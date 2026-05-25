@@ -1,0 +1,34 @@
+# Hassas bilgiler — ASLA git'e gitmesin
+.env
+*.env
+aidan-mcp/.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Build
+node_modules/
+dist/
+build/
+
+# Netlify
+.netlify/
+
+# Claude Code yerel ayarlar (kullanıcıya özel)
+.claude/settings.local.json
+

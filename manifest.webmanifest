@@ -1,0 +1,26 @@
+{
+  "name": "Aidan - ADHD Asistanım",
+  "short_name": "Aidan",
+  "description": "ADHD için kişisel asistan: görevler, pomodoro, hatırlatmalar.",
+  "start_url": "./asistan.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#1e1e2e",
+  "theme_color": "#1e1e2e",
+  "lang": "tr",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+# Aidan — Netlify yapılandırması
+# Tek dosya HTML PWA, build gerekmiyor
+
+[build]
+  publish = "."
+
+# /CLAUDE.md ve /aidan-mcp/* yollarını 404 göster (özel notlar gizli kalsın)
+[[redirects]]
+  from = "/CLAUDE.md"
+  to = "/asistan.html"
+  status = 404
+
+[[redirects]]
+  from = "/aidan-mcp/*"
+  to = "/asistan.html"
+  status = 404
+
+[[redirects]]
+  from = "/.env*"
+  to = "/asistan.html"
+  status = 404

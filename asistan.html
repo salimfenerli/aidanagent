@@ -1,0 +1,2643 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1e1e2e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Aidan">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<title>Aidan - ADHD Asistanım</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg-elev: #161b22;
+    --surface: #1c2128;
+    --surface-hover: #22272e;
+    --border: #30363d;
+    --border-soft: #21262d;
+    --text: #e6edf3;
+    --text-muted: #7d8590;
+    --accent: #6366f1;
+    --accent-hover: #4f46e5;
+    --accent-soft: rgba(99, 102, 241, 0.12);
+    --success: #3fb950;
+    --warning: #d29922;
+    --danger: #f85149;
+    --info: #58a6ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px 20px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .container { max-width: 980px; margin: 0 auto; }
+  h1 {
+    text-align: center;
+    font-size: 1.8em;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin-bottom: 4px;
+    color: var(--text);
+  }
+  .subtitle { text-align: center; color: var(--text-muted); margin-bottom: 20px; font-size: 0.9em; }
+
+  /* Üst bar - zaman körlüğü */
+  .topbar {
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .topbar-item { display: flex; flex-direction: column; align-items: center; min-width: 100px; gap: 2px; }
+  .topbar-label { font-size: 0.7em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; }
+  .topbar-value { font-size: 1.25em; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .topbar-value.next { color: var(--warning); }
+  .topbar-value.session { color: var(--success); }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    justify-content: center;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 4px;
+  }
+  .tab {
+    padding: 8px 14px;
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.88em;
+    font-weight: 500;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .tab:hover { background: var(--surface-hover); color: var(--text); transform: none; }
+  .tab.active {
+    background: var(--accent);
+    color: white;
+  }
+  .panel {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 24px;
+    display: none;
+    border: 1px solid var(--border-soft);
+  }
+  .panel.active { display: block; }
+  h2 { margin-bottom: 18px; color: var(--text); font-size: 1.2em; font-weight: 600; letter-spacing: -0.01em; }
+  h3 { color: var(--text); margin: 14px 0 10px; font-size: 1em; font-weight: 600; }
+
+  /* Form elemanları */
+  input[type="text"], input[type="email"], input[type="password"], input[type="time"], input[type="date"], input[type="number"], select, textarea {
+    padding: 10px 12px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--bg-elev);
+    color: var(--text);
+    font-size: 0.95em;
+    font-family: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  textarea { width: 100%; min-height: 160px; resize: vertical; line-height: 1.5; }
+  button {
+    padding: 9px 16px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.15s;
+    font-size: 0.9em;
+    font-family: inherit;
+  }
+  button:hover { background: var(--accent-hover); transform: none; }
+  button.danger { background: var(--danger); }
+  button.danger:hover { background: #d73a3a; }
+  button.secondary { background: var(--surface-hover); color: var(--text); border: 1px solid var(--border); }
+  button.secondary:hover { background: var(--border); }
+  button.small { padding: 6px 10px; font-size: 0.82em; }
+
+  /* Görevler */
+  .task-input {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto auto;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .task-input input[type="text"] { min-width: 0; }
+  .task-input-row2 { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  @media (max-width: 700px) {
+    .task-input { grid-template-columns: 1fr; }
+  }
+  .task {
+    background: var(--bg-elev);
+    padding: 12px 14px;
+    border-radius: 8px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--border-soft);
+    border-left: 3px solid var(--success);
+    transition: background 0.15s;
+  }
+  .task:hover { background: var(--surface-hover); }
+  .task.urgent { border-left-color: var(--danger); }
+  .task.low { border-left-color: var(--text-muted); }
+  .task.cat-odev { border-left-color: var(--warning); }
+  .task.cat-ev { border-left-color: var(--info); }
+  .task.cat-kisisel { border-left-color: var(--accent); }
+  .task.done { opacity: 0.4; border-left-color: var(--border); }
+  .task.done .task-text { text-decoration: line-through; }
+  .task-text { flex: 1; font-size: 0.95em; }
+  .task-meta { font-size: 0.75em; color: var(--text-muted); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .task-meta .badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: var(--bg);
+    border: 1px solid var(--border-soft);
+    font-weight: 500;
+  }
+  .task-meta .badge.due-today { background: rgba(248, 81, 73, 0.15); color: var(--danger); border-color: rgba(248, 81, 73, 0.3); }
+  .task-meta .badge.due-soon { background: rgba(210, 153, 34, 0.15); color: var(--warning); border-color: rgba(210, 153, 34, 0.3); }
+  .task input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; flex-shrink: 0; accent-color: var(--accent); }
+  .subtasks { margin-left: 26px; margin-top: 6px; }
+  .subtask {
+    background: var(--bg);
+    padding: 6px 10px;
+    border-radius: 5px;
+    margin-bottom: 3px;
+    font-size: 0.88em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .subtask-del {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    margin-left: auto;
+    font-size: 1em;
+    padding: 0 4px;
+    line-height: 1;
+  }
+  .subtask-del:hover { color: var(--danger); }
+  .subtask-add {
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--text-muted);
+    font-size: 0.8em;
+    padding: 5px 12px;
+    border-radius: 5px;
+    margin-top: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    display: inline-block;
+    transition: all 0.15s;
+  }
+  .subtask-add:hover { border-color: var(--accent); color: var(--accent); }
+  .task-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+
+  /* Pomodoro */
+  .pomodoro { text-align: center; padding: 12px; }
+  .timer-ring {
+    position: relative;
+    width: 240px;
+    height: 240px;
+    margin: 18px auto;
+    border-radius: 50%;
+    background: conic-gradient(var(--accent) var(--p, 0%), var(--surface-hover) var(--p, 0%));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.3s;
+  }
+  .timer-ring.break { background: conic-gradient(var(--success) var(--p, 0%), var(--surface-hover) var(--p, 0%)); }
+  .timer-inner {
+    width: 214px;
+    height: 214px;
+    background: var(--surface);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+  }
+  .timer {
+    font-size: 3.2em;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    letter-spacing: -0.02em;
+  }
+  .timer.break { color: var(--success); }
+  .timer-status { font-size: 1em; margin-bottom: 8px; color: var(--text-muted); font-weight: 500; }
+  .timer-controls { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+  .focus-task {
+    background: var(--bg-elev);
+    padding: 12px;
+    border-radius: 8px;
+    margin: 10px auto;
+    font-size: 0.95em;
+    max-width: 500px;
+    border: 1px solid var(--border-soft);
+    color: var(--text-muted);
+  }
+  .session-count { color: var(--text-muted); margin-top: 14px; font-size: 0.9em; }
+
+  /* Pomodoro haftalık trend */
+  .pomo-history {
+    margin-top: 24px;
+    padding: 16px;
+    background: var(--bg-elev);
+    border-radius: 10px;
+    border: 1px solid var(--border-soft);
+  }
+  .pomo-history-title {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    text-align: left;
+    letter-spacing: 0.02em;
+  }
+  .bar-chart {
+    display: flex;
+    gap: 6px;
+    height: 100px;
+    align-items: flex-end;
+  }
+  .bar-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0;
+  }
+  .bar-wrap {
+    width: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+  }
+  .bar {
+    width: 100%;
+    background: var(--accent-soft);
+    border-radius: 4px 4px 0 0;
+    min-height: 3px;
+    transition: height 0.4s ease;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 4px;
+  }
+  .bar.today { background: var(--accent); }
+  .bar-value { color: var(--text); font-size: 0.7em; font-weight: 600; opacity: 0.9; }
+  .bar.today .bar-value { color: white; }
+  .bar-day { font-size: 0.7em; color: var(--text-muted); margin-top: 6px; }
+  .bar-col.today .bar-day { color: var(--accent); font-weight: 600; }
+
+  /* Brain dump */
+  .dump-entry {
+    background: var(--bg-elev);
+    padding: 12px 14px;
+    border-radius: 8px;
+    margin-top: 8px;
+    border: 1px solid var(--border-soft);
+    border-left: 3px solid var(--accent);
+  }
+  .dump-date { font-size: 0.78em; color: var(--text-muted); margin-bottom: 6px; }
+
+  /* Rutinler */
+  .routine-item {
+    background: var(--bg-elev);
+    padding: 12px 14px;
+    border-radius: 8px;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    border: 1px solid var(--border-soft);
+  }
+  .routine-info { flex: 1; min-width: 200px; }
+  .routine-time { color: var(--warning); font-weight: 600; font-size: 1em; }
+  .routine-name { color: var(--text); }
+
+  /* Check-in */
+  .mood-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 14px 0;
+  }
+  .mood {
+    font-size: 1.8em;
+    background: var(--bg-elev);
+    border: 1px solid var(--border-soft);
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .mood:hover { background: var(--surface-hover); border-color: var(--accent); transform: none; }
+  .checkin-row {
+    background: var(--bg-elev);
+    padding: 10px 12px;
+    border-radius: 7px;
+    margin-bottom: 4px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    border: 1px solid var(--border-soft);
+  }
+
+  /* Ayarlar */
+  .settings-row {
+    background: var(--bg-elev);
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border-soft);
+  }
+  .settings-row label { display: block; margin-bottom: 8px; color: var(--text); font-weight: 600; font-size: 0.95em; }
+  .settings-row input[type="text"], .settings-row input[type="email"], .settings-row input[type="password"] { width: 100%; max-width: 460px; }
+  .settings-help { font-size: 0.82em; color: var(--text-muted); margin-top: 8px; line-height: 1.55; }
+
+  .motivation {
+    background: var(--accent-soft);
+    padding: 12px 40px 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 18px;
+    text-align: center;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    color: var(--text);
+    font-size: 0.92em;
+    position: relative;
+  }
+  .motivation-close {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.4em;
+    cursor: pointer;
+    padding: 4px 10px;
+    line-height: 1;
+    border-radius: 4px;
+  }
+  .motivation-close:hover { color: var(--text); background: rgba(99, 102, 241, 0.15); }
+  .empty { text-align: center; color: var(--text-muted); padding: 28px; font-size: 0.9em; }
+  .notif-banner {
+    background: rgba(210, 153, 34, 0.12);
+    color: var(--warning);
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 14px;
+    text-align: center;
+    cursor: pointer;
+    font-weight: 500;
+    border: 1px solid rgba(210, 153, 34, 0.3);
+    font-size: 0.9em;
+  }
+  .stats { display: flex; gap: 10px; justify-content: center; margin-bottom: 18px; flex-wrap: wrap; }
+  .stat { background: var(--bg-elev); padding: 12px 18px; border-radius: 8px; text-align: center; min-width: 90px; border: 1px solid var(--border-soft); }
+  .stat-num { font-size: 1.5em; font-weight: 600; color: var(--text); letter-spacing: -0.02em; }
+  .stat-label { font-size: 0.78em; color: var(--text-muted); margin-top: 2px; }
+
+  /* Bugünün 3'ü */
+  .mit-box {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(210, 153, 34, 0.06));
+    border: 1px solid rgba(210, 153, 34, 0.25);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+  .mit-title { font-size: 0.85em; font-weight: 600; color: var(--warning); margin-bottom: 8px; letter-spacing: 0.02em; display: flex; justify-content: space-between; align-items: center; }
+  .mit-count { font-variant-numeric: tabular-nums; color: var(--text-muted); font-weight: 500; }
+  .mit-list { display: flex; flex-direction: column; gap: 4px; }
+  .mit-item { font-size: 0.92em; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .mit-item.done { text-decoration: line-through; opacity: 0.5; }
+  .mit-empty { font-size: 0.85em; color: var(--text-muted); font-style: italic; }
+  .task.mit { border-left-color: var(--warning); background: rgba(210, 153, 34, 0.05); }
+  button.small.mit-on { background: var(--warning); color: #1c2128; }
+  button.small.mit-on:hover { background: #e0a82e; }
+
+  /* Filtre chip'leri */
+  .filter-chips {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .filter-chip {
+    padding: 6px 12px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border-soft);
+    border-radius: 16px;
+    cursor: pointer;
+    font-size: 0.82em;
+    color: var(--text-muted);
+    transition: all 0.15s;
+    font-family: inherit;
+    font-weight: 500;
+  }
+  .filter-chip:hover { background: var(--surface-hover); color: var(--text); }
+  .filter-chip.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .filter-chip .chip-count {
+    margin-left: 4px;
+    opacity: 0.7;
+    font-size: 0.9em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Şu an ne yapayım? Butonu */
+  .suggest-btn {
+    width: 100%;
+    padding: 14px 18px;
+    background: linear-gradient(135deg, var(--accent), #4f46e5);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 1em;
+    font-weight: 600;
+    margin-bottom: 16px;
+    transition: transform 0.1s, box-shadow 0.15s;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  }
+  .suggest-btn:hover { box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4); transform: translateY(-1px); }
+  .suggest-btn:active { transform: translateY(0); }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    max-width: 460px;
+    width: 100%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  }
+  .modal-title { font-size: 0.85em; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 0.02em; }
+  .modal-task { font-size: 1.4em; font-weight: 600; color: var(--text); margin-bottom: 16px; line-height: 1.35; }
+  .modal-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px; }
+  .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .modal-actions button { flex: 1; min-width: 110px; }
+  .modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.85em; margin-top: 14px; width: 100%; padding: 8px; }
+  .modal-close:hover { color: var(--text); background: var(--surface-hover); border-radius: 7px; }
+
+  /* Toast */
+  .toast-container {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+    max-width: calc(100vw - 32px);
+  }
+  .toast {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    padding: 12px 16px;
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 0.9em;
+    max-width: 360px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    pointer-events: auto;
+    animation: toast-in 0.2s ease-out;
+    line-height: 1.4;
+  }
+  .toast.success { border-left-color: var(--success); }
+  .toast.warning { border-left-color: var(--warning); }
+  .toast.error { border-left-color: var(--danger); }
+  .toast.info { border-left-color: var(--info); }
+  .toast.fade-out { animation: toast-out 0.3s ease-in forwards; }
+  @keyframes toast-in {
+    from { transform: translateX(110%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  @keyframes toast-out {
+    to { transform: translateX(110%); opacity: 0; }
+  }
+
+  /* Input modal */
+  .modal input.modal-input,
+  .modal textarea.modal-input {
+    width: 100%;
+    margin-bottom: 14px;
+    padding: 12px;
+    font-size: 1em;
+  }
+  .modal textarea.modal-input { min-height: 140px; resize: vertical; }
+
+  /* Seri rozeti */
+  .task-meta .badge.series-badge {
+    background: rgba(99, 102, 241, 0.12);
+    color: var(--accent);
+    border-color: rgba(99, 102, 241, 0.3);
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .task-meta .badge.series-badge:hover { background: rgba(99, 102, 241, 0.22); }
+  .task-meta .badge.series-badge.complete {
+    background: rgba(63, 185, 80, 0.15);
+    color: var(--success);
+    border-color: rgba(63, 185, 80, 0.3);
+  }
+
+  /* Takvim butonu (üst bar) */
+  .topbar-cal-btn {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1.1em;
+    transition: all 0.15s;
+  }
+  .topbar-cal-btn:hover { background: var(--surface-hover); border-color: var(--accent); transform: none; }
+
+  /* Takvim modal */
+  .cal-modal { max-width: 760px; }
+  .cal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+    gap: 10px;
+  }
+  .cal-title { font-size: 1.1em; font-weight: 600; color: var(--text); }
+  .cal-nav { display: flex; gap: 6px; }
+  .cal-nav button {
+    padding: 6px 10px;
+    background: var(--bg-elev);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font-size: 0.85em;
+  }
+  .cal-nav button:hover { background: var(--surface-hover); }
+  .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+  }
+  .cal-day {
+    background: var(--bg-elev);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 8px;
+    min-height: 100px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .cal-day.today {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .cal-day.past { opacity: 0.55; }
+  .cal-day-head {
+    font-size: 0.72em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .cal-day.today .cal-day-head { color: var(--accent); }
+  .cal-day-num {
+    font-size: 1em;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .cal-task {
+    background: var(--surface);
+    border-left: 2px solid var(--text-muted);
+    padding: 3px 6px;
+    border-radius: 3px;
+    font-size: 0.72em;
+    color: var(--text);
+    line-height: 1.3;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cal-task:hover { background: var(--surface-hover); }
+  .cal-task.urgent { border-left-color: var(--danger); }
+  .cal-task.odev { border-left-color: var(--warning); }
+  .cal-task.ev { border-left-color: var(--info); }
+  .cal-task.kisisel { border-left-color: var(--accent); }
+  .cal-task.mit { background: rgba(210, 153, 34, 0.15); border-left-color: var(--warning); }
+  .cal-task.done { opacity: 0.4; text-decoration: line-through; }
+  .cal-summary {
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: var(--bg-elev);
+    border-radius: 8px;
+    font-size: 0.85em;
+    color: var(--text-muted);
+    border: 1px solid var(--border-soft);
+  }
+  @media (max-width: 700px) {
+    .cal-grid { grid-template-columns: repeat(2, 1fr); }
+    .cal-day { min-height: 80px; }
+  }
+
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🧠 Aidan</h1>
+  <p class="subtitle">ADHD beyninin yan dalı — Salim için</p>
+
+  <!-- ÜST BAR: ZAMAN KÖRLÜĞÜ -->
+  <div class="topbar">
+    <div class="topbar-item">
+      <div class="topbar-label">Şu an</div>
+      <div class="topbar-value" id="tbClock">--:--</div>
+    </div>
+    <div class="topbar-item">
+      <div class="topbar-label">Sonraki rutin</div>
+      <div class="topbar-value next" id="tbNext">—</div>
+    </div>
+    <div class="topbar-item">
+      <div class="topbar-label">Kesintisiz çalışma</div>
+      <div class="topbar-value session" id="tbFocus">0 dk</div>
+    </div>
+    <button class="topbar-cal-btn" onclick="openCalendar()" title="Haftalık takvim">📅 Hafta</button>
+  </div>
+
+  <div id="notifBanner" class="notif-banner" style="display:none;" onclick="askNotif()">
+    🔔 Hatırlatmaların çalışması için bildirimlere izin ver (tıkla)
+  </div>
+
+  <div class="motivation" id="motivation">
+    <span id="motivationText"></span>
+    <button class="motivation-close" onclick="dismissMotivation()" title="Kapat" aria-label="Kapat">×</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="tasks" onclick="showTab('tasks', this)">📋 Görevler</button>
+    <button class="tab" data-tab="focus" onclick="showTab('focus', this)">🍅 Odak</button>
+    <button class="tab" data-tab="dump" onclick="showTab('dump', this)">🧠 Brain Dump</button>
+    <button class="tab" data-tab="routine" onclick="showTab('routine', this)">⏰ Rutinler</button>
+    <button class="tab" data-tab="checkin" onclick="showTab('checkin', this)">💭 Check-in</button>
+    <button class="tab" data-tab="settings" onclick="showTab('settings', this)">⚙️ Ayarlar</button>
+  </div>
+
+  <!-- GÖREVLER -->
+  <div id="tasks" class="panel active">
+    <h2>📋 Bugün ne yapacağız?</h2>
+    <div class="stats">
+      <div class="stat"><div class="stat-num" id="statTotal">0</div><div class="stat-label">Toplam</div></div>
+      <div class="stat"><div class="stat-num" id="statDone">0</div><div class="stat-label">Bitti</div></div>
+      <div class="stat"><div class="stat-num" id="statLeft">0</div><div class="stat-label">Kaldı</div></div>
+    </div>
+    <div class="mit-box">
+      <div class="mit-title">
+        <span>⭐ Bugünün 3'ü</span>
+        <span class="mit-count" id="mitCount">0/3</span>
+      </div>
+      <div class="mit-list" id="mitList"></div>
+    </div>
+    <button class="suggest-btn" onclick="suggestTask()">🎯 Şu an ne yapayım?</button>
+    <div class="task-input">
+      <input type="text" id="taskInput" placeholder="Ne yapman lazım?" onkeypress="if(event.key==='Enter')addTask()">
+      <select id="taskPriority" title="Öncelik">
+        <option value="normal">Normal</option>
+        <option value="urgent">🔥 Acil</option>
+        <option value="low">⬇️ Düşük</option>
+      </select>
+      <select id="taskCategory" title="Kategori">
+        <option value="">Kategorisiz</option>
+        <option value="odev">📚 Ödev</option>
+        <option value="ev">🏠 Ev</option>
+        <option value="kisisel">💜 Kişisel</option>
+      </select>
+      <input type="date" id="taskDue" title="Son tarih" style="max-width:150px;">
+      <input type="number" id="taskEstimate" placeholder="dk" title="Kaç dk sürer?" style="max-width:80px;" min="1">
+    </div>
+    <div class="task-input-row2">
+      <button onclick="addTask()">➕ Ekle</button>
+      <button class="secondary" onclick="splitTask()">✂️ Böl</button>
+      <select id="taskRepeatNew" title="Tekrar">
+        <option value="">Tek seferlik</option>
+        <option value="daily">🔁 Her gün</option>
+        <option value="weekdays">📚 Hafta içi (Pzt–Cum)</option>
+        <option value="weekends">🛋️ Hafta sonu (Cmt–Paz)</option>
+        <option value="weekly">📅 Her hafta</option>
+      </select>
+      <input type="time" id="taskReminder" title="Saat hatırlatması (opsiyonel)" style="max-width:130px;" placeholder="Hatırlat">
+    </div>
+    <input type="search" id="taskSearch" placeholder="🔍 Görev ara..." style="width:100%; margin-bottom:10px; padding: 9px 12px; font-size: 0.92em;" oninput="renderTasks()">
+    <div class="filter-chips" id="filterChips">
+      <button class="filter-chip active" data-filter="all" onclick="setFilter('all', this)">Hepsi <span class="chip-count" id="cnt-all"></span></button>
+      <button class="filter-chip" data-filter="today" onclick="setFilter('today', this)">📅 Bugün <span class="chip-count" id="cnt-today"></span></button>
+      <button class="filter-chip" data-filter="urgent" onclick="setFilter('urgent', this)">🔥 Acil <span class="chip-count" id="cnt-urgent"></span></button>
+      <button class="filter-chip" data-filter="odev" onclick="setFilter('odev', this)">📚 Ödev <span class="chip-count" id="cnt-odev"></span></button>
+      <button class="filter-chip" data-filter="ev" onclick="setFilter('ev', this)">🏠 Ev <span class="chip-count" id="cnt-ev"></span></button>
+      <button class="filter-chip" data-filter="kisisel" onclick="setFilter('kisisel', this)">💜 Kişisel <span class="chip-count" id="cnt-kisisel"></span></button>
+      <button class="filter-chip" data-filter="done" onclick="setFilter('done', this)">✅ Bitenler <span class="chip-count" id="cnt-done"></span></button>
+    </div>
+    <div id="taskList"></div>
+  </div>
+
+  <!-- POMODORO -->
+  <div id="focus" class="panel">
+    <h2>🍅 Odak Modu</h2>
+    <div class="pomodoro">
+      <div class="timer-status" id="timerStatus">Çalışma zamanı</div>
+      <div class="focus-task" id="focusTask">Bir görev seç ya da serbest çalış</div>
+      <div class="timer-ring" id="timerRing">
+        <div class="timer-inner">
+          <div class="timer" id="timer">25:00</div>
+        </div>
+      </div>
+      <div class="timer-controls">
+        <button onclick="startTimer()" id="startBtn">▶️ Başla</button>
+        <button class="secondary" onclick="pauseTimer()">⏸️ Duraklat</button>
+        <button class="danger" onclick="resetTimer()">🔄 Sıfırla</button>
+      </div>
+      <div style="margin-top:15px;">
+        <button class="secondary small" onclick="setTimer(5,2)">⚡ 5dk (başla!)</button>
+        <button class="secondary small" onclick="setTimer(15,3)">15/3</button>
+        <button class="secondary small" onclick="setTimer(25,5)">25/5</button>
+        <button class="secondary small" onclick="setTimer(50,10)">50/10</button>
+      </div>
+      <div class="session-count">Bugün tamamlanan pomodoro: <span id="pomoCount">0</span> 🍅</div>
+    </div>
+    <div class="pomo-history">
+      <div class="pomo-history-title">📊 Son 7 gün</div>
+      <div class="bar-chart" id="pomoChart"></div>
+    </div>
+  </div>
+
+  <!-- BRAIN DUMP -->
+  <div id="dump" class="panel">
+    <h2>🧠 Kafandakileri Dök</h2>
+    <p style="margin-bottom:10px; color:#888;">Düşüncen, fikrin, endişen — ne varsa yaz. Düzenlemeye uğraşma.</p>
+    <textarea id="dumpInput" placeholder="Aklımdan geçen şey..."></textarea>
+    <div style="margin-top:10px;">
+      <button onclick="saveDump()">💾 Kaydet</button>
+      <button class="danger" onclick="clearAllDumps()">🗑️ Hepsini Sil</button>
+    </div>
+    <div id="dumpList" style="margin-top:20px;"></div>
+  </div>
+
+  <!-- RUTİNLER -->
+  <div id="routine" class="panel">
+    <h2>⏰ Günlük Rutinler & Hatırlatmalar</h2>
+    <p style="margin-bottom:15px; color:#888;">İlaç, su, kalk, yat — neyin hatırlatılmasını istiyorsan ekle.</p>
+    <div class="task-input-row2">
+      <input type="time" id="routineTime" style="max-width:150px;">
+      <input type="text" id="routineName" placeholder="Hatırlatma (örn: İlacımı al)" style="flex:1; min-width:200px;">
+      <button onclick="addRoutine()">➕ Ekle</button>
+    </div>
+    <div id="routineList"></div>
+  </div>
+
+  <!-- CHECK-IN -->
+  <div id="checkin" class="panel">
+    <h2>💭 Bugün nasılsın?</h2>
+    <div class="mood-buttons">
+      <button class="mood" onclick="logMood('😄','harika')">😄</button>
+      <button class="mood" onclick="logMood('🙂','iyi')">🙂</button>
+      <button class="mood" onclick="logMood('😐','idare eder')">😐</button>
+      <button class="mood" onclick="logMood('😩','zor')">😩</button>
+      <button class="mood" onclick="logMood('😴','tükenmiş')">😴</button>
+    </div>
+    <textarea id="checkinNote" placeholder="Bir not (opsiyonel) — örn: enerjik, dağınık, kafam karışık..." style="min-height:80px;"></textarea>
+    <div id="checkinList" style="margin-top:20px; max-height:300px; overflow-y:auto;"></div>
+  </div>
+
+  <!-- AYARLAR -->
+  <div id="settings" class="panel">
+    <h2>⚙️ Ayarlar</h2>
+
+    <div class="settings-row">
+      <label>📱 Telefon Bildirimi (ntfy.sh)</label>
+      <input type="text" id="ntfyTopic" placeholder="ör: salim-aidan-9k3m2q" onchange="saveSettings()">
+      <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
+        <button class="small" onclick="genRandomTopic()">🎲 Rastgele üret</button>
+        <button class="small secondary" onclick="testNtfy()">📤 Test bildirimi gönder</button>
+        <button class="small secondary" onclick="openNtfyWeb()">🌐 Web sayfasını aç</button>
+      </div>
+      <div id="ntfyStatus" style="margin-top:10px;"></div>
+      <div class="settings-help">
+        <b>Nasıl çalışır:</b><br>
+        1. Telefonuna <b>ntfy</b> uygulamasını indir (Play Store / App Store, ücretsiz)<br>
+        2. Uygulamada "+" → "Subscribe to topic" → yukarıdaki adı yaz, "Subscribe" bas<br>
+        3. Tahmin edilemez bir ad seç (🎲 ile)<br>
+        4. <b>Sorun varsa:</b> "🌐 Web sayfasını aç" → o sayfadan test mesajı gönder (bu HTML'den bağımsız)
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <label>🧠 Hyperfocus Koruması</label>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <input type="checkbox" id="hyperfocusEnabled" onchange="saveSettings()" style="width:20px; height:20px;">
+        <span>Aktif et</span>
+        <span style="color:#888; margin-left:15px;">Her</span>
+        <input type="number" id="hyperfocusMin" min="15" max="180" value="45" onchange="saveSettings()" style="width:80px;">
+        <span style="color:#888;">dk'da uyarı ver</span>
+      </div>
+      <div class="settings-help">Bu süre boyunca aralıksız çalışırsan (sayfayla aktif etkileşim) "kalk, su iç" uyarısı gelir. 5 dk hareketsiz kalırsan sayaç sıfırlanır.</div>
+    </div>
+
+    <div class="settings-row">
+      <label>☁️ Bulut Senkronu (Supabase) — Telefon ↔ Bilgisayar</label>
+      <div id="supaSetupBox">
+        <input type="text" id="supaUrl" placeholder="Supabase Project URL (https://xxxxx.supabase.co)" style="width:100%;max-width:500px;margin-bottom:6px;">
+        <input type="text" id="supaKey" placeholder="Supabase anon public key (uzun bir JWT)" style="width:100%;max-width:500px;margin-bottom:6px;">
+        <button class="small" onclick="connectSupabase()">🔌 Bağlan</button>
+        <button class="small secondary" onclick="disconnectSupabase()">Kes</button>
+      </div>
+      <div id="supaAuthBox" style="margin-top:10px;"></div>
+      <div id="supaStatus" style="margin-top:10px;"></div>
+      <div class="settings-help">
+        Aidan'ı tüm cihazlarında senkronize tutar.<br>
+        İlk kez: <b>Hesap Oluştur</b>. Sonra her cihazda aynı email + şifre ile <b>Giriş Yap</b>.
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <label>💾 Yedekleme</label>
+      <button class="small" onclick="exportData()">📥 Verileri indir (JSON)</button>
+      <button class="small secondary" onclick="document.getElementById('importFile').click()">📤 Yedek yükle</button>
+      <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importData(event)">
+      <button class="small danger" onclick="resetAll()">⚠️ Her şeyi sıfırla</button>
+      <div class="settings-help">Verilerin sadece bu bilgisayarda kayıtlı. Yedek almazsan tarayıcı temizliğinde kaybolur.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Input modal (prompt yerine) -->
+<div class="modal-overlay" id="inputModal" onclick="if(event.target.id==='inputModal')cancelInputModal()">
+  <div class="modal">
+    <div class="modal-title" id="inputModalTitle">Düzenle</div>
+    <div class="modal-task" id="inputModalLabel" style="font-size:1em; font-weight:500; margin-bottom:12px; color: var(--text-muted);"></div>
+    <input type="text" id="inputModalInput" class="modal-input">
+    <textarea id="inputModalTextarea" class="modal-input" style="display:none;"></textarea>
+    <div class="modal-actions">
+      <button onclick="resolveInputModal()">Tamam</button>
+      <button class="secondary" onclick="cancelInputModal()">İptal</button>
+    </div>
+  </div>
+</div>
+
+<!-- Takvim modal -->
+<div class="modal-overlay" id="calModal" onclick="if(event.target.id==='calModal')closeCalendar()">
+  <div class="modal cal-modal">
+    <div class="cal-header">
+      <div class="cal-title" id="calTitle">📅 Bu hafta</div>
+      <div class="cal-nav">
+        <button onclick="calWeek(-1)" title="Önceki hafta">◀</button>
+        <button onclick="calWeek(0)" title="Bu hafta">Bugün</button>
+        <button onclick="calWeek(1)" title="Sonraki hafta">▶</button>
+      </div>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="cal-summary" id="calSummary"></div>
+    <button class="modal-close" onclick="closeCalendar()">Kapat</button>
+  </div>
+</div>
+
+<!-- Seri detay modal -->
+<div class="modal-overlay" id="seriesModal" onclick="if(event.target.id==='seriesModal')closeSeriesModal()">
+  <div class="modal" style="max-width:540px;">
+    <div class="modal-title" id="seriesModalSub">Ödev serisi</div>
+    <div class="modal-task" id="seriesModalTitle">—</div>
+    <div id="seriesModalProgress" style="margin-bottom:12px; font-size:0.9em; color:var(--text-muted);"></div>
+    <div id="seriesModalList" style="max-height:340px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;"></div>
+    <button class="modal-close" onclick="closeSeriesModal()">Kapat</button>
+  </div>
+</div>
+
+<!-- Şu an ne yapayım? Modal -->
+<div class="modal-overlay" id="suggestModal" onclick="if(event.target.id==='suggestModal')closeSuggestModal()">
+  <div class="modal">
+    <div class="modal-title" id="suggestReason">Sana bir görev önerdim</div>
+    <div class="modal-task" id="suggestTaskText">—</div>
+    <div class="modal-meta" id="suggestMeta"></div>
+    <div class="modal-actions">
+      <button onclick="acceptSuggestion(false)">▶️ Başla</button>
+      <button class="secondary" onclick="acceptSuggestion(true)">⚡ 5dk dene</button>
+      <button class="secondary" onclick="suggestTask()">🔄 Başka tane</button>
+    </div>
+    <button class="modal-close" onclick="closeSuggestModal()">Kapat</button>
+  </div>
+</div>
+
+<script>
+// ============ VERİ ============
+let data = JSON.parse(localStorage.getItem('aidan') || '{}');
+data.tasks = data.tasks || [];
+data.dumps = data.dumps || [];
+data.routines = data.routines || [];
+data.checkins = data.checkins || [];
+data.pomoToday = data.pomoToday || { date: today(), count: 0 };
+data.pomoHistory = data.pomoHistory || {};
+data.settings = data.settings || { ntfyTopic: '', hyperfocusEnabled: false, hyperfocusMin: 45 };
+if (data.pomoToday.date !== today()) data.pomoToday = { date: today(), count: 0 };
+
+// Geriye uyumluluk: eski görevlere yeni alanlar ekle
+data.tasks.forEach(t => {
+  if (t.priority === undefined) t.priority = 'normal';
+  if (t.due === undefined) t.due = null;
+  if (t.estimateMin === undefined) t.estimateMin = null;
+  if (t.actualMin === undefined) t.actualMin = null;
+  if (t.repeat === undefined) t.repeat = null;
+  if (t.category === undefined) t.category = null;
+  if (t.doneDate === undefined) t.doneDate = null;
+  if (t.mitDate === undefined) t.mitDate = null;
+  if (t.streakCount === undefined) t.streakCount = 0;
+  if (t.lastStreakDate === undefined) t.lastStreakDate = null;
+  if (t.reminderTime === undefined) t.reminderTime = null;
+  if (t.lastReminded === undefined) t.lastReminded = null;
+  if (t.seriesId === undefined) t.seriesId = null;
+  if (t.seriesName === undefined) t.seriesName = null;
+  if (t.seriesIndex === undefined) t.seriesIndex = null;
+  if (t.seriesTotal === undefined) t.seriesTotal = null;
+});
+
+function today() { return new Date().toISOString().slice(0,10); }
+function save() {
+  localStorage.setItem('aidan', JSON.stringify(data));
+  if (window._supa && window._user) schedulePush();
+}
+function timeStr() { return new Date().toLocaleString('tr-TR'); }
+
+const sessionStart = Date.now();
+let lastUserActivity = Date.now();
+let focusStreakStart = Date.now();
+let lastHyperfocusAlert = 0;
+const IDLE_RESET_MS = 5 * 60 * 1000; // 5 dk hareketsizlik → streak resetlenir
+
+function markActivity() {
+  const now = Date.now();
+  if (now - lastUserActivity > IDLE_RESET_MS) {
+    focusStreakStart = now;
+  }
+  lastUserActivity = now;
+}
+['click', 'keydown', 'touchstart', 'scroll'].forEach(ev => {
+  document.addEventListener(ev, markActivity, { passive: true });
+});
+
+// ============ MOTİVASYON ============
+const motivations = [
+  "Mükemmel olmak zorunda değilsin. Sadece başla. 🌱",
+  "5 dakika yap. Sonrasını sonra düşünürsün. ⏱️",
+  "ADHD beynin bir hata değil, farklı bir işletim sistemi. 🧠",
+  "Küçük adım > Büyük plan. 👣",
+  "Şu an dağınık hissetmen, başaramayacağın anlamına gelmez. 💪",
+  "Bir şeye başlamak, bitirmekten daha zor. Başardığın için tebrikler. 🎉",
+  "Odağın kayıyorsa, kendine kızma — geri getir, o kadar. 🔄",
+  "Bugün sadece BİR şey yap. Bonus her şey hediye. 🎁",
+  "Beynin hızlı koşuyor — sen de yanında yürü, yormadan. 🚶",
+  "Hatırla: dinlenmek, tembellik değil. Sürdürülebilirlik. ☕",
+  "Ödeve başlamak en zor kısım. Aç defteri, tek satır yaz. Gerisi gelir. 📖",
+  "Bitmemiş iş, başlanmamış işten her zaman daha iyidir. ✍️"
+];
+document.getElementById('motivationText').textContent =
+  motivations[Math.floor(Math.random() * motivations.length)];
+
+if (sessionStorage.getItem('motivationDismissed') === '1') {
+  document.getElementById('motivation').style.display = 'none';
+}
+
+function dismissMotivation() {
+  document.getElementById('motivation').style.display = 'none';
+  sessionStorage.setItem('motivationDismissed', '1');
+}
+
+// ============ TAB ============
+function showTab(name, btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(name).classList.add('active');
+  if (btn) btn.classList.add('active');
+  else document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+}
+
+// ============ GÖREVLER ============
+function addTask() {
+  const text = document.getElementById('taskInput').value.trim();
+  if (!text) return;
+  const task = {
+    id: Date.now(),
+    text,
+    done: false,
+    doneDate: null,
+    subtasks: [],
+    created: timeStr(),
+    priority: document.getElementById('taskPriority').value,
+    category: document.getElementById('taskCategory').value || null,
+    due: document.getElementById('taskDue').value || null,
+    estimateMin: parseInt(document.getElementById('taskEstimate').value) || null,
+    actualMin: null,
+    repeat: document.getElementById('taskRepeatNew').value || null,
+    reminderTime: document.getElementById('taskReminder').value || null,
+    lastReminded: null,
+    mitDate: null,
+    streakCount: 0,
+    lastStreakDate: null,
+    seriesId: null,
+    seriesName: null,
+    seriesIndex: null,
+    seriesTotal: null
+  };
+  data.tasks.push(task);
+  document.getElementById('taskInput').value = '';
+  document.getElementById('taskDue').value = '';
+  document.getElementById('taskEstimate').value = '';
+  document.getElementById('taskPriority').value = 'normal';
+  document.getElementById('taskCategory').value = '';
+  document.getElementById('taskRepeatNew').value = '';
+  document.getElementById('taskReminder').value = '';
+  save(); renderTasks();
+}
+
+async function splitTask() {
+  const text = document.getElementById('taskInput').value.trim();
+  if (!text) { showToast('Önce büyük görevi yaz, sonra "Böl" bas.', 'warning'); return; }
+  const parts = await aidanPrompt(
+    `"${text}" görevini böl`,
+    'Her satıra bir adım yaz:',
+    "1. adım\n2. adım\n3. adım",
+    true
+  );
+  if (parts === null || !parts.trim()) return;
+  const subs = parts.split('\n').map(s => s.trim()).filter(s => s).map(s => ({ text: s, done: false }));
+  if (subs.length === 0) return;
+  data.tasks.push({
+    id: Date.now(), text, done: false, doneDate: null, subtasks: subs, created: timeStr(),
+    priority: document.getElementById('taskPriority').value,
+    category: document.getElementById('taskCategory').value || null,
+    due: document.getElementById('taskDue').value || null,
+    estimateMin: parseInt(document.getElementById('taskEstimate').value) || null,
+    actualMin: null,
+    repeat: document.getElementById('taskRepeatNew').value || null,
+    reminderTime: document.getElementById('taskReminder').value || null,
+    lastReminded: null,
+    mitDate: null,
+    streakCount: 0,
+    lastStreakDate: null,
+    seriesId: null,
+    seriesName: null,
+    seriesIndex: null,
+    seriesTotal: null
+  });
+  document.getElementById('taskInput').value = '';
+  document.getElementById('taskReminder').value = '';
+  save(); renderTasks();
+  showToast(`Görev ${subs.length} adıma bölündü ✂️`, 'success');
+}
+
+function toggleTask(id) {
+  const t = data.tasks.find(x => x.id === id);
+  t.done = !t.done;
+  t.doneDate = t.done ? today() : null;
+
+  // Streak (sadece günlük tekrarlı görevler için)
+  if (t.done && t.repeat === 'daily') {
+    const todayStr = today();
+    if (t.lastStreakDate === todayStr) {
+      // Bugün zaten sayıldı, dokunma
+    } else if (t.lastStreakDate) {
+      const diffDays = Math.round((new Date(todayStr) - new Date(t.lastStreakDate)) / 86400000);
+      t.streakCount = (diffDays === 1) ? (t.streakCount || 0) + 1 : 1;
+    } else {
+      t.streakCount = 1;
+    }
+    t.lastStreakDate = todayStr;
+    // Streak milestone kutlaması
+    if ([3, 7, 14, 30, 60, 100].includes(t.streakCount)) {
+      setTimeout(() => {
+        playBeep();
+        alert(`🔥 ${t.streakCount} gün seri! "${t.text}" alışkanlığa dönüşüyor. Devam et. 💪`);
+      }, 300);
+    }
+  }
+
+  if (t.done && t.estimateMin && currentFocusTaskId === id && focusStartTime) {
+    const elapsed = Math.round((Date.now() - focusStartTime) / 60000);
+    t.actualMin = elapsed;
+    const diff = elapsed - t.estimateMin;
+    setTimeout(() => {
+      if (diff > 5) showToast(`Görev bitti! Tahmin ${t.estimateMin}dk, gerçek ${elapsed}dk — ${diff}dk fazla. Bir dahaki sefer biraz daha cömert tahmin et 📊`, 'info', 5000);
+      else if (diff < -5) showToast(`Görev bitti! Tahmin ${t.estimateMin}dk, gerçek ${elapsed}dk — daha hızlı bitti! 🎉`, 'success', 5000);
+      else showToast(`Görev bitti! Tahmin ${t.estimateMin}dk, gerçek ${elapsed}dk — tahmin neredeyse tam 🎯`, 'success', 5000);
+    }, 200);
+  } else if (t.done && t.estimateMin && !t.actualMin) {
+    // Manuel bitirildi, tahmin var ama gerçek süre yok — kibarca sor
+    setTimeout(async () => {
+      const cevap = await aidanPrompt(`"${t.text}" bitti! 🎯`, 'Kaç dakika sürdü? (sadece sayı)', String(t.estimateMin));
+      if (cevap === null) return;
+      const dk = parseInt(cevap);
+      if (isNaN(dk) || dk <= 0) return;
+      t.actualMin = dk;
+      save();
+      renderTasks();
+      const diff = dk - t.estimateMin;
+      if (diff > 5) showToast(`Tahmin ${t.estimateMin}dk, gerçek ${dk}dk — ${diff}dk fazla. 📊`, 'info', 5000);
+      else if (diff < -5) showToast(`Tahmin ${t.estimateMin}dk, gerçek ${dk}dk — daha hızlı bitti! 🎉`, 'success', 5000);
+      else showToast(`Tahmin ${t.estimateMin}dk, gerçek ${dk}dk — tahmin neredeyse tam 🎯`, 'success', 5000);
+    }, 300);
+  }
+
+  // MIT kutlaması: bugünün 3'ünü tamamladıysa
+  if (t.done && t.mitDate === today()) {
+    const mit = data.tasks.filter(x => x.mitDate === today());
+    const mitDone = mit.filter(x => x.done).length;
+    if (mit.length === 3 && mitDone === 3) {
+      setTimeout(() => {
+        playBeep();
+        alert('🎉 Bugünün 3\'ünü TAMAMLADIN!\n\nBugün için işin bitti. Bonus her şey hediye. Kendini ödüllendir. 💜');
+      }, 400);
+    } else if (mitDone < mit.length) {
+      // Tek tek tamamlanma — küçük dopamin
+      setTimeout(() => playBeep(), 50);
+    }
+  }
+
+  save(); renderTasks();
+}
+
+function toggleSub(tid, idx) {
+  const t = data.tasks.find(x => x.id === tid);
+  t.subtasks[idx].done = !t.subtasks[idx].done;
+  if (t.subtasks.every(s => s.done)) {
+    t.done = true;
+    t.doneDate = today();
+  }
+  save(); renderTasks();
+}
+
+function deleteTask(id) {
+  if (!confirm('Görevi sil?')) return;
+  data.tasks = data.tasks.filter(x => x.id !== id);
+  save(); renderTasks();
+}
+
+async function addSubtask(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  const txt = await aidanPrompt('Alt görev ekle', `"${t.text}" için bir adım:`, '');
+  if (txt === null) return;
+  const trimmed = txt.trim();
+  if (!trimmed) return;
+  t.subtasks.push({ text: trimmed, done: false });
+  // Eğer ana görev tamamlandıysa ve yeni subtask eklendi, ana görevi geri aç
+  if (t.done) { t.done = false; t.doneDate = null; }
+  save(); renderTasks();
+  showToast('Alt görev eklendi', 'success');
+}
+
+async function deleteSubtask(tid, idx) {
+  const t = data.tasks.find(x => x.id === tid);
+  if (!t || !t.subtasks[idx]) return;
+  t.subtasks.splice(idx, 1);
+  save(); renderTasks();
+}
+
+async function editTask(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  const yeni = await aidanPrompt('Görev düzenle', 'Görev metni:', t.text);
+  if (yeni === null) return; // iptal
+  const trimmed = yeni.trim();
+  if (!trimmed) {
+    if (confirm('Boş bıraktın. Görevi silmek mi istedin?')) {
+      data.tasks = data.tasks.filter(x => x.id !== id);
+      save(); renderTasks();
+    }
+    return;
+  }
+  if (trimmed === t.text) return;
+  t.text = trimmed;
+  save(); renderTasks();
+  showToast('Görev güncellendi ✏️', 'success');
+}
+
+function toggleMit(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  const todayStr = today();
+  if (t.mitDate === todayStr) {
+    t.mitDate = null;
+    showToast('Bugünün 3\'ünden çıkarıldı', 'info');
+  } else {
+    const currentMit = data.tasks.filter(x => x.mitDate === todayStr).length;
+    if (currentMit >= 3) {
+      showToast('Bugünün 3\'ü dolu! Önce birinin ⭐\'ını kaldır. 3 sınırı kasıtlı — odak için.', 'warning', 5000);
+      return;
+    }
+    t.mitDate = todayStr;
+    showToast('⭐ Bugünün 3\'üne eklendi', 'success');
+  }
+  save(); renderTasks();
+}
+
+function startTaskNow(id, fiveMinMode) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  currentFocusTaskId = id;
+  focusStartTime = Date.now();
+  document.getElementById('focusTask').textContent = '🎯 ' + t.text;
+  const mins = fiveMinMode ? 5 : (t.estimateMin || 25);
+  setTimer(mins, fiveMinMode ? 2 : 5);
+  showTab('focus');
+  setTimeout(() => startTimer(), 200);
+}
+
+let currentFocusTaskId = null;
+let focusStartTime = null;
+
+// ============ FİLTRE ============
+let _taskFilter = localStorage.getItem('aidan_filter') || 'all';
+
+function setFilter(f, btn) {
+  _taskFilter = f;
+  localStorage.setItem('aidan_filter', f);
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  else {
+    const target = document.querySelector(`[data-filter="${f}"]`);
+    if (target) target.classList.add('active');
+  }
+  renderTasks();
+}
+
+function initFilter() {
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  const target = document.querySelector(`[data-filter="${_taskFilter}"]`);
+  if (target) target.classList.add('active');
+  else { _taskFilter = 'all'; document.querySelector('[data-filter="all"]').classList.add('active'); }
+}
+
+function filterTasks(tasks) {
+  const ts = today();
+  let filtered;
+  switch (_taskFilter) {
+    case 'today':
+      filtered = tasks.filter(t => !t.done && (
+        t.mitDate === ts ||
+        t.priority === 'urgent' ||
+        (t.due && t.due <= ts) ||
+        !t.due
+      ));
+      break;
+    case 'urgent':
+      filtered = tasks.filter(t => !t.done && t.priority === 'urgent');
+      break;
+    case 'odev':
+    case 'ev':
+    case 'kisisel':
+      filtered = tasks.filter(t => !t.done && t.category === _taskFilter);
+      break;
+    case 'done':
+      filtered = tasks.filter(t => t.done);
+      break;
+    default:
+      filtered = tasks;
+  }
+  // Arama uygula
+  const searchEl = document.getElementById('taskSearch');
+  const q = searchEl ? searchEl.value.trim().toLowerCase() : '';
+  if (q) {
+    filtered = filtered.filter(t =>
+      t.text.toLowerCase().includes(q) ||
+      (t.subtasks && t.subtasks.some(s => s.text.toLowerCase().includes(q)))
+    );
+  }
+  return filtered;
+}
+
+function updateFilterCounts() {
+  const ts = today();
+  const total = data.tasks.length;
+  const todayCount = data.tasks.filter(t => !t.done && (
+    t.mitDate === ts || t.priority === 'urgent' || (t.due && t.due <= ts) || !t.due
+  )).length;
+  const setCnt = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n > 0 ? n : ''; };
+  setCnt('cnt-all', total);
+  setCnt('cnt-today', todayCount);
+  setCnt('cnt-urgent', data.tasks.filter(t => !t.done && t.priority === 'urgent').length);
+  setCnt('cnt-odev', data.tasks.filter(t => !t.done && t.category === 'odev').length);
+  setCnt('cnt-ev', data.tasks.filter(t => !t.done && t.category === 'ev').length);
+  setCnt('cnt-kisisel', data.tasks.filter(t => !t.done && t.category === 'kisisel').length);
+  setCnt('cnt-done', data.tasks.filter(t => t.done).length);
+}
+
+// ============ TOAST & MODAL ============
+function showToast(message, type = 'info', duration = 3500) {
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+  const toast = document.createElement('div');
+  toast.className = 'toast ' + type;
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('fade-out');
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+  // Tıklayınca kapat
+  toast.addEventListener('click', () => {
+    toast.classList.add('fade-out');
+    setTimeout(() => toast.remove(), 300);
+  });
+}
+
+let _inputModalResolve = null;
+
+function aidanPrompt(title, label, defaultValue = '', multiline = false) {
+  return new Promise(resolve => {
+    document.getElementById('inputModalTitle').textContent = title;
+    document.getElementById('inputModalLabel').textContent = label;
+    const input = document.getElementById('inputModalInput');
+    const textarea = document.getElementById('inputModalTextarea');
+    if (multiline) {
+      input.style.display = 'none';
+      textarea.style.display = 'block';
+      textarea.value = defaultValue;
+      setTimeout(() => textarea.focus(), 100);
+    } else {
+      input.style.display = 'block';
+      textarea.style.display = 'none';
+      input.value = defaultValue;
+      setTimeout(() => { input.focus(); input.select(); }, 100);
+    }
+    _inputModalResolve = resolve;
+    document.getElementById('inputModal').classList.add('active');
+  });
+}
+
+function resolveInputModal() {
+  const input = document.getElementById('inputModalInput');
+  const textarea = document.getElementById('inputModalTextarea');
+  const val = (textarea.style.display !== 'none' ? textarea.value : input.value);
+  document.getElementById('inputModal').classList.remove('active');
+  if (_inputModalResolve) _inputModalResolve(val);
+  _inputModalResolve = null;
+}
+
+function cancelInputModal() {
+  document.getElementById('inputModal').classList.remove('active');
+  if (_inputModalResolve) _inputModalResolve(null);
+  _inputModalResolve = null;
+}
+
+// Enter ile gönder (textarea hariç — orada Ctrl+Enter)
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('inputModal').classList.contains('active')) return;
+  if (e.key === 'Enter') {
+    const textarea = document.getElementById('inputModalTextarea');
+    if (textarea.style.display !== 'none' && !e.ctrlKey && !e.metaKey) return; // textarea'da normal Enter newline
+    e.preventDefault();
+    resolveInputModal();
+  } else if (e.key === 'Escape') {
+    cancelInputModal();
+  }
+});
+
+// ============ ŞU AN NE YAPAYIM? ============
+let _suggestedTaskId = null;
+let _recentSuggestions = [];
+
+function suggestTask() {
+  const pending = data.tasks.filter(t => !t.done);
+  if (pending.length === 0) {
+    alert('🎉 Tüm görevlerini bitirmişsin!\n\nYeni görev ekle veya dinlen. Bonus her şey hediye. 💜');
+    return;
+  }
+
+  const todayStr = today();
+  const buckets = [
+    { reason: '⭐ Bugünün 3\'ünden', tasks: pending.filter(t => t.mitDate === todayStr) },
+    { reason: '🔥 Acil görevin var', tasks: pending.filter(t => t.priority === 'urgent' && t.mitDate !== todayStr) },
+    { reason: '⏰ Bunu geçirme — son gün bugün', tasks: pending.filter(t => t.due === todayStr && t.priority !== 'urgent' && t.mitDate !== todayStr) },
+    { reason: '🚨 Bu zaten gecikti', tasks: pending.filter(t => t.due && t.due < todayStr && t.mitDate !== todayStr && t.priority !== 'urgent') },
+    { reason: '💡 Kısa bir şey: bunu yap', tasks: pending.filter(t => t.estimateMin && t.estimateMin <= 15 && !t.mitDate && t.priority !== 'urgent' && (!t.due || t.due > todayStr)) },
+    { reason: '🎲 Rastgele bir şey', tasks: pending.filter(t => !t.mitDate && t.priority !== 'urgent' && (!t.due || t.due > todayStr)) }
+  ];
+
+  let selected = null, reason = '';
+  for (const b of buckets) {
+    if (b.tasks.length > 0) {
+      // Son 5 öneride olmayanları tercih et
+      const fresh = b.tasks.filter(t => !_recentSuggestions.includes(t.id));
+      const pool = fresh.length > 0 ? fresh : b.tasks;
+      selected = pool[Math.floor(Math.random() * pool.length)];
+      reason = b.reason;
+      break;
+    }
+  }
+
+  if (!selected) {
+    // Hiç filtre eşleşmediyse pending'ten rastgele
+    selected = pending[Math.floor(Math.random() * pending.length)];
+    reason = '🎲 Bunu deneyebilirsin';
+  }
+
+  _suggestedTaskId = selected.id;
+  _recentSuggestions.push(selected.id);
+  if (_recentSuggestions.length > 5) _recentSuggestions.shift();
+
+  document.getElementById('suggestReason').textContent = reason;
+  document.getElementById('suggestTaskText').textContent = selected.text;
+
+  const meta = [];
+  if (selected.priority === 'urgent') meta.push('🔥 ACİL');
+  if (selected.category) {
+    const cat = { odev: '📚 Ödev', ev: '🏠 Ev', kisisel: '💜 Kişisel' };
+    if (cat[selected.category]) meta.push(cat[selected.category]);
+  }
+  if (selected.estimateMin) meta.push(`⏱️ ${selected.estimateMin} dk`);
+  if (selected.due === todayStr) meta.push('📅 Bugün son gün');
+  else if (selected.due && selected.due < todayStr) meta.push('🚨 Gecikti');
+
+  document.getElementById('suggestMeta').innerHTML =
+    meta.map(m => `<span class="badge">${escapeHtml(m)}</span>`).join('');
+
+  document.getElementById('suggestModal').classList.add('active');
+}
+
+function acceptSuggestion(fiveMinMode) {
+  if (!_suggestedTaskId) return;
+  const id = _suggestedTaskId;
+  closeSuggestModal();
+  startTaskNow(id, fiveMinMode);
+}
+
+function closeSuggestModal() {
+  document.getElementById('suggestModal').classList.remove('active');
+  _suggestedTaskId = null;
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeSuggestModal();
+});
+
+function sortTasks(tasks) {
+  const priorityOrder = { urgent: 0, normal: 1, low: 2 };
+  const todayStr = today();
+  return [...tasks].sort((a, b) => {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    // MIT (Bugünün 3'ü) en üstte
+    const aMit = a.mitDate === todayStr ? 0 : 1;
+    const bMit = b.mitDate === todayStr ? 0 : 1;
+    if (aMit !== bMit) return aMit - bMit;
+    const pa = priorityOrder[a.priority] ?? 1;
+    const pb = priorityOrder[b.priority] ?? 1;
+    if (pa !== pb) return pa - pb;
+    if (a.due && b.due) return a.due.localeCompare(b.due);
+    if (a.due) return -1;
+    if (b.due) return 1;
+    return b.id - a.id;
+  });
+}
+
+function effectiveStreak(t) {
+  if (t.repeat !== 'daily' || !t.lastStreakDate || !t.streakCount) return 0;
+  const diff = Math.round((new Date(today()) - new Date(t.lastStreakDate)) / 86400000);
+  if (diff > 1) return 0; // bir gün atlandı, streak kırıldı
+  return t.streakCount;
+}
+
+function dueLabel(due) {
+  if (!due) return '';
+  const d = new Date(due);
+  const t = new Date(today());
+  const diff = Math.round((d - t) / 86400000);
+  if (diff < 0) return { text: `📅 ${Math.abs(diff)} gün gecikti`, cls: 'due-today' };
+  if (diff === 0) return { text: '📅 Bugün son gün!', cls: 'due-today' };
+  if (diff === 1) return { text: '📅 Yarın', cls: 'due-soon' };
+  if (diff <= 3) return { text: `📅 ${diff} gün kaldı`, cls: 'due-soon' };
+  return { text: `📅 ${due}`, cls: '' };
+}
+
+function renderTaskItem(t) {
+  const todayStr = today();
+  const isMit = t.mitDate === todayStr;
+  const cls = [
+    t.done ? 'done' : '',
+    t.priority === 'urgent' ? 'urgent' : '',
+    t.priority === 'low' ? 'low' : '',
+    t.category ? 'cat-' + t.category : '',
+    isMit ? 'mit' : ''
+  ].filter(x => x).join(' ');
+  const due = dueLabel(t.due);
+  const streak = effectiveStreak(t);
+  return `
+    <div class="task ${cls}">
+      <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask(${t.id})">
+      <div style="flex:1;">
+        <div class="task-text">${isMit ? '⭐ ' : ''}${escapeHtml(t.text)}</div>
+        <div class="task-meta">
+          ${t.priority === 'urgent' ? '<span class="badge" style="background:#ff5555;color:white;">🔥 ACİL</span>' : ''}
+          ${t.category ? `<span class="badge">${({odev:'📚 Ödev',ev:'🏠 Ev',kisisel:'💜 Kişisel'})[t.category] || t.category}</span>` : ''}
+          ${due ? `<span class="badge ${due.cls}">${due.text}</span>` : ''}
+          ${t.estimateMin ? `<span class="badge">⏱️ ${t.estimateMin}dk</span>` : ''}
+          ${t.actualMin ? `<span class="badge">✓ ${t.actualMin}dk sürdü</span>` : ''}
+          ${t.repeat ? `<span class="badge">${({daily:'🔁 Günlük',weekly:'📅 Haftalık',weekdays:'📚 Hafta içi',weekends:'🛋️ Hafta sonu'})[t.repeat] || t.repeat}</span>` : ''}
+          ${t.reminderTime ? `<span class="badge" style="background:rgba(99,102,241,0.15);color:var(--accent);border-color:rgba(99,102,241,0.3);">🔔 ${t.reminderTime}</span>` : ''}
+          ${streak > 1 ? `<span class="badge" style="background:rgba(248,81,73,0.15);color:var(--danger);border-color:rgba(248,81,73,0.3);">🔥 ${streak} gün</span>` : ''}
+          ${t.seriesId ? (() => { const sp = seriesProgress(t.seriesId); return `<span class="badge series-badge" title="${escapeHtml(t.seriesName||'Seri')}" onclick="event.stopPropagation(); showSeries('${t.seriesId}')">📚 ${escapeHtml((t.seriesName||'Seri').slice(0,18))} ${sp.done}/${sp.total}</span>`; })() : ''}
+        </div>
+        <div class="subtasks">
+          ${t.subtasks.map((s,i) => `
+            <div class="subtask">
+              <input type="checkbox" ${s.done?'checked':''} onchange="toggleSub(${t.id},${i})">
+              <span style="${s.done?'text-decoration:line-through;opacity:0.5':''}; flex:1;">${escapeHtml(s.text)}</span>
+              <button class="subtask-del" onclick="deleteSubtask(${t.id},${i})" title="Sil">×</button>
+            </div>
+          `).join('')}
+          <button class="subtask-add" onclick="addSubtask(${t.id})">+ alt adım</button>
+        </div>
+      </div>
+      <div class="task-actions">
+        <button class="small ${isMit ? 'mit-on' : 'secondary'}" onclick="toggleMit(${t.id})" title="${isMit ? 'Bugünün 3\'ünden çıkar' : 'Bugünün 3\'üne ekle'}">${isMit ? '⭐' : '☆'}</button>
+        <button class="small" onclick="startTaskNow(${t.id}, false)" title="Şimdi başla — odak moduna geçer">▶️</button>
+        <button class="small secondary" onclick="editTask(${t.id})" title="Düzenle">✏️</button>
+        <button class="small danger" onclick="deleteTask(${t.id})">🗑️</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderTasks() {
+  const list = document.getElementById('taskList');
+  const sorted = sortTasks(filterTasks(data.tasks));
+  const todayStr = today();
+
+  if (sorted.length === 0) {
+    const emptyMsg = _taskFilter === 'all'
+      ? 'Henüz görev yok. Yukarıdan ekle 👆'
+      : 'Bu filtreye uyan görev yok. <a href="#" onclick="setFilter(\'all\', null); return false;" style="color:var(--accent);">Hepsini göster</a>';
+    list.innerHTML = '<div class="empty">' + emptyMsg + '</div>';
+  } else if (_taskFilter === 'all') {
+    // İki gruba böl: Şimdi (bugün üzerinde çalışılabilir) ve Sonra (gelecek tarihli)
+    const simdi = sorted.filter(t => t.done || !t.due || t.due <= todayStr || t.priority === 'urgent' || t.mitDate === todayStr);
+    const sonra = sorted.filter(t => !t.done && t.due && t.due > todayStr && t.priority !== 'urgent' && t.mitDate !== todayStr);
+    let html = '';
+    if (simdi.length > 0) html += simdi.map(renderTaskItem).join('');
+    if (sonra.length > 0) {
+      html += `
+        <details style="margin-top: 14px;">
+          <summary style="cursor:pointer; padding: 10px 14px; background: var(--bg-elev); border-radius: 8px; border: 1px solid var(--border-soft); color: var(--text-muted); font-size: 0.88em; user-select: none;">
+            📦 Sonraki günler (${sonra.length})
+          </summary>
+          <div style="margin-top: 6px;">
+            ${sonra.map(renderTaskItem).join('')}
+          </div>
+        </details>
+      `;
+    }
+    list.innerHTML = html;
+  } else {
+    list.innerHTML = sorted.map(renderTaskItem).join('');
+  }
+
+  const total = data.tasks.length;
+  const done = data.tasks.filter(t => t.done).length;
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statDone').textContent = done;
+  document.getElementById('statLeft').textContent = total - done;
+  renderMit();
+  updateFilterCounts();
+}
+
+function renderMit() {
+  const todayStr = today();
+  const mitTasks = data.tasks.filter(t => t.mitDate === todayStr);
+  const doneCount = mitTasks.filter(t => t.done).length;
+  const countEl = document.getElementById('mitCount');
+  const listEl = document.getElementById('mitList');
+  if (!countEl || !listEl) return;
+  countEl.textContent = doneCount + '/3';
+  if (mitTasks.length === 0) {
+    listEl.innerHTML = '<div class="mit-empty">Bugün için 3 öncelik seç — görev kartındaki ☆ butonuna bas</div>';
+    return;
+  }
+  listEl.innerHTML = mitTasks.map(t => `
+    <div class="mit-item ${t.done ? 'done' : ''}">
+      <span>${t.done ? '✅' : '⬜'}</span>
+      <span>${escapeHtml(t.text)}</span>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Tekrarlı görevleri yeni günde reset et
+function checkRepeatingTasks() {
+  let changed = false;
+  const todayStr = today();
+  const dayOfWeek = new Date(todayStr).getDay(); // 0=Pazar, 1-5=Hafta içi, 6=Cumartesi
+  const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+  data.tasks.forEach(t => {
+    if (!t.done || !t.doneDate || t.doneDate === todayStr) return;
+
+    let shouldReset = false;
+    if (t.repeat === 'daily') {
+      shouldReset = true;
+    } else if (t.repeat === 'weekdays') {
+      shouldReset = isWeekday;
+    } else if (t.repeat === 'weekends') {
+      shouldReset = isWeekend;
+    } else if (t.repeat === 'weekly') {
+      const diff = Math.round((new Date(todayStr) - new Date(t.doneDate)) / 86400000);
+      shouldReset = diff >= 7;
+    }
+
+    if (shouldReset) {
+      t.done = false;
+      t.doneDate = null;
+      t.subtasks.forEach(s => s.done = false);
+      changed = true;
+    }
+  });
+  if (changed) save();
+}
+
+// ============ POMODORO ============
+let timerSec = 25*60, workMin = 25, breakMin = 5, isBreak = false, timerInt = null, running = false;
+let totalSec = 25*60;
+
+function updateTimerDisplay() {
+  const m = Math.floor(timerSec/60), s = timerSec%60;
+  const txt = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  document.getElementById('timer').textContent = txt;
+  document.getElementById('timer').classList.toggle('break', isBreak);
+  document.getElementById('timerRing').classList.toggle('break', isBreak);
+  document.getElementById('timerStatus').textContent = isBreak ? '☕ Mola zamanı' : '🎯 Çalışma zamanı';
+  const pct = ((totalSec - timerSec) / totalSec) * 100;
+  document.getElementById('timerRing').style.setProperty('--p', pct + '%');
+  document.title = `${txt} - Aidan`;
+}
+
+function startTimer() {
+  if (running) return;
+  running = true;
+  if (!isBreak && !focusStartTime) focusStartTime = Date.now();
+  timerInt = setInterval(() => {
+    timerSec--;
+    if (timerSec <= 0) {
+      clearInterval(timerInt);
+      running = false;
+      if (!isBreak) {
+        data.pomoToday.count++;
+        const tStr = today();
+        data.pomoHistory[tStr] = (data.pomoHistory[tStr] || 0) + 1;
+        save();
+        document.getElementById('pomoCount').textContent = data.pomoToday.count;
+        renderPomoHistory();
+        notify('🍅 Pomodoro bitti!', 'Harika iş! Şimdi ' + breakMin + ' dk mola.');
+        isBreak = true;
+        timerSec = breakMin * 60;
+        totalSec = breakMin * 60;
+      } else {
+        notify('☕ Mola bitti!', 'Hadi devam, ' + workMin + ' dk daha.');
+        isBreak = false;
+        timerSec = workMin * 60;
+        totalSec = workMin * 60;
+        focusStartTime = Date.now();
+      }
+      playBeep();
+      updateTimerDisplay();
+    }
+    updateTimerDisplay();
+  }, 1000);
+}
+
+function pauseTimer() { clearInterval(timerInt); running = false; }
+
+function resetTimer() {
+  clearInterval(timerInt);
+  running = false;
+  isBreak = false;
+  timerSec = workMin * 60;
+  totalSec = workMin * 60;
+  focusStartTime = null;
+  currentFocusTaskId = null;
+  updateTimerDisplay();
+  document.title = 'Aidan - ADHD Asistanım';
+}
+
+function setTimer(w, b) {
+  workMin = w; breakMin = b;
+  resetTimer();
+}
+
+function renderPomoHistory() {
+  const chart = document.getElementById('pomoChart');
+  if (!chart) return;
+  const todayStr = today();
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(todayStr);
+    d.setDate(d.getDate() - i);
+    const ds = d.toISOString().slice(0, 10);
+    days.push({
+      date: ds,
+      count: data.pomoHistory[ds] || 0,
+      label: ['Pzr','Pzt','Sal','Çar','Per','Cum','Cmt'][d.getDay()],
+      isToday: ds === todayStr
+    });
+  }
+  const max = Math.max(...days.map(d => d.count), 1);
+  chart.innerHTML = days.map(d => `
+    <div class="bar-col ${d.isToday ? 'today' : ''}">
+      <div class="bar-wrap">
+        <div class="bar ${d.isToday ? 'today' : ''}" style="height: ${Math.max((d.count / max) * 100, d.count > 0 ? 12 : 3)}%">
+          ${d.count > 0 ? `<span class="bar-value">${d.count}</span>` : ''}
+        </div>
+      </div>
+      <div class="bar-day">${d.label}</div>
+    </div>
+  `).join('');
+}
+
+function playBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value = 800; o.type = 'sine';
+    g.gain.setValueAtTime(0.3, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+    o.start(); o.stop(ctx.currentTime + 0.5);
+  } catch(e) {}
+}
+
+// ============ BRAIN DUMP ============
+function saveDump() {
+  const text = document.getElementById('dumpInput').value.trim();
+  if (!text) return;
+  data.dumps.unshift({ text, when: timeStr() });
+  document.getElementById('dumpInput').value = '';
+  save(); renderDumps();
+}
+function deleteDump(idx) { data.dumps.splice(idx, 1); save(); renderDumps(); }
+function clearAllDumps() {
+  if (!confirm('Tüm brain dump notlarını sil?')) return;
+  data.dumps = []; save(); renderDumps();
+}
+function renderDumps() {
+  const list = document.getElementById('dumpList');
+  if (!data.dumps.length) { list.innerHTML = '<div class="empty">Henüz not yok.</div>'; return; }
+  list.innerHTML = data.dumps.map((d, i) => `
+    <div class="dump-entry">
+      <div class="dump-date">${d.when}</div>
+      <div style="white-space:pre-wrap;">${escapeHtml(d.text)}</div>
+      <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
+        <button class="small" onclick="dumpToTask(${i})">📋 Göreve çevir</button>
+        <button class="danger small" onclick="deleteDump(${i})">Sil</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function dumpToTask(idx) {
+  const d = data.dumps[idx];
+  if (!d) return;
+  // Çok uzun dump için kullanıcıya metni gözden geçirme şansı ver
+  const initial = d.text.length > 120 ? d.text.slice(0, 117) + '...' : d.text;
+  const taskText = await aidanPrompt('Göreve çevir', 'Görev metni (gerekirse düzenle):', initial);
+  if (taskText === null) return;
+  const trimmed = taskText.trim();
+  if (!trimmed) return;
+  data.tasks.push({
+    id: Date.now(),
+    text: trimmed,
+    done: false,
+    doneDate: null,
+    subtasks: [],
+    created: timeStr(),
+    priority: 'normal',
+    category: null,
+    due: null,
+    estimateMin: null,
+    actualMin: null,
+    repeat: null,
+    mitDate: null,
+    streakCount: 0,
+    lastStreakDate: null
+  });
+  data.dumps.splice(idx, 1);
+  save();
+  renderDumps();
+  renderTasks();
+  showToast('Brain dump göreve çevrildi 📋 — Görevler sekmesinde', 'success', 4000);
+}
+
+// ============ RUTİNLER ============
+function addRoutine() {
+  const time = document.getElementById('routineTime').value;
+  const name = document.getElementById('routineName').value.trim();
+  if (!time || !name) { showToast('Saat ve isim gir.', 'warning'); return; }
+  data.routines.push({ id: Date.now(), time, name, lastFired: '' });
+  document.getElementById('routineTime').value = '';
+  document.getElementById('routineName').value = '';
+  save(); renderRoutines();
+  showToast('Rutin eklendi ⏰', 'success');
+}
+function deleteRoutine(id) {
+  data.routines = data.routines.filter(r => r.id !== id);
+  save(); renderRoutines();
+}
+function renderRoutines() {
+  const list = document.getElementById('routineList');
+  if (!data.routines.length) {
+    list.innerHTML = '<div class="empty">Henüz rutin yok. Örnek: 09:00 İlacımı al</div>';
+    return;
+  }
+  list.innerHTML = data.routines.sort((a,b)=>a.time.localeCompare(b.time)).map(r => `
+    <div class="routine-item">
+      <div class="routine-info">
+        <span class="routine-time">${r.time}</span>
+        <span class="routine-name"> — ${escapeHtml(r.name)}</span>
+      </div>
+      <button class="danger small" onclick="deleteRoutine(${r.id})">Sil</button>
+    </div>
+  `).join('');
+}
+
+// ============ CHECK-IN ============
+function logMood(emoji, label) {
+  const note = document.getElementById('checkinNote').value.trim();
+  data.checkins.unshift({ emoji, label, note, when: timeStr() });
+  document.getElementById('checkinNote').value = '';
+  save(); renderCheckins();
+  const responses = {
+    'harika': 'Süper! Bu enerjiyi bir göreve yönlendirelim mi? 💫',
+    'iyi': 'Güzel. Bugün küçük bir şey halletmek için iyi gün. ✨',
+    'idare eder': 'Tamam. Bugün için bar düşük tutalım — sadece 1 görev. 🎯',
+    'zor': 'Zor günler oluyor. 5 dakika kuralı: sadece 5 dk dene, sonra bırakabilirsin. 💜',
+    'tükenmiş': 'Dinlen. Hiçbir görev senin sağlığından önemli değil. 😴'
+  };
+  showToast(responses[label] || 'Kaydettim. 💜', 'info', 5000);
+}
+function renderCheckins() {
+  const list = document.getElementById('checkinList');
+  if (!data.checkins.length) { list.innerHTML = ''; return; }
+  list.innerHTML = '<h3>Geçmiş</h3>' +
+    data.checkins.slice(0, 20).map(c => `
+      <div class="checkin-row">
+        <div style="font-size:1.8em;">${c.emoji}</div>
+        <div style="flex:1;">
+          <div style="font-size:0.85em;color:#888;">${c.when}</div>
+          <div><b>${c.label}</b>${c.note ? ' — ' + escapeHtml(c.note) : ''}</div>
+        </div>
+      </div>
+    `).join('');
+}
+
+// ============ AYARLAR ============
+function saveSettings() {
+  data.settings.ntfyTopic = document.getElementById('ntfyTopic').value.trim();
+  data.settings.hyperfocusEnabled = document.getElementById('hyperfocusEnabled').checked;
+  data.settings.hyperfocusMin = parseInt(document.getElementById('hyperfocusMin').value) || 45;
+  save();
+}
+function loadSettings() {
+  document.getElementById('ntfyTopic').value = data.settings.ntfyTopic || '';
+  document.getElementById('hyperfocusEnabled').checked = data.settings.hyperfocusEnabled || false;
+  document.getElementById('hyperfocusMin').value = data.settings.hyperfocusMin || 45;
+  document.getElementById('supaUrl').value = data.settings.supaUrl || '';
+  document.getElementById('supaKey').value = data.settings.supaKey || '';
+  if (data.settings.supaUrl && data.settings.supaKey) {
+    initSupabase();
+  } else {
+    renderAuthBox();
+  }
+}
+function genRandomTopic() {
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+  let s = 'salim-aidan-';
+  for (let i = 0; i < 8; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  document.getElementById('ntfyTopic').value = s;
+  saveSettings();
+  alert('Üretildi: ' + s + '\n\nBu adı telefondaki ntfy uygulamasında "Subscribe to topic" altına da yaz.');
+}
+function showNtfyStatus(html, color) {
+  const el = document.getElementById('ntfyStatus');
+  if (!el) return;
+  el.innerHTML = `<div style="background:${color};color:#1e1e2e;padding:10px;border-radius:8px;white-space:pre-wrap;font-size:0.9em;">${html}</div>`;
+}
+
+function validateTopic(topic) {
+  if (!topic) return 'Topic adı boş.';
+  if (topic.length < 3) return 'Topic adı en az 3 karakter olmalı.';
+  if (!/^[a-zA-Z0-9_-]+$/.test(topic)) return 'Topic adında sadece harf (a-z), rakam, tire (-) ve alt çizgi (_) olmalı. Türkçe karakter / boşluk olmaz.';
+  return null;
+}
+
+async function testNtfy() {
+  saveSettings();
+  const topic = (document.getElementById('ntfyTopic').value || '').trim();
+  const err = validateTopic(topic);
+  if (err) { showNtfyStatus('⚠️ ' + err, '#ffb86c'); return; }
+
+  const url = 'https://ntfy.sh/' + topic;
+  const msg = 'Aidan Test - ' + new Date().toLocaleTimeString('tr-TR') + ' - Eğer bunu görüyorsan, telefon bildirimi calisiyor!';
+
+  showNtfyStatus('⏳ Gönderiliyor: ' + url + '\nTopic: "' + topic + '"', '#8be9fd');
+
+  // Custom header'lar CORS preflight tetikliyor; query param ile gönder (preflight yok)
+  const urlWithParams = url + '?title=' + encodeURIComponent('Aidan Test') + '&tags=brain';
+
+  try {
+    const r = await fetch(urlWithParams, {
+      method: 'POST',
+      body: msg
+    });
+    if (r.ok) {
+      const responseText = await r.text();
+      showNtfyStatus(
+        '✅ Sunucuya gönderildi (HTTP ' + r.status + ')\n\n' +
+        'Sunucu cevabı: ' + responseText.slice(0, 200) + '\n\n' +
+        'Telefonunda 5 sn içinde gelmediyse:\n' +
+        '• Telefondaki ntfy uygulamasında topic adı TAM olarak şu mu: "' + topic + '"\n' +
+        '• Telefon ntfy\'a bildirim izni vermiş mi? (Ayarlar → Uygulamalar → ntfy → Bildirimler)\n' +
+        '• Telefon internet var mı?\n\n' +
+        'TEST: "🌐 Web sayfasını aç" butonuna bas, oradan da test gönder. O da gelmezse sorun telefondaki abonelikte.',
+        '#50fa7b'
+      );
+    } else {
+      showNtfyStatus('❌ Sunucu hatası: HTTP ' + r.status + '\nURL: ' + urlWithParams, '#ff5555');
+    }
+  } catch (e) {
+    // Fetch hatası — muhtemelen CORS veya ağ. no-cors ile tekrar dene
+    try {
+      await fetch(urlWithParams, { method: 'POST', body: msg, mode: 'no-cors' });
+      showNtfyStatus(
+        '⚠️ Gönderildi ama tarayıcı cevabı okuyamadı (CORS).\n' +
+        'Mesaj muhtemelen ulaştı — telefonunu kontrol et.\n\n' +
+        'Hata: ' + e.message + '\n\n' +
+        'Gelmediyse "🌐 Web sayfasını aç" ile tarayıcıdan test gönder.',
+        '#ffb86c'
+      );
+    } catch (e2) {
+      showNtfyStatus(
+        '❌ Bağlantı hatası: ' + e2.message + '\n\n' +
+        'Olası nedenler:\n' +
+        '• İnternet bağlantın yok\n' +
+        '• Tarayıcı/firewall ntfy.sh\'i bloke ediyor\n' +
+        '• file:// kısıtlaması (Edge/Chrome bazen)\n\n' +
+        'Çözüm: "🌐 Web sayfasını aç" butonuna bas, oradan test gönder.',
+        '#ff5555'
+      );
+    }
+  }
+}
+
+function openNtfyWeb() {
+  saveSettings();
+  const topic = (document.getElementById('ntfyTopic').value || '').trim();
+  const err = validateTopic(topic);
+  if (err) { showNtfyStatus('⚠️ ' + err, '#ffb86c'); return; }
+  const url = 'https://ntfy.sh/' + topic;
+
+  // Pop-up bloke olabilir, yeni sekmeyi açmayı deneyelim AMA aynı zamanda linki ekranda göster
+  let popupBlocked = false;
+  try {
+    const w = window.open(url, '_blank');
+    if (!w || w.closed || typeof w.closed === 'undefined') popupBlocked = true;
+  } catch(e) { popupBlocked = true; }
+
+  const el = document.getElementById('ntfyStatus');
+  el.innerHTML = `
+    <div style="background:#bd93f9;color:#1e1e2e;padding:12px;border-radius:8px;font-size:0.95em;">
+      ${popupBlocked ? '⚠️ Pop-up bloke edildi.<br>' : '🌐 Yeni sekme açıldı (açılmadıysa):'}
+      <br><br>
+      <b>Şu linke tıkla:</b><br>
+      <a href="${url}" target="_blank" rel="noopener" style="display:inline-block;background:#1e1e2e;color:#8be9fd;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:bold;margin:8px 0;font-size:1.05em;word-break:break-all;">${url}</a>
+      <br>
+      <button class="small" style="background:#50fa7b;margin-top:8px;" onclick="navigator.clipboard.writeText('${url}').then(()=>alert('Linki kopyaladım. Yeni sekme açıp yapıştır.'))">📋 Linki kopyala</button>
+      <br><br>
+      <b>O sayfada ne yapacaksın:</b><br>
+      1. Aşağıdaki "Send notification" / mesaj kutusunu bul<br>
+      2. Bir test mesajı yaz, "Send" bas<br>
+      3. Telefonuna geliyorsa → abonelik DOĞRU, sorun bu HTML'de (CORS)<br>
+      4. Telefona da gelmiyorsa → telefondaki ntfy uygulamasında topic adı yanlış veya bildirim izni yok
+    </div>
+  `;
+}
+
+function sendNtfy(title, body) {
+  const topic = data.settings.ntfyTopic;
+  if (!topic || validateTopic(topic)) return;
+  const url = 'https://ntfy.sh/' + topic + '?title=' + encodeURIComponent(title) + '&tags=brain';
+  fetch(url, { method: 'POST', body: body, mode: 'no-cors' })
+    .catch(e => console.warn('ntfy failed', e));
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `aidan-yedek-${today()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function importData(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const imported = JSON.parse(ev.target.result);
+      if (!confirm('Mevcut verilerin üzerine yazılacak. Devam?')) return;
+      data = imported;
+      save();
+      location.reload();
+    } catch (err) { alert('Hatalı dosya: ' + err.message); }
+  };
+  reader.readAsText(file);
+}
+function resetAll() {
+  if (!confirm('TÜM verilerin silinecek. Emin misin?')) return;
+  if (!confirm('Gerçekten emin misin? Bu geri alınamaz.')) return;
+  localStorage.removeItem('aidan');
+  location.reload();
+}
+
+// ============ ZAMAN KÖRLÜĞÜ ÜST BAR ============
+function updateTopbar() {
+  const now = new Date();
+  document.getElementById('tbClock').textContent =
+    String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+
+  // Sonraki rutin
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  let nextR = null, nextDiff = Infinity;
+  data.routines.forEach(r => {
+    const [h, m] = r.time.split(':').map(Number);
+    const rMin = h * 60 + m;
+    let diff = rMin - nowMin;
+    if (diff <= 0) diff += 24 * 60;
+    if (diff < nextDiff) { nextDiff = diff; nextR = r; }
+  });
+  if (nextR) {
+    const txt = nextDiff < 60 ? nextDiff + ' dk' : Math.floor(nextDiff/60) + 'sa ' + (nextDiff%60) + 'dk';
+    document.getElementById('tbNext').textContent = nextR.name.slice(0, 15) + ' (' + txt + ')';
+  } else {
+    document.getElementById('tbNext').textContent = '—';
+  }
+
+  // Kesintisiz çalışma: son aktiviteden 5dk+ geçtiyse "—" göster (idle)
+  const sinceActivity = Date.now() - lastUserActivity;
+  let focusMin;
+  if (sinceActivity > IDLE_RESET_MS) {
+    document.getElementById('tbFocus').textContent = '—';
+    focusMin = 0;
+  } else {
+    focusMin = Math.floor((Date.now() - focusStreakStart) / 60000);
+    document.getElementById('tbFocus').textContent =
+      focusMin < 60 ? focusMin + ' dk' : Math.floor(focusMin/60) + 'sa ' + (focusMin%60) + 'dk';
+  }
+
+  // Hyperfocus uyarısı — gerçek aktif streak'e bağlı
+  if (data.settings.hyperfocusEnabled && focusMin > 0) {
+    const limit = data.settings.hyperfocusMin || 45;
+    const sinceAlert = (Date.now() - lastHyperfocusAlert) / 60000;
+    if (focusMin >= limit && sinceAlert >= limit) {
+      lastHyperfocusAlert = Date.now();
+      notify('🧠 Hyperfocus uyarısı', `${limit} dk'dır kesintisiz çalışıyorsun. Kalk, su iç, gözlerini dinlendir.`);
+      playBeep();
+    }
+  }
+}
+setInterval(updateTopbar, 10000);
+updateTopbar();
+
+// ============ RUTİN + GÖREV HATIRLATMA KONTROL ============
+setInterval(() => {
+  const now = new Date();
+  const hhmm = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  const todayStr = today();
+  let changed = false;
+  data.routines.forEach(r => {
+    if (r.time === hhmm && r.lastFired !== todayStr) {
+      r.lastFired = todayStr;
+      changed = true;
+      notify('⏰ Hatırlatma', r.name);
+      playBeep();
+    }
+  });
+  data.tasks.forEach(t => {
+    if (t.done) return;
+    if (!t.reminderTime || t.reminderTime !== hhmm) return;
+    if (t.lastReminded === todayStr) return;
+    t.lastReminded = todayStr;
+    changed = true;
+    notify('🎯 Görev hatırlatması', t.text);
+    playBeep();
+  });
+  if (changed) save();
+}, 30000);
+
+// ============ BİLDİRİM ============
+function askNotif() {
+  Notification.requestPermission().then(p => {
+    if (p === 'granted') {
+      document.getElementById('notifBanner').style.display = 'none';
+      notify('✅ Aidan hazır!', 'Hatırlatmalar artık çalışacak.');
+    }
+  });
+}
+
+function notify(title, body) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(title, { body });
+  }
+  sendNtfy(title, body);
+}
+
+if ('Notification' in window && Notification.permission === 'default') {
+  document.getElementById('notifBanner').style.display = 'block';
+}
+
+// ============ SUPABASE BULUT SENKRONU ============
+window._supa = null;
+window._user = null;
+let _pushTimer = null;
+let _pulling = false;
+let _pushing = false;
+
+function showSupaStatus(msg, color) {
+  const el = document.getElementById('supaStatus');
+  if (el) el.innerHTML = `<div style="background:${color};color:#1e1e2e;padding:10px;border-radius:8px;font-size:0.9em;white-space:pre-wrap;">${msg}</div>`;
+}
+
+function renderAuthBox() {
+  const el = document.getElementById('supaAuthBox');
+  if (!window._supa) { el.innerHTML = ''; return; }
+  if (window._user) {
+    el.innerHTML = `
+      <div style="background:#50fa7b;color:#1e1e2e;padding:12px;border-radius:8px;">
+        ✅ Giriş yapıldı: <b>${window._user.email}</b><br>
+        <button class="small danger" style="margin-top:8px;" onclick="logoutUser()">🚪 Çıkış yap</button>
+        <button class="small" style="margin-top:8px;background:#bd93f9;color:white;" onclick="manualPull()">🔄 Şimdi senkronize et</button>
+      </div>
+    `;
+  } else {
+    el.innerHTML = `
+      <div style="background:#2a2a3e;padding:12px;border-radius:8px;">
+        <b>📧 Email + Şifre ile giriş:</b><br>
+        <input type="email" id="loginEmail" placeholder="email@adres.com" style="width:100%;max-width:300px;margin:6px 0;display:block;">
+        <input type="password" id="loginPassword" placeholder="şifre (en az 6 karakter)" style="width:100%;max-width:300px;margin:6px 0;display:block;">
+        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="small" onclick="signUpUser()">🆕 Hesap Oluştur</button>
+          <button class="small secondary" onclick="signInUser()">🔓 Giriş Yap</button>
+        </div>
+        <div style="font-size:0.85em;color:#888;margin-top:6px;">İlk kez: "Hesap Oluştur" bas.<br>Sonra her zaman: "Giriş Yap".<br>Aynı email ve şifreyi telefonda da kullanacaksın.</div>
+      </div>
+    `;
+  }
+}
+
+async function signUpUser() {
+  if (!window._supa) { showSupaStatus('⚠️ Önce Supabase\'e bağlan.', '#ffb86c'); return; }
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if (!email || !email.includes('@')) { showSupaStatus('⚠️ Geçerli email gir.', '#ffb86c'); return; }
+  if (password.length < 6) { showSupaStatus('⚠️ Şifre en az 6 karakter olmalı.', '#ffb86c'); return; }
+
+  showSupaStatus('⏳ Hesap oluşturuluyor...', '#8be9fd');
+  const {data: signupData, error} = await window._supa.auth.signUp({email, password});
+  if (error) {
+    showSupaStatus('❌ Hata: ' + error.message + '\n\nZaten hesabın varsa "Giriş Yap" butonuna bas.', '#ff5555');
+    return;
+  }
+  if (signupData.session) {
+    showSupaStatus('✅ Hesap oluşturuldu ve giriş yapıldı!', '#50fa7b');
+  } else {
+    showSupaStatus('⚠️ Hesap oluşturuldu AMA email doğrulama gerekiyor.\n\nSupabase\'de şunu yap:\nAuthentication → Providers → Email → "Confirm email" KAPAT → Save\n\nSonra "Giriş Yap" bas.', '#ffb86c');
+  }
+}
+
+async function signInUser() {
+  if (!window._supa) { showSupaStatus('⚠️ Önce Supabase\'e bağlan.', '#ffb86c'); return; }
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if (!email || !password) { showSupaStatus('⚠️ Email ve şifre gerekli.', '#ffb86c'); return; }
+
+  showSupaStatus('⏳ Giriş yapılıyor...', '#8be9fd');
+  const {error} = await window._supa.auth.signInWithPassword({email, password});
+  if (error) {
+    showSupaStatus('❌ Hata: ' + error.message + '\n\nHesabın yok mu? "Hesap Oluştur" bas.', '#ff5555');
+  } else {
+    showSupaStatus('✅ Giriş başarılı!', '#50fa7b');
+  }
+}
+
+function connectSupabase() {
+  let url = document.getElementById('supaUrl').value.trim();
+  let key = document.getElementById('supaKey').value.trim();
+  // Sık yapılan hataları otomatik temizle
+  url = url.replace(/\/rest\/v1\/?$/, ''); // /rest/v1 kaldır
+  url = url.replace(/\/auth\/v1\/?$/, ''); // /auth/v1 kaldır
+  url = url.replace(/\/+$/, ''); // sondaki / kaldır
+  if (!url || !key) { showSupaStatus('⚠️ URL ve key gerekli.', '#ffb86c'); return; }
+  if (!url.startsWith('https://') || !url.includes('.supabase.co')) {
+    showSupaStatus('⚠️ URL https://xxxxx.supabase.co formatında olmalı.', '#ffb86c');
+    return;
+  }
+  // Temizlenmiş halini geri yaz
+  document.getElementById('supaUrl').value = url;
+  document.getElementById('supaKey').value = key;
+  data.settings.supaUrl = url;
+  data.settings.supaKey = key;
+  localStorage.setItem('aidan', JSON.stringify(data));
+  initSupabase();
+}
+
+function disconnectSupabase() {
+  if (!confirm('Bulut bağlantısını kes? Veriler bilgisayarında kalır ama artık senkronize olmaz.')) return;
+  if (window._supa && window._user) window._supa.auth.signOut();
+  data.settings.supaUrl = '';
+  data.settings.supaKey = '';
+  localStorage.setItem('aidan', JSON.stringify(data));
+  window._supa = null;
+  window._user = null;
+  renderAuthBox();
+  showSupaStatus('🔌 Bağlantı kesildi.', '#6272a4');
+}
+
+function initSupabase() {
+  const url = data.settings.supaUrl;
+  const key = data.settings.supaKey;
+  if (!url || !key) return;
+  if (!window.supabase) { showSupaStatus('❌ Supabase kütüphanesi yüklenemedi (internet?).', '#ff5555'); return; }
+
+  try {
+    window._supa = window.supabase.createClient(url, key);
+  } catch(e) {
+    showSupaStatus('❌ Bağlantı hatası: ' + e.message, '#ff5555');
+    return;
+  }
+
+  showSupaStatus('✅ Supabase\'e bağlandı. Email ile giriş yap.', '#50fa7b');
+
+  window._supa.auth.onAuthStateChange((event, session) => {
+    if (session && session.user) {
+      window._user = session.user;
+      onLoginSuccess();
+    } else {
+      window._user = null;
+      renderAuthBox();
+    }
+  });
+
+  window._supa.auth.getSession().then(({data: {session}}) => {
+    if (session && session.user) {
+      window._user = session.user;
+      onLoginSuccess();
+    } else {
+      renderAuthBox();
+    }
+  });
+}
+
+async function logoutUser() {
+  if (!window._supa) return;
+  await window._supa.auth.signOut();
+  showSupaStatus('🚪 Çıkış yapıldı. Veriler bilgisayarında durmaya devam ediyor.', '#6272a4');
+}
+
+async function onLoginSuccess() {
+  renderAuthBox();
+  showSupaStatus('✅ Giriş başarılı: ' + window._user.email + '\n⏳ Veriler eşitleniyor...', '#50fa7b');
+  await pullFromCloud();
+  subscribeToCloud();
+}
+
+async function pullFromCloud() {
+  if (!window._supa || !window._user) return;
+  _pulling = true;
+  try {
+    const {data: row, error} = await window._supa
+      .from('aidan_data')
+      .select('*')
+      .eq('user_id', window._user.id)
+      .maybeSingle();
+
+    if (error) {
+      showSupaStatus('⚠️ Çekme hatası: ' + error.message + '\n(Tablo yok mu? SQL\'i çalıştırdın mı?)', '#ff5555');
+      _pulling = false;
+      return;
+    }
+
+    if (row && row.data) {
+      // Bulutta veri var — yereli onunla değiştir
+      const remoteData = row.data;
+      data = remoteData;
+      // Eski alanları ekle
+      data.tasks = data.tasks || [];
+      data.dumps = data.dumps || [];
+      data.routines = data.routines || [];
+      data.checkins = data.checkins || [];
+      data.settings = data.settings || {};
+      data.pomoToday = data.pomoToday || { date: today(), count: 0 };
+      localStorage.setItem('aidan', JSON.stringify(data));
+      // Yenilemeden re-render et (aktif sekmeyi koru)
+      renderTasks();
+      renderDumps();
+      renderRoutines();
+      renderCheckins();
+      document.getElementById('pomoCount').textContent = data.pomoToday.count;
+      showSupaStatus('✅ Buluttan veri çekildi.', '#50fa7b');
+    } else {
+      // Bulutta veri yok — yereli yükle
+      await pushToCloudNow();
+      showSupaStatus('✅ İlk veri buluta yüklendi. Artık eşitleniyor.', '#50fa7b');
+    }
+  } catch(e) {
+    showSupaStatus('❌ ' + e.message, '#ff5555');
+  }
+  _pulling = false;
+}
+
+function schedulePush() {
+  if (_pulling) return;
+  clearTimeout(_pushTimer);
+  _pushTimer = setTimeout(pushToCloudNow, 1500);
+}
+
+async function pushToCloudNow() {
+  if (!window._supa || !window._user) return;
+  _pushing = true;
+  try {
+    const now = new Date();
+    const {error} = await window._supa
+      .from('aidan_data')
+      .upsert({
+        user_id: window._user.id,
+        data: data,
+        updated_at: now.toISOString()
+      }, { onConflict: 'user_id' });
+    if (error) console.warn('Push hata:', error);
+    else localStorage.setItem('aidan_lastPush', String(now.getTime()));
+  } catch(e) { console.warn('Push hata:', e); }
+  // Echo'yu görmezden gelmek için kısa grace period
+  setTimeout(() => { _pushing = false; }, 3000);
+}
+
+function subscribeToCloud() {
+  if (!window._supa || !window._user) return;
+  window._supa.channel('aidan-sync-' + window._user.id)
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'aidan_data',
+      filter: 'user_id=eq.' + window._user.id
+    }, payload => {
+      // Kendi push'umuzun echo'sunu görmezden gel
+      if (_pulling || _pushing) return;
+      if (!payload.new || !payload.new.data) return;
+      // Veri gerçekten farklı mı?
+      const remoteJson = JSON.stringify(payload.new.data);
+      const localJson = JSON.stringify(data);
+      if (remoteJson === localJson) return;
+      // Diğer cihazdan gelmiş — sayfa yenilemeden uygula
+      data = payload.new.data;
+      // Eski alanlar eksikse default ekle
+      data.tasks = data.tasks || [];
+      data.dumps = data.dumps || [];
+      data.routines = data.routines || [];
+      data.checkins = data.checkins || [];
+      data.settings = data.settings || {};
+      data.pomoToday = data.pomoToday || { date: today(), count: 0 };
+      localStorage.setItem('aidan', JSON.stringify(data));
+      // Sekmeyi koruyarak yeniden render et
+      renderTasks();
+      renderDumps();
+      renderRoutines();
+      renderCheckins();
+      showSupaStatus('🔄 Diğer cihazdan güncelleme alındı.', '#bd93f9');
+    })
+    .subscribe();
+}
+
+async function manualPull() {
+  showSupaStatus('⏳ Veriler çekiliyor...', '#8be9fd');
+  await pullFromCloud();
+}
+
+// ============ SERİ (Ödev grupları) ============
+function seriesProgress(seriesId) {
+  if (!seriesId) return { done: 0, total: 0 };
+  const items = data.tasks.filter(t => t.seriesId === seriesId);
+  return { done: items.filter(t => t.done).length, total: items.length };
+}
+
+function showSeries(seriesId) {
+  const items = data.tasks.filter(t => t.seriesId === seriesId)
+    .sort((a, b) => (a.seriesIndex || 0) - (b.seriesIndex || 0));
+  if (items.length === 0) { showToast('Seri bulunamadı', 'warning'); return; }
+  const sp = seriesProgress(seriesId);
+  const name = items[0].seriesName || 'Seri';
+  document.getElementById('seriesModalTitle').textContent = '📚 ' + name;
+  document.getElementById('seriesModalProgress').textContent =
+    `${sp.done}/${sp.total} bitti${sp.done === sp.total ? ' — Tamamlandı! 🎉' : ''}`;
+  const listHtml = items.map(t => {
+    const dueStr = t.due ? new Date(t.due).toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+    return `
+      <div style="padding:10px 12px; background:var(--bg-elev); border-radius:7px; border:1px solid var(--border-soft); display:flex; gap:10px; align-items:center;">
+        <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask(${t.id}); showSeries('${seriesId}')" style="width:18px;height:18px;">
+        <div style="flex:1;">
+          <div style="${t.done ? 'text-decoration:line-through; opacity:0.5;' : ''} font-size:0.92em;">${escapeHtml(t.text)}</div>
+          <div style="font-size:0.75em; color:var(--text-muted); margin-top:2px;">${dueStr}${t.estimateMin ? ' · ⏱️ ' + t.estimateMin + 'dk' : ''}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  document.getElementById('seriesModalList').innerHTML = listHtml;
+  document.getElementById('seriesModal').classList.add('active');
+}
+
+function closeSeriesModal() {
+  document.getElementById('seriesModal').classList.remove('active');
+}
+
+// ============ TAKVİM ============
+let _calOffset = 0; // hafta ofseti (0 = bu hafta)
+
+function openCalendar() {
+  _calOffset = 0;
+  renderCalendar();
+  document.getElementById('calModal').classList.add('active');
+}
+
+function closeCalendar() {
+  document.getElementById('calModal').classList.remove('active');
+}
+
+function calWeek(delta) {
+  if (delta === 0) _calOffset = 0;
+  else _calOffset += delta;
+  renderCalendar();
+}
+
+function startOfWeek(offsetWeeks) {
+  const now = new Date();
+  const day = now.getDay(); // 0 paz, 1 pzt, ...
+  const diff = (day === 0 ? -6 : 1 - day); // pazartesi'ye git
+  const d = new Date(now);
+  d.setDate(now.getDate() + diff + offsetWeeks * 7);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function renderCalendar() {
+  const start = startOfWeek(_calOffset);
+  const todayStr = today();
+  const dayNames = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+  const monthFmt = new Intl.DateTimeFormat('tr-TR', { month: 'long' });
+
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    const iso = d.toISOString().slice(0, 10);
+    days.push({ date: d, iso, name: dayNames[i] });
+  }
+
+  const tasksByDay = {};
+  days.forEach(d => tasksByDay[d.iso] = []);
+  data.tasks.forEach(t => {
+    if (t.due && tasksByDay[t.due]) tasksByDay[t.due].push(t);
+    if (t.mitDate && tasksByDay[t.mitDate] && (!t.due || t.due !== t.mitDate)) {
+      // MIT bugüne, due başka güne ise iki yerde gösterme — sadece due'sunda göster
+      // (mit zaten bugün olduğu için yukarıdaki dueIso == mitDate yakalıyor)
+    }
+  });
+
+  // Başlık
+  const firstDay = days[0].date;
+  const lastDay = days[6].date;
+  const titleStr = `${firstDay.getDate()} ${monthFmt.format(firstDay)} — ${lastDay.getDate()} ${monthFmt.format(lastDay)}`;
+  document.getElementById('calTitle').textContent = '📅 ' + (_calOffset === 0 ? 'Bu hafta · ' : (_calOffset === 1 ? 'Sonraki · ' : (_calOffset === -1 ? 'Önceki · ' : ''))) + titleStr;
+
+  // Grid
+  const html = days.map(d => {
+    const isToday = d.iso === todayStr;
+    const isPast = d.iso < todayStr;
+    const dayTasks = tasksByDay[d.iso] || [];
+    const tasksHtml = dayTasks.slice(0, 8).map(t => {
+      const cls = [
+        t.priority === 'urgent' ? 'urgent' : '',
+        t.category || '',
+        t.mitDate === d.iso ? 'mit' : '',
+        t.done ? 'done' : ''
+      ].filter(x => x).join(' ');
+      const label = (t.mitDate === d.iso ? '⭐ ' : '') + (t.text || '');
+      return `<div class="cal-task ${cls}" onclick="closeCalendar(); showTab('tasks', document.querySelector('[data-tab=tasks]')); setTimeout(() => { const el = document.querySelector('[onchange*=&quot;toggleTask(${t.id})&quot;]'); if(el) el.scrollIntoView({behavior:'smooth', block:'center'}); }, 100);" title="${escapeHtml(t.text)}">${escapeHtml(label)}</div>`;
+    }).join('');
+    const more = dayTasks.length > 8 ? `<div style="font-size:0.7em; color:var(--text-muted); padding:2px 4px;">+${dayTasks.length - 8} daha</div>` : '';
+    return `
+      <div class="cal-day ${isToday ? 'today' : ''} ${isPast && !isToday ? 'past' : ''}">
+        <div class="cal-day-head">${d.name}</div>
+        <div class="cal-day-num">${d.date.getDate()}</div>
+        ${tasksHtml}${more}
+      </div>
+    `;
+  }).join('');
+  document.getElementById('calGrid').innerHTML = html;
+
+  // Özet
+  const totalThisWeek = days.reduce((sum, d) => sum + tasksByDay[d.iso].length, 0);
+  const doneThisWeek = days.reduce((sum, d) => sum + tasksByDay[d.iso].filter(t => t.done).length, 0);
+  document.getElementById('calSummary').innerHTML =
+    `📊 Bu hafta: <b style="color:var(--text);">${totalThisWeek}</b> görev · <b style="color:var(--success);">${doneThisWeek}</b> bitti · <b style="color:var(--warning);">${totalThisWeek - doneThisWeek}</b> kaldı`;
+}
+
+// ============ PWA: Service Worker Kaydı ============
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(e => console.log('SW kaydı başarısız (dosyadan açılıyorsa normal):', e.message));
+  });
+}
+
+// ============ İLK RENDER ============
+loadSettings();
+initFilter();
+checkRepeatingTasks();
+renderTasks();
+renderDumps();
+renderRoutines();
+renderCheckins();
+document.getElementById('pomoCount').textContent = data.pomoToday.count;
+renderPomoHistory();
+updateTimerDisplay();
+</script>
+</body>
+</html>
