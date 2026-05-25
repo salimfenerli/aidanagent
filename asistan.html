@@ -2625,6 +2625,22 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(e => console.log('SW kaydı başarısız (dosyadan açılıyorsa normal):', e.message));
   });
+
+  // SW yeni sürüm aktifleştiğinde otomatik yenile (sadece bir kez)
+  let _swReloaded = sessionStorage.getItem('_swReloaded') === '1';
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'SW_UPDATED' && !_swReloaded) {
+      _swReloaded = true;
+      sessionStorage.setItem('_swReloaded', '1');
+      showToast('🔄 Aidan güncellendi, yeniden yükleniyor...', 'info');
+      setTimeout(() => window.location.reload(), 800);
+    }
+  });
+
+  // Sayfa açıldığında SW'ye yeni sürüm var mı diye kontrol et
+  navigator.serviceWorker.ready.then(reg => {
+    if (reg && reg.update) reg.update();
+  });
 }
 
 // ============ İLK RENDER ============
