@@ -1,0 +1,20 @@
+name = "aidan-pusher"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# Cron tetikleyiciler — Cloudflare UTC kullanır (TR = UTC+3)
+[triggers]
+crons = [
+  "0 5 * * *",   # 08:00 TR — sabah brifingi
+  "0 6 * * *",   # 09:00 TR — deadline uyarısı
+  "0 9 * * *",   # 12:00 TR — öğle ping
+  "0 18 * * *",  # 21:00 TR — akşam özet (opsiyonel, istemezsen sil)
+]
+
+# NOT: Environment değişkenlerini KOD'A YAZMA.
+# Cloudflare Dashboard'dan Worker → Settings → Variables and Secrets'tan ekle:
+#   SUPABASE_URL        (Plaintext)
+#   SUPABASE_KEY        (Plaintext)
+#   AIDAN_EMAIL         (Plaintext)
+#   AIDAN_PASSWORD      (Secret olarak ekle — gizli kalır)
+#   NTFY_TOPIC          (Plaintext)
