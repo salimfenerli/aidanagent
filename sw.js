@@ -1,11 +1,9 @@
-const CACHE = 'aidan-v6-1';
+const CACHE = 'aidan-v6-3';
 const ASSETS = [
-  './',
-  './asistan.html',
-  './index.html',
-  './manifest.webmanifest',
-  './icon.svg',
-  './icon-maskable.svg'
+  '/',
+  '/manifest.webmanifest',
+  '/icon.svg',
+  '/icon-maskable.svg'
 ];
 
 self.addEventListener('install', e => {

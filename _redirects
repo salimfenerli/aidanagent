@@ -1,7 +1,10 @@
-# Hassas dosyalar — public erişim engelle
-/CLAUDE.md       /asistan.html  404
-/aidan-mcp/*     /asistan.html  404
-/aidan-worker/*  /asistan.html  404
-/.env*           /asistan.html  404
-/.git*           /asistan.html  404
-/.claude/*       /asistan.html  404
+/asistan.html / 301
+/asistan / 301
+/CLAUDE.md /404.html 404
+/aidan-mcp/* /404.html 404
+/aidan-worker/* /404.html 404
+/.env* /404.html 404
+/.git* /404.html 404
+/.claude/* /404.html 404
+/netlify.toml /404.html 404
+/blackjack.html /404.html 404
