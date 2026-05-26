@@ -190,7 +190,7 @@ async def add_task(
 
     text: Görev metni (zorunlu)
     priority: 'urgent' | 'normal' | 'low'
-    category: 'odev' | 'ev' | 'kisisel'
+    category: 'odev' | 'ders' | 'ev' | 'kisisel'
     due: 'bugün' | 'yarın' | 'YYYY-MM-DD' | 'DD.MM.YYYY' | 'DD.MM'
     estimate_min: Tahmini dakika
     reminder_time: 'HH:MM' (telefonda bildirim)
@@ -214,7 +214,7 @@ async def add_task(
         "subtasks": [],
         "created": datetime.now().strftime("%d.%m.%Y %H:%M"),
         "priority": priority if priority in ("urgent", "normal", "low") else "normal",
-        "category": category if category in ("odev", "ev", "kisisel") else None,
+        "category": category if category in ("odev", "ders", "ev", "kisisel") else None,
         "due": _parse_due(due),
         "estimateMin": estimate_min,
         "actualMin": None,
@@ -423,7 +423,7 @@ async def add_homework_series(
     chunks: Kaç parça (sayfa yoksa). chunk_labels verirsen onun uzunluğu kullanılır.
     chunk_labels: Her parçanın metni (örn: ['Konu 1', 'Konu 2']). Verilirse chunks = len().
     daily_minutes: Her parça için tahmini dakika
-    category: 'odev' | 'ev' | 'kisisel'
+    category: 'odev' | 'ders' | 'ev' | 'kisisel'
     reminder_time: 'HH:MM' (her gün aynı saatte bildirim)
     start: Başlangıç günü (varsayılan: bugün)
     skip_weekends: True ise Cmt-Paz atla
@@ -478,7 +478,7 @@ async def add_homework_series(
             "subtasks": [],
             "created": created_now,
             "priority": "normal",
-            "category": category if category in ("odev", "ev", "kisisel") else "odev",
+            "category": category if category in ("odev", "ders", "ev", "kisisel") else "odev",
             "due": day.isoformat(),
             "estimateMin": daily_minutes,
             "actualMin": None,

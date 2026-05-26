@@ -120,6 +120,69 @@ async function sendTyping(env, chatId) {
 // ============================================================
 // Cron mesaj üreticiler
 // ============================================================
+// Akıllı MIT skoru — geçmiş, deadline, öncelik, tahmin'e göre
+function scoreTaskForMit(t, today, tomorrow) {
+  let score = 0;
+  if (t.due) {
+    if (t.due < today) score += 150; // gecikti, hemen ele al
+    else if (t.due === today) score += 100;
+    else if (t.due === tomorrow) score += 50;
+    else {
+      // Yaklaşan deadline'a göre lineer azal
+      const days = Math.max(1, Math.round((new Date(t.due) - new Date(today)) / 86400000));
+      if (days <= 7) score += Math.max(10, 40 - days * 4);
+    }
+  }
+  if (t.priority === 'urgent') score += 60;
+  if (t.priority === 'low') score -= 15;
+  if (t.estimateMin) {
+    if (t.estimateMin <= 30) score += 20;
+    else if (t.estimateMin <= 60) score += 15;
+    else if (t.estimateMin > 120) score -= 10;
+  }
+  if (t.reminderTime) score += 12;
+  if (t.category === 'odev') score += 8;
+  if (t.category === 'ders') score += 12; // özel ders = sabit randevu, kaçırılamaz
+  // Eski / unutulmuş — created'dan en az 5 gün geçmişse hatırlat
+  if (t.created) {
+    const ageMs = Date.now() - new Date(t.created.replace(' ', 'T')).getTime();
+    const ageDays = Math.floor(ageMs / 86400000);
+    if (ageDays >= 5 && ageDays <= 30) score += 15;
+  }
+  // Seri görevi: sıradaki adım önemli
+  if (t.seriesId) score += 10;
+  return score;
+}
+
+function suggestMitFromTasks(data) {
+  const today = trToday();
+  const tomorrow = trDate(1);
+  const tasks = (data.tasks || []).filter(t => !t.done);
+  if (!tasks.length) return [];
+  const scored = tasks
+    .map(t => ({ t, score: scoreTaskForMit(t, today, tomorrow) }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+  // En fazla 3, kategorik çeşitlilik gözet
+  const out = [];
+  const usedCats = new Set();
+  for (const { t } of scored) {
+    if (out.length >= 3) break;
+    // İlk 2 görevi her kategoriden almaya çalış, 3.'de zorlama
+    if (out.length < 2 && t.category && usedCats.has(t.category)) continue;
+    out.push(t);
+    if (t.category) usedCats.add(t.category);
+  }
+  // Hâlâ 3'e ulaşamadıysak en yüksek skorlulardan tamamla
+  if (out.length < 3) {
+    for (const { t } of scored) {
+      if (out.length >= 3) break;
+      if (!out.includes(t)) out.push(t);
+    }
+  }
+  return out;
+}
+
 function buildMorning(data) {
   const today = trToday();
   const tasks = data.tasks || [];
@@ -127,13 +190,35 @@ function buildMorning(data) {
   const urgent = tasks.filter(t => t.priority === 'urgent' && !t.done);
   const dueToday = tasks.filter(t => t.due === today && !t.done);
   const dueTomorrow = tasks.filter(t => t.due === trDate(1) && !t.done);
+  const overdue = tasks.filter(t => t.due && t.due < today && !t.done);
 
   const lines = [`🌅 Günaydın Salim`];
   if (mit.length) {
     lines.push('', `⭐ Bugünün 3'ü:`);
     mit.forEach(t => lines.push(`  • ${t.text}`));
   } else {
-    lines.push('', `⭐ Henüz MIT seçilmedi — bugün için 1-3 önemli görev belirle.`);
+    // MIT seçilmediyse akıllı öneri yap
+    const suggestions = suggestMitFromTasks(data);
+    if (suggestions.length) {
+      lines.push('', `🎯 Bugünün 3'ü için öneri:`);
+      suggestions.forEach((t, i) => {
+        const extras = [];
+        if (t.due === today) extras.push('bugün son');
+        else if (t.due === trDate(1)) extras.push('yarın son');
+        else if (t.due && t.due < today) extras.push('⚠️ gecikti');
+        if (t.priority === 'urgent') extras.push('🔴 acil');
+        if (t.estimateMin) extras.push(`${t.estimateMin}dk`);
+        const tail = extras.length ? ` (${extras.join(' · ')})` : '';
+        lines.push(`  ${i + 1}. ${t.text}${tail}`);
+      });
+      lines.push('', `💡 Uygunsa PWA'da ⭐'lara tıkla, ya da bana "MIT 1 2 3" yaz.`);
+    } else {
+      lines.push('', `⭐ MIT seçilmedi ve aktif görev yok. Yeni bir görev ekleyerek başla.`);
+    }
+  }
+  if (overdue.length) {
+    lines.push('', `⚠️ Gecikmiş (${overdue.length}):`);
+    overdue.slice(0, 3).forEach(t => lines.push(`  • ${t.text} (${t.due})`));
   }
   if (urgent.length) {
     lines.push('', `🔴 Acil (${urgent.length}):`);
@@ -288,7 +373,7 @@ const TOOL_HANDLERS = {
       subtasks: [],
       created: new Date(Date.now() + TR_OFFSET_MS).toISOString().replace('T', ' ').slice(0, 16),
       priority: ['urgent','normal','low'].includes(args.priority) ? args.priority : 'normal',
-      category: ['odev','ev','kisisel'].includes(args.category) ? args.category : null,
+      category: ['odev','ders','ev','kisisel'].includes(args.category) ? args.category : null,
       due: parseDueText(args.due),
       estimateMin: args.estimate_min ? parseInt(args.estimate_min) : null,
       actualMin: null,
@@ -309,7 +394,7 @@ const TOOL_HANDLERS = {
     const bits = [`✅ Eklendi: ${text}`];
     if (t.due) bits.push(`📅 ${t.due}`);
     if (t.reminderTime) bits.push(`🔔 ${t.reminderTime}`);
-    if (t.category) bits.push(`🏷️ ${({odev:'Ödev',ev:'Ev',kisisel:'Kişisel'})[t.category]}`);
+    if (t.category) bits.push(`🏷️ ${({odev:'Ödev',ders:'Özel Ders',ev:'Ev',kisisel:'Kişisel'})[t.category]}`);
     if (t.priority === 'urgent') bits.push('🔴 Acil');
     if (mit) bits.push("⭐ MIT'e eklendi");
     return { ok: true, reply: bits.join(' · ') };
@@ -378,6 +463,62 @@ const TOOL_HANDLERS = {
     return { ok: true, reply: payload.message };
   },
 
+  async set_mit(args, ctx) {
+    const q = String(args.query || '').trim().toLowerCase();
+    if (!q) return { ok: false, reply: '❌ Hangi görevi MIT yapayım?' };
+    const today = trToday();
+    const tasks = ctx.data.tasks || [];
+    const matches = tasks.filter(t => !t.done && (t.text || '').toLowerCase().includes(q));
+    if (!matches.length) return { ok: false, reply: `❌ "${q}" eşleşen aktif görev yok.` };
+    if (matches.length > 1) {
+      const list = matches.slice(0, 5).map(t => `• ${t.text}`).join('\n');
+      return { ok: false, reply: `🤔 Birden fazla eşleşme:\n${list}\nDaha net belirt.` };
+    }
+    const t = matches[0];
+    if (t.mitDate === today) {
+      return { ok: true, reply: `⭐ "${t.text}" zaten bugünün MIT'sinde.` };
+    }
+    const mitCount = tasks.filter(x => x.mitDate === today && !x.done).length;
+    if (mitCount >= 3) {
+      return { ok: false, reply: `❌ Bugünün 3'ü dolu. Önce birini bitir veya MIT'ten çıkar.` };
+    }
+    t.mitDate = today;
+    ctx.dirty = true;
+    return { ok: true, reply: `⭐ "${t.text}" bugünün MIT'sine eklendi (${mitCount + 1}/3).` };
+  },
+
+  async unset_mit(args, ctx) {
+    const q = String(args.query || '').trim().toLowerCase();
+    if (!q) return { ok: false, reply: '❌ Hangi görevi MIT\'ten çıkarayım?' };
+    const today = trToday();
+    const tasks = ctx.data.tasks || [];
+    const matches = tasks.filter(t => t.mitDate === today && (t.text || '').toLowerCase().includes(q));
+    if (!matches.length) return { ok: false, reply: `❌ "${q}" eşleşen bugünün MIT'inde görev yok.` };
+    const t = matches[0];
+    t.mitDate = null;
+    ctx.dirty = true;
+    return { ok: true, reply: `✅ "${t.text}" MIT'ten çıkarıldı.` };
+  },
+
+  async postpone_task(args, ctx) {
+    const q = String(args.query || '').trim().toLowerCase();
+    if (!q) return { ok: false, reply: '❌ Hangi görev?' };
+    const to = parseDueText(args.to || 'yarın') || trDate(1);
+    const tasks = ctx.data.tasks || [];
+    const matches = tasks.filter(t => !t.done && (t.text || '').toLowerCase().includes(q));
+    if (!matches.length) return { ok: false, reply: `❌ "${q}" eşleşmedi.` };
+    if (matches.length > 1) {
+      const list = matches.slice(0, 5).map(t => `• ${t.text}`).join('\n');
+      return { ok: false, reply: `🤔 Birden fazla eşleşme:\n${list}\nDaha net belirt.` };
+    }
+    const t = matches[0];
+    t.due = to;
+    // Yarına atıldığı için bugünün MIT'inden çıkar
+    if (t.mitDate === trToday() && to !== trToday()) t.mitDate = null;
+    ctx.dirty = true;
+    return { ok: true, reply: `📅 "${t.text}" → ${to} olarak ertelendi.` };
+  },
+
   async brain_dump(args, ctx) {
     const text = String(args.text || '').trim();
     if (!text) return { ok: false, reply: '❌ Boş.' };
@@ -402,7 +543,7 @@ const TOOL_SCHEMAS = [
         properties: {
           text: { type: 'string', description: 'Görev metni' },
           priority: { type: 'string', enum: ['urgent','normal','low'], description: '"acil" denirse urgent' },
-          category: { type: 'string', enum: ['odev','ev','kisisel'], description: 'Ödev/ev/kişisel' },
+          category: { type: 'string', enum: ['odev','ders','ev','kisisel'], description: 'odev=okul ödevi, ders=özel ders/kursa katılım, ev=ev işi, kisisel=kişisel' },
           due: { type: 'string', description: 'Son tarih: "bugün", "yarın", "salı", "DD.MM.YYYY" veya "YYYY-MM-DD"' },
           estimate_min: { type: 'integer', description: 'Tahmini dakika' },
           reminder_time: { type: 'string', description: 'HH:MM formatında saat hatırlatma' },
@@ -461,6 +602,45 @@ const TOOL_SCHEMAS = [
   {
     type: 'function',
     function: {
+      name: 'set_mit',
+      description: 'Bir görevi bugünün MIT\'ine (3\'üne) ekle. "X\'i MIT yap", "X\'i bugünün 3\'üne ekle", "X öncelikli olsun" denirse.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: 'Görev metninden parça' } },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'unset_mit',
+      description: 'Bir görevi MIT\'ten çıkar. "X\'i MIT\'ten çıkar" denirse.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: 'Görev metninden parça' } },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'postpone_task',
+      description: 'Bir görevi başka güne ertele. "X\'i yarına at", "X\'i salıya ertele", "X\'i 3 gün sonraya kaydır" denirse.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Görev metninden parça' },
+          to: { type: 'string', description: 'Yeni tarih: "yarın", "salı", "DD.MM.YYYY", "YYYY-MM-DD"' },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'brain_dump',
       description: 'Akla geleni Brain Dump\'a kaydet. "şunu unutma", "bir fikir geldi", "şu lazım" gibi yapısı olmayan şeyler için.',
       parameters: {
@@ -504,6 +684,9 @@ NE ZAMAN TOOL ÇAĞIR:
 - "bitti/yaptım" → complete_task
 - "sil/iptal" → delete_task
 - "özet/durum/brifing/ne yapayım" → show_briefing
+- "X'i MIT yap / öncelikli olsun / bugünün 3'üne ekle" → set_mit
+- "X'i MIT'ten çıkar" → unset_mit
+- "X'i yarına at / salıya ertele / kaydır" → postpone_task
 - "şunu unutma/aklımda olsun" → brain_dump
 
 NE ZAMAN TOOL ÇAĞIRMA (sadece sohbet):
@@ -532,10 +715,15 @@ Sen: "Görev ekleyebilirim, listeleyebilirim, mood kaydederim, bugünün özetin
 
 ÖRNEK TOOL ÇAĞRILARI:
 "yarın matematik ödevi" → add_task(text="matematik ödevi", due="yarın", category="odev")
+"perşembe matematik özel dersim var 16:00" → add_task(text="matematik özel dersi", due="perşembe", category="ders", reminder_time="16:00")
+"her salı 17:00 fizik özel ders" → add_task(text="fizik özel dersi", category="ders", reminder_time="17:00", repeat="weekly")
 "matematik bitti" → complete_task(query="matematik")
 "bugün ne yapayım" → show_briefing()
 "akşam 7'de ilaç hatırlat" → add_task(text="ilaç al", reminder_time="19:00")
 "şunu unutma: yeni şarj kablosu lazım" → brain_dump(text="yeni şarj kablosu lazım")
+"matematik ödevini MIT yap" → set_mit(query="matematik")
+"tarih kitabını yarına at" → postpone_task(query="tarih", to="yarın")
+"fizik ödevini salıya kaydır" → postpone_task(query="fizik", to="salı")
 
 ASLA "tool çağırıyorum" yazma. Doğrudan çağır. Tool sonrası ek yorum yazma.`;
 }

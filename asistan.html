@@ -97,7 +97,9 @@
   .tab.active {
     background: var(--accent);
     color: white;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
   }
+  .tab:active { transform: scale(0.97); }
   .panel {
     background: var(--surface);
     border-radius: 12px;
@@ -173,6 +175,7 @@
   .task.urgent { border-left-color: var(--danger); }
   .task.low { border-left-color: var(--text-muted); }
   .task.cat-odev { border-left-color: var(--warning); }
+  .task.cat-ders { border-left-color: #c084fc; }
   .task.cat-ev { border-left-color: var(--info); }
   .task.cat-kisisel { border-left-color: var(--accent); }
   .task.done { opacity: 0.4; border-left-color: var(--border); }
@@ -189,7 +192,14 @@
   }
   .task-meta .badge.due-today { background: rgba(248, 81, 73, 0.15); color: var(--danger); border-color: rgba(248, 81, 73, 0.3); }
   .task-meta .badge.due-soon { background: rgba(210, 153, 34, 0.15); color: var(--warning); border-color: rgba(210, 153, 34, 0.3); }
-  .task input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; flex-shrink: 0; accent-color: var(--accent); }
+  .task input[type="checkbox"] {
+    width: 24px; height: 24px;
+    cursor: pointer; flex-shrink: 0;
+    accent-color: var(--success);
+    transition: transform 0.1s;
+  }
+  .task input[type="checkbox"]:hover { transform: scale(1.15); }
+  .task input[type="checkbox"]:active { transform: scale(0.92); }
   .subtasks { margin-left: 26px; margin-top: 6px; }
   .subtask {
     background: var(--bg);
@@ -228,162 +238,94 @@
   .subtask-add:hover { border-color: var(--accent); color: var(--accent); }
   .task-actions { display: flex; gap: 4px; flex-wrap: wrap; }
 
-  /* Pomodoro */
+  /* Odak / Pomodoro */
   .pomodoro { text-align: center; padding: 12px; }
   .timer-ring {
     position: relative;
-    width: 240px;
-    height: 240px;
-    margin: 18px auto;
+    width: 260px;
+    height: 260px;
+    margin: 22px auto;
     border-radius: 50%;
     background: conic-gradient(var(--accent) var(--p, 0%), var(--surface-hover) var(--p, 0%));
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.3s;
+    transition: background 0.3s, transform 0.3s, box-shadow 0.3s;
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.08);
   }
-  .timer-ring.break { background: conic-gradient(var(--success) var(--p, 0%), var(--surface-hover) var(--p, 0%)); }
+  .timer-ring.running {
+    box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.18), 0 0 32px rgba(99, 102, 241, 0.25);
+    animation: timer-breathe 4s ease-in-out infinite;
+  }
+  .timer-ring.paused {
+    filter: saturate(0.5);
+    box-shadow: 0 0 0 4px rgba(125, 133, 144, 0.08);
+  }
+  .timer-ring.break {
+    background: conic-gradient(var(--success) var(--p, 0%), var(--surface-hover) var(--p, 0%));
+    box-shadow: 0 0 0 6px rgba(63, 185, 80, 0.15);
+  }
+  @keyframes timer-breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.015); }
+  }
   .timer-inner {
-    width: 214px;
-    height: 214px;
+    width: 232px;
+    height: 232px;
     background: var(--surface);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-direction: column;
+    gap: 4px;
   }
   .timer {
-    font-size: 3.2em;
+    font-size: 3.4em;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     color: var(--text);
     letter-spacing: -0.02em;
+    line-height: 1;
   }
   .timer.break { color: var(--success); }
-  .timer-status { font-size: 1em; margin-bottom: 8px; color: var(--text-muted); font-weight: 500; }
-  .timer-controls { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
-  .focus-task {
-    background: var(--bg-elev);
-    padding: 12px;
-    border-radius: 8px;
-    margin: 10px auto;
-    font-size: 0.95em;
-    max-width: 500px;
-    border: 1px solid var(--border-soft);
+  .timer-sub {
+    font-size: 0.72em;
     color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 500;
   }
-  .session-count { color: var(--text-muted); margin-top: 14px; font-size: 0.9em; }
-
-  /* Pomodoro haftalık trend */
-  .pomo-history {
-    margin-top: 24px;
-    padding: 16px;
-    background: var(--bg-elev);
-    border-radius: 10px;
-    border: 1px solid var(--border-soft);
-  }
-  .pomo-history-title {
+  .timer-status {
     font-size: 0.85em;
     color: var(--text-muted);
-    margin-bottom: 12px;
-    text-align: left;
-    letter-spacing: 0.02em;
-  }
-  .bar-chart {
-    display: flex;
-    gap: 6px;
-    height: 100px;
-    align-items: flex-end;
-  }
-  .bar-col {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    min-width: 0;
-  }
-  .bar-wrap {
-    width: 100%;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    align-items: center;
-  }
-  .bar {
-    width: 100%;
-    background: var(--accent-soft);
-    border-radius: 4px 4px 0 0;
-    min-height: 3px;
-    transition: height 0.4s ease;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding-top: 4px;
-  }
-  .bar.today { background: var(--accent); }
-  .bar-value { color: var(--text); font-size: 0.7em; font-weight: 600; opacity: 0.9; }
-  .bar.today .bar-value { color: white; }
-  .bar-day { font-size: 0.7em; color: var(--text-muted); margin-top: 6px; }
-  .bar-col.today .bar-day { color: var(--accent); font-weight: 600; }
-
-  /* Brain dump */
-  .dump-entry {
-    background: var(--bg-elev);
-    padding: 12px 14px;
-    border-radius: 8px;
-    margin-top: 8px;
-    border: 1px solid var(--border-soft);
-    border-left: 3px solid var(--accent);
-  }
-  .dump-date { font-size: 0.78em; color: var(--text-muted); margin-bottom: 6px; }
-
-  /* Rutinler */
-  .routine-item {
-    background: var(--bg-elev);
-    padding: 12px 14px;
-    border-radius: 8px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     margin-bottom: 6px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    border: 1px solid var(--border-soft);
   }
-  .routine-info { flex: 1; min-width: 200px; }
-  .routine-time { color: var(--warning); font-weight: 600; font-size: 1em; }
-  .routine-name { color: var(--text); }
-
-  /* Check-in */
-  .mood-buttons {
-    display: flex;
-    gap: 8px;
-    justify-content: center;
-    flex-wrap: wrap;
-    margin: 14px 0;
-  }
-  .mood {
-    font-size: 1.8em;
+  .timer-controls { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+  .timer-presets { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+  .focus-task {
     background: var(--bg-elev);
+    padding: 14px 18px;
+    border-radius: 10px;
+    margin: 12px auto;
+    font-size: 1em;
+    max-width: 500px;
     border: 1px solid var(--border-soft);
-    padding: 10px 14px;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.15s;
+    color: var(--text);
+    line-height: 1.4;
   }
-  .mood:hover { background: var(--surface-hover); border-color: var(--accent); transform: none; }
-  .checkin-row {
-    background: var(--bg-elev);
-    padding: 10px 12px;
-    border-radius: 7px;
-    margin-bottom: 4px;
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    border: 1px solid var(--border-soft);
+  .focus-task.empty { color: var(--text-muted); font-style: italic; }
+  .session-count {
+    color: var(--text-muted);
+    margin-top: 18px;
+    font-size: 0.9em;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-soft);
   }
+  .session-count span { color: var(--accent); font-weight: 600; font-size: 1.1em; }
 
   /* Ayarlar */
   .settings-row {
@@ -397,32 +339,6 @@
   .settings-row input[type="text"], .settings-row input[type="email"], .settings-row input[type="password"] { width: 100%; max-width: 460px; }
   .settings-help { font-size: 0.82em; color: var(--text-muted); margin-top: 8px; line-height: 1.55; }
 
-  .motivation {
-    background: var(--accent-soft);
-    padding: 12px 40px 12px 16px;
-    border-radius: 8px;
-    margin-bottom: 18px;
-    text-align: center;
-    border: 1px solid rgba(99, 102, 241, 0.2);
-    color: var(--text);
-    font-size: 0.92em;
-    position: relative;
-  }
-  .motivation-close {
-    position: absolute;
-    top: 50%;
-    right: 10px;
-    transform: translateY(-50%);
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    font-size: 1.4em;
-    cursor: pointer;
-    padding: 4px 10px;
-    line-height: 1;
-    border-radius: 4px;
-  }
-  .motivation-close:hover { color: var(--text); background: rgba(99, 102, 241, 0.15); }
   .empty { text-align: center; color: var(--text-muted); padding: 28px; font-size: 0.9em; }
   .notif-banner {
     background: rgba(210, 153, 34, 0.12);
@@ -435,6 +351,90 @@
     font-weight: 500;
     border: 1px solid rgba(210, 153, 34, 0.3);
     font-size: 0.9em;
+  }
+
+  /* Quick capture topbar */
+  .quick-capture {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 4px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .quick-capture:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+  }
+  .quick-capture input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 0.95em;
+    padding: 9px 12px;
+    outline: none;
+    font-family: inherit;
+  }
+  .quick-capture input::placeholder { color: var(--text-muted); }
+  .quick-capture-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 0 16px;
+    border-radius: 7px;
+    font-size: 1.3em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.12s, transform 0.1s;
+    line-height: 1;
+  }
+  .quick-capture-btn:hover { background: var(--accent-hover); }
+  .quick-capture-btn:active { transform: scale(0.95); }
+
+  /* Done dopamine — kutlama efektleri */
+  @keyframes done-pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.06); background: rgba(63, 185, 80, 0.15); }
+    100% { transform: scale(1); }
+  }
+  .task.just-done {
+    animation: done-pop 0.6s ease-out;
+  }
+  @keyframes confetti-fall {
+    0% { transform: translate(0, -20px) rotate(0deg); opacity: 1; }
+    100% { transform: translate(var(--x, 80px), 220px) rotate(var(--r, 240deg)); opacity: 0; }
+  }
+  .confetti-burst {
+    position: fixed;
+    pointer-events: none;
+    z-index: 3000;
+  }
+  .confetti-piece {
+    position: absolute;
+    width: 8px;
+    height: 12px;
+    border-radius: 2px;
+    animation: confetti-fall 1.1s cubic-bezier(0.4, 0.2, 0.6, 1) forwards;
+  }
+  .done-counter {
+    position: fixed;
+    pointer-events: none;
+    z-index: 3001;
+    font-size: 2.4em;
+    font-weight: 700;
+    color: var(--success);
+    text-shadow: 0 2px 12px rgba(63, 185, 80, 0.45);
+    opacity: 0;
+    animation: counter-pop 1.4s ease-out forwards;
+  }
+  @keyframes counter-pop {
+    0%   { opacity: 0; transform: translate(-50%, -30%) scale(0.5); }
+    20%  { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+    40%  { opacity: 1; transform: translate(-50%, -55%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -90%) scale(1); }
   }
   .stats { display: flex; gap: 10px; justify-content: center; margin-bottom: 18px; flex-wrap: wrap; }
   .stat { background: var(--bg-elev); padding: 12px 18px; border-radius: 8px; text-align: center; min-width: 90px; border: 1px solid var(--border-soft); }
@@ -452,9 +452,36 @@
   .mit-title { font-size: 0.85em; font-weight: 600; color: var(--warning); margin-bottom: 8px; letter-spacing: 0.02em; display: flex; justify-content: space-between; align-items: center; }
   .mit-count { font-variant-numeric: tabular-nums; color: var(--text-muted); font-weight: 500; }
   .mit-list { display: flex; flex-direction: column; gap: 4px; }
-  .mit-item { font-size: 0.92em; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .mit-item {
+    font-size: 0.95em; color: var(--text);
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.12s, opacity 0.12s;
+    user-select: none;
+  }
+  .mit-item:hover { background: rgba(255, 255, 255, 0.04); }
+  .mit-item:active { transform: scale(0.99); }
   .mit-item.done { text-decoration: line-through; opacity: 0.5; }
+  .mit-check { font-size: 1.05em; flex-shrink: 0; }
   .mit-empty { font-size: 0.85em; color: var(--text-muted); font-style: italic; }
+  .mit-suggestion {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px;
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px dashed rgba(99, 102, 241, 0.35);
+    border-radius: 8px;
+    margin-top: 5px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    font-size: 0.9em;
+  }
+  .mit-suggestion:hover { background: rgba(99, 102, 241, 0.16); border-color: var(--accent); }
+  .mit-suggestion:active { transform: scale(0.98); }
+  .mit-sug-icon { font-size: 0.85em; color: var(--accent); flex-shrink: 0; }
+  .mit-sug-text { flex: 1; color: var(--text); }
+  .mit-sug-meta { font-size: 0.78em; color: var(--text-muted); flex-shrink: 0; }
   .task.mit { border-left-color: var(--warning); background: rgba(210, 153, 34, 0.05); }
   button.small.mit-on { background: var(--warning); color: #1c2128; }
   button.small.mit-on:hover { background: #e0a82e; }
@@ -535,6 +562,48 @@
   .modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.85em; margin-top: 14px; width: 100%; padding: 8px; }
   .modal-close:hover { color: var(--text); background: var(--surface-hover); border-radius: 7px; }
 
+  /* Postpone hızlı menü */
+  .postpone-menu {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translate(-50%, 20px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    z-index: 1500;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 260px;
+    max-width: 360px;
+    opacity: 0;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+  .postpone-menu.open {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  .postpone-title {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    text-align: center;
+    line-height: 1.3;
+  }
+  .postpone-menu button {
+    padding: 10px 14px;
+    font-size: 0.95em;
+    text-align: center;
+    border-radius: 8px;
+  }
+  @media (max-width: 600px) {
+    .postpone-menu { left: 12px; right: 12px; transform: translateY(20px); min-width: 0; }
+    .postpone-menu.open { transform: translateY(0); }
+  }
+
   /* Toast */
   .toast-container {
     position: fixed;
@@ -599,105 +668,123 @@
     border-color: rgba(63, 185, 80, 0.3);
   }
 
-  /* Takvim butonu (üst bar) */
-  .topbar-cal-btn {
-    background: var(--bg-elev);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 8px 12px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 1.1em;
-    transition: all 0.15s;
+  /* Akşam özet — günün gururu */
+  .evening-summary {
+    margin: 12px 0 18px;
+    padding: 16px 18px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.10), rgba(192, 132, 252, 0.08));
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 12px;
+    display: none;
+    position: relative;
   }
-  .topbar-cal-btn:hover { background: var(--surface-hover); border-color: var(--accent); transform: none; }
+  .evening-summary.active { display: block; }
+  .evening-summary-title {
+    font-size: 0.95em;
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .evening-summary-stats {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    font-size: 0.88em;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .evening-summary-stats b { color: var(--accent); font-size: 1.15em; }
+  .evening-list {
+    font-size: 0.82em;
+    color: var(--text-muted);
+    line-height: 1.6;
+    max-height: 110px;
+    overflow-y: auto;
+  }
+  .evening-line {
+    padding-left: 14px;
+    position: relative;
+  }
+  .evening-line::before {
+    content: '✓';
+    position: absolute;
+    left: 0;
+    color: var(--success);
+  }
+  .evening-close {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.2em;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    line-height: 1;
+  }
+  .evening-close:hover { color: var(--text); background: var(--surface-hover); }
+  .evening-empty { font-size: 0.85em; color: var(--text-muted); font-style: italic; }
 
-  /* Takvim modal */
-  .cal-modal { max-width: 760px; }
-  .cal-header {
+  /* Doluluk barı — bugün için planlanmış süre */
+  .capacity-bar {
+    margin: 10px 0 16px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 10px 14px;
+    display: none;
+  }
+  .capacity-bar.active { display: block; }
+  .capacity-head {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 14px;
-    gap: 10px;
-  }
-  .cal-title { font-size: 1.1em; font-weight: 600; color: var(--text); }
-  .cal-nav { display: flex; gap: 6px; }
-  .cal-nav button {
-    padding: 6px 10px;
-    background: var(--bg-elev);
-    color: var(--text);
-    border: 1px solid var(--border);
-    font-size: 0.85em;
-  }
-  .cal-nav button:hover { background: var(--surface-hover); }
-  .cal-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 6px;
-  }
-  .cal-day {
-    background: var(--bg-elev);
-    border: 1px solid var(--border-soft);
-    border-radius: 8px;
-    padding: 8px;
-    min-height: 100px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .cal-day.today {
-    border-color: var(--accent);
-    background: var(--accent-soft);
-  }
-  .cal-day.past { opacity: 0.55; }
-  .cal-day-head {
-    font-size: 0.72em;
+    font-size: 0.82em;
     color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    font-weight: 600;
-    margin-bottom: 2px;
+    margin-bottom: 6px;
   }
-  .cal-day.today .cal-day-head { color: var(--accent); }
-  .cal-day-num {
-    font-size: 1em;
-    font-weight: 600;
-    color: var(--text);
-    margin-bottom: 4px;
-  }
-  .cal-task {
-    background: var(--surface);
-    border-left: 2px solid var(--text-muted);
-    padding: 3px 6px;
-    border-radius: 3px;
-    font-size: 0.72em;
-    color: var(--text);
-    line-height: 1.3;
-    cursor: pointer;
+  .capacity-head b { color: var(--text); font-weight: 600; }
+  .capacity-track {
+    height: 8px;
+    background: var(--surface-hover);
+    border-radius: 4px;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
-  .cal-task:hover { background: var(--surface-hover); }
-  .cal-task.urgent { border-left-color: var(--danger); }
-  .cal-task.odev { border-left-color: var(--warning); }
-  .cal-task.ev { border-left-color: var(--info); }
-  .cal-task.kisisel { border-left-color: var(--accent); }
-  .cal-task.mit { background: rgba(210, 153, 34, 0.15); border-left-color: var(--warning); }
-  .cal-task.done { opacity: 0.4; text-decoration: line-through; }
-  .cal-summary {
-    margin-top: 14px;
-    padding: 10px 12px;
-    background: var(--bg-elev);
-    border-radius: 8px;
-    font-size: 0.85em;
+  .capacity-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--success), var(--accent));
+    border-radius: 4px;
+    transition: width 0.4s ease;
+  }
+  .capacity-bar.full .capacity-fill { background: linear-gradient(90deg, var(--warning), var(--danger)); }
+  .capacity-bar.over .capacity-fill { background: var(--danger); }
+  .capacity-hint {
+    font-size: 0.78em;
     color: var(--text-muted);
-    border: 1px solid var(--border-soft);
+    margin-top: 6px;
   }
-  @media (max-width: 700px) {
-    .cal-grid { grid-template-columns: repeat(2, 1fr); }
-    .cal-day { min-height: 80px; }
+  .capacity-bar.full .capacity-hint { color: var(--warning); }
+  .capacity-bar.over .capacity-hint { color: var(--danger); }
+
+  /* Mobil iyileştirmeler */
+  @media (max-width: 600px) {
+    body { padding: 16px 14px; }
+    h1 { font-size: 1.5em; }
+    .subtitle { font-size: 0.82em; margin-bottom: 14px; }
+    .topbar { padding: 10px 12px; gap: 8px; }
+    .topbar-item { min-width: 0; flex: 1; }
+    .topbar-label { font-size: 0.62em; }
+    .topbar-value { font-size: 1.05em; }
+    .tabs { padding: 3px; gap: 2px; }
+    .tab { padding: 7px 9px; font-size: 0.82em; }
+    .panel { padding: 16px 14px; border-radius: 10px; }
+    .timer-ring { width: 220px; height: 220px; }
+    .timer-inner { width: 196px; height: 196px; }
+    .timer { font-size: 2.8em; }
+    .task { padding: 10px 12px; }
+    .task-actions button { padding: 6px 8px; font-size: 0.9em; }
   }
 
 </style>
@@ -705,7 +792,7 @@
 <body>
 <div class="container">
   <h1>🧠 Aidan</h1>
-  <p class="subtitle">ADHD beyninin yan dalı — Salim için ✨</p>
+  <p class="subtitle" id="appSubtitle">ADHD beyninin yan dalı — Salim için ✨</p>
 
   <!-- ÜST BAR: ZAMAN KÖRLÜĞÜ -->
   <div class="topbar">
@@ -714,30 +801,28 @@
       <div class="topbar-value" id="tbClock">--:--</div>
     </div>
     <div class="topbar-item">
-      <div class="topbar-label">Sonraki rutin</div>
+      <div class="topbar-label">Sıradaki hatırlatma</div>
       <div class="topbar-value next" id="tbNext">—</div>
     </div>
     <div class="topbar-item">
       <div class="topbar-label">Kesintisiz çalışma</div>
       <div class="topbar-value session" id="tbFocus">0 dk</div>
     </div>
-    <button class="topbar-cal-btn" onclick="openCalendar()" title="Haftalık takvim">📅 Hafta</button>
   </div>
 
   <div id="notifBanner" class="notif-banner" style="display:none;" onclick="askNotif()">
     🔔 Hatırlatmaların çalışması için bildirimlere izin ver (tıkla)
   </div>
 
-  <div class="motivation" id="motivation">
-    <span id="motivationText"></span>
-    <button class="motivation-close" onclick="dismissMotivation()" title="Kapat" aria-label="Kapat">×</button>
+  <!-- HIZLI YAKALAMA — aklına geleni 2 sn'de yaz, sonra düşün -->
+  <div class="quick-capture">
+    <input type="text" id="quickCapture" placeholder="⚡ Aklına geleni hızlıca yaz, Enter'la ekle..." aria-label="Hızlı görev ekle" onkeydown="quickCaptureKey(event)">
+    <button class="quick-capture-btn" onclick="quickCaptureSubmit()" title="Ekle">＋</button>
   </div>
 
   <div class="tabs">
     <button class="tab active" data-tab="tasks" onclick="showTab('tasks', this)">📋 Görevler</button>
-    <button class="tab" data-tab="focus" onclick="showTab('focus', this)">🍅 Odak</button>
-    <button class="tab" data-tab="dump" onclick="showTab('dump', this)">🧠 Brain Dump</button>
-    <button class="tab" data-tab="routine" onclick="showTab('routine', this)">⏰ Rutinler</button>
+    <button class="tab" data-tab="focus" onclick="showTab('focus', this)">🎧 Odak</button>
     <button class="tab" data-tab="settings" onclick="showTab('settings', this)">⚙️ Ayarlar</button>
   </div>
 
@@ -756,17 +841,31 @@
       </div>
       <div class="mit-list" id="mitList"></div>
     </div>
+    <div class="capacity-bar" id="capacityBar">
+      <div class="capacity-head">
+        <span><b id="capacityLabel">0sa 0dk</b> planlandın · bugün</span>
+        <span id="capacityPct">0%</span>
+      </div>
+      <div class="capacity-track"><div class="capacity-fill" id="capacityFill" style="width:0%;"></div></div>
+      <div class="capacity-hint" id="capacityHint">—</div>
+    </div>
+    <div class="evening-summary" id="eveningSummary">
+      <button class="evening-close" onclick="dismissEveningSummary()" title="Bugün için kapat">×</button>
+      <div class="evening-summary-title" id="eveningTitle">🌙 Bugünün özeti</div>
+      <div class="evening-summary-stats" id="eveningStats"></div>
+      <div class="evening-list" id="eveningList"></div>
+    </div>
     <button class="suggest-btn" onclick="suggestTask()">🎯 Şu an ne yapayım?</button>
     <div class="task-input">
       <input type="text" id="taskInput" placeholder="Ne yapman lazım?" onkeypress="if(event.key==='Enter')addTask()">
       <select id="taskPriority" title="Öncelik">
         <option value="normal">Normal</option>
         <option value="urgent">🔥 Acil</option>
-        <option value="low">⬇️ Düşük</option>
       </select>
       <select id="taskCategory" title="Kategori">
         <option value="">Kategorisiz</option>
         <option value="odev">📚 Ödev</option>
+        <option value="ders">📖 Özel Ders</option>
         <option value="ev">🏠 Ev</option>
         <option value="kisisel">💜 Kişisel</option>
       </select>
@@ -779,8 +878,6 @@
       <select id="taskRepeatNew" title="Tekrar">
         <option value="">Tek seferlik</option>
         <option value="daily">🔁 Her gün</option>
-        <option value="weekdays">📚 Hafta içi (Pzt–Cum)</option>
-        <option value="weekends">🛋️ Hafta sonu (Cmt–Paz)</option>
         <option value="weekly">📅 Her hafta</option>
       </select>
       <input type="time" id="taskReminder" title="Saat hatırlatması (opsiyonel)" style="max-width:130px;" placeholder="Hatırlat">
@@ -791,6 +888,7 @@
       <button class="filter-chip" data-filter="today" onclick="setFilter('today', this)">📅 Bugün <span class="chip-count" id="cnt-today"></span></button>
       <button class="filter-chip" data-filter="urgent" onclick="setFilter('urgent', this)">🔥 Acil <span class="chip-count" id="cnt-urgent"></span></button>
       <button class="filter-chip" data-filter="odev" onclick="setFilter('odev', this)">📚 Ödev <span class="chip-count" id="cnt-odev"></span></button>
+      <button class="filter-chip" data-filter="ders" onclick="setFilter('ders', this)">📖 Özel Ders <span class="chip-count" id="cnt-ders"></span></button>
       <button class="filter-chip" data-filter="ev" onclick="setFilter('ev', this)">🏠 Ev <span class="chip-count" id="cnt-ev"></span></button>
       <button class="filter-chip" data-filter="kisisel" onclick="setFilter('kisisel', this)">💜 Kişisel <span class="chip-count" id="cnt-kisisel"></span></button>
       <button class="filter-chip" data-filter="done" onclick="setFilter('done', this)">✅ Bitenler <span class="chip-count" id="cnt-done"></span></button>
@@ -798,15 +896,16 @@
     <div id="taskList"></div>
   </div>
 
-  <!-- POMODORO -->
+  <!-- ODAK -->
   <div id="focus" class="panel">
-    <h2>🍅 Odak Modu</h2>
+    <h2>🎧 Odak Modu</h2>
     <div class="pomodoro">
-      <div class="timer-status" id="timerStatus">Çalışma zamanı</div>
-      <div class="focus-task" id="focusTask">Bir görev seç ya da serbest çalış</div>
+      <div class="timer-status" id="timerStatus">Hazır</div>
+      <div class="focus-task empty" id="focusTask">Bir görev seç ya da serbest çalış</div>
       <div class="timer-ring" id="timerRing">
         <div class="timer-inner">
           <div class="timer" id="timer">25:00</div>
+          <div class="timer-sub" id="timerSub">dakika</div>
         </div>
       </div>
       <div class="timer-controls">
@@ -814,78 +913,25 @@
         <button class="secondary" onclick="pauseTimer()">⏸️ Duraklat</button>
         <button class="danger" onclick="resetTimer()">🔄 Sıfırla</button>
       </div>
-      <div style="margin-top:15px;">
-        <button class="secondary small" onclick="setTimer(5,2)">⚡ 5dk (başla!)</button>
-        <button class="secondary small" onclick="setTimer(15,3)">15/3</button>
-        <button class="secondary small" onclick="setTimer(25,5)">25/5</button>
-        <button class="secondary small" onclick="setTimer(50,10)">50/10</button>
+      <div class="timer-presets">
+        <button class="secondary small" onclick="setTimer(5,2)" title="ADHD için altın kural — 5 dk başla, devamı kendiliğinden gelir">⚡ 5dk (başla!)</button>
+        <button class="secondary small" onclick="setTimer(25,5)">🍅 25/5</button>
       </div>
-      <div class="session-count">Bugün tamamlanan pomodoro: <span id="pomoCount">0</span> 🍅</div>
-    </div>
-    <div class="pomo-history">
-      <div class="pomo-history-title">📊 Son 7 gün</div>
-      <div class="bar-chart" id="pomoChart"></div>
+      <div class="session-count">Bugün: <span id="pomoCount">0</span> seans 🎧</div>
     </div>
   </div>
-
-  <!-- BRAIN DUMP -->
-  <div id="dump" class="panel">
-    <h2>🧠 Kafandakileri Dök</h2>
-    <p style="margin-bottom:10px; color:#888;">Düşüncen, fikrin, endişen — ne varsa yaz. Düzenlemeye uğraşma.</p>
-    <textarea id="dumpInput" placeholder="Aklımdan geçen şey..."></textarea>
-    <div style="margin-top:10px;">
-      <button onclick="saveDump()">💾 Kaydet</button>
-      <button class="danger" onclick="clearAllDumps()">🗑️ Hepsini Sil</button>
-    </div>
-    <div id="dumpList" style="margin-top:20px;"></div>
-  </div>
-
-  <!-- RUTİNLER -->
-  <div id="routine" class="panel">
-    <h2>⏰ Günlük Rutinler & Hatırlatmalar</h2>
-    <p style="margin-bottom:15px; color:#888;">İlaç, su, kalk, yat — neyin hatırlatılmasını istiyorsan ekle.</p>
-    <div class="task-input-row2">
-      <input type="time" id="routineTime" style="max-width:150px;">
-      <input type="text" id="routineName" placeholder="Hatırlatma (örn: İlacımı al)" style="flex:1; min-width:200px;">
-      <button onclick="addRoutine()">➕ Ekle</button>
-    </div>
-    <div id="routineList"></div>
-  </div>
-
-  <!-- CHECK-IN sekmesi kaldırıldı (mood yerine Telegram bot kullanılacak) -->
 
   <!-- AYARLAR -->
   <div id="settings" class="panel">
     <h2>⚙️ Ayarlar</h2>
 
     <div class="settings-row">
-      <label>📱 Telefon Bildirimi (ntfy.sh)</label>
-      <input type="text" id="ntfyTopic" placeholder="ör: salim-aidan-9k3m2q" onchange="saveSettings()">
-      <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
-        <button class="small" onclick="genRandomTopic()">🎲 Rastgele üret</button>
-        <button class="small secondary" onclick="testNtfy()">📤 Test bildirimi gönder</button>
-        <button class="small secondary" onclick="openNtfyWeb()">🌐 Web sayfasını aç</button>
-      </div>
-      <div id="ntfyStatus" style="margin-top:10px;"></div>
+      <label>📱 Bildirimler</label>
       <div class="settings-help">
-        <b>Nasıl çalışır:</b><br>
-        1. Telefonuna <b>ntfy</b> uygulamasını indir (Play Store / App Store, ücretsiz)<br>
-        2. Uygulamada "+" → "Subscribe to topic" → yukarıdaki adı yaz, "Subscribe" bas<br>
-        3. Tahmin edilemez bir ad seç (🎲 ile)<br>
-        4. <b>Sorun varsa:</b> "🌐 Web sayfasını aç" → o sayfadan test mesajı gönder (bu HTML'den bağımsız)
+        Bildirimler artık <b>Telegram bot</b> üzerinden geliyor: <a href="https://t.me/salim_aidan_bot" target="_blank" style="color:var(--accent);">t.me/salim_aidan_bot</a>.
+        Sabah brifingi, deadline uyarısı, öğle/akşam özeti — hepsi Telegram'da.
+        Tarayıcı bildirimi için yukarıdaki "🔔 Bildirimlere izin ver" banner'ına bas.
       </div>
-    </div>
-
-    <div class="settings-row">
-      <label>🧠 Hyperfocus Koruması</label>
-      <div style="display:flex; gap:10px; align-items:center;">
-        <input type="checkbox" id="hyperfocusEnabled" onchange="saveSettings()" style="width:20px; height:20px;">
-        <span>Aktif et</span>
-        <span style="color:#888; margin-left:15px;">Her</span>
-        <input type="number" id="hyperfocusMin" min="15" max="180" value="45" onchange="saveSettings()" style="width:80px;">
-        <span style="color:#888;">dk'da uyarı ver</span>
-      </div>
-      <div class="settings-help">Bu süre boyunca aralıksız çalışırsan (sayfayla aktif etkileşim) "kalk, su iç" uyarısı gelir. 5 dk hareketsiz kalırsan sayaç sıfırlanır.</div>
     </div>
 
     <div class="settings-row">
@@ -932,23 +978,6 @@
   </div>
 </div>
 
-<!-- Takvim modal -->
-<div class="modal-overlay" id="calModal" onclick="if(event.target.id==='calModal')closeCalendar()">
-  <div class="modal cal-modal">
-    <div class="cal-header">
-      <div class="cal-title" id="calTitle">📅 Bu hafta</div>
-      <div class="cal-nav">
-        <button onclick="calWeek(-1)" title="Önceki hafta">◀</button>
-        <button onclick="calWeek(0)" title="Bu hafta">Bugün</button>
-        <button onclick="calWeek(1)" title="Sonraki hafta">▶</button>
-      </div>
-    </div>
-    <div class="cal-grid" id="calGrid"></div>
-    <div class="cal-summary" id="calSummary"></div>
-    <button class="modal-close" onclick="closeCalendar()">Kapat</button>
-  </div>
-</div>
-
 <!-- Seri detay modal -->
 <div class="modal-overlay" id="seriesModal" onclick="if(event.target.id==='seriesModal')closeSeriesModal()">
   <div class="modal" style="max-width:540px;">
@@ -956,6 +985,10 @@
     <div class="modal-task" id="seriesModalTitle">—</div>
     <div id="seriesModalProgress" style="margin-bottom:12px; font-size:0.9em; color:var(--text-muted);"></div>
     <div id="seriesModalList" style="max-height:340px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;"></div>
+    <div class="modal-actions" id="seriesModalActions" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="secondary small" id="seriesRebalanceBtn" onclick="rebalanceSeriesFromModal()">🔄 Yeniden dengele</button>
+      <button class="danger small" id="seriesDeleteBtn" onclick="deleteSeriesFromModal()">🗑️ Seriyi sil</button>
+    </div>
     <button class="modal-close" onclick="closeSeriesModal()">Kapat</button>
   </div>
 </div>
@@ -968,8 +1001,6 @@
     <div class="modal-meta" id="suggestMeta"></div>
     <div class="modal-actions">
       <button onclick="acceptSuggestion(false)">▶️ Başla</button>
-      <button class="secondary" onclick="acceptSuggestion(true)">⚡ 5dk dene</button>
-      <button class="secondary" onclick="suggestTask()">🔄 Başka tane</button>
     </div>
     <button class="modal-close" onclick="closeSuggestModal()">Kapat</button>
   </div>
@@ -981,10 +1012,8 @@ let data = JSON.parse(localStorage.getItem('aidan') || '{}');
 data.tasks = data.tasks || [];
 data.dumps = data.dumps || [];
 data.routines = data.routines || [];
-data.checkins = data.checkins || [];
 data.pomoToday = data.pomoToday || { date: today(), count: 0 };
-data.pomoHistory = data.pomoHistory || {};
-data.settings = data.settings || { ntfyTopic: '', hyperfocusEnabled: false, hyperfocusMin: 45 };
+data.settings = data.settings || {};
 if (data.pomoToday.date !== today()) data.pomoToday = { date: today(), count: 0 };
 
 // Geriye uyumluluk: eski görevlere yeni alanlar ekle
@@ -1017,7 +1046,6 @@ function timeStr() { return new Date().toLocaleString('tr-TR'); }
 const sessionStart = Date.now();
 let lastUserActivity = Date.now();
 let focusStreakStart = Date.now();
-let lastHyperfocusAlert = 0;
 const IDLE_RESET_MS = 5 * 60 * 1000; // 5 dk hareketsizlik → streak resetlenir
 
 function markActivity() {
@@ -1031,33 +1059,6 @@ function markActivity() {
   document.addEventListener(ev, markActivity, { passive: true });
 });
 
-// ============ MOTİVASYON ============
-const motivations = [
-  "Mükemmel olmak zorunda değilsin. Sadece başla. 🌱",
-  "5 dakika yap. Sonrasını sonra düşünürsün. ⏱️",
-  "ADHD beynin bir hata değil, farklı bir işletim sistemi. 🧠",
-  "Küçük adım > Büyük plan. 👣",
-  "Şu an dağınık hissetmen, başaramayacağın anlamına gelmez. 💪",
-  "Bir şeye başlamak, bitirmekten daha zor. Başardığın için tebrikler. 🎉",
-  "Odağın kayıyorsa, kendine kızma — geri getir, o kadar. 🔄",
-  "Bugün sadece BİR şey yap. Bonus her şey hediye. 🎁",
-  "Beynin hızlı koşuyor — sen de yanında yürü, yormadan. 🚶",
-  "Hatırla: dinlenmek, tembellik değil. Sürdürülebilirlik. ☕",
-  "Ödeve başlamak en zor kısım. Aç defteri, tek satır yaz. Gerisi gelir. 📖",
-  "Bitmemiş iş, başlanmamış işten her zaman daha iyidir. ✍️"
-];
-document.getElementById('motivationText').textContent =
-  motivations[Math.floor(Math.random() * motivations.length)];
-
-if (sessionStorage.getItem('motivationDismissed') === '1') {
-  document.getElementById('motivation').style.display = 'none';
-}
-
-function dismissMotivation() {
-  document.getElementById('motivation').style.display = 'none';
-  sessionStorage.setItem('motivationDismissed', '1');
-}
-
 // ============ TAB ============
 function showTab(name, btn) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -1068,6 +1069,51 @@ function showTab(name, btn) {
 }
 
 // ============ GÖREVLER ============
+// Hızlı yakalama — sadece metin, sonra düşün
+function quickCaptureKey(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    quickCaptureSubmit();
+  } else if (e.key === 'Escape') {
+    document.getElementById('quickCapture').value = '';
+    document.getElementById('quickCapture').blur();
+  }
+}
+
+function quickCaptureSubmit() {
+  const inp = document.getElementById('quickCapture');
+  const text = inp.value.trim();
+  if (!text) return;
+  const task = {
+    id: Date.now(),
+    text,
+    done: false,
+    doneDate: null,
+    subtasks: [],
+    created: timeStr(),
+    priority: 'normal',
+    category: null,
+    due: null,
+    estimateMin: null,
+    actualMin: null,
+    repeat: null,
+    reminderTime: null,
+    lastReminded: null,
+    mitDate: null,
+    streakCount: 0,
+    lastStreakDate: null,
+    seriesId: null,
+    seriesName: null,
+    seriesIndex: null,
+    seriesTotal: null
+  };
+  data.tasks.unshift(task);
+  inp.value = '';
+  save();
+  renderTasks();
+  showToast(`✅ Eklendi: ${text.slice(0, 40)}${text.length > 40 ? '…' : ''}`, 'success', 2200);
+}
+
 function addTask() {
   const text = document.getElementById('taskInput').value.trim();
   if (!text) return;
@@ -1143,72 +1189,51 @@ async function splitTask() {
 
 function toggleTask(id) {
   const t = data.tasks.find(x => x.id === id);
+  const wasDone = t.done;
   t.done = !t.done;
   t.doneDate = t.done ? today() : null;
-
-  // Streak (sadece günlük tekrarlı görevler için)
-  if (t.done && t.repeat === 'daily') {
-    const todayStr = today();
-    if (t.lastStreakDate === todayStr) {
-      // Bugün zaten sayıldı, dokunma
-    } else if (t.lastStreakDate) {
-      const diffDays = Math.round((new Date(todayStr) - new Date(t.lastStreakDate)) / 86400000);
-      t.streakCount = (diffDays === 1) ? (t.streakCount || 0) + 1 : 1;
-    } else {
-      t.streakCount = 1;
-    }
-    t.lastStreakDate = todayStr;
-    // Streak milestone kutlaması
-    if ([3, 7, 14, 30, 60, 100].includes(t.streakCount)) {
-      setTimeout(() => {
-        playBeep();
-        alert(`🔥 ${t.streakCount} gün seri! "${t.text}" alışkanlığa dönüşüyor. Devam et. 💪`);
-      }, 300);
-    }
-  }
+  const justFinished = t.done && !wasDone;
 
   if (t.done && t.estimateMin && currentFocusTaskId === id && focusStartTime) {
+    // Focus modunda otomatik ölç
     const elapsed = Math.round((Date.now() - focusStartTime) / 60000);
     t.actualMin = elapsed;
     const diff = elapsed - t.estimateMin;
     setTimeout(() => {
-      if (diff > 5) showToast(`Görev bitti! Tahmin ${t.estimateMin}dk, gerçek ${elapsed}dk — ${diff}dk fazla. Bir dahaki sefer biraz daha cömert tahmin et 📊`, 'info', 5000);
-      else if (diff < -5) showToast(`Görev bitti! Tahmin ${t.estimateMin}dk, gerçek ${elapsed}dk — daha hızlı bitti! 🎉`, 'success', 5000);
-      else showToast(`Görev bitti! Tahmin ${t.estimateMin}dk, gerçek ${elapsed}dk — tahmin neredeyse tam 🎯`, 'success', 5000);
+      if (diff > 5) showToast(`Tahmin ${t.estimateMin}dk, gerçek ${elapsed}dk — ${diff}dk fazla 📊`, 'info', 4000);
+      else if (diff < -5) showToast(`${elapsed}dk'da bitti — tahminden hızlı! 🎉`, 'success', 4000);
+      else showToast(`${elapsed}dk — tahmin neredeyse tam 🎯`, 'success', 4000);
     }, 200);
-  } else if (t.done && t.estimateMin && !t.actualMin) {
-    // Manuel bitirildi, tahmin var ama gerçek süre yok — kibarca sor
-    setTimeout(async () => {
-      const cevap = await aidanPrompt(`"${t.text}" bitti! 🎯`, 'Kaç dakika sürdü? (sadece sayı)', String(t.estimateMin));
-      if (cevap === null) return;
-      const dk = parseInt(cevap);
-      if (isNaN(dk) || dk <= 0) return;
-      t.actualMin = dk;
-      save();
-      renderTasks();
-      const diff = dk - t.estimateMin;
-      if (diff > 5) showToast(`Tahmin ${t.estimateMin}dk, gerçek ${dk}dk — ${diff}dk fazla. 📊`, 'info', 5000);
-      else if (diff < -5) showToast(`Tahmin ${t.estimateMin}dk, gerçek ${dk}dk — daha hızlı bitti! 🎉`, 'success', 5000);
-      else showToast(`Tahmin ${t.estimateMin}dk, gerçek ${dk}dk — tahmin neredeyse tam 🎯`, 'success', 5000);
-    }, 300);
   }
 
   // MIT kutlaması: bugünün 3'ünü tamamladıysa
+  let mitFullCelebration = false;
   if (t.done && t.mitDate === today()) {
     const mit = data.tasks.filter(x => x.mitDate === today());
     const mitDone = mit.filter(x => x.done).length;
     if (mit.length === 3 && mitDone === 3) {
-      setTimeout(() => {
-        playBeep();
-        alert('🎉 Bugünün 3\'ünü TAMAMLADIN!\n\nBugün için işin bitti. Bonus her şey hediye. Kendini ödüllendir. 💜');
-      }, 400);
-    } else if (mitDone < mit.length) {
-      // Tek tek tamamlanma — küçük dopamin
-      setTimeout(() => playBeep(), 50);
+      mitFullCelebration = true;
     }
   }
 
   save(); renderTasks();
+
+  // Done dopamine — DOM güncellendikten sonra
+  if (justFinished) {
+    setTimeout(() => celebrateDone(id), 30);
+  }
+  if (mitFullCelebration) {
+    setTimeout(() => {
+      // Daha büyük kutlama: birden çok konfeti
+      const stats = document.querySelector('.stats') || document.querySelector('.mit-box');
+      if (stats) {
+        confettiBurst(stats);
+        setTimeout(() => confettiBurst(stats), 200);
+        setTimeout(() => confettiBurst(stats), 400);
+      }
+      showToast('🎉 Bugünün 3\'ünü TAMAMLADIN! Bonus her şey hediye. 💜', 'success', 7000);
+    }, 500);
+  }
 }
 
 function toggleSub(tid, idx) {
@@ -1225,6 +1250,66 @@ function deleteTask(id) {
   if (!confirm('Görevi sil?')) return;
   data.tasks = data.tasks.filter(x => x.id !== id);
   save(); renderTasks();
+}
+
+async function postponeTask(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t || t.done) return;
+  closePostponeMenu();
+  const menu = document.createElement('div');
+  menu.id = 'postponeMenu';
+  menu.className = 'postpone-menu';
+  const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0,10); })();
+  const in3 = (() => { const d = new Date(); d.setDate(d.getDate() + 3); return d.toISOString().slice(0,10); })();
+  const nextWeek = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().slice(0,10); })();
+  menu.innerHTML = `
+    <div class="postpone-title">📅 "${escapeHtml((t.text||'').slice(0,40))}" ertele</div>
+    <button onclick="applyPostpone(${id}, '${tomorrow}')">⏭️ Yarın</button>
+    <button onclick="applyPostpone(${id}, '${in3}')">+3 gün</button>
+    <button onclick="applyPostpone(${id}, '${nextWeek}')">📆 Haftaya</button>
+    <button onclick="applyPostponePick(${id})">📅 Tarih seç</button>
+    <button class="secondary" onclick="closePostponeMenu()">İptal</button>
+  `;
+  document.body.appendChild(menu);
+  setTimeout(() => menu.classList.add('open'), 10);
+  // Dışarı tıklayınca kapat
+  setTimeout(() => {
+    document.addEventListener('click', _postponeOutsideClick, { once: true });
+  }, 100);
+}
+
+function _postponeOutsideClick(e) {
+  if (!e.target.closest('#postponeMenu')) closePostponeMenu();
+}
+
+function closePostponeMenu() {
+  const m = document.getElementById('postponeMenu');
+  if (m) m.remove();
+}
+
+function applyPostpone(id, dateIso) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  const oldDue = t.due;
+  t.due = dateIso;
+  // Yarına atıldıysa bugünün MIT'inden çıkar
+  if (t.mitDate === today() && dateIso !== today()) t.mitDate = null;
+  save();
+  renderTasks();
+  closePostponeMenu();
+  const fmt = new Date(dateIso).toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' });
+  showToast(`📅 ${fmt}'e ertelendi · sorun değil 💜`, 'success');
+}
+
+async function applyPostponePick(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  closePostponeMenu();
+  const inp = await aidanPrompt('Tarih seç', 'YYYY-MM-DD veya "salı", "yarın":', t.due || '');
+  if (inp === null) return;
+  const parsed = parseDateInput(inp.trim());
+  if (!parsed) { showToast('Tarih anlaşılamadı', 'warning'); return; }
+  applyPostpone(id, parsed);
 }
 
 async function addSubtask(id) {
@@ -1286,16 +1371,19 @@ function toggleMit(id) {
   save(); renderTasks();
 }
 
-function startTaskNow(id, fiveMinMode) {
+function startTaskNow(id, quickTry) {
   const t = data.tasks.find(x => x.id === id);
   if (!t) return;
   currentFocusTaskId = id;
   focusStartTime = Date.now();
-  document.getElementById('focusTask').textContent = '🎯 ' + t.text;
-  const mins = fiveMinMode ? 5 : (t.estimateMin || 25);
-  setTimer(mins, fiveMinMode ? 2 : 5);
+  const focusEl = document.getElementById('focusTask');
+  focusEl.textContent = (quickTry ? '⚡ Sadece 2 dakika dene — başlaman yeter: ' : '🎯 ') + t.text;
+  focusEl.classList.remove('empty');
+  const mins = quickTry ? 2 : (t.estimateMin || 25);
+  setTimer(mins, quickTry ? 1 : 5);
   showTab('focus');
   setTimeout(() => startTimer(), 200);
+  if (quickTry) showToast('⚡ 2 dakika. Bitince devam edip etmeme kararını sonra ver.', 'info', 4000);
 }
 
 let currentFocusTaskId = null;
@@ -1339,6 +1427,7 @@ function filterTasks(tasks) {
       filtered = tasks.filter(t => !t.done && t.priority === 'urgent');
       break;
     case 'odev':
+    case 'ders':
     case 'ev':
     case 'kisisel':
       filtered = tasks.filter(t => !t.done && t.category === _taskFilter);
@@ -1372,6 +1461,7 @@ function updateFilterCounts() {
   setCnt('cnt-today', todayCount);
   setCnt('cnt-urgent', data.tasks.filter(t => !t.done && t.priority === 'urgent').length);
   setCnt('cnt-odev', data.tasks.filter(t => !t.done && t.category === 'odev').length);
+  setCnt('cnt-ders', data.tasks.filter(t => !t.done && t.category === 'ders').length);
   setCnt('cnt-ev', data.tasks.filter(t => !t.done && t.category === 'ev').length);
   setCnt('cnt-kisisel', data.tasks.filter(t => !t.done && t.category === 'kisisel').length);
   setCnt('cnt-done', data.tasks.filter(t => t.done).length);
@@ -1435,6 +1525,20 @@ function cancelInputModal() {
   _inputModalResolve = null;
 }
 
+// Klavye kısayolu: "/" → quick capture'a odaklan
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    const qc = document.getElementById('quickCapture');
+    if (qc) {
+      e.preventDefault();
+      qc.focus();
+      qc.select();
+    }
+  }
+});
+
 // Enter ile gönder (textarea hariç — orada Ctrl+Enter)
 document.addEventListener('keydown', e => {
   if (!document.getElementById('inputModal').classList.contains('active')) return;
@@ -1497,7 +1601,7 @@ function suggestTask() {
   const meta = [];
   if (selected.priority === 'urgent') meta.push('🔥 ACİL');
   if (selected.category) {
-    const cat = { odev: '📚 Ödev', ev: '🏠 Ev', kisisel: '💜 Kişisel' };
+    const cat = { odev: '📚 Ödev', ders: '📖 Özel Ders', ev: '🏠 Ev', kisisel: '💜 Kişisel' };
     if (cat[selected.category]) meta.push(cat[selected.category]);
   }
   if (selected.estimateMin) meta.push(`⏱️ ${selected.estimateMin} dk`);
@@ -1545,13 +1649,6 @@ function sortTasks(tasks) {
   });
 }
 
-function effectiveStreak(t) {
-  if (t.repeat !== 'daily' || !t.lastStreakDate || !t.streakCount) return 0;
-  const diff = Math.round((new Date(today()) - new Date(t.lastStreakDate)) / 86400000);
-  if (diff > 1) return 0; // bir gün atlandı, streak kırıldı
-  return t.streakCount;
-}
-
 function dueLabel(due) {
   if (!due) return '';
   const d = new Date(due);
@@ -1562,6 +1659,20 @@ function dueLabel(due) {
   if (diff === 1) return { text: '📅 Yarın', cls: 'due-soon' };
   if (diff <= 3) return { text: `📅 ${diff} gün kaldı`, cls: 'due-soon' };
   return { text: `📅 ${due}`, cls: '' };
+}
+
+function taskAgeDays(t) {
+  if (!t.created) return 0;
+  // 'tr-TR locale string' biçimini parse et
+  const m = t.created.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  let createdMs;
+  if (m) {
+    createdMs = new Date(+m[3], +m[2] - 1, +m[1]).getTime();
+  } else {
+    createdMs = new Date(t.created).getTime();
+  }
+  if (isNaN(createdMs)) return 0;
+  return Math.floor((Date.now() - createdMs) / 86400000);
 }
 
 function renderTaskItem(t) {
@@ -1575,7 +1686,8 @@ function renderTaskItem(t) {
     isMit ? 'mit' : ''
   ].filter(x => x).join(' ');
   const due = dueLabel(t.due);
-  const streak = effectiveStreak(t);
+  const age = t.done ? 0 : taskAgeDays(t);
+  const showAge = !t.done && age >= 5 && !t.repeat;
   return `
     <div class="task ${cls}">
       <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask(${t.id})">
@@ -1583,15 +1695,16 @@ function renderTaskItem(t) {
         <div class="task-text">${isMit ? '⭐ ' : ''}${escapeHtml(t.text)}</div>
         <div class="task-meta">
           ${t.priority === 'urgent' ? '<span class="badge" style="background:#ff5555;color:white;">🔥 ACİL</span>' : ''}
-          ${t.category ? `<span class="badge">${({odev:'📚 Ödev',ev:'🏠 Ev',kisisel:'💜 Kişisel'})[t.category] || t.category}</span>` : ''}
+          ${t.category ? `<span class="badge">${({odev:'📚 Ödev',ders:'📖 Özel Ders',ev:'🏠 Ev',kisisel:'💜 Kişisel'})[t.category] || t.category}</span>` : ''}
           ${due ? `<span class="badge ${due.cls}">${due.text}</span>` : ''}
           ${t.estimateMin ? `<span class="badge">⏱️ ${t.estimateMin}dk</span>` : ''}
           ${t.actualMin ? `<span class="badge">✓ ${t.actualMin}dk sürdü</span>` : ''}
           ${t.repeat ? `<span class="badge">${({daily:'🔁 Günlük',weekly:'📅 Haftalık',weekdays:'📚 Hafta içi',weekends:'🛋️ Hafta sonu'})[t.repeat] || t.repeat}</span>` : ''}
           ${t.reminderTime ? `<span class="badge" style="background:rgba(99,102,241,0.15);color:var(--accent);border-color:rgba(99,102,241,0.3);">🔔 ${t.reminderTime}</span>` : ''}
-          ${streak > 1 ? `<span class="badge" style="background:rgba(248,81,73,0.15);color:var(--danger);border-color:rgba(248,81,73,0.3);">🔥 ${streak} gün</span>` : ''}
+          ${showAge ? `<span class="badge" style="background:rgba(210,153,34,0.12);color:var(--warning);border-color:rgba(210,153,34,0.3);" title="Bu görev ${age} gündür duruyor — bitirebilir misin yoksa silmeli mi?">🕰️ ${age}g</span>` : ''}
           ${t.seriesId ? (() => { const sp = seriesProgress(t.seriesId); return `<span class="badge series-badge" title="${escapeHtml(t.seriesName||'Seri')}" onclick="event.stopPropagation(); showSeries('${t.seriesId}')">📚 ${escapeHtml((t.seriesName||'Seri').slice(0,18))} ${sp.done}/${sp.total}</span>`; })() : ''}
         </div>
+        ${t.subtasks && t.subtasks.length ? `
         <div class="subtasks">
           ${t.subtasks.map((s,i) => `
             <div class="subtask">
@@ -1602,10 +1715,14 @@ function renderTaskItem(t) {
           `).join('')}
           <button class="subtask-add" onclick="addSubtask(${t.id})">+ alt adım</button>
         </div>
+        ` : ''}
       </div>
       <div class="task-actions">
         <button class="small ${isMit ? 'mit-on' : 'secondary'}" onclick="toggleMit(${t.id})" title="${isMit ? 'Bugünün 3\'ünden çıkar' : 'Bugünün 3\'üne ekle'}">${isMit ? '⭐' : '☆'}</button>
         <button class="small" onclick="startTaskNow(${t.id}, false)" title="Şimdi başla — odak moduna geçer">▶️</button>
+        ${t.done || !t.estimateMin || t.estimateMin <= 5 ? '' : `<button class="small secondary" onclick="startTaskNow(${t.id}, true)" title="Sadece 2 dakika dene — başlamanın altın kuralı">⚡2dk</button>`}
+        ${t.done ? '' : `<button class="small secondary" onclick="postponeTask(${t.id})" title="Ertele — başka güne kaydır">📅</button>`}
+        ${t.done ? '' : `<button class="small secondary" onclick="addSubtask(${t.id})" title="Alt adım ekle">✂️</button>`}
         <button class="small secondary" onclick="editTask(${t.id})" title="Düzenle">✏️</button>
         <button class="small danger" onclick="deleteTask(${t.id})">🗑️</button>
       </div>
@@ -1652,7 +1769,160 @@ function renderTasks() {
   document.getElementById('statDone').textContent = done;
   document.getElementById('statLeft').textContent = total - done;
   renderMit();
+  renderCapacity();
+  renderEveningSummary();
   updateFilterCounts();
+}
+
+function renderEveningSummary() {
+  const box = document.getElementById('eveningSummary');
+  if (!box) return;
+  const ts = today();
+  const hour = new Date().getHours();
+  // 19:00+ sonra göster, ya da bittiği halde gün içinde 5+ görev bittiyse de göster
+  const doneToday = data.tasks.filter(t => t.done && t.doneDate === ts);
+  const dismissedKey = `eveningSummaryDismissed:${ts}`;
+  const dismissed = sessionStorage.getItem(dismissedKey) === '1';
+  const shouldShow = !dismissed && (hour >= 19 || doneToday.length >= 5);
+  if (!shouldShow) {
+    box.classList.remove('active');
+    return;
+  }
+  box.classList.add('active');
+
+  const mit = data.tasks.filter(t => t.mitDate === ts);
+  const mitDone = mit.filter(t => t.done).length;
+  const pomo = (data.pomoToday && data.pomoToday.date === ts) ? (data.pomoToday.count || 0) : 0;
+  const totalActualMin = doneToday.reduce((s, t) => s + (t.actualMin || 0), 0);
+
+  // Vibe seçimi
+  let title;
+  if (doneToday.length === 0 && pomo === 0) {
+    title = '🌙 Bugün için iyiyiz. Yarın yeni bir gün — kendine yumuşak ol 💜';
+  } else if (mit.length > 0 && mitDone === mit.length) {
+    title = '🎉 Bugünün MIT\'ini tamamen bitirdin. Bonus her şey hediye.';
+  } else if (doneToday.length >= 5) {
+    title = '🔥 Bugün üretken bir gündü — bak neler bitirmişsin:';
+  } else {
+    title = '🌙 Bugünün özeti — başardığını gör:';
+  }
+  document.getElementById('eveningTitle').textContent = title;
+
+  const statsParts = [];
+  statsParts.push(`<span>✅ <b>${doneToday.length}</b> görev</span>`);
+  if (mit.length > 0) statsParts.push(`<span>⭐ <b>${mitDone}/${mit.length}</b> MIT</span>`);
+  if (pomo > 0) statsParts.push(`<span>🎧 <b>${pomo}</b> seans</span>`);
+  if (totalActualMin > 0) {
+    const h = Math.floor(totalActualMin / 60), m = totalActualMin % 60;
+    statsParts.push(`<span>⏱️ <b>${h > 0 ? h + 'sa ' : ''}${m}dk</b> odaklanma</span>`);
+  }
+  document.getElementById('eveningStats').innerHTML = statsParts.join('');
+
+  const listEl = document.getElementById('eveningList');
+  if (doneToday.length === 0) {
+    listEl.innerHTML = '<div class="evening-empty">Bugün henüz bir şey bitmemiş — sorun yok. Yarın yeni bir gün.</div>';
+  } else {
+    listEl.innerHTML = doneToday.slice(0, 12).map(t =>
+      `<div class="evening-line">${escapeHtml(t.text)}${t.actualMin ? ` <span style="opacity:0.7;">(${t.actualMin}dk)</span>` : ''}</div>`
+    ).join('');
+    if (doneToday.length > 12) {
+      listEl.innerHTML += `<div class="evening-line" style="opacity:0.6;">… ve ${doneToday.length - 12} tane daha</div>`;
+    }
+  }
+}
+
+function dismissEveningSummary() {
+  const ts = today();
+  sessionStorage.setItem(`eveningSummaryDismissed:${ts}`, '1');
+  document.getElementById('eveningSummary').classList.remove('active');
+}
+
+// Bugün için planlanan toplam tahmini dk — doluluk göstergesi
+function renderCapacity() {
+  const bar = document.getElementById('capacityBar');
+  if (!bar) return;
+  const ts = today();
+  const todayTasks = data.tasks.filter(t => !t.done && (t.due === ts || t.mitDate === ts));
+  const withEstimate = todayTasks.filter(t => t.estimateMin);
+  if (todayTasks.length === 0) {
+    bar.classList.remove('active', 'full', 'over');
+    return;
+  }
+  const totalMin = withEstimate.reduce((s, t) => s + (t.estimateMin || 0), 0);
+  // Verimli ADHD günü kapasitesi: 4 saat odaklanma (=240dk). Bunu üst sınır kabul ediyoruz.
+  const CAP = 240;
+  const pct = Math.min(200, Math.round((totalMin / CAP) * 100));
+  bar.classList.add('active');
+  bar.classList.toggle('full', pct >= 80 && pct < 105);
+  bar.classList.toggle('over', pct >= 105);
+  const hours = Math.floor(totalMin / 60), mins = totalMin % 60;
+  document.getElementById('capacityLabel').textContent =
+    (hours > 0 ? hours + 'sa ' : '') + mins + 'dk';
+  document.getElementById('capacityPct').textContent = pct + '%';
+  document.getElementById('capacityFill').style.width = Math.min(100, pct) + '%';
+  const noEstimate = todayTasks.length - withEstimate.length;
+  let hint;
+  if (pct >= 105) hint = '⚠️ Fazla yüklendin. Bir kısmını "📅 Ertele" ile yarına atmayı düşün.';
+  else if (pct >= 80) hint = '🟠 Dolu bir gün. Önce MIT 3\'ünü bitir, diğerleri bonus.';
+  else if (pct >= 40) hint = '🟢 Dengeli gün. Tek tek halledersin.';
+  else if (totalMin === 0 && noEstimate > 0) hint = 'ℹ️ Tahmin yok — görevlere "dk" yaz, doluluk gözüksün.';
+  else hint = '🌱 Hafif gün. Bonus iş alabilirsin ya da dinlen.';
+  if (noEstimate > 0 && totalMin > 0) hint += ` (${noEstimate} görev tahminsiz)`;
+  document.getElementById('capacityHint').textContent = hint;
+}
+
+// MIT için akıllı skor — Worker'daki ile aynı mantık
+function scoreTaskForMit(t) {
+  const todayStr = today();
+  const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0,10); })();
+  let score = 0;
+  if (t.due) {
+    if (t.due < todayStr) score += 150;
+    else if (t.due === todayStr) score += 100;
+    else if (t.due === tomorrow) score += 50;
+    else {
+      const days = Math.max(1, Math.round((new Date(t.due) - new Date(todayStr)) / 86400000));
+      if (days <= 7) score += Math.max(10, 40 - days * 4);
+    }
+  }
+  if (t.priority === 'urgent') score += 60;
+  if (t.priority === 'low') score -= 15;
+  if (t.estimateMin) {
+    if (t.estimateMin <= 30) score += 20;
+    else if (t.estimateMin <= 60) score += 15;
+    else if (t.estimateMin > 120) score -= 10;
+  }
+  if (t.reminderTime) score += 12;
+  if (t.category === 'odev') score += 8;
+  if (t.category === 'ders') score += 12;
+  const age = taskAgeDays(t);
+  if (age >= 5 && age <= 30) score += 15;
+  if (t.seriesId) score += 10;
+  return score;
+}
+
+function suggestMitTasks(limit = 3) {
+  const candidates = data.tasks.filter(t => !t.done && t.mitDate !== today());
+  if (!candidates.length) return [];
+  const scored = candidates
+    .map(t => ({ t, score: scoreTaskForMit(t) }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+  const out = [];
+  const usedCats = new Set();
+  for (const { t } of scored) {
+    if (out.length >= limit) break;
+    if (out.length < 2 && t.category && usedCats.has(t.category)) continue;
+    out.push(t);
+    if (t.category) usedCats.add(t.category);
+  }
+  if (out.length < limit) {
+    for (const { t } of scored) {
+      if (out.length >= limit) break;
+      if (!out.includes(t)) out.push(t);
+    }
+  }
+  return out;
 }
 
 function renderMit() {
@@ -1664,15 +1934,46 @@ function renderMit() {
   if (!countEl || !listEl) return;
   countEl.textContent = doneCount + '/3';
   if (mitTasks.length === 0) {
-    listEl.innerHTML = '<div class="mit-empty">Bugün için 3 öncelik seç — görev kartındaki ☆ butonuna bas</div>';
+    const suggestions = suggestMitTasks(3);
+    if (suggestions.length === 0) {
+      listEl.innerHTML = '<div class="mit-empty">Bugün için 3 öncelik seç — görev kartındaki ☆ butonuna bas</div>';
+      return;
+    }
+    const sugHtml = suggestions.map(t => {
+      const extras = [];
+      if (t.due === todayStr) extras.push('bugün');
+      else if (t.due && t.due < todayStr) extras.push('⚠️ gecikti');
+      else if (t.due) {
+        const d = new Date(t.due);
+        extras.push(d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }));
+      }
+      if (t.priority === 'urgent') extras.push('🔴 acil');
+      if (t.estimateMin) extras.push(`${t.estimateMin}dk`);
+      const tail = extras.length ? `<span class="mit-sug-meta">${extras.join(' · ')}</span>` : '';
+      return `
+        <div class="mit-suggestion" onclick="acceptMitSuggestion(${t.id})">
+          <span class="mit-sug-icon">＋⭐</span>
+          <span class="mit-sug-text">${escapeHtml(t.text)}</span>
+          ${tail}
+        </div>
+      `;
+    }).join('');
+    listEl.innerHTML = `
+      <div class="mit-empty" style="margin-bottom:8px;">🎯 Bugünün önerisi (tıkla, ⭐'la):</div>
+      ${sugHtml}
+    `;
     return;
   }
   listEl.innerHTML = mitTasks.map(t => `
-    <div class="mit-item ${t.done ? 'done' : ''}">
-      <span>${t.done ? '✅' : '⬜'}</span>
+    <div class="mit-item ${t.done ? 'done' : ''}" onclick="toggleTask(${t.id})" title="${t.done ? 'Geri aç' : 'Bitti olarak işaretle'}">
+      <span class="mit-check">${t.done ? '✅' : '⬜'}</span>
       <span>${escapeHtml(t.text)}</span>
     </div>
   `).join('');
+}
+
+function acceptMitSuggestion(id) {
+  toggleMit(id);
 }
 
 function escapeHtml(s) {
@@ -1719,19 +2020,29 @@ let totalSec = 25*60;
 function updateTimerDisplay() {
   const m = Math.floor(timerSec/60), s = timerSec%60;
   const txt = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  document.getElementById('timer').textContent = txt;
-  document.getElementById('timer').classList.toggle('break', isBreak);
-  document.getElementById('timerRing').classList.toggle('break', isBreak);
-  document.getElementById('timerStatus').textContent = isBreak ? '☕ Mola zamanı' : '🎯 Çalışma zamanı';
+  const timerEl = document.getElementById('timer');
+  const ring = document.getElementById('timerRing');
+  const subEl = document.getElementById('timerSub');
+  timerEl.textContent = txt;
+  timerEl.classList.toggle('break', isBreak);
+  ring.classList.toggle('break', isBreak);
+  ring.classList.toggle('running', running);
+  ring.classList.toggle('paused', !running && timerSec < totalSec);
+  document.getElementById('timerStatus').textContent =
+    !running && timerSec === totalSec ? 'Hazır' :
+    !running ? '⏸️ Durakta' :
+    isBreak ? '☕ Mola zamanı' : '🎯 Çalışma zamanı';
+  if (subEl) subEl.textContent = isBreak ? 'mola' : (running ? 'odak' : 'dakika');
   const pct = ((totalSec - timerSec) / totalSec) * 100;
-  document.getElementById('timerRing').style.setProperty('--p', pct + '%');
-  document.title = `${txt} - Aidan`;
+  ring.style.setProperty('--p', pct + '%');
+  document.title = running ? `${txt} ${isBreak ? '☕' : '🎧'} Aidan` : 'Aidan - ADHD Asistanım';
 }
 
 function startTimer() {
   if (running) return;
   running = true;
   if (!isBreak && !focusStartTime) focusStartTime = Date.now();
+  updateTimerDisplay();
   timerInt = setInterval(() => {
     timerSec--;
     if (timerSec <= 0) {
@@ -1739,12 +2050,9 @@ function startTimer() {
       running = false;
       if (!isBreak) {
         data.pomoToday.count++;
-        const tStr = today();
-        data.pomoHistory[tStr] = (data.pomoHistory[tStr] || 0) + 1;
         save();
         document.getElementById('pomoCount').textContent = data.pomoToday.count;
-        renderPomoHistory();
-        notify('🍅 Pomodoro bitti!', 'Harika iş! Şimdi ' + breakMin + ' dk mola.');
+        notify('🎧 Seans bitti!', 'Harika iş! Şimdi ' + breakMin + ' dk mola.');
         isBreak = true;
         timerSec = breakMin * 60;
         totalSec = breakMin * 60;
@@ -1762,7 +2070,11 @@ function startTimer() {
   }, 1000);
 }
 
-function pauseTimer() { clearInterval(timerInt); running = false; }
+function pauseTimer() {
+  clearInterval(timerInt);
+  running = false;
+  updateTimerDisplay();
+}
 
 function resetTimer() {
   clearInterval(timerInt);
@@ -1772,6 +2084,11 @@ function resetTimer() {
   totalSec = workMin * 60;
   focusStartTime = null;
   currentFocusTaskId = null;
+  const focusEl = document.getElementById('focusTask');
+  if (focusEl) {
+    focusEl.textContent = 'Bir görev seç ya da serbest çalış';
+    focusEl.classList.add('empty');
+  }
   updateTimerDisplay();
   document.title = 'Aidan - ADHD Asistanım';
 }
@@ -1779,35 +2096,6 @@ function resetTimer() {
 function setTimer(w, b) {
   workMin = w; breakMin = b;
   resetTimer();
-}
-
-function renderPomoHistory() {
-  const chart = document.getElementById('pomoChart');
-  if (!chart) return;
-  const todayStr = today();
-  const days = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(todayStr);
-    d.setDate(d.getDate() - i);
-    const ds = d.toISOString().slice(0, 10);
-    days.push({
-      date: ds,
-      count: data.pomoHistory[ds] || 0,
-      label: ['Pzr','Pzt','Sal','Çar','Per','Cum','Cmt'][d.getDay()],
-      isToday: ds === todayStr
-    });
-  }
-  const max = Math.max(...days.map(d => d.count), 1);
-  chart.innerHTML = days.map(d => `
-    <div class="bar-col ${d.isToday ? 'today' : ''}">
-      <div class="bar-wrap">
-        <div class="bar ${d.isToday ? 'today' : ''}" style="height: ${Math.max((d.count / max) * 100, d.count > 0 ? 12 : 3)}%">
-          ${d.count > 0 ? `<span class="bar-value">${d.count}</span>` : ''}
-        </div>
-      </div>
-      <div class="bar-day">${d.label}</div>
-    </div>
-  `).join('');
 }
 
 function playBeep() {
@@ -1822,140 +2110,83 @@ function playBeep() {
   } catch(e) {}
 }
 
-// ============ BRAIN DUMP ============
-function saveDump() {
-  const text = document.getElementById('dumpInput').value.trim();
-  if (!text) return;
-  data.dumps.unshift({ text, when: timeStr() });
-  document.getElementById('dumpInput').value = '';
-  save(); renderDumps();
-}
-function deleteDump(idx) { data.dumps.splice(idx, 1); save(); renderDumps(); }
-function clearAllDumps() {
-  if (!confirm('Tüm brain dump notlarını sil?')) return;
-  data.dumps = []; save(); renderDumps();
-}
-function renderDumps() {
-  const list = document.getElementById('dumpList');
-  if (!data.dumps.length) { list.innerHTML = '<div class="empty">Henüz not yok.</div>'; return; }
-  list.innerHTML = data.dumps.map((d, i) => `
-    <div class="dump-entry">
-      <div class="dump-date">${d.when}</div>
-      <div style="white-space:pre-wrap;">${escapeHtml(d.text)}</div>
-      <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
-        <button class="small" onclick="dumpToTask(${i})">📋 Göreve çevir</button>
-        <button class="danger small" onclick="deleteDump(${i})">Sil</button>
-      </div>
-    </div>
-  `).join('');
+function playDoneChime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const notes = [523.25, 659.25, 783.99]; // C5 E5 G5 — major chord
+    notes.forEach((freq, i) => {
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type = 'triangle';
+      o.frequency.value = freq;
+      const t0 = ctx.currentTime + i * 0.08;
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(0.22, t0 + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.45);
+      o.start(t0); o.stop(t0 + 0.5);
+    });
+  } catch(e) {}
 }
 
-async function dumpToTask(idx) {
-  const d = data.dumps[idx];
-  if (!d) return;
-  // Çok uzun dump için kullanıcıya metni gözden geçirme şansı ver
-  const initial = d.text.length > 120 ? d.text.slice(0, 117) + '...' : d.text;
-  const taskText = await aidanPrompt('Göreve çevir', 'Görev metni (gerekirse düzenle):', initial);
-  if (taskText === null) return;
-  const trimmed = taskText.trim();
-  if (!trimmed) return;
-  data.tasks.push({
-    id: Date.now(),
-    text: trimmed,
-    done: false,
-    doneDate: null,
-    subtasks: [],
-    created: timeStr(),
-    priority: 'normal',
-    category: null,
-    due: null,
-    estimateMin: null,
-    actualMin: null,
-    repeat: null,
-    mitDate: null,
-    streakCount: 0,
-    lastStreakDate: null
-  });
-  data.dumps.splice(idx, 1);
-  save();
-  renderDumps();
-  renderTasks();
-  showToast('Brain dump göreve çevrildi 📋 — Görevler sekmesinde', 'success', 4000);
+// Konfeti patlat — element koordinatından
+function confettiBurst(originEl) {
+  try {
+    const rect = originEl.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const colors = ['#3fb950', '#6366f1', '#d29922', '#c084fc', '#58a6ff', '#f85149'];
+    const burst = document.createElement('div');
+    burst.className = 'confetti-burst';
+    burst.style.left = cx + 'px';
+    burst.style.top = cy + 'px';
+    for (let i = 0; i < 16; i++) {
+      const piece = document.createElement('div');
+      piece.className = 'confetti-piece';
+      piece.style.background = colors[i % colors.length];
+      const angle = (Math.PI * 2 * i) / 16 + (Math.random() - 0.5) * 0.4;
+      const dist = 60 + Math.random() * 90;
+      piece.style.setProperty('--x', Math.cos(angle) * dist + 'px');
+      piece.style.setProperty('--r', (Math.random() * 720 - 360) + 'deg');
+      piece.style.animationDelay = (Math.random() * 0.06) + 's';
+      burst.appendChild(piece);
+    }
+    document.body.appendChild(burst);
+    setTimeout(() => burst.remove(), 1300);
+  } catch(e) {}
 }
 
-// ============ RUTİNLER ============
-function addRoutine() {
-  const time = document.getElementById('routineTime').value;
-  const name = document.getElementById('routineName').value.trim();
-  if (!time || !name) { showToast('Saat ve isim gir.', 'warning'); return; }
-  data.routines.push({ id: Date.now(), time, name, lastFired: '' });
-  document.getElementById('routineTime').value = '';
-  document.getElementById('routineName').value = '';
-  save(); renderRoutines();
-  showToast('Rutin eklendi ⏰', 'success');
+// "Bugün +N" sayaç pop-up
+function showDoneCounter() {
+  const todayStr = today();
+  const doneToday = data.tasks.filter(t => t.done && t.doneDate === todayStr).length;
+  if (!doneToday) return;
+  const el = document.createElement('div');
+  el.className = 'done-counter';
+  el.textContent = '+' + doneToday;
+  el.style.left = '50%';
+  el.style.top = '40%';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1500);
 }
-function deleteRoutine(id) {
-  data.routines = data.routines.filter(r => r.id !== id);
-  save(); renderRoutines();
-}
-function renderRoutines() {
-  const list = document.getElementById('routineList');
-  if (!data.routines.length) {
-    list.innerHTML = '<div class="empty">Henüz rutin yok. Örnek: 09:00 İlacımı al</div>';
-    return;
+
+function celebrateDone(taskId) {
+  // Görev kartını bul, üzerine kutlama
+  const card = document.querySelector(`[onchange="toggleTask(${taskId})"]`)?.closest('.task')
+              || document.querySelector(`[onclick*="toggleTask(${taskId})"]`)?.closest('.mit-item');
+  if (card) {
+    card.classList.add('just-done');
+    confettiBurst(card);
+    setTimeout(() => card.classList.remove('just-done'), 700);
   }
-  list.innerHTML = data.routines.sort((a,b)=>a.time.localeCompare(b.time)).map(r => `
-    <div class="routine-item">
-      <div class="routine-info">
-        <span class="routine-time">${r.time}</span>
-        <span class="routine-name"> — ${escapeHtml(r.name)}</span>
-      </div>
-      <button class="danger small" onclick="deleteRoutine(${r.id})">Sil</button>
-    </div>
-  `).join('');
-}
-
-// ============ CHECK-IN ============
-function logMood(emoji, label) {
-  const note = document.getElementById('checkinNote').value.trim();
-  data.checkins.unshift({ emoji, label, note, when: timeStr() });
-  document.getElementById('checkinNote').value = '';
-  save(); renderCheckins();
-  const responses = {
-    'harika': 'Süper! Bu enerjiyi bir göreve yönlendirelim mi? 💫',
-    'iyi': 'Güzel. Bugün küçük bir şey halletmek için iyi gün. ✨',
-    'idare eder': 'Tamam. Bugün için bar düşük tutalım — sadece 1 görev. 🎯',
-    'zor': 'Zor günler oluyor. 5 dakika kuralı: sadece 5 dk dene, sonra bırakabilirsin. 💜',
-    'tükenmiş': 'Dinlen. Hiçbir görev senin sağlığından önemli değil. 😴'
-  };
-  showToast(responses[label] || 'Kaydettim. 💜', 'info', 5000);
-}
-function renderCheckins() {
-  const list = document.getElementById('checkinList');
-  if (!data.checkins.length) { list.innerHTML = ''; return; }
-  list.innerHTML = '<h3>Geçmiş</h3>' +
-    data.checkins.slice(0, 20).map(c => `
-      <div class="checkin-row">
-        <div style="font-size:1.8em;">${c.emoji}</div>
-        <div style="flex:1;">
-          <div style="font-size:0.85em;color:#888;">${c.when}</div>
-          <div><b>${c.label}</b>${c.note ? ' — ' + escapeHtml(c.note) : ''}</div>
-        </div>
-      </div>
-    `).join('');
+  playDoneChime();
+  showDoneCounter();
 }
 
 // ============ AYARLAR ============
 function saveSettings() {
-  data.settings.ntfyTopic = document.getElementById('ntfyTopic').value.trim();
-  data.settings.hyperfocusEnabled = document.getElementById('hyperfocusEnabled').checked;
-  data.settings.hyperfocusMin = parseInt(document.getElementById('hyperfocusMin').value) || 45;
   save();
 }
 function loadSettings() {
-  document.getElementById('ntfyTopic').value = data.settings.ntfyTopic || '';
-  document.getElementById('hyperfocusEnabled').checked = data.settings.hyperfocusEnabled || false;
-  document.getElementById('hyperfocusMin').value = data.settings.hyperfocusMin || 45;
   document.getElementById('supaUrl').value = data.settings.supaUrl || '';
   document.getElementById('supaKey').value = data.settings.supaKey || '';
   if (data.settings.supaUrl && data.settings.supaKey) {
@@ -1963,126 +2194,6 @@ function loadSettings() {
   } else {
     renderAuthBox();
   }
-}
-function genRandomTopic() {
-  const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
-  let s = 'salim-aidan-';
-  for (let i = 0; i < 8; i++) s += chars[Math.floor(Math.random() * chars.length)];
-  document.getElementById('ntfyTopic').value = s;
-  saveSettings();
-  alert('Üretildi: ' + s + '\n\nBu adı telefondaki ntfy uygulamasında "Subscribe to topic" altına da yaz.');
-}
-function showNtfyStatus(html, color) {
-  const el = document.getElementById('ntfyStatus');
-  if (!el) return;
-  el.innerHTML = `<div style="background:${color};color:#1e1e2e;padding:10px;border-radius:8px;white-space:pre-wrap;font-size:0.9em;">${html}</div>`;
-}
-
-function validateTopic(topic) {
-  if (!topic) return 'Topic adı boş.';
-  if (topic.length < 3) return 'Topic adı en az 3 karakter olmalı.';
-  if (!/^[a-zA-Z0-9_-]+$/.test(topic)) return 'Topic adında sadece harf (a-z), rakam, tire (-) ve alt çizgi (_) olmalı. Türkçe karakter / boşluk olmaz.';
-  return null;
-}
-
-async function testNtfy() {
-  saveSettings();
-  const topic = (document.getElementById('ntfyTopic').value || '').trim();
-  const err = validateTopic(topic);
-  if (err) { showNtfyStatus('⚠️ ' + err, '#ffb86c'); return; }
-
-  const url = 'https://ntfy.sh/' + topic;
-  const msg = 'Aidan Test - ' + new Date().toLocaleTimeString('tr-TR') + ' - Eğer bunu görüyorsan, telefon bildirimi calisiyor!';
-
-  showNtfyStatus('⏳ Gönderiliyor: ' + url + '\nTopic: "' + topic + '"', '#8be9fd');
-
-  // Custom header'lar CORS preflight tetikliyor; query param ile gönder (preflight yok)
-  const urlWithParams = url + '?title=' + encodeURIComponent('Aidan Test') + '&tags=brain';
-
-  try {
-    const r = await fetch(urlWithParams, {
-      method: 'POST',
-      body: msg
-    });
-    if (r.ok) {
-      const responseText = await r.text();
-      showNtfyStatus(
-        '✅ Sunucuya gönderildi (HTTP ' + r.status + ')\n\n' +
-        'Sunucu cevabı: ' + responseText.slice(0, 200) + '\n\n' +
-        'Telefonunda 5 sn içinde gelmediyse:\n' +
-        '• Telefondaki ntfy uygulamasında topic adı TAM olarak şu mu: "' + topic + '"\n' +
-        '• Telefon ntfy\'a bildirim izni vermiş mi? (Ayarlar → Uygulamalar → ntfy → Bildirimler)\n' +
-        '• Telefon internet var mı?\n\n' +
-        'TEST: "🌐 Web sayfasını aç" butonuna bas, oradan da test gönder. O da gelmezse sorun telefondaki abonelikte.',
-        '#50fa7b'
-      );
-    } else {
-      showNtfyStatus('❌ Sunucu hatası: HTTP ' + r.status + '\nURL: ' + urlWithParams, '#ff5555');
-    }
-  } catch (e) {
-    // Fetch hatası — muhtemelen CORS veya ağ. no-cors ile tekrar dene
-    try {
-      await fetch(urlWithParams, { method: 'POST', body: msg, mode: 'no-cors' });
-      showNtfyStatus(
-        '⚠️ Gönderildi ama tarayıcı cevabı okuyamadı (CORS).\n' +
-        'Mesaj muhtemelen ulaştı — telefonunu kontrol et.\n\n' +
-        'Hata: ' + e.message + '\n\n' +
-        'Gelmediyse "🌐 Web sayfasını aç" ile tarayıcıdan test gönder.',
-        '#ffb86c'
-      );
-    } catch (e2) {
-      showNtfyStatus(
-        '❌ Bağlantı hatası: ' + e2.message + '\n\n' +
-        'Olası nedenler:\n' +
-        '• İnternet bağlantın yok\n' +
-        '• Tarayıcı/firewall ntfy.sh\'i bloke ediyor\n' +
-        '• file:// kısıtlaması (Edge/Chrome bazen)\n\n' +
-        'Çözüm: "🌐 Web sayfasını aç" butonuna bas, oradan test gönder.',
-        '#ff5555'
-      );
-    }
-  }
-}
-
-function openNtfyWeb() {
-  saveSettings();
-  const topic = (document.getElementById('ntfyTopic').value || '').trim();
-  const err = validateTopic(topic);
-  if (err) { showNtfyStatus('⚠️ ' + err, '#ffb86c'); return; }
-  const url = 'https://ntfy.sh/' + topic;
-
-  // Pop-up bloke olabilir, yeni sekmeyi açmayı deneyelim AMA aynı zamanda linki ekranda göster
-  let popupBlocked = false;
-  try {
-    const w = window.open(url, '_blank');
-    if (!w || w.closed || typeof w.closed === 'undefined') popupBlocked = true;
-  } catch(e) { popupBlocked = true; }
-
-  const el = document.getElementById('ntfyStatus');
-  el.innerHTML = `
-    <div style="background:#bd93f9;color:#1e1e2e;padding:12px;border-radius:8px;font-size:0.95em;">
-      ${popupBlocked ? '⚠️ Pop-up bloke edildi.<br>' : '🌐 Yeni sekme açıldı (açılmadıysa):'}
-      <br><br>
-      <b>Şu linke tıkla:</b><br>
-      <a href="${url}" target="_blank" rel="noopener" style="display:inline-block;background:#1e1e2e;color:#8be9fd;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:bold;margin:8px 0;font-size:1.05em;word-break:break-all;">${url}</a>
-      <br>
-      <button class="small" style="background:#50fa7b;margin-top:8px;" onclick="navigator.clipboard.writeText('${url}').then(()=>alert('Linki kopyaladım. Yeni sekme açıp yapıştır.'))">📋 Linki kopyala</button>
-      <br><br>
-      <b>O sayfada ne yapacaksın:</b><br>
-      1. Aşağıdaki "Send notification" / mesaj kutusunu bul<br>
-      2. Bir test mesajı yaz, "Send" bas<br>
-      3. Telefonuna geliyorsa → abonelik DOĞRU, sorun bu HTML'de (CORS)<br>
-      4. Telefona da gelmiyorsa → telefondaki ntfy uygulamasında topic adı yanlış veya bildirim izni yok
-    </div>
-  `;
-}
-
-function sendNtfy(title, body) {
-  const topic = data.settings.ntfyTopic;
-  if (!topic || validateTopic(topic)) return;
-  const url = 'https://ntfy.sh/' + topic + '?title=' + encodeURIComponent(title) + '&tags=brain';
-  fetch(url, { method: 'POST', body: body, mode: 'no-cors' })
-    .catch(e => console.warn('ntfy failed', e));
 }
 
 function exportData() {
@@ -2117,24 +2228,56 @@ function resetAll() {
 }
 
 // ============ ZAMAN KÖRLÜĞÜ ÜST BAR ============
+function updateAppSubtitle() {
+  const sub = document.getElementById('appSubtitle');
+  if (!sub) return;
+  const now = new Date();
+  const dayNames = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+  const monthNames = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+  const dayStr = `${dayNames[now.getDay()]}, ${now.getDate()} ${monthNames[now.getMonth()]}`;
+  const todayStr = today();
+  const tasks = data.tasks || [];
+  const active = tasks.filter(t => !t.done).length;
+  const doneToday = tasks.filter(t => t.doneDate === todayStr).length;
+  const mit = tasks.filter(t => t.mitDate === todayStr);
+  const mitDone = mit.filter(t => t.done).length;
+  // ADHD friendly: bugün ne durumda?
+  let mood = '';
+  const hour = now.getHours();
+  if (hour < 6) mood = '🌙';
+  else if (hour < 12) mood = '☀️';
+  else if (hour < 18) mood = '🌤️';
+  else mood = '🌆';
+  let summary = `${mood} ${dayStr}`;
+  if (mit.length > 0) {
+    summary += ` · ⭐ ${mitDone}/${mit.length}`;
+  }
+  if (doneToday > 0) summary += ` · ✅ ${doneToday} bitti`;
+  if (active === 0 && doneToday === 0) summary += ` · sakin bir gün`;
+  sub.textContent = summary;
+}
+
 function updateTopbar() {
+  updateAppSubtitle();
   const now = new Date();
   document.getElementById('tbClock').textContent =
     String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
 
-  // Sonraki rutin
+  // Sıradaki hatırlatma — bugünün reminderTime'lı görevleri arasında en yakını
   const nowMin = now.getHours() * 60 + now.getMinutes();
   let nextR = null, nextDiff = Infinity;
-  data.routines.forEach(r => {
-    const [h, m] = r.time.split(':').map(Number);
+  (data.tasks || []).forEach(t => {
+    if (t.done || !t.reminderTime) return;
+    const [h, m] = t.reminderTime.split(':').map(Number);
+    if (isNaN(h) || isNaN(m)) return;
     const rMin = h * 60 + m;
-    let diff = rMin - nowMin;
-    if (diff <= 0) diff += 24 * 60;
-    if (diff < nextDiff) { nextDiff = diff; nextR = r; }
+    if (rMin < nowMin) return; // bugün geçti
+    const diff = rMin - nowMin;
+    if (diff < nextDiff) { nextDiff = diff; nextR = t; }
   });
   if (nextR) {
     const txt = nextDiff < 60 ? nextDiff + ' dk' : Math.floor(nextDiff/60) + 'sa ' + (nextDiff%60) + 'dk';
-    document.getElementById('tbNext').textContent = nextR.name.slice(0, 15) + ' (' + txt + ')';
+    document.getElementById('tbNext').textContent = (nextR.text || '').slice(0, 18) + ' · ' + txt;
   } else {
     document.getElementById('tbNext').textContent = '—';
   }
@@ -2151,16 +2294,6 @@ function updateTopbar() {
       focusMin < 60 ? focusMin + ' dk' : Math.floor(focusMin/60) + 'sa ' + (focusMin%60) + 'dk';
   }
 
-  // Hyperfocus uyarısı — gerçek aktif streak'e bağlı
-  if (data.settings.hyperfocusEnabled && focusMin > 0) {
-    const limit = data.settings.hyperfocusMin || 45;
-    const sinceAlert = (Date.now() - lastHyperfocusAlert) / 60000;
-    if (focusMin >= limit && sinceAlert >= limit) {
-      lastHyperfocusAlert = Date.now();
-      notify('🧠 Hyperfocus uyarısı', `${limit} dk'dır kesintisiz çalışıyorsun. Kalk, su iç, gözlerini dinlendir.`);
-      playBeep();
-    }
-  }
 }
 setInterval(updateTopbar, 10000);
 updateTopbar();
@@ -2171,14 +2304,6 @@ setInterval(() => {
   const hhmm = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
   const todayStr = today();
   let changed = false;
-  data.routines.forEach(r => {
-    if (r.time === hhmm && r.lastFired !== todayStr) {
-      r.lastFired = todayStr;
-      changed = true;
-      notify('⏰ Hatırlatma', r.name);
-      playBeep();
-    }
-  });
   data.tasks.forEach(t => {
     if (t.done) return;
     if (!t.reminderTime || t.reminderTime !== hhmm) return;
@@ -2391,16 +2516,12 @@ async function pullFromCloud() {
       data.tasks = data.tasks || [];
       data.dumps = data.dumps || [];
       data.routines = data.routines || [];
-      data.checkins = data.checkins || [];
-      data.settings = data.settings || {};
+            data.settings = data.settings || {};
       data.pomoToday = data.pomoToday || { date: today(), count: 0 };
       localStorage.setItem('aidan', JSON.stringify(data));
       // Yenilemeden re-render et (aktif sekmeyi koru)
       renderTasks();
-      renderDumps();
-      renderRoutines();
-      renderCheckins();
-      document.getElementById('pomoCount').textContent = data.pomoToday.count;
+            document.getElementById('pomoCount').textContent = data.pomoToday.count;
       showSupaStatus('✅ Buluttan veri çekildi.', '#50fa7b');
     } else {
       // Bulutta veri yok — yereli yükle
@@ -2460,16 +2581,12 @@ function subscribeToCloud() {
       data.tasks = data.tasks || [];
       data.dumps = data.dumps || [];
       data.routines = data.routines || [];
-      data.checkins = data.checkins || [];
-      data.settings = data.settings || {};
+            data.settings = data.settings || {};
       data.pomoToday = data.pomoToday || { date: today(), count: 0 };
       localStorage.setItem('aidan', JSON.stringify(data));
       // Sekmeyi koruyarak yeniden render et
       renderTasks();
-      renderDumps();
-      renderRoutines();
-      renderCheckins();
-      showSupaStatus('🔄 Diğer cihazdan güncelleme alındı.', '#bd93f9');
+            showSupaStatus('🔄 Diğer cihazdan güncelleme alındı.', '#bd93f9');
     })
     .subscribe();
 }
@@ -2480,6 +2597,8 @@ async function manualPull() {
 }
 
 // ============ SERİ (Ödev grupları) ============
+let _activeSeriesId = null;
+
 function seriesProgress(seriesId) {
   if (!seriesId) return { done: 0, total: 0 };
   const items = data.tasks.filter(t => t.seriesId === seriesId);
@@ -2490,121 +2609,166 @@ function showSeries(seriesId) {
   const items = data.tasks.filter(t => t.seriesId === seriesId)
     .sort((a, b) => (a.seriesIndex || 0) - (b.seriesIndex || 0));
   if (items.length === 0) { showToast('Seri bulunamadı', 'warning'); return; }
+  _activeSeriesId = seriesId;
   const sp = seriesProgress(seriesId);
   const name = items[0].seriesName || 'Seri';
+  const allDone = sp.done === sp.total;
   document.getElementById('seriesModalTitle').textContent = '📚 ' + name;
   document.getElementById('seriesModalProgress').textContent =
-    `${sp.done}/${sp.total} bitti${sp.done === sp.total ? ' — Tamamlandı! 🎉' : ''}`;
+    `${sp.done}/${sp.total} bitti${allDone ? ' — Tamamlandı! 🎉' : ''}`;
+  const todayStr = today();
   const listHtml = items.map(t => {
     const dueStr = t.due ? new Date(t.due).toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+    const isOverdue = !t.done && t.due && t.due < todayStr;
     return `
-      <div style="padding:10px 12px; background:var(--bg-elev); border-radius:7px; border:1px solid var(--border-soft); display:flex; gap:10px; align-items:center;">
+      <div style="padding:10px 12px; background:var(--bg-elev); border-radius:7px; border:1px solid ${isOverdue ? 'var(--danger)' : 'var(--border-soft)'}; display:flex; gap:10px; align-items:center;">
         <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask(${t.id}); showSeries('${seriesId}')" style="width:18px;height:18px;">
         <div style="flex:1;">
           <div style="${t.done ? 'text-decoration:line-through; opacity:0.5;' : ''} font-size:0.92em;">${escapeHtml(t.text)}</div>
-          <div style="font-size:0.75em; color:var(--text-muted); margin-top:2px;">${dueStr}${t.estimateMin ? ' · ⏱️ ' + t.estimateMin + 'dk' : ''}</div>
+          <div style="font-size:0.75em; color:${isOverdue ? 'var(--danger)' : 'var(--text-muted)'}; margin-top:2px;">${isOverdue ? '⚠️ Geçti · ' : ''}${dueStr}${t.estimateMin ? ' · ⏱️ ' + t.estimateMin + 'dk' : ''}</div>
         </div>
       </div>
     `;
   }).join('');
   document.getElementById('seriesModalList').innerHTML = listHtml;
+  // Tamamen bittiyse rebalance butonunu gizle
+  const rb = document.getElementById('seriesRebalanceBtn');
+  if (rb) rb.style.display = allDone ? 'none' : '';
   document.getElementById('seriesModal').classList.add('active');
 }
 
 function closeSeriesModal() {
   document.getElementById('seriesModal').classList.remove('active');
+  _activeSeriesId = null;
 }
 
-// ============ TAKVİM ============
-let _calOffset = 0; // hafta ofseti (0 = bu hafta)
-
-function openCalendar() {
-  _calOffset = 0;
-  renderCalendar();
-  document.getElementById('calModal').classList.add('active');
+// Lokal tarihi ISO formatına çevir (UTC kayması olmadan)
+function localISO(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
-function closeCalendar() {
-  document.getElementById('calModal').classList.remove('active');
-}
-
-function calWeek(delta) {
-  if (delta === 0) _calOffset = 0;
-  else _calOffset += delta;
-  renderCalendar();
-}
-
-function startOfWeek(offsetWeeks) {
-  const now = new Date();
-  const day = now.getDay(); // 0 paz, 1 pzt, ...
-  const diff = (day === 0 ? -6 : 1 - day); // pazartesi'ye git
-  const d = new Date(now);
-  d.setDate(now.getDate() + diff + offsetWeeks * 7);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function renderCalendar() {
-  const start = startOfWeek(_calOffset);
-  const todayStr = today();
-  const dayNames = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
-  const monthFmt = new Intl.DateTimeFormat('tr-TR', { month: 'long' });
-
+// Verilen gün aralığına `count` adet görevi dağıt. skipWeekends ise Cmt/Paz atla.
+// startISO ve endISO dahil. Yeterli iş günü yoksa endISO'da yığ.
+function planSeriesDays(startISO, endISO, count, skipWeekends) {
+  const start = new Date(startISO + 'T00:00:00');
+  const end = new Date(endISO + 'T00:00:00');
+  if (end < start) return Array(count).fill(endISO);
   const days = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    const iso = d.toISOString().slice(0, 10);
-    days.push({ date: d, iso, name: dayNames[i] });
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const dow = d.getDay(); // 0=Paz, 6=Cmt
+    if (skipWeekends && (dow === 0 || dow === 6)) continue;
+    days.push(localISO(d));
   }
-
-  const tasksByDay = {};
-  days.forEach(d => tasksByDay[d.iso] = []);
-  data.tasks.forEach(t => {
-    if (t.due && tasksByDay[t.due]) tasksByDay[t.due].push(t);
-    if (t.mitDate && tasksByDay[t.mitDate] && (!t.due || t.due !== t.mitDate)) {
-      // MIT bugüne, due başka güne ise iki yerde gösterme — sadece due'sunda göster
-      // (mit zaten bugün olduğu için yukarıdaki dueIso == mitDate yakalıyor)
+  if (days.length === 0) {
+    // Sadece hafta sonu varsa weekend'leri kabul et
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      days.push(localISO(d));
     }
+  }
+  if (count <= 0) return [];
+  if (count === 1) return [days[days.length - 1]];
+  if (days.length >= count) {
+    const step = (days.length - 1) / (count - 1);
+    return Array.from({ length: count }, (_, i) => days[Math.round(i * step)]);
+  }
+  // Yeterli gün yok — kalanları son güne yığ
+  const out = [...days];
+  while (out.length < count) out.push(days[days.length - 1]);
+  return out;
+}
+
+async function rebalanceSeriesFromModal() {
+  const sid = _activeSeriesId;
+  if (!sid) return;
+  const items = data.tasks.filter(t => t.seriesId === sid)
+    .sort((a, b) => (a.seriesIndex || 0) - (b.seriesIndex || 0));
+  if (items.length === 0) return;
+  const undone = items.filter(t => !t.done);
+  if (undone.length === 0) { showToast('Bu seri zaten bitmiş', 'info'); return; }
+
+  // Mevcut son tarihi göster
+  const lastDue = items.map(t => t.due).filter(Boolean).sort().reverse()[0] || today();
+  const name = items[0].seriesName || 'Seri';
+
+  const newDeadlineRaw = await aidanPrompt(
+    `🔄 "${name}" yeniden dengele`,
+    `${undone.length} bitmemiş parça kaldı. Yeni son tarih?`,
+    lastDue
+  );
+  if (newDeadlineRaw === null) return;
+  const newDeadline = parseDateInput(newDeadlineRaw.trim());
+  if (!newDeadline) { showToast('Tarih anlaşılamadı', 'warning'); return; }
+  if (newDeadline < today()) { showToast('Son tarih geçmişte olamaz', 'warning'); return; }
+
+  const skipWeekends = confirm('Hafta sonlarını (Cmt-Paz) atlayalım mı?\n\nTamam = Evet, atla\nİptal = Hayır, hafta sonu da plan yap');
+
+  // Yarından başla (bugün için yeni iş eklemek baskı yapar)
+  const startDate = today();
+  const days = planSeriesDays(startDate, newDeadline, undone.length, skipWeekends);
+
+  undone.forEach((t, i) => {
+    t.due = days[i] || newDeadline;
+    // Geçmişte MIT'lendiyse temizle (yeniden planda eski MIT anlamsız)
+    if (t.mitDate && t.mitDate < today()) t.mitDate = null;
   });
 
-  // Başlık
-  const firstDay = days[0].date;
-  const lastDay = days[6].date;
-  const titleStr = `${firstDay.getDate()} ${monthFmt.format(firstDay)} — ${lastDay.getDate()} ${monthFmt.format(lastDay)}`;
-  document.getElementById('calTitle').textContent = '📅 ' + (_calOffset === 0 ? 'Bu hafta · ' : (_calOffset === 1 ? 'Sonraki · ' : (_calOffset === -1 ? 'Önceki · ' : ''))) + titleStr;
+  save();
+  renderTasks();
+  showSeries(sid);
+  showToast(`✅ ${undone.length} parça yeniden dağıtıldı (${newDeadline})`, 'success');
+}
 
-  // Grid
-  const html = days.map(d => {
-    const isToday = d.iso === todayStr;
-    const isPast = d.iso < todayStr;
-    const dayTasks = tasksByDay[d.iso] || [];
-    const tasksHtml = dayTasks.slice(0, 8).map(t => {
-      const cls = [
-        t.priority === 'urgent' ? 'urgent' : '',
-        t.category || '',
-        t.mitDate === d.iso ? 'mit' : '',
-        t.done ? 'done' : ''
-      ].filter(x => x).join(' ');
-      const label = (t.mitDate === d.iso ? '⭐ ' : '') + (t.text || '');
-      return `<div class="cal-task ${cls}" onclick="closeCalendar(); showTab('tasks', document.querySelector('[data-tab=tasks]')); setTimeout(() => { const el = document.querySelector('[onchange*=&quot;toggleTask(${t.id})&quot;]'); if(el) el.scrollIntoView({behavior:'smooth', block:'center'}); }, 100);" title="${escapeHtml(t.text)}">${escapeHtml(label)}</div>`;
-    }).join('');
-    const more = dayTasks.length > 8 ? `<div style="font-size:0.7em; color:var(--text-muted); padding:2px 4px;">+${dayTasks.length - 8} daha</div>` : '';
-    return `
-      <div class="cal-day ${isToday ? 'today' : ''} ${isPast && !isToday ? 'past' : ''}">
-        <div class="cal-day-head">${d.name}</div>
-        <div class="cal-day-num">${d.date.getDate()}</div>
-        ${tasksHtml}${more}
-      </div>
-    `;
-  }).join('');
-  document.getElementById('calGrid').innerHTML = html;
+async function deleteSeriesFromModal() {
+  const sid = _activeSeriesId;
+  if (!sid) return;
+  const items = data.tasks.filter(t => t.seriesId === sid);
+  if (items.length === 0) return;
+  const name = items[0].seriesName || 'Seri';
+  if (!confirm(`"${name}" serisindeki ${items.length} görevi silelim mi?\n\nBitmiş olanlar da silinir.`)) return;
+  data.tasks = data.tasks.filter(t => t.seriesId !== sid);
+  save();
+  renderTasks();
+  closeSeriesModal();
+  showToast(`🗑️ "${name}" serisi silindi`, 'success');
+}
 
-  // Özet
-  const totalThisWeek = days.reduce((sum, d) => sum + tasksByDay[d.iso].length, 0);
-  const doneThisWeek = days.reduce((sum, d) => sum + tasksByDay[d.iso].filter(t => t.done).length, 0);
-  document.getElementById('calSummary').innerHTML =
-    `📊 Bu hafta: <b style="color:var(--text);">${totalThisWeek}</b> görev · <b style="color:var(--success);">${doneThisWeek}</b> bitti · <b style="color:var(--warning);">${totalThisWeek - doneThisWeek}</b> kaldı`;
+// Esnek tarih parse: 'YYYY-MM-DD', 'DD.MM.YYYY', 'DD/MM', 'yarın', 'salı', 'haftaya'
+function parseDateInput(s) {
+  if (!s) return null;
+  s = String(s).trim().toLowerCase();
+  if (!s) return null;
+  if (s === 'bugün' || s === 'bugun' || s === 'today') return today();
+  if (s === 'yarın' || s === 'yarin' || s === 'tomorrow') {
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  }
+  if (s === 'haftaya' || s === 'next week') {
+    const d = new Date(); d.setDate(d.getDate() + 7);
+    return d.toISOString().slice(0, 10);
+  }
+  const dayMap = { 'pazartesi':1, 'salı':2, 'sali':2, 'çarşamba':3, 'carsamba':3, 'perşembe':4, 'persembe':4, 'cuma':5, 'cumartesi':6, 'pazar':0 };
+  for (const [name, dow] of Object.entries(dayMap)) {
+    if (s.includes(name)) {
+      const todayDow = new Date().getDay();
+      let diff = (dow - todayDow + 7) % 7;
+      if (diff === 0) diff = 7;
+      if (s.includes('gelecek') || s.includes('haftaya')) diff = ((dow - todayDow + 7) % 7) + 7;
+      const d = new Date(); d.setDate(d.getDate() + diff);
+      return d.toISOString().slice(0, 10);
+    }
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{1,2})[\.\/-](\d{1,2})(?:[\.\/-](\d{2,4}))?$/);
+  if (m) {
+    let [_, d, mo, y] = m;
+    if (!y) y = new Date().getFullYear();
+    if (y.length === 2) y = '20' + y;
+    return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  }
+  return null;
 }
 
 // ============ PWA: Service Worker Kaydı ============
@@ -2635,11 +2799,7 @@ loadSettings();
 initFilter();
 checkRepeatingTasks();
 renderTasks();
-renderDumps();
-renderRoutines();
-renderCheckins();
 document.getElementById('pomoCount').textContent = data.pomoToday.count;
-renderPomoHistory();
 updateTimerDisplay();
 </script>
 </body>

@@ -1,4 +1,4 @@
-const CACHE = 'aidan-v5-0';
+const CACHE = 'aidan-v6-0';
 const ASSETS = [
   './',
   './asistan.html',
@@ -24,8 +24,6 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  // ntfy.sh isteklerini ASLA cache'leme
-  if (url.hostname === 'ntfy.sh') return;
   if (e.request.method !== 'GET') return;
   if (url.origin !== location.origin) return; // dış kaynaklar cache'sız
 
