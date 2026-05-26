@@ -897,6 +897,59 @@ async function handleWebhook(request, env) {
 }
 
 // ============================================================
+// Static file serving (PWA host)
+// ============================================================
+// __STATIC_FILES__ deploy.py tarafından base64 dict ile değiştirilir.
+// Form: { "/path": { "content_b64": "...", "type": "text/html; charset=utf-8" } }
+const STATIC_FILES = __STATIC_FILES__;
+
+const SECURITY_HEADERS = {
+  'X-Frame-Options': 'DENY',
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(self), geolocation=(), payment=(), usb=()',
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Content-Security-Policy': [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.telegram.org",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "manifest-src 'self'",
+    "worker-src 'self'",
+  ].join('; '),
+};
+
+function base64DecodeToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function serveStatic(path) {
+  const file = STATIC_FILES[path];
+  if (!file) return null;
+  const isHtml = path.endsWith('.html') || path === '/';
+  const isSw = path === '/sw.js';
+  const cacheControl = (isHtml || isSw)
+    ? 'no-cache, no-store, must-revalidate'  // HTML & SW: her zaman taze
+    : 'public, max-age=3600';                 // ikon, manifest: 1 saat
+  return new Response(base64DecodeToBytes(file.content_b64), {
+    headers: {
+      'Content-Type': file.type,
+      'Cache-Control': cacheControl,
+      ...SECURITY_HEADERS,
+    },
+  });
+}
+
+// ============================================================
 // Main entry
 // ============================================================
 export default {
@@ -908,24 +961,32 @@ export default {
       return handleWebhook(request, env);
     }
 
-    // Manuel cron testi (GET) — secret param zorunlu (spam'i önler)
+    // Static serve (PWA) — '/' → asistan.html, ve diğer asset'ler
     if (request.method === 'GET') {
-      const providedSecret = url.searchParams.get('secret');
-      if (!providedSecret || providedSecret !== env.WEBHOOK_SECRET) {
-        // Saldırgana bilgi sızdırmamak için sade 404
-        return new Response('Not found', { status: 404 });
+      let path = url.pathname;
+      if (path === '/') path = '/asistan.html';
+      // Cron test mi yoksa static mi?
+      const cronType = url.searchParams.get('type');
+      if (cronType && url.pathname === '/') {
+        // Eski test URL'leri: /?type=morning — secret zorunlu
+        const providedSecret = url.searchParams.get('secret');
+        if (!providedSecret || providedSecret !== env.WEBHOOK_SECRET) {
+          return new Response('Not found', { status: 404 });
+        }
+        try {
+          const result = await runCronJob(env, cronType);
+          return new Response(JSON.stringify(result, null, 2), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ error: e.message }, null, 2), {
+            status: 500, headers: { 'Content-Type': 'application/json' },
+          });
+        }
       }
-      const type = url.searchParams.get('type') || 'morning';
-      try {
-        const result = await runCronJob(env, type);
-        return new Response(JSON.stringify(result, null, 2), {
-          headers: { 'Content-Type': 'application/json' },
-        });
-      } catch (e) {
-        return new Response(JSON.stringify({ error: e.message }, null, 2), {
-          status: 500, headers: { 'Content-Type': 'application/json' },
-        });
-      }
+      // Static serve
+      const staticResp = serveStatic(path);
+      if (staticResp) return staticResp;
     }
 
     return new Response('Not found', { status: 404 });

@@ -5,10 +5,17 @@ Wrangler'a gerek yok, sadece python + httpx.
 Çalıştırmadan önce env değişkenleri ayarla:
   CF_API_TOKEN   — Cloudflare API token
   CF_ACCOUNT_ID  — Cloudflare account id
+  SUPABASE_URL / SUPABASE_KEY / AIDAN_EMAIL / AIDAN_PASSWORD
+  TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID / WEBHOOK_SECRET
+
+Bu script aynı zamanda PWA static dosyalarını da (asistan.html, sw.js,
+manifest, ikonlar) Worker'a embed eder — site Worker URL'inden serve edilir.
 """
 import os
 import sys
 import json
+import base64
+import mimetypes
 import httpx
 from pathlib import Path
 
@@ -19,7 +26,45 @@ SCRIPT_NAME = "aidan-pusher"
 API = "https://api.cloudflare.com/client/v4"
 HDRS = {"Authorization": f"Bearer {TOKEN}"}
 
-WORKER_JS = (Path(__file__).parent / "worker.js").read_text(encoding="utf-8")
+ROOT = Path(__file__).parent.parent       # claudedeneme/
+WORKER_DIR = Path(__file__).parent        # claudedeneme/aidan-worker/
+
+# Worker'a embed edilecek static dosyalar — yol → mime
+STATIC_FILES = [
+    ("asistan.html",         "text/html; charset=utf-8"),
+    ("index.html",           "text/html; charset=utf-8"),
+    ("sw.js",                "application/javascript; charset=utf-8"),
+    ("manifest.webmanifest", "application/manifest+json"),
+    ("icon.svg",             "image/svg+xml"),
+    ("icon-maskable.svg",    "image/svg+xml"),
+]
+
+
+def build_worker_js() -> str:
+    """worker.js'i oku, static dosyaları base64'le embed et."""
+    raw = (WORKER_DIR / "worker.js").read_text(encoding="utf-8")
+    embedded: dict[str, dict[str, str]] = {}
+    total_kb = 0
+    for fname, mime in STATIC_FILES:
+        path = ROOT / fname
+        if not path.exists():
+            print(f"  ⚠️  Eksik: {fname}")
+            continue
+        data = path.read_bytes()
+        b64 = base64.b64encode(data).decode("ascii")
+        embedded[f"/{fname}"] = {"content_b64": b64, "type": mime}
+        # Root path '/' alias'ı asistan.html için
+        size_kb = len(data) / 1024
+        total_kb += size_kb
+        print(f"  ✓ /{fname:25s} {size_kb:6.1f} KB → {len(b64)/1024:6.1f} KB b64")
+
+    json_blob = json.dumps(embedded)
+    print(f"  📦 Toplam embed: {total_kb:.1f} KB raw, {len(json_blob)/1024:.1f} KB JSON")
+    if "__STATIC_FILES__" not in raw:
+        print("  ❌ worker.js içinde __STATIC_FILES__ placeholder yok!")
+        sys.exit(1)
+    return raw.replace("__STATIC_FILES__", json_blob)
+
 
 CRON_LIST = [
     {"cron": "0 5 * * *"},   # 08:00 TR sabah brifing
@@ -29,7 +74,7 @@ CRON_LIST = [
 ]
 
 
-def upload_script():
+def upload_script(worker_js: str):
     url = f"{API}/accounts/{ACCOUNT}/workers/scripts/{SCRIPT_NAME}"
     metadata = {
         "main_module": "worker.js",
@@ -37,18 +82,18 @@ def upload_script():
     }
     files = {
         "metadata": (None, json.dumps(metadata), "application/json"),
-        "worker.js": ("worker.js", WORKER_JS, "application/javascript+module"),
+        "worker.js": ("worker.js", worker_js, "application/javascript+module"),
     }
-    r = httpx.put(url, headers=HDRS, files=files, timeout=60)
+    r = httpx.put(url, headers=HDRS, files=files, timeout=120)
     print(f"Upload script: {r.status_code}")
     if not r.is_success:
-        print(r.text)
+        print(r.text[:1000])
         sys.exit(1)
     body = r.json()
     if not body.get("success"):
-        print(json.dumps(body, indent=2))
+        print(json.dumps(body, indent=2)[:1500])
         sys.exit(1)
-    print("  ✓ Worker scripti yüklendi")
+    print(f"  ✓ Worker scripti yüklendi ({len(worker_js)/1024:.1f} KB)")
 
 
 def enable_workers_dev():
@@ -70,7 +115,7 @@ def set_secret(name: str, value: str):
     r = httpx.put(url, headers=HDRS, json=payload, timeout=30)
     print(f"Set secret {name}: {r.status_code}")
     if not r.is_success:
-        print(r.text)
+        print(r.text[:500])
 
 
 def set_crons():
@@ -78,7 +123,7 @@ def set_crons():
     r = httpx.put(url, headers=HDRS, json=CRON_LIST, timeout=30)
     print(f"Set crons: {r.status_code}")
     if not r.is_success:
-        print(r.text)
+        print(r.text[:500])
     else:
         print("  ✓ 4 cron trigger ayarlandı")
 
@@ -95,18 +140,20 @@ if __name__ == "__main__":
     print(f"Account: {ACCOUNT}")
     print(f"Script:  {SCRIPT_NAME}\n")
 
-    upload_script()
+    print("→ Static dosyaları Worker'a embed ediyorum…")
+    worker_js = build_worker_js()
     print()
 
-    # Secret'lar
-    secrets = {
-        "SUPABASE_URL": os.environ["SUPABASE_URL"],
-        "SUPABASE_KEY": os.environ["SUPABASE_KEY"],
-        "AIDAN_EMAIL": os.environ["AIDAN_EMAIL"],
-        "AIDAN_PASSWORD": os.environ["AIDAN_PASSWORD"],
-        "NTFY_TOPIC": os.environ.get("NTFY_TOPIC", ""),
-    }
-    for k, v in secrets.items():
+    upload_script(worker_js)
+    print()
+
+    # Secret'lar (varsa)
+    secret_names = [
+        "SUPABASE_URL", "SUPABASE_KEY", "AIDAN_EMAIL", "AIDAN_PASSWORD",
+        "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "WEBHOOK_SECRET",
+    ]
+    for k in secret_names:
+        v = os.environ.get(k, "")
         if v:
             set_secret(k, v)
     print()
@@ -118,5 +165,9 @@ if __name__ == "__main__":
 
     sub = get_subdomain()
     if sub:
-        print(f"\n🚀 Hazır! URL: https://{SCRIPT_NAME}.{sub}.workers.dev")
-        print(f"   Test:  https://{SCRIPT_NAME}.{sub}.workers.dev/?type=morning")
+        base = f"https://{SCRIPT_NAME}.{sub}.workers.dev"
+        print(f"\n🚀 Hazır!")
+        print(f"   🌐 Site:   {base}/")
+        print(f"   📱 PWA:    {base}/asistan.html")
+        print(f"   🔧 Cron:   {base}/?secret=<WEBHOOK_SECRET>&type=morning")
+        print(f"   🤖 Bot WH: {base}/webhook")
