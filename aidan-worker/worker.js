@@ -908,8 +908,13 @@ export default {
       return handleWebhook(request, env);
     }
 
-    // Manuel cron testi (GET)
+    // Manuel cron testi (GET) — secret param zorunlu (spam'i önler)
     if (request.method === 'GET') {
+      const providedSecret = url.searchParams.get('secret');
+      if (!providedSecret || providedSecret !== env.WEBHOOK_SECRET) {
+        // Saldırgana bilgi sızdırmamak için sade 404
+        return new Response('Not found', { status: 404 });
+      }
       const type = url.searchParams.get('type') || 'morning';
       try {
         const result = await runCronJob(env, type);
