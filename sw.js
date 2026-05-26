@@ -1,4 +1,4 @@
-const CACHE = 'aidan-v4-1';
+const CACHE = 'aidan-v5-0';
 const ASSETS = [
   './',
   './asistan.html',

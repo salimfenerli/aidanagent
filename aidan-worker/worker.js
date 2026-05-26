@@ -378,21 +378,6 @@ const TOOL_HANDLERS = {
     return { ok: true, reply: payload.message };
   },
 
-  async log_mood(args, ctx) {
-    const emoji = String(args.emoji || '').trim();
-    const valid = ['😄','🙂','😐','😩','😴'];
-    if (!valid.includes(emoji)) return { ok: false, reply: `❌ Geçersiz mood. Şunlardan biri: ${valid.join(' ')}` };
-    const labels = { '😄':'harika', '🙂':'iyi', '😐':'idare', '😩':'kötü', '😴':'yorgun' };
-    ctx.data.checkins = ctx.data.checkins || [];
-    ctx.data.checkins.push({
-      emoji, label: labels[emoji],
-      note: args.note ? String(args.note) : '',
-      when: new Date(Date.now() + TR_OFFSET_MS).toISOString().replace('T', ' ').slice(0, 16),
-    });
-    ctx.dirty = true;
-    return { ok: true, reply: `${emoji} kaydedildi (${labels[emoji]})${args.note ? ' — ' + args.note : ''}` };
-  },
-
   async brain_dump(args, ctx) {
     const text = String(args.text || '').trim();
     if (!text) return { ok: false, reply: '❌ Boş.' };
@@ -476,21 +461,6 @@ const TOOL_SCHEMAS = [
   {
     type: 'function',
     function: {
-      name: 'log_mood',
-      description: 'Mood kaydet. "yorgunum", "iyiyim", "berbat hissediyorum" gibi.',
-      parameters: {
-        type: 'object',
-        properties: {
-          emoji: { type: 'string', enum: ['😄','🙂','😐','😩','😴'], description: 'harika/iyi/idare/kötü/yorgun' },
-          note: { type: 'string' },
-        },
-        required: ['emoji'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
       name: 'brain_dump',
       description: 'Akla geleni Brain Dump\'a kaydet. "şunu unutma", "bir fikir geldi", "şu lazım" gibi yapısı olmayan şeyler için.',
       parameters: {
@@ -511,32 +481,63 @@ function buildSystemPrompt(data) {
   const mit = tasks.filter(t => t.mitDate === today && !t.done);
   const totalActive = tasks.filter(t => !t.done).length;
 
-  return `Sen Aidan'sın — Salim'in ADHD asistanı. Türkçe konuş, KISA cevap ver, samimi ol.
+  return `Sen Aidan'sın — Salim'in ADHD asistanı.
+
+⚠️ KRİTİK KURALLAR:
+1. CEVAPLAR HER ZAMAN TÜRKÇE OLMALI. İngilizce ASLA yazma.
+2. KISA cevap (1-2 cümle), samimi, "Salim" diye hitap et.
+3. "Your input is not sufficient" gibi şablon İngilizce mesajları ASLA verme — onun yerine Türkçe ve samimi konuş.
+4. Bilmiyorsan "anlamadım, biraz daha açar mısın?" gibi Türkçe yaz.
 
 📅 Bugün: ${trDayName()}, ${today} (${trClock()})
-📊 Salim'in ${totalActive} aktif görevi var.
-⭐ Bugünün MIT: ${mit.length ? mit.map(t => t.text).join(', ') : 'henüz seçilmedi'}
+📊 ${totalActive} aktif görev. ⭐ MIT: ${mit.length ? mit.map(t => t.text).join(', ') : 'yok'}
 
-Tarih kuralları:
+Tarih:
 - "bugün" = ${today}
 - "yarın" = ${trDate(1)}
-- "salı/çarşamba" gibi → en yakın o gün
-- Saat: HH:MM formatı (örn 16:00)
+- "salı/çarşamba" → en yakın o gün
+- Saat: HH:MM
 
-Kurallar:
-1. Salim bir şey EKLEMEK/SİLMEK/BİTİRMEK isterse mutlaka tool çağır.
-2. Salim soru sorarsa (ne var/bugün ne yapayım), önce list_tasks veya show_briefing kullan.
-3. Tool çağırdıktan sonra tool sonucunu kendin tekrar yazma, sistem zaten gösterecek.
-4. Tool gerekmeyen sohbet (selam, teşekkür) için kısa Türkçe cevap ver, tool çağırma.
-5. Belirsizse en yakın anlamı seç, sonra teyit et.
-6. ASLA "tool çağırıyorum" gibi şeyler yazma. Doğrudan çağır.
+NE ZAMAN TOOL ÇAĞIR:
+- "ekle/yap/hatırlat" → add_task
+- "ne var/göster/listele" → list_tasks
+- "bitti/yaptım" → complete_task
+- "sil/iptal" → delete_task
+- "özet/durum/brifing/ne yapayım" → show_briefing
+- "şunu unutma/aklımda olsun" → brain_dump
 
-Örnekler:
-- "yarın matematik ödevi" → add_task(text="matematik ödevi", due="yarın", category="odev")
-- "matematik bitti" → complete_task(query="matematik")
-- "bugün ne yapayım" → show_briefing()
-- "yorgunum çok" → log_mood(emoji="😴", note="çok yorgun")
-- "selam" → "Selam Salim, ne yapıyorsun?"`;
+NE ZAMAN TOOL ÇAĞIRMA (sadece sohbet):
+- Selam/merhaba/naber/iyi akşamlar → Türkçe samimi cevap
+- Teşekkür/sağol → "rica ederim" tarzı
+- "Neler yapabilirsin" → kısa Türkçe açıklama
+
+ÖRNEK SOHBETLER:
+Kullanıcı: "naber"
+Sen: "İyiyim Salim, sen nasılsın? Yardımcı olabileceğim bir şey var mı?"
+
+Kullanıcı: "selam"
+Sen: "Selam Salim 👋 Bugün ne yapıyoruz?"
+
+Kullanıcı: "saol"
+Sen: "Rica ederim 💜"
+
+Kullanıcı: "nasılsın"
+Sen: "Burdayım, hazırım. Senin moralin nasıl?"
+
+Kullanıcı: "iyi geceler"
+Sen: "İyi geceler Salim, yarın görüşürüz 🌙"
+
+Kullanıcı: "yapabildiğin neler"
+Sen: "Görev ekleyebilirim, listeleyebilirim, mood kaydederim, bugünün özetini veririm, brain dump'a not alırım. Doğal yaz, anlarım."
+
+ÖRNEK TOOL ÇAĞRILARI:
+"yarın matematik ödevi" → add_task(text="matematik ödevi", due="yarın", category="odev")
+"matematik bitti" → complete_task(query="matematik")
+"bugün ne yapayım" → show_briefing()
+"akşam 7'de ilaç hatırlat" → add_task(text="ilaç al", reminder_time="19:00")
+"şunu unutma: yeni şarj kablosu lazım" → brain_dump(text="yeni şarj kablosu lazım")
+
+ASLA "tool çağırıyorum" yazma. Doğrudan çağır. Tool sonrası ek yorum yazma.`;
 }
 
 async function aiInterpret(env, data, userText) {
@@ -558,6 +559,21 @@ async function aiInterpret(env, data, userText) {
 // ============================================================
 // Webhook handler
 // ============================================================
+async function transcribeVoice(env, fileId) {
+  const token = env.TELEGRAM_BOT_TOKEN;
+  // 1) file_path al
+  const info = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`).then(r => r.json());
+  if (!info.ok) throw new Error('getFile fail: ' + JSON.stringify(info));
+  const filePath = info.result.file_path;
+  // 2) Sesi indir
+  const audioResp = await fetch(`https://api.telegram.org/file/bot${token}/${filePath}`);
+  const audioBuffer = await audioResp.arrayBuffer();
+  // 3) Whisper'a ver
+  const audioArray = [...new Uint8Array(audioBuffer)];
+  const transcribe = await env.AI.run('@cf/openai/whisper', { audio: audioArray });
+  return (transcribe.text || '').trim();
+}
+
 async function handleWebhook(request, env) {
   // Auth
   const provided = request.headers.get('X-Telegram-Bot-Api-Secret-Token');
@@ -567,10 +583,35 @@ async function handleWebhook(request, env) {
 
   const update = await request.json();
   const msg = update.message || update.edited_message;
-  if (!msg || !msg.text) return new Response('OK');
+  if (!msg) return new Response('OK');
 
   const chatId = msg.chat.id;
-  const text = msg.text.trim();
+  let text = '';
+  let wasVoice = false;
+
+  if (msg.voice || msg.audio) {
+    // Sesli mesaj
+    wasVoice = true;
+    await sendTyping(env, chatId);
+    try {
+      const fileId = (msg.voice || msg.audio).file_id;
+      text = await transcribeVoice(env, fileId);
+      if (!text) {
+        await sendTg(env, { chatId, message: '🎤 Sesi anlayamadım, tekrar dener misin?' });
+        return new Response('OK');
+      }
+      // Salim'e ne duyduğumuzu göster (yanlışsa fark etsin)
+      await sendTg(env, { chatId, message: `🎤 Duyduğum: "${text}"`, silent: true });
+    } catch (e) {
+      console.error('Voice error:', e);
+      await sendTg(env, { chatId, message: `🎤 Ses çevirme hatası: ${e.message}` });
+      return new Response('OK');
+    }
+  } else if (msg.text) {
+    text = msg.text.trim();
+  } else {
+    return new Response('OK'); // text yok, voice yok → ignore
+  }
 
   // Sadece sahibine cevap ver
   if (String(chatId) !== String(env.TELEGRAM_CHAT_ID)) {
@@ -583,7 +624,7 @@ async function handleWebhook(request, env) {
     await sendTg(env, {
       chatId,
       title: '🧠 Aidan',
-      message: 'Selam Salim! Ben Aidan. Bana her şeyi yazabilirsin:\n\n• "yarın matematik ödevi"\n• "bugün ne yapayım"\n• "matematik bitti"\n• "yorgunum"\n• "akşam 19\'da ilaç hatırlat"\n\nGörevlerin Aidan PWA ile senkron, telefon/PC her yerden gör.'
+      message: 'Selam Salim! Ben Aidan. Bana yaz veya 🎤 sesli mesaj at:\n\n• "yarın matematik ödevi"\n• "bugün ne yapayım"\n• "matematik bitti"\n• "akşam 19\'da ilaç hatırlat"\n\nGörevlerin Aidan PWA ile senkron, telefon/PC her yerden gör. /help yazarsan tüm komutları gör.'
     });
     return new Response('OK');
   }
@@ -591,7 +632,7 @@ async function handleWebhook(request, env) {
     await sendTg(env, {
       chatId,
       title: 'Komutlar',
-      message: 'Doğal dille yaz, anlarım. Örnek:\n\n📝 EKLEMEK:\n• "yarın matematik ödevi"\n• "akşam 8\'de ilaç hatırlat"\n• "alışveriş yapmam lazım"\n\n📋 GÖRMEK:\n• "ne var bugün"\n• "acil olanlar"\n• "bitenleri göster"\n\n✅ BİTİRMEK:\n• "matematik bitti"\n• "X yaptım"\n\n🗑️ SİLMEK:\n• "X\'i sil"\n\n😊 MOOD:\n• "yorgunum"\n• "harika hissediyorum"\n\n🌅 ÖZET:\n• "bugün ne yapayım"\n• "durum"\n• "brifing"'
+      message: 'Doğal dille yaz veya 🎤 sesli mesaj at, anlarım.\n\n📝 EKLEMEK:\n• "yarın matematik ödevi"\n• "akşam 8\'de ilaç hatırlat"\n• "alışveriş yapmam lazım"\n\n📋 GÖRMEK:\n• "ne var bugün"\n• "acil olanlar"\n• "bitenleri göster"\n\n✅ BİTİRMEK:\n• "matematik bitti"\n• "X yaptım"\n\n🗑️ SİLMEK:\n• "X\'i sil"\n\n🌅 ÖZET:\n• "bugün ne yapayım"\n• "durum"\n• "brifing"\n\n🧠 BRAIN DUMP:\n• "şunu unutma..."\n• "aklımda olsun..."'
     });
     return new Response('OK');
   }
@@ -637,7 +678,26 @@ async function handleWebhook(request, env) {
       await sendTg(env, { chatId, message: finalReply });
     } else {
       // Düz sohbet cevabı
-      const reply = (ai.response || 'Pardon, anlayamadım. /help ile komutları gör.').trim();
+      let reply = (ai.response || '').trim();
+      // İngilizce/şablon fallback'leri filtrele
+      const englishGarbage = [
+        /your input is not sufficient/i,
+        /please provide more details/i,
+        /^i'?m sorry/i,
+        /^i don'?t understand/i,
+        /^as an ai/i,
+        /^i cannot/i,
+      ];
+      const isEnglishJunk = englishGarbage.some(rx => rx.test(reply));
+      if (!reply || isEnglishJunk) {
+        const friendly = [
+          'Burdayım, ne yapıyoruz?',
+          'Selam Salim 👋',
+          'Naber? Yardım edebileceğim bir şey var mı?',
+          'Anlamadım, biraz daha açar mısın?',
+        ];
+        reply = friendly[Math.floor(Math.random() * friendly.length)];
+      }
       await sendTg(env, { chatId, message: reply });
     }
   } catch (e) {

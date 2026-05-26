@@ -738,7 +738,6 @@
     <button class="tab" data-tab="focus" onclick="showTab('focus', this)">🍅 Odak</button>
     <button class="tab" data-tab="dump" onclick="showTab('dump', this)">🧠 Brain Dump</button>
     <button class="tab" data-tab="routine" onclick="showTab('routine', this)">⏰ Rutinler</button>
-    <button class="tab" data-tab="checkin" onclick="showTab('checkin', this)">💭 Check-in</button>
     <button class="tab" data-tab="settings" onclick="showTab('settings', this)">⚙️ Ayarlar</button>
   </div>
 
@@ -853,19 +852,7 @@
     <div id="routineList"></div>
   </div>
 
-  <!-- CHECK-IN -->
-  <div id="checkin" class="panel">
-    <h2>💭 Bugün nasılsın?</h2>
-    <div class="mood-buttons">
-      <button class="mood" onclick="logMood('😄','harika')">😄</button>
-      <button class="mood" onclick="logMood('🙂','iyi')">🙂</button>
-      <button class="mood" onclick="logMood('😐','idare eder')">😐</button>
-      <button class="mood" onclick="logMood('😩','zor')">😩</button>
-      <button class="mood" onclick="logMood('😴','tükenmiş')">😴</button>
-    </div>
-    <textarea id="checkinNote" placeholder="Bir not (opsiyonel) — örn: enerjik, dağınık, kafam karışık..." style="min-height:80px;"></textarea>
-    <div id="checkinList" style="margin-top:20px; max-height:300px; overflow-y:auto;"></div>
-  </div>
+  <!-- CHECK-IN sekmesi kaldırıldı (mood yerine Telegram bot kullanılacak) -->
 
   <!-- AYARLAR -->
   <div id="settings" class="panel">
