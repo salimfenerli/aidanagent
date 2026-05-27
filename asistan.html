@@ -14,111 +14,139 @@
 <title>Aidan - ADHD Asistanım</title>
 <style>
   :root {
-    --bg: #0d1117;
-    --bg-elev: #161b22;
-    --surface: #1c2128;
-    --surface-hover: #22272e;
-    --border: #30363d;
-    --border-soft: #21262d;
-    --text: #e6edf3;
-    --text-muted: #7d8590;
-    --accent: #6366f1;
-    --accent-hover: #4f46e5;
-    --accent-soft: rgba(99, 102, 241, 0.12);
-    --success: #3fb950;
-    --warning: #d29922;
-    --danger: #f85149;
-    --info: #58a6ff;
+    --bg: #090b0f;
+    --bg-elev: #10131a;
+    --surface: #14171f;
+    --surface-hover: #1b1f28;
+    --border: #242936;
+    --border-soft: #1a1e2a;
+    --text: #dde2ea;
+    --text-muted: #636e80;
+    --text-faint: #343c4a;
+    --accent: #7c6ff7;
+    --accent-hover: #6a5df0;
+    --accent-soft: rgba(124, 111, 247, 0.1);
+    --accent-glow: rgba(124, 111, 247, 0.22);
+    --success: #36d058;
+    --success-soft: rgba(54, 208, 88, 0.1);
+    --warning: #e5a117;
+    --warning-soft: rgba(229, 161, 23, 0.1);
+    --danger: #f75252;
+    --danger-soft: rgba(247, 82, 82, 0.1);
+    --info: #4aa8ff;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
+    --shadow-md: 0 4px 16px rgba(0,0,0,0.5), 0 1px 4px rgba(0,0,0,0.4);
+    --shadow-lg: 0 12px 40px rgba(0,0,0,0.6), 0 4px 12px rgba(0,0,0,0.4);
+    --radius: 10px;
+    --radius-sm: 6px;
+    --radius-lg: 14px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
-    padding: 24px 20px;
-    line-height: 1.5;
+    padding: 28px 20px 48px;
+    line-height: 1.55;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
-  .container { max-width: 980px; margin: 0 auto; }
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 320px;
+    background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(124, 111, 247, 0.08) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .container { max-width: 860px; margin: 0 auto; position: relative; z-index: 1; }
   h1 {
     text-align: center;
-    font-size: 1.8em;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    margin-bottom: 4px;
-    color: var(--text);
+    font-size: 1.75em;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    margin-bottom: 5px;
+    background: linear-gradient(135deg, #dde2ea 0%, #a8b0c4 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
-  .subtitle { text-align: center; color: var(--text-muted); margin-bottom: 20px; font-size: 0.9em; }
+  .subtitle { text-align: center; color: var(--text-muted); margin-bottom: 22px; font-size: 0.88em; letter-spacing: 0.01em; }
 
   /* Üst bar - zaman körlüğü */
   .topbar {
     background: var(--surface);
     border: 1px solid var(--border-soft);
-    border-radius: 10px;
-    padding: 14px 18px;
-    margin-bottom: 18px;
+    border-radius: var(--radius);
+    padding: 14px 20px;
+    margin-bottom: 16px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
+    box-shadow: var(--shadow-sm);
   }
-  .topbar-item { display: flex; flex-direction: column; align-items: center; min-width: 100px; gap: 2px; }
-  .topbar-label { font-size: 0.7em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; }
-  .topbar-value { font-size: 1.25em; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .topbar-item { display: flex; flex-direction: column; align-items: center; min-width: 90px; gap: 3px; }
+  .topbar-label { font-size: 0.67em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+  .topbar-value { font-size: 1.2em; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
   .topbar-value.next { color: var(--warning); }
   .topbar-value.session { color: var(--success); }
 
   .tabs {
     display: flex;
-    gap: 4px;
-    margin-bottom: 18px;
+    gap: 3px;
+    margin-bottom: 16px;
     flex-wrap: wrap;
     justify-content: center;
-    background: var(--surface);
+    background: var(--bg-elev);
     border: 1px solid var(--border-soft);
-    border-radius: 10px;
+    border-radius: 12px;
     padding: 4px;
+    box-shadow: var(--shadow-sm);
   }
   .tab {
-    padding: 8px 14px;
+    padding: 8px 16px;
     background: transparent;
     border: none;
-    border-radius: 7px;
+    border-radius: 9px;
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 0.88em;
+    font-size: 0.87em;
     font-weight: 500;
-    transition: all 0.15s;
+    transition: all 0.15s ease;
     font-family: inherit;
+    letter-spacing: 0.01em;
   }
-  .tab:hover { background: var(--surface-hover); color: var(--text); transform: none; }
+  .tab:hover { background: var(--surface-hover); color: var(--text); }
   .tab.active {
-    background: var(--accent);
-    color: white;
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 1px 6px rgba(0,0,0,0.5), 0 0 0 1px var(--border);
   }
   .tab:active { transform: scale(0.97); }
   .panel {
     background: var(--surface);
-    border-radius: 12px;
-    padding: 24px;
+    border-radius: var(--radius-lg);
+    padding: 24px 22px;
     display: none;
     border: 1px solid var(--border-soft);
+    box-shadow: var(--shadow-md);
   }
   .panel.active { display: block; }
-  h2 { margin-bottom: 18px; color: var(--text); font-size: 1.2em; font-weight: 600; letter-spacing: -0.01em; }
-  h3 { color: var(--text); margin: 14px 0 10px; font-size: 1em; font-weight: 600; }
+  h2 { margin-bottom: 18px; color: var(--text); font-size: 1.15em; font-weight: 600; letter-spacing: -0.02em; }
+  h3 { color: var(--text); margin: 14px 0 10px; font-size: 0.98em; font-weight: 600; }
 
   /* Form elemanları */
   input[type="text"], input[type="email"], input[type="password"], input[type="time"], input[type="date"], input[type="number"], select, textarea {
-    padding: 10px 12px;
-    border-radius: 7px;
+    padding: 9px 12px;
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border);
-    background: var(--bg-elev);
+    background: var(--bg);
     color: var(--text);
-    font-size: 0.95em;
+    font-size: 0.93em;
     font-family: inherit;
     transition: border-color 0.15s, box-shadow 0.15s;
   }
@@ -127,89 +155,134 @@
     border-color: var(--accent);
     box-shadow: 0 0 0 3px var(--accent-soft);
   }
+  select option { background: var(--bg-elev); }
   textarea { width: 100%; min-height: 160px; resize: vertical; line-height: 1.5; }
   button {
     padding: 9px 16px;
     background: var(--accent);
     color: white;
     border: none;
-    border-radius: 7px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     font-weight: 500;
-    transition: background 0.15s;
+    transition: background 0.12s ease, box-shadow 0.12s ease, transform 0.1s ease;
     font-size: 0.9em;
     font-family: inherit;
+    letter-spacing: 0.01em;
   }
-  button:hover { background: var(--accent-hover); transform: none; }
+  button:hover { background: var(--accent-hover); box-shadow: 0 0 0 3px var(--accent-glow); }
+  button:active { transform: scale(0.97); }
   button.danger { background: var(--danger); }
-  button.danger:hover { background: #d73a3a; }
-  button.secondary { background: var(--surface-hover); color: var(--text); border: 1px solid var(--border); }
-  button.secondary:hover { background: var(--border); }
+  button.danger:hover { background: #e04040; box-shadow: 0 0 0 3px var(--danger-soft); }
+  button.secondary { background: var(--surface-hover); color: var(--text); border: 1px solid var(--border); box-shadow: none; }
+  button.secondary:hover { background: var(--border); box-shadow: none; }
   button.small { padding: 6px 10px; font-size: 0.82em; }
 
-  /* Görevler */
+  /* Görev ekleme — collapsible section */
+  .add-task-section {
+    background: var(--bg-elev);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .add-task-section summary {
+    padding: 11px 16px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.88em;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    user-select: none;
+    list-style: none;
+    transition: color 0.15s, background 0.15s;
+    letter-spacing: 0.01em;
+  }
+  .add-task-section summary::-webkit-details-marker { display: none; }
+  .add-task-section summary::before {
+    content: '▸';
+    font-size: 0.9em;
+    transition: transform 0.2s ease;
+    display: inline-block;
+  }
+  .add-task-section[open] summary::before { transform: rotate(90deg); }
+  .add-task-section summary:hover { color: var(--text); background: var(--surface-hover); }
+  .add-task-inner { padding: 0 14px 14px; }
   .task-input {
     display: grid;
     grid-template-columns: 1fr auto auto auto auto;
-    gap: 8px;
-    margin-bottom: 10px;
+    gap: 7px;
+    margin-bottom: 8px;
+    margin-top: 12px;
   }
   .task-input input[type="text"] { min-width: 0; }
-  .task-input-row2 { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .task-input-row2 { display: flex; gap: 7px; margin-bottom: 0; flex-wrap: wrap; }
   @media (max-width: 700px) {
     .task-input { grid-template-columns: 1fr; }
   }
+
+  /* Görev kartları */
   .task {
     background: var(--bg-elev);
-    padding: 12px 14px;
-    border-radius: 8px;
-    margin-bottom: 6px;
+    padding: 13px 14px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 5px;
     display: flex;
-    align-items: center;
-    gap: 10px;
+    align-items: flex-start;
+    gap: 11px;
     border: 1px solid var(--border-soft);
     border-left: 3px solid var(--success);
-    transition: background 0.15s;
+    transition: background 0.12s, box-shadow 0.12s, border-color 0.12s;
+    box-shadow: var(--shadow-sm);
   }
-  .task:hover { background: var(--surface-hover); }
+  .task:hover {
+    background: var(--surface-hover);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  }
   .task.urgent { border-left-color: var(--danger); }
-  .task.low { border-left-color: var(--text-muted); }
+  .task.low { border-left-color: var(--text-faint); }
   .task.cat-odev { border-left-color: var(--warning); }
-  .task.cat-ders { border-left-color: #c084fc; }
+  .task.cat-ders { border-left-color: #b78bfa; }
   .task.cat-ev { border-left-color: var(--info); }
   .task.cat-kisisel { border-left-color: var(--accent); }
-  .task.done { opacity: 0.4; border-left-color: var(--border); }
+  .task.done { opacity: 0.38; border-left-color: var(--border-soft); box-shadow: none; }
   .task.done .task-text { text-decoration: line-through; }
-  .task-text { flex: 1; font-size: 0.95em; }
-  .task-meta { font-size: 0.75em; color: var(--text-muted); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .task > div:first-child { padding-top: 2px; }
+  .task-text { flex: 1; font-size: 0.93em; line-height: 1.45; }
+  .task-meta { font-size: 0.73em; color: var(--text-muted); margin-top: 5px; display: flex; flex-wrap: wrap; gap: 4px; }
   .task-meta .badge {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
     padding: 2px 7px;
     border-radius: 4px;
     background: var(--bg);
     border: 1px solid var(--border-soft);
     font-weight: 500;
   }
-  .task-meta .badge.due-today { background: rgba(248, 81, 73, 0.15); color: var(--danger); border-color: rgba(248, 81, 73, 0.3); }
-  .task-meta .badge.due-soon { background: rgba(210, 153, 34, 0.15); color: var(--warning); border-color: rgba(210, 153, 34, 0.3); }
+  .task-meta .badge.due-today { background: var(--danger-soft); color: var(--danger); border-color: rgba(247, 82, 82, 0.3); }
+  .task-meta .badge.due-soon { background: var(--warning-soft); color: var(--warning); border-color: rgba(229, 161, 23, 0.3); }
   .task input[type="checkbox"] {
-    width: 24px; height: 24px;
+    width: 18px; height: 18px;
     cursor: pointer; flex-shrink: 0;
     accent-color: var(--success);
     transition: transform 0.1s;
+    margin-top: 1px;
   }
   .task input[type="checkbox"]:hover { transform: scale(1.15); }
   .task input[type="checkbox"]:active { transform: scale(0.92); }
-  .subtasks { margin-left: 26px; margin-top: 6px; }
+  .subtasks { margin-left: 28px; margin-top: 8px; }
   .subtask {
     background: var(--bg);
     padding: 6px 10px;
-    border-radius: 5px;
+    border-radius: var(--radius-sm);
     margin-bottom: 3px;
-    font-size: 0.88em;
+    font-size: 0.87em;
     display: flex;
     align-items: center;
     gap: 8px;
+    border: 1px solid var(--border-soft);
   }
   .subtask-del {
     background: transparent;
@@ -220,23 +293,25 @@
     font-size: 1em;
     padding: 0 4px;
     line-height: 1;
+    box-shadow: none;
   }
-  .subtask-del:hover { color: var(--danger); }
+  .subtask-del:hover { color: var(--danger); background: none; box-shadow: none; }
   .subtask-add {
     background: transparent;
     border: 1px dashed var(--border);
     color: var(--text-muted);
-    font-size: 0.8em;
+    font-size: 0.79em;
     padding: 5px 12px;
-    border-radius: 5px;
+    border-radius: var(--radius-sm);
     margin-top: 4px;
     cursor: pointer;
     font-family: inherit;
     display: inline-block;
     transition: all 0.15s;
+    box-shadow: none;
   }
-  .subtask-add:hover { border-color: var(--accent); color: var(--accent); }
-  .task-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+  .subtask-add:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); box-shadow: none; }
+  .task-actions { display: flex; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
 
   /* Odak / Pomodoro */
   .pomodoro { text-align: center; padding: 12px; }
@@ -279,49 +354,51 @@
     justify-content: center;
     flex-direction: column;
     gap: 4px;
+    box-shadow: inset 0 2px 12px rgba(0,0,0,0.4);
   }
   .timer {
     font-size: 3.4em;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     color: var(--text);
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
     line-height: 1;
   }
   .timer.break { color: var(--success); }
   .timer-sub {
-    font-size: 0.72em;
+    font-size: 0.7em;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.12em;
-    font-weight: 500;
+    letter-spacing: 0.14em;
+    font-weight: 600;
   }
   .timer-status {
-    font-size: 0.85em;
+    font-size: 0.82em;
     color: var(--text-muted);
-    font-weight: 500;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.1em;
     margin-bottom: 6px;
   }
   .timer-controls { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
   .timer-presets { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
   .focus-task {
     background: var(--bg-elev);
-    padding: 14px 18px;
-    border-radius: 10px;
+    padding: 13px 16px;
+    border-radius: var(--radius);
     margin: 12px auto;
-    font-size: 1em;
+    font-size: 0.95em;
     max-width: 500px;
     border: 1px solid var(--border-soft);
     color: var(--text);
-    line-height: 1.4;
+    line-height: 1.45;
+    box-shadow: var(--shadow-sm);
   }
   .focus-task.empty { color: var(--text-muted); font-style: italic; }
   .session-count {
     color: var(--text-muted);
     margin-top: 18px;
-    font-size: 0.9em;
+    font-size: 0.88em;
     padding-top: 14px;
     border-top: 1px solid var(--border-soft);
   }
@@ -330,43 +407,45 @@
   /* Ayarlar */
   .settings-row {
     background: var(--bg-elev);
-    padding: 16px;
-    border-radius: 8px;
+    padding: 16px 18px;
+    border-radius: var(--radius-sm);
     margin-bottom: 10px;
     border: 1px solid var(--border-soft);
+    box-shadow: var(--shadow-sm);
   }
-  .settings-row label { display: block; margin-bottom: 8px; color: var(--text); font-weight: 600; font-size: 0.95em; }
+  .settings-row label { display: block; margin-bottom: 8px; color: var(--text); font-weight: 600; font-size: 0.93em; letter-spacing: -0.01em; }
   .settings-row input[type="text"], .settings-row input[type="email"], .settings-row input[type="password"] { width: 100%; max-width: 460px; }
-  .settings-help { font-size: 0.82em; color: var(--text-muted); margin-top: 8px; line-height: 1.55; }
+  .settings-help { font-size: 0.81em; color: var(--text-muted); margin-top: 8px; line-height: 1.6; }
 
-  .empty { text-align: center; color: var(--text-muted); padding: 28px; font-size: 0.9em; }
+  .empty { text-align: center; color: var(--text-muted); padding: 32px 16px; font-size: 0.9em; letter-spacing: 0.01em; }
   .notif-banner {
-    background: rgba(210, 153, 34, 0.12);
+    background: var(--warning-soft);
     color: var(--warning);
     padding: 10px 14px;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     margin-bottom: 14px;
     text-align: center;
     cursor: pointer;
     font-weight: 500;
-    border: 1px solid rgba(210, 153, 34, 0.3);
-    font-size: 0.9em;
+    border: 1px solid rgba(229, 161, 23, 0.3);
+    font-size: 0.88em;
   }
 
-  /* Quick capture topbar */
+  /* Quick capture — hero input */
   .quick-capture {
     display: flex;
-    gap: 6px;
-    margin-bottom: 16px;
+    gap: 5px;
+    margin-bottom: 14px;
     background: var(--surface);
-    border: 1px solid var(--border-soft);
-    border-radius: 10px;
-    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 5px;
     transition: border-color 0.15s, box-shadow 0.15s;
+    box-shadow: var(--shadow-sm);
   }
   .quick-capture:focus-within {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+    box-shadow: 0 0 0 3px var(--accent-glow);
   }
   .quick-capture input {
     flex: 1;
@@ -383,25 +462,26 @@
     background: var(--accent);
     color: white;
     border: none;
-    padding: 0 16px;
+    padding: 0 18px;
     border-radius: 7px;
-    font-size: 1.3em;
+    font-size: 1.25em;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.12s, transform 0.1s;
+    transition: background 0.12s, transform 0.1s, box-shadow 0.12s;
     line-height: 1;
+    box-shadow: 0 1px 4px rgba(124, 111, 247, 0.3);
   }
-  .quick-capture-btn:hover { background: var(--accent-hover); }
+  .quick-capture-btn:hover { background: var(--accent-hover); box-shadow: 0 2px 8px var(--accent-glow); }
   .quick-capture-btn:active { transform: scale(0.95); }
 
   /* Done dopamine — kutlama efektleri */
   @keyframes done-pop {
     0% { transform: scale(1); }
-    40% { transform: scale(1.06); background: rgba(63, 185, 80, 0.15); }
+    40% { transform: scale(1.04); background: var(--success-soft); }
     100% { transform: scale(1); }
   }
   .task.just-done {
-    animation: done-pop 0.6s ease-out;
+    animation: done-pop 0.55s ease-out;
   }
   @keyframes confetti-fall {
     0% { transform: translate(0, -20px) rotate(0deg); opacity: 1; }
@@ -426,7 +506,7 @@
     font-size: 2.4em;
     font-weight: 700;
     color: var(--success);
-    text-shadow: 0 2px 12px rgba(63, 185, 80, 0.45);
+    text-shadow: 0 2px 16px rgba(54, 208, 88, 0.5);
     opacity: 0;
     animation: counter-pop 1.4s ease-out forwards;
   }
@@ -436,55 +516,64 @@
     40%  { opacity: 1; transform: translate(-50%, -55%) scale(1); }
     100% { opacity: 0; transform: translate(-50%, -90%) scale(1); }
   }
-  .stats { display: flex; gap: 10px; justify-content: center; margin-bottom: 18px; flex-wrap: wrap; }
-  .stat { background: var(--bg-elev); padding: 12px 18px; border-radius: 8px; text-align: center; min-width: 90px; border: 1px solid var(--border-soft); }
-  .stat-num { font-size: 1.5em; font-weight: 600; color: var(--text); letter-spacing: -0.02em; }
-  .stat-label { font-size: 0.78em; color: var(--text-muted); margin-top: 2px; }
+  .stats { display: flex; gap: 8px; justify-content: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .stat {
+    background: var(--bg-elev);
+    padding: 11px 20px;
+    border-radius: var(--radius-sm);
+    text-align: center;
+    min-width: 88px;
+    border: 1px solid var(--border-soft);
+    box-shadow: var(--shadow-sm);
+  }
+  .stat-num { font-size: 1.5em; font-weight: 700; color: var(--text); letter-spacing: -0.03em; }
+  .stat-label { font-size: 0.73em; color: var(--text-muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; }
 
   /* Bugünün 3'ü */
   .mit-box {
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(210, 153, 34, 0.06));
-    border: 1px solid rgba(210, 153, 34, 0.25);
-    border-radius: 10px;
+    background: var(--bg-elev);
+    border: 1px solid rgba(229, 161, 23, 0.2);
+    border-radius: var(--radius);
     padding: 14px 16px;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
+    box-shadow: var(--shadow-sm);
   }
-  .mit-title { font-size: 0.85em; font-weight: 600; color: var(--warning); margin-bottom: 8px; letter-spacing: 0.02em; display: flex; justify-content: space-between; align-items: center; }
+  .mit-title { font-size: 0.82em; font-weight: 600; color: var(--warning); margin-bottom: 10px; letter-spacing: 0.04em; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }
   .mit-count { font-variant-numeric: tabular-nums; color: var(--text-muted); font-weight: 500; }
-  .mit-list { display: flex; flex-direction: column; gap: 4px; }
+  .mit-list { display: flex; flex-direction: column; gap: 3px; }
   .mit-item {
-    font-size: 0.95em; color: var(--text);
+    font-size: 0.93em; color: var(--text);
     display: flex; align-items: center; gap: 10px;
-    padding: 6px 8px;
-    border-radius: 6px;
+    padding: 7px 10px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     transition: background 0.12s, opacity 0.12s;
     user-select: none;
+    border: 1px solid transparent;
   }
-  .mit-item:hover { background: rgba(255, 255, 255, 0.04); }
+  .mit-item:hover { background: var(--surface-hover); border-color: var(--border-soft); }
   .mit-item:active { transform: scale(0.99); }
-  .mit-item.done { text-decoration: line-through; opacity: 0.5; }
-  .mit-check { font-size: 1.05em; flex-shrink: 0; }
-  .mit-empty { font-size: 0.85em; color: var(--text-muted); font-style: italic; }
+  .mit-item.done { text-decoration: line-through; opacity: 0.45; }
+  .mit-check { font-size: 1em; flex-shrink: 0; }
+  .mit-empty { font-size: 0.84em; color: var(--text-muted); font-style: italic; padding: 4px 2px; }
   .mit-suggestion {
     display: flex; align-items: center; gap: 8px;
-    padding: 8px 10px;
-    background: rgba(99, 102, 241, 0.08);
-    border: 1px dashed rgba(99, 102, 241, 0.35);
-    border-radius: 8px;
-    margin-top: 5px;
+    padding: 8px 12px;
+    background: var(--accent-soft);
+    border: 1px dashed rgba(124, 111, 247, 0.3);
+    border-radius: var(--radius-sm);
+    margin-top: 4px;
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s, transform 0.1s;
-    font-size: 0.9em;
+    transition: background 0.12s, border-color 0.12s, transform 0.1s;
+    font-size: 0.88em;
+    box-shadow: none;
   }
-  .mit-suggestion:hover { background: rgba(99, 102, 241, 0.16); border-color: var(--accent); }
+  .mit-suggestion:hover { background: rgba(124, 111, 247, 0.16); border-color: var(--accent); }
   .mit-suggestion:active { transform: scale(0.98); }
   .mit-sug-icon { font-size: 0.85em; color: var(--accent); flex-shrink: 0; }
-  .mit-sug-text { flex: 1; color: var(--text); }
-  .mit-sug-meta { font-size: 0.78em; color: var(--text-muted); flex-shrink: 0; }
-  .task.mit { border-left-color: var(--warning); background: rgba(210, 153, 34, 0.05); }
-  button.small.mit-on { background: var(--warning); color: #1c2128; }
-  button.small.mit-on:hover { background: #e0a82e; }
+  .mit-sug-text { flex: 1; color: var(--text); font-size: 0.97em; }
+  .mit-sug-meta { font-size: 0.76em; color: var(--text-muted); flex-shrink: 0; }
+  .task.mit { border-left-color: var(--warning); background: var(--warning-soft); }
 
   /* Filtre chip'leri */
   .filter-chips {
@@ -494,73 +583,76 @@
     flex-wrap: wrap;
   }
   .filter-chip {
-    padding: 6px 12px;
+    padding: 5px 11px;
     background: var(--bg-elev);
     border: 1px solid var(--border-soft);
-    border-radius: 16px;
+    border-radius: 20px;
     cursor: pointer;
-    font-size: 0.82em;
+    font-size: 0.8em;
     color: var(--text-muted);
-    transition: all 0.15s;
+    transition: all 0.12s;
     font-family: inherit;
     font-weight: 500;
+    letter-spacing: 0.01em;
+    box-shadow: none;
   }
-  .filter-chip:hover { background: var(--surface-hover); color: var(--text); }
-  .filter-chip.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .filter-chip:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border); box-shadow: none; }
+  .filter-chip.active { background: var(--accent); color: white; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
   .filter-chip .chip-count {
     margin-left: 4px;
-    opacity: 0.7;
-    font-size: 0.9em;
+    opacity: 0.65;
+    font-size: 0.88em;
     font-variant-numeric: tabular-nums;
   }
 
   /* Şu an ne yapayım? Butonu */
   .suggest-btn {
     width: 100%;
-    padding: 14px 18px;
-    background: linear-gradient(135deg, var(--accent), #4f46e5);
+    padding: 13px 18px;
+    background: var(--accent);
     color: white;
     border: none;
-    border-radius: 10px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
-    font-size: 1em;
+    font-size: 0.95em;
     font-weight: 600;
-    margin-bottom: 16px;
-    transition: transform 0.1s, box-shadow 0.15s;
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+    margin-bottom: 14px;
+    transition: background 0.12s, box-shadow 0.12s, transform 0.1s;
+    box-shadow: 0 2px 10px rgba(124, 111, 247, 0.3);
+    letter-spacing: 0.01em;
   }
-  .suggest-btn:hover { box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4); transform: translateY(-1px); }
-  .suggest-btn:active { transform: translateY(0); }
+  .suggest-btn:hover { background: var(--accent-hover); box-shadow: 0 4px 18px var(--accent-glow); }
+  .suggest-btn:active { transform: scale(0.99); }
 
   /* Modal */
   .modal-overlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.7);
     display: none;
     align-items: center;
     justify-content: center;
     z-index: 1000;
     padding: 20px;
-    backdrop-filter: blur(4px);
+    backdrop-filter: blur(6px);
   }
   .modal-overlay.active { display: flex; }
   .modal {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: var(--radius-lg);
     padding: 24px;
     max-width: 460px;
     width: 100%;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow-lg);
   }
-  .modal-title { font-size: 0.85em; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 0.02em; }
-  .modal-task { font-size: 1.4em; font-weight: 600; color: var(--text); margin-bottom: 16px; line-height: 1.35; }
+  .modal-title { font-size: 0.78em; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
+  .modal-task { font-size: 1.35em; font-weight: 600; color: var(--text); margin-bottom: 16px; line-height: 1.35; letter-spacing: -0.01em; }
   .modal-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px; }
   .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .modal-actions button { flex: 1; min-width: 110px; }
-  .modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.85em; margin-top: 14px; width: 100%; padding: 8px; }
-  .modal-close:hover { color: var(--text); background: var(--surface-hover); border-radius: 7px; }
+  .modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.84em; margin-top: 12px; width: 100%; padding: 8px; letter-spacing: 0.01em; box-shadow: none; }
+  .modal-close:hover { color: var(--text); background: var(--surface-hover); border-radius: var(--radius-sm); box-shadow: none; }
 
   /* Postpone hızlı menü */
   .postpone-menu {
@@ -570,13 +662,13 @@
     transform: translate(-50%, 20px);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: var(--radius-lg);
     padding: 14px;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow-lg);
     z-index: 1500;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 7px;
     min-width: 260px;
     max-width: 360px;
     opacity: 0;
@@ -587,7 +679,7 @@
     transform: translate(-50%, 0);
   }
   .postpone-title {
-    font-size: 0.85em;
+    font-size: 0.82em;
     color: var(--text-muted);
     margin-bottom: 4px;
     text-align: center;
@@ -655,49 +747,51 @@
 
   /* Seri rozeti */
   .task-meta .badge.series-badge {
-    background: rgba(99, 102, 241, 0.12);
+    background: var(--accent-soft);
     color: var(--accent);
-    border-color: rgba(99, 102, 241, 0.3);
+    border-color: rgba(124, 111, 247, 0.3);
     cursor: pointer;
     font-weight: 600;
   }
-  .task-meta .badge.series-badge:hover { background: rgba(99, 102, 241, 0.22); }
+  .task-meta .badge.series-badge:hover { background: rgba(124, 111, 247, 0.2); }
   .task-meta .badge.series-badge.complete {
-    background: rgba(63, 185, 80, 0.15);
+    background: var(--success-soft);
     color: var(--success);
-    border-color: rgba(63, 185, 80, 0.3);
+    border-color: rgba(54, 208, 88, 0.3);
   }
 
   /* Akşam özet — günün gururu */
   .evening-summary {
-    margin: 12px 0 18px;
+    margin: 12px 0 16px;
     padding: 16px 18px;
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.10), rgba(192, 132, 252, 0.08));
-    border: 1px solid rgba(99, 102, 241, 0.25);
-    border-radius: 12px;
+    background: var(--bg-elev);
+    border: 1px solid rgba(124, 111, 247, 0.2);
+    border-radius: var(--radius);
     display: none;
     position: relative;
+    box-shadow: var(--shadow-sm);
   }
   .evening-summary.active { display: block; }
   .evening-summary-title {
-    font-size: 0.95em;
+    font-size: 0.93em;
     color: var(--text);
     font-weight: 600;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
+    padding-right: 28px;
   }
   .evening-summary-stats {
     display: flex;
-    gap: 18px;
+    gap: 16px;
     flex-wrap: wrap;
-    font-size: 0.88em;
+    font-size: 0.87em;
     color: var(--text);
     margin-bottom: 8px;
   }
-  .evening-summary-stats b { color: var(--accent); font-size: 1.15em; }
+  .evening-summary-stats b { color: var(--accent); font-size: 1.1em; }
   .evening-list {
-    font-size: 0.82em;
+    font-size: 0.81em;
     color: var(--text-muted);
-    line-height: 1.6;
+    line-height: 1.65;
     max-height: 110px;
     overflow-y: auto;
   }
@@ -710,81 +804,92 @@
     position: absolute;
     left: 0;
     color: var(--success);
+    font-size: 0.9em;
   }
   .evening-close {
     position: absolute;
-    top: 10px;
+    top: 12px;
     right: 12px;
     background: none;
     border: none;
     color: var(--text-muted);
-    font-size: 1.2em;
+    font-size: 1.1em;
     cursor: pointer;
-    padding: 4px 8px;
+    padding: 4px 7px;
     border-radius: 4px;
     line-height: 1;
+    box-shadow: none;
   }
-  .evening-close:hover { color: var(--text); background: var(--surface-hover); }
-  .evening-empty { font-size: 0.85em; color: var(--text-muted); font-style: italic; }
+  .evening-close:hover { color: var(--text); background: var(--surface-hover); box-shadow: none; }
+  .evening-empty { font-size: 0.84em; color: var(--text-muted); font-style: italic; }
 
-  /* Doluluk barı — bugün için planlanmış süre */
+  /* Doluluk barı */
   .capacity-bar {
-    margin: 10px 0 16px;
+    margin: 8px 0 14px;
     background: var(--bg-elev);
     border: 1px solid var(--border-soft);
-    border-radius: 10px;
+    border-radius: var(--radius-sm);
     padding: 10px 14px;
     display: none;
+    box-shadow: var(--shadow-sm);
   }
   .capacity-bar.active { display: block; }
   .capacity-head {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.82em;
+    font-size: 0.8em;
     color: var(--text-muted);
-    margin-bottom: 6px;
+    margin-bottom: 7px;
   }
   .capacity-head b { color: var(--text); font-weight: 600; }
   .capacity-track {
-    height: 8px;
-    background: var(--surface-hover);
-    border-radius: 4px;
+    height: 5px;
+    background: var(--bg);
+    border-radius: 3px;
     overflow: hidden;
   }
   .capacity-fill {
     height: 100%;
     background: linear-gradient(90deg, var(--success), var(--accent));
-    border-radius: 4px;
-    transition: width 0.4s ease;
+    border-radius: 3px;
+    transition: width 0.5s ease;
   }
   .capacity-bar.full .capacity-fill { background: linear-gradient(90deg, var(--warning), var(--danger)); }
   .capacity-bar.over .capacity-fill { background: var(--danger); }
   .capacity-hint {
-    font-size: 0.78em;
+    font-size: 0.76em;
     color: var(--text-muted);
     margin-top: 6px;
   }
   .capacity-bar.full .capacity-hint { color: var(--warning); }
   .capacity-bar.over .capacity-hint { color: var(--danger); }
 
+  /* MIT star buton */
+  button.small.mit-on { background: var(--warning); color: #0d0f14; }
+  button.small.mit-on:hover { background: #d4940f; box-shadow: 0 0 0 3px var(--warning-soft); }
+
   /* Mobil iyileştirmeler */
   @media (max-width: 600px) {
-    body { padding: 16px 14px; }
-    h1 { font-size: 1.5em; }
+    body { padding: 16px 12px 48px; }
+    h1 { font-size: 1.45em; }
     .subtitle { font-size: 0.82em; margin-bottom: 14px; }
-    .topbar { padding: 10px 12px; gap: 8px; }
+    .topbar { padding: 11px 13px; gap: 8px; }
     .topbar-item { min-width: 0; flex: 1; }
-    .topbar-label { font-size: 0.62em; }
+    .topbar-label { font-size: 0.6em; }
     .topbar-value { font-size: 1.05em; }
     .tabs { padding: 3px; gap: 2px; }
-    .tab { padding: 7px 9px; font-size: 0.82em; }
-    .panel { padding: 16px 14px; border-radius: 10px; }
+    .tab { padding: 7px 10px; font-size: 0.83em; }
+    .panel { padding: 16px 13px; border-radius: var(--radius); }
     .timer-ring { width: 220px; height: 220px; }
     .timer-inner { width: 196px; height: 196px; }
     .timer { font-size: 2.8em; }
-    .task { padding: 10px 12px; }
-    .task-actions button { padding: 6px 8px; font-size: 0.9em; }
+    .task { padding: 11px 12px; }
+    .task-actions button { padding: 6px 8px; font-size: 0.88em; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
 
 </style>
@@ -856,32 +961,37 @@
       <div class="evening-list" id="eveningList"></div>
     </div>
     <button class="suggest-btn" onclick="suggestTask()">🎯 Şu an ne yapayım?</button>
-    <div class="task-input">
-      <input type="text" id="taskInput" placeholder="Ne yapman lazım?" onkeypress="if(event.key==='Enter')addTask()">
-      <select id="taskPriority" title="Öncelik">
-        <option value="normal">Normal</option>
-        <option value="urgent">🔥 Acil</option>
-      </select>
-      <select id="taskCategory" title="Kategori">
-        <option value="">Kategorisiz</option>
-        <option value="odev">📚 Ödev</option>
-        <option value="ders">📖 Özel Ders</option>
-        <option value="ev">🏠 Ev</option>
-        <option value="kisisel">💜 Kişisel</option>
-      </select>
-      <input type="date" id="taskDue" title="Son tarih" style="max-width:150px;">
-      <input type="number" id="taskEstimate" placeholder="dk" title="Kaç dk sürer?" style="max-width:80px;" min="1">
-    </div>
-    <div class="task-input-row2">
-      <button onclick="addTask()">➕ Ekle</button>
-      <button class="secondary" onclick="splitTask()">✂️ Böl</button>
-      <select id="taskRepeatNew" title="Tekrar">
-        <option value="">Tek seferlik</option>
-        <option value="daily">🔁 Her gün</option>
-        <option value="weekly">📅 Her hafta</option>
-      </select>
-      <input type="time" id="taskReminder" title="Saat hatırlatması (opsiyonel)" style="max-width:130px;" placeholder="Hatırlat">
-    </div>
+    <details class="add-task-section" id="addTaskSection">
+      <summary>➕ Görev ekle</summary>
+      <div class="add-task-inner">
+        <div class="task-input">
+          <input type="text" id="taskInput" placeholder="Ne yapman lazım?" onkeypress="if(event.key==='Enter')addTask()">
+          <select id="taskPriority" title="Öncelik">
+            <option value="normal">Normal</option>
+            <option value="urgent">🔥 Acil</option>
+          </select>
+          <select id="taskCategory" title="Kategori">
+            <option value="">Kategorisiz</option>
+            <option value="odev">📚 Ödev</option>
+            <option value="ders">📖 Özel Ders</option>
+            <option value="ev">🏠 Ev</option>
+            <option value="kisisel">💜 Kişisel</option>
+          </select>
+          <input type="date" id="taskDue" title="Son tarih" style="max-width:150px;">
+          <input type="number" id="taskEstimate" placeholder="dk" title="Kaç dk sürer?" style="max-width:80px;" min="1">
+        </div>
+        <div class="task-input-row2">
+          <button onclick="addTask()">➕ Ekle</button>
+          <button class="secondary" onclick="splitTask()">✂️ Böl</button>
+          <select id="taskRepeatNew" title="Tekrar">
+            <option value="">Tek seferlik</option>
+            <option value="daily">🔁 Her gün</option>
+            <option value="weekly">📅 Her hafta</option>
+          </select>
+          <input type="time" id="taskReminder" title="Saat hatırlatması (opsiyonel)" style="max-width:130px;" placeholder="Hatırlat">
+        </div>
+      </div>
+    </details>
     <input type="search" id="taskSearch" placeholder="🔍 Görev ara..." style="width:100%; margin-bottom:10px; padding: 9px 12px; font-size: 0.92em;" oninput="renderTasks()">
     <div class="filter-chips" id="filterChips">
       <button class="filter-chip active" data-filter="all" onclick="setFilter('all', this)">Hepsi <span class="chip-count" id="cnt-all"></span></button>
@@ -2330,7 +2440,6 @@ function notify(title, body) {
   if ('Notification' in window && Notification.permission === 'granted') {
     new Notification(title, { body });
   }
-  sendNtfy(title, body);
 }
 
 if ('Notification' in window && Notification.permission === 'default') {
