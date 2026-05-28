@@ -71,6 +71,7 @@ CRON_LIST = [
     {"cron": "0 6 * * *"},   # 09:00 TR deadline uyarı
     {"cron": "0 9 * * *"},   # 12:00 TR öğle ping
     {"cron": "0 18 * * *"},  # 21:00 TR akşam özet
+    {"cron": "0 18 * * SUN"},  # Pazar 21:00 TR — haftalık review (AI yorumlu)
 ]
 
 
@@ -125,7 +126,7 @@ def set_crons():
     if not r.is_success:
         print(r.text[:500])
     else:
-        print("  ✓ 4 cron trigger ayarlandı")
+        print(f"  ✓ {len(CRON_LIST)} cron trigger ayarlandı")
 
 
 def get_subdomain():

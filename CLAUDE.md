@@ -15,8 +15,8 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 ```
 ┌──────────────┐      ┌──────────────┐      ┌───────────────┐
 │  iPhone PWA  │◄────►│   Supabase   │◄────►│   Windows PC  │
-│   (Aidan)    │      │  (aidan_data │      │     PWA       │
-│              │      │    tablo)    │      │   (Aidan)     │
+│ (aidanapp.   │      │  (aidan_data │      │     PWA       │
+│  pages.dev)  │      │    tablo)    │      │ (aidanapp...) │
 └──────────────┘      └──────┬───────┘      └───────┬───────┘
                              │                       │
                       ┌──────▼──────┐         ┌─────▼──────┐
@@ -34,33 +34,35 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 ```
 
 - **Frontend:** `asistan.html` (~2700 satır, tek dosya HTML + CSS + JS)
-- **Hosting:** Netlify, **otomatik git deploy** (`salimfenerli/aidanagent` repo)
-- **Deploy:** Otomatik — git push → 30 sn sonra `https://aidanagent.netlify.app/asistan.html`'de canlı
+- **Hosting:** **Cloudflare Pages** (`aidanapp.pages.dev`) — Mayıs 27, 2026'da Netlify'dan geçildi (Netlify free tier kotası tükendi)
+- **Deploy:** `py aidan-pages-deploy.py` ile Direct Upload API → 5 sn'de canlı
 - **Bulut:** Supabase (`fluhzvzulrnfyqogrgfi.supabase.co`)
 - **Bildirim:** Telegram bot (eski ntfy.sh deprecate edildi, kota sorunu)
 - **PWA:** Manifest + Service Worker (network-first stratejisi) + icon.svg
-- **Cache versiyonu:** `aidan-v6-0` (sw.js içinde, her büyük değişikte artırılır)
+- **Cache versiyonu:** `aidan-v6-3` (sw.js içinde, her büyük değişikte artırılır)
 - **AI:** Cloudflare Workers AI — **Llama 3.3 70B** (intent + tool use) + **Whisper** (sesli → metin). Bedava.
 - **MCP Server (PC):** Python, Claude Desktop bağlanır, doğrudan Supabase'e operasyon yapar
-- **Cloudflare Worker:** Cron brifing + Telegram webhook handler
-- **Güvenlik:** Supabase RLS doğrulandı (anon=hiçbir şey, auth=sadece kendi user_id). Netlify CSP/HSTS/X-Frame headers canlıda. Worker GET `?secret=` zorunlu (spam koruması).
+- **Cloudflare Worker:** Cron brifing + Telegram webhook handler (artık static serve etmiyor, sadece backend)
+- **Güvenlik:** Supabase RLS doğrulandı (anon=hiçbir şey, auth=sadece kendi user_id). Pages `_headers` ile CSP/HSTS/X-Frame/COOP/Permissions-Policy canlıda (8 header). Worker GET `?secret=` zorunlu (spam koruması). Sensitive paths (`/CLAUDE.md`, `/aidan-mcp/*`, `/.env*`) `_redirects` ile 404'e gidiyor.
 
 ## Dosyalar (`C:\Users\Salim\Desktop\claudedeneme\`)
 
-### Frontend (Netlify'a deploy oluyor)
-- `asistan.html` — ana uygulama
-- `index.html` — asistan.html'e redirect
-- `manifest.webmanifest` — PWA manifest
-- `sw.js` — service worker (network-first, otomatik update mesajı)
+### Frontend (Cloudflare Pages'e deploy oluyor)
+- `asistan.html` — ana uygulama. Pages'te `/index.html` olarak servis ediliyor (auto-strip redirect loop'u önlemek için)
+- `404.html` — Aidan stilinde dark mode error sayfası, `_redirects` 404 hedefi
+- `manifest.webmanifest` — PWA manifest (start_url + scope = `/`)
+- `sw.js` — service worker (network-first, otomatik update mesajı, cache `aidan-v6-3`)
 - `icon.svg`, `icon-maskable.svg` — PWA ikonları
-- `netlify.toml` — Netlify config (CLAUDE.md ve aidan-mcp/ public'e gitmesin diye 404 redirect)
+- `_headers` — Cloudflare Pages config: 8 security header (CSP, HSTS, X-Frame, COOP, Permissions-Policy, Referrer-Policy, X-Content-Type, X-XSS)
+- `_redirects` — Pages config: `/asistan.html` → `/`, sensitive paths (`/CLAUDE.md`, `/aidan-mcp/*`, `/aidan-worker/*`, `/.env*`, `/.git*`, `/.claude/*`, `/netlify.toml`, `/blackjack.html`) → 404
+- `aidan-pages-deploy.py` — Cloudflare Pages Direct Upload script (multipart `_headers`/`_redirects` field + asset manifest)
 
 ### MCP Server (PC'de çalışır, Claude Desktop için)
 - `aidan-mcp/server.py` — FastMCP server, Supabase REST direkt çağırır
 - `aidan-mcp/.env` — credentials (gitignore'da, asla commit edilmez)
 
 ### Cloudflare Worker
-- `aidan-worker/worker.js` — Worker kodu (cron + webhook + AI + tools)
+- `aidan-worker/worker.js` — Worker kodu (cron + webhook + AI + tools). Sadece backend, static serve YOK.
 - `aidan-worker/deploy.py` — Cloudflare API üzerinden deploy scripti (wrangler yok)
 - `aidan-worker/wrangler.toml` — cron schedules referansı
 
@@ -72,13 +74,13 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 
 | Servis | URL | Not |
 |---|---|---|
-| Aidan PWA | https://aidanagent.netlify.app/asistan.html | Canlı |
-| Netlify Dashboard | https://app.netlify.com | "aidanagent" projesi |
-| GitHub Repo | https://github.com/salimfenerli/aidanagent | Private, Netlify oluşturmuştu |
+| Aidan PWA | **https://aidanapp.pages.dev/** | Canlı (Cloudflare Pages) |
+| Cloudflare Pages Dashboard | https://dash.cloudflare.com/?to=/:account/pages | "aidanapp" projesi |
+| GitHub Repo | https://github.com/salimfenerli/aidanagent | Private, eski Netlify backup'ı |
 | Supabase | https://supabase.com/dashboard/project/fluhzvzulrnfyqogrgfi | Email + şifre auth |
-| Cloudflare Dashboard | https://dash.cloudflare.com | Worker'lar burada |
-| Worker URL | https://aidan-pusher.fenerlisalim04.workers.dev | Cron + webhook |
-| Worker test (GET) | `?type=morning\|noon\|evening\|deadline` | Manuel brifing tetikleme |
+| Cloudflare Dashboard | https://dash.cloudflare.com | Worker + Pages burada |
+| Worker URL | https://aidan-pusher.fenerlisalim04.workers.dev | Cron + webhook (sadece backend) |
+| Worker test (GET) | `?type=morning\|noon\|evening\|deadline&secret=<WEBHOOK_SECRET>` | Manuel brifing tetikleme |
 | Telegram bot | t.me/salim_aidan_bot | Asıl kullanıcı arayüzü mobilde |
 
 ## Credentials (sadece .env'de)
@@ -294,29 +296,45 @@ Veya manuel API çağrısı (deploy.py inline). Wrangler yok.
 - **🔒 Güvenlik sıkılaştırma:** Worker GET endpoint'i artık `?secret=` zorunlu. Netlify security headers (CSP, HSTS, X-Frame, Referrer-Policy, Permissions-Policy, X-Content-Type, COOP). Supabase RLS 4 senaryoda canlıda doğrulandı (anon=hiçbir şey, auth=sadece kendi user_id).
 - **Cache:** v5-0 → v6-0
 
+### Mayıs 27, 2026 (Netlify → Cloudflare Pages göçü + URL temizliği)
+- **Netlify free tier kotası tükendi** — "This team has exceeded the credit limit" 503 hatası
+- **Cloudflare Pages'e geçildi** — Direct Upload API ile (wrangler yok), Python script ile multipart upload
+- **URL temizliği:** `aidanagent.netlify.app/asistan.html` → **`aidanapp.pages.dev/`** (kullanıcı identifier yok, kısa)
+- **Çözülen Pages problemleri:**
+  - `.html` auto-strip redirect loop (`/` → 308 → `/asistan` → 308 → ∞) → asistan.html'i `/index.html` path'inde upload ederek çözüldü
+  - `_headers`/`_redirects` asset olarak yükleniyordu (200 servis) → multipart form field (filename tuple ile) olarak gönderildi
+  - Sensitive paths (`/CLAUDE.md`, `/aidan-mcp/*`) SPA fallback ile 200 dönüyordu → `_redirects` ile `/404.html` 404 yönlendirmesi
+  - Cache propagation lag → deployment-specific URL'lerden test edilerek doğrulandı
+- **Yeni dosyalar:** `404.html` (dark mode), `_headers`, `_redirects`, `aidan-pages-deploy.py`
+- **Worker artık sadece backend** — static serve etmiyor, cron + webhook + AI işine odaklı
+- **Manifest düzeltildi** — `start_url` ve `scope` = `/` (eski `/asistan.html` yerine)
+- **8 security header canlıda doğrulandı:** CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-XSS-Protection, COOP
+- **Cache:** v6-0 → v6-3
+
 ## Mevcut Durum
 
 ### ✅ Çalışıyor
-- iPhone + PC PWA, otomatik senkron
+- iPhone + PC PWA, otomatik senkron (`aidanapp.pages.dev`)
 - Supabase auth + realtime sync + **RLS test edildi/doğrulandı**
 - MCP server Claude Desktop'a bağlı
-- Auto-deploy (git push → 30 sn canlı)
+- Pages deploy (`py aidan-pages-deploy.py` → 5 sn canlı)
 - Cloudflare Worker 4 cron schedule
 - Telegram bot iki yönlü (yazılı + 🎤 sesli)
 - Llama 3.3 70B intent + tool use
 - Whisper sesli → metin
 - Ödev serisi + yeniden dengele
 - Network-first SW
-- Netlify security headers (CSP/HSTS/X-Frame canlıda)
+- Pages 8 security headers canlıda (CSP/HSTS/X-Frame/COOP/Permissions-Policy/Referrer/X-Content-Type/X-XSS)
 
 ### 💰 Maliyet
 **$0/ay** — hepsi free tier:
-- Netlify: 300 credits/ay (auto-deploy ile drag-drop'tan az kullanım)
+- Cloudflare Pages: sınırsız bandwidth + 500 build/ay (Direct Upload kullanıyoruz, build limiti tüketmiyor)
 - Supabase: free
 - Cloudflare Workers: 100K istek/gün
 - Cloudflare Workers AI: 10K neuron/gün
 - Telegram Bot: sınırsız bedava
-- ntfy: kullanılmıyor
+- Netlify: ❌ kullanılmıyor (kota tükendi)
+- ntfy: ❌ kullanılmıyor
 
 ## Önemli Kararlar
 
@@ -363,16 +381,17 @@ Veya manuel API çağrısı (deploy.py inline). Wrangler yok.
 - **AskUserQuestion** tek karar gerekiyorsa kullan
 - Her büyük değişiklikten sonra `sw.js` cache versiyonunu artır
 
-## Deploy Süreci (otomatik)
+## Deploy Süreci (Cloudflare Pages Direct Upload)
 
 1. Ben dosyaları düzenliyorum
-2. `sw.js` cache versiyonunu artırıyorum (örn `v5-0` → `v5-1`)
-3. `git add -A && git commit -m "..." && git push`
-4. Netlify webhook tetikler, 30 sn içinde canlı
+2. `sw.js` cache versiyonunu artırıyorum (örn `v6-3` → `v6-4`)
+3. `py aidan-pages-deploy.py` (env'de `CF_API_TOKEN` + `CF_ACCOUNT_ID` lazım)
+4. 5 sn içinde `https://aidanapp.pages.dev/` canlı
 5. Telefonda PWA: yeni SW otomatik aktif olur, toast "🔄 güncellendi" çıkar, sayfa yenilenir
 6. Bilgisayarda PWA aynı şekilde
+7. Opsiyonel: `git add -A && git commit -m "..." && git push` (yedek/history için)
 
-⚠️ Eski drag-drop yöntemi artık **GEREKSİZ**. Salim'e söyleme bile, otomatik olsun.
+⚠️ Netlify ve drag-drop yöntemi artık **GEREKSİZ**. Salim'e söyleme bile, Pages otomatik.
 
 ## Test Edilmesi Gereken
 
@@ -453,16 +472,21 @@ Veya manuel API çağrısı (deploy.py inline). Wrangler yok.
 ## Hızlı Komutlar (yeni sohbette başlangıç için)
 
 ```bash
-# Aidan deploy (otomatik)
+# Aidan deploy (Cloudflare Pages Direct Upload)
+cd /c/Users/Salim/Desktop/claudedeneme
+export CF_API_TOKEN=<token> CF_ACCOUNT_ID=dd37c3eb3e7fbab35ee16f1a6db4cce1
+py aidan-pages-deploy.py
+
+# Git yedek (opsiyonel, history için)
 git -C "C:/Users/Salim/Desktop/claudedeneme" add -A && \
   git -C "C:/Users/Salim/Desktop/claudedeneme" commit -m "..." && \
   git -C "C:/Users/Salim/Desktop/claudedeneme" push
 
 # Worker manuel test
-curl https://aidan-pusher.fenerlisalim04.workers.dev/?type=morning
+curl "https://aidan-pusher.fenerlisalim04.workers.dev/?type=morning&secret=<WEBHOOK_SECRET>"
 
 # Aidan'ın live durumu kontrol
-curl -s "https://aidanagent.netlify.app/asistan.html?t=$(date +%s)" | grep "subtitle"
+curl -sI "https://aidanapp.pages.dev/" | grep -i "content-security-policy"
 
 # Telegram webhook info
 curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo
@@ -471,8 +495,9 @@ curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo
 ## Yeni Sohbet Başlıyorsa — Önce Bunları Yap
 
 1. **Salim'in test sonuçlarını sor**: sesli Telegram çalıştı mı? Sabah brifingi geldi mi?
-2. **Sıradaki feature** için karar: Borsa modülü en olası
-3. **Brain Dump / Rutinler hakkında karar bekliyor** — kullanmazsa silmek istiyor
-4. ⚠️ **Drag-drop deploy ASLA önerme**, artık git push otomatik
+2. **PWA'yı yeni URL'den yükledi mi?** (`aidanapp.pages.dev`) — eski Netlify URL'i ölü
+3. **Sıradaki feature** için karar: Borsa modülü en olası (Salim "sona, daha detaylı" dedi)
+4. ⚠️ **Netlify / drag-drop deploy ASLA önerme** — Pages Direct Upload kullanıyoruz
 5. ⚠️ **ntfy.sh'tan asla bahsetme**, Telegram bot kullanılıyor
 6. ⚠️ **Mood/check-in'den bahsetme**, kaldırıldı
+7. ⚠️ **CF_API_TOKEN paylaşıldıysa revoke ettirmeyi unutma** — eski token'lar dashboard'da kalmasın

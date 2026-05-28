@@ -318,21 +318,68 @@ async def brain_dump(text: str) -> str:
 
 
 @mcp.tool()
-async def log_mood(emoji: str, note: str = "") -> str:
-    """Mood check-in kaydet.
+async def set_mit(task_id: int) -> str:
+    """Görevi bugünün MIT'sine (3'üne) ekle. En fazla 3 olabilir.
 
-    emoji: 😄 (harika) | 🙂 (iyi) | 😐 (idare eder) | 😩 (kötü) | 😴 (yorgun)
-    note: Opsiyonel not
+    task_id: list_tasks/find_task çıktısındaki # numarası
     """
-    mapping = {"😄": "harika", "🙂": "iyi", "😐": "idare", "😩": "kötü", "😴": "yorgun"}
-    label = mapping.get(emoji, "?")
+    today_iso = date.today().isoformat()
     data = await _get_data()
-    data.setdefault("checkins", []).append({
-        "emoji": emoji, "label": label, "note": note,
-        "when": datetime.now().strftime("%d.%m.%Y %H:%M"),
-    })
+    tasks = data.get("tasks", [])
+    target = None
+    for t in tasks:
+        if t.get("id") == task_id:
+            target = t
+            break
+    if not target:
+        return f"❌ Görev bulunamadı: #{task_id}"
+    if target.get("done"):
+        return f"❌ '{target.get('text')}' zaten bitmiş."
+    if target.get("mitDate") == today_iso:
+        return f"⭐ '{target.get('text')}' zaten bugünün MIT'sinde."
+    mit_count = sum(1 for t in tasks if t.get("mitDate") == today_iso and not t.get("done"))
+    if mit_count >= 3:
+        return "❌ Bugünün 3'ü dolu. Önce birini bitir veya MIT'ten çıkar."
+    target["mitDate"] = today_iso
     await _save_data(data)
-    return f"{emoji} kaydedildi ({label})" + (f" — {note}" if note else "")
+    return f"⭐ '{target.get('text')}' bugünün MIT'sine eklendi ({mit_count + 1}/3)."
+
+
+@mcp.tool()
+async def unset_mit(task_id: int) -> str:
+    """Görevi bugünün MIT'sinden çıkar."""
+    today_iso = date.today().isoformat()
+    data = await _get_data()
+    for t in data.get("tasks", []):
+        if t.get("id") == task_id:
+            if t.get("mitDate") != today_iso:
+                return f"❌ '{t.get('text')}' bugünün MIT'sinde değil."
+            t["mitDate"] = None
+            await _save_data(data)
+            return f"✅ '{t.get('text')}' MIT'ten çıkarıldı."
+    return f"❌ Görev bulunamadı: #{task_id}"
+
+
+@mcp.tool()
+async def postpone_task(task_id: int, to: str = "yarın") -> str:
+    """Görevi başka güne ertele. MIT'teyse otomatik çıkarır.
+
+    task_id: list_tasks çıktısındaki # numarası
+    to: yeni tarih (yarın/salı/DD.MM.YYYY/YYYY-MM-DD)
+    """
+    new_due = _parse_due(to)
+    if not new_due:
+        return f"❌ Tarih anlaşılamadı: '{to}'"
+    today_iso = date.today().isoformat()
+    data = await _get_data()
+    for t in data.get("tasks", []):
+        if t.get("id") == task_id:
+            t["due"] = new_due
+            if t.get("mitDate") == today_iso and new_due != today_iso:
+                t["mitDate"] = None
+            await _save_data(data)
+            return f"📅 '{t.get('text')}' → {new_due} olarak ertelendi."
+    return f"❌ Görev bulunamadı: #{task_id}"
 
 
 @mcp.tool()
@@ -349,9 +396,6 @@ async def daily_briefing() -> str:
 
     pomo = data.get("pomoToday", {})
     pomo_count = pomo.get("count", 0) if pomo.get("date") == today_iso else 0
-
-    checkins = data.get("checkins", [])
-    last_mood = checkins[-1] if checkins else None
 
     lines = [f"📆 {date.today().strftime('%d.%m.%Y')} brifingi", ""]
     lines.append(f"⭐ MIT: {len(mit_done)}/{len(mit) + len(mit_done)} bitti")
@@ -371,8 +415,6 @@ async def daily_briefing() -> str:
             lines.append(f"   - {t['text']}")
         lines.append("")
     lines.append(f"🍅 Pomodoro bugün: {pomo_count}")
-    if last_mood:
-        lines.append(f"😊 Son mood: {last_mood['emoji']} ({last_mood['when']})")
     return "\n".join(lines)
 
 

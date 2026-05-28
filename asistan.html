@@ -1061,6 +1061,11 @@
     </div>
 
     <div class="settings-row">
+      <label>📊 Zaman tahminin (son 30 gün)</label>
+      <div id="estimateStats" class="settings-help">—</div>
+    </div>
+
+    <div class="settings-row">
       <label>💾 Yedekleme</label>
       <button class="small" onclick="exportData()">📥 Verileri indir (JSON)</button>
       <button class="small secondary" onclick="document.getElementById('importFile').click()">📤 Yedek yükle</button>
@@ -1176,6 +1181,45 @@ function showTab(name, btn) {
   document.getElementById(name).classList.add('active');
   if (btn) btn.classList.add('active');
   else document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+  if (name === 'settings') updateEstimateStats();
+}
+
+// ============ ZAMAN TAHMİN DOĞRULUĞU (ADHD self-awareness) ============
+function updateEstimateStats() {
+  const el = document.getElementById('estimateStats');
+  if (!el) return;
+  const thirtyAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const dones = data.tasks.filter(t => t.done && t.doneDate && t.doneDate >= thirtyAgo);
+  const withBoth = dones.filter(t => t.estimateMin && t.actualMin);
+
+  if (withBoth.length < 3) {
+    el.innerHTML = `Henüz yeterli veri yok (${withBoth.length}/3 görev ölçülmüş).<br>
+      🎧 Odak sekmesinde pomodoro ile görev yaptıkça Aidan tahmin ↔ gerçek farkını ölçer.`;
+    return;
+  }
+
+  const totalEst = withBoth.reduce((s, t) => s + t.estimateMin, 0);
+  const totalAct = withBoth.reduce((s, t) => s + t.actualMin, 0);
+  const avgEst = Math.round(totalEst / withBoth.length);
+  const avgAct = Math.round(totalAct / withBoth.length);
+  const ratio = (totalAct / totalEst).toFixed(1);
+
+  const accurate = withBoth.filter(t => {
+    const tolerance = Math.max(5, t.estimateMin * 0.2);
+    return Math.abs(t.actualMin - t.estimateMin) <= tolerance;
+  }).length;
+  const accuratePct = Math.round((accurate / withBoth.length) * 100);
+
+  let comment;
+  if (ratio >= 1.5) comment = '⏰ Görevler tahminden uzun sürüyor — daha geniş tahmin etmeyi dene.';
+  else if (ratio <= 0.7) comment = '⚡ Hızlısın — tahminlerini biraz artırabilirsin.';
+  else comment = '✨ Tahminlerin gerçeğe yakın — iyi gidiyorsun.';
+
+  el.innerHTML = `
+    <b>${withBoth.length}</b> görev ölçülmüş — ortalama tahmin <b>${avgEst}dk</b> → gerçek <b>${avgAct}dk</b> (<b>${ratio}x</b>).<br>
+    🎯 Tahminlerinin <b>%${accuratePct}</b>'ı doğru (±20% içinde).<br>
+    ${comment}
+  `;
 }
 
 // ============ GÖREVLER ============

@@ -288,6 +288,99 @@ function buildEvening(data) {
   return { title: '🌙 Akşam özet', message: lines.join('\n') };
 }
 
+function getWeekStartIso() {
+  const d = new Date(Date.now() + TR_OFFSET_MS);
+  const dow = d.getUTCDay(); // 0=Pazar
+  const diffToMonday = dow === 0 ? 6 : dow - 1;
+  d.setUTCDate(d.getUTCDate() - diffToMonday);
+  return d.toISOString().slice(0, 10);
+}
+
+async function buildWeekly(env, data) {
+  const today = trToday();
+  const weekStart = getWeekStartIso();
+  const tasks = data.tasks || [];
+
+  const doneThisWeek = tasks.filter(t => t.doneDate && t.doneDate >= weekStart && t.doneDate <= today);
+  const overdueNow = tasks.filter(t => !t.done && t.due && t.due < today);
+  const mitDoneThisWeek = doneThisWeek.filter(t => t.mitDate && t.mitDate === t.doneDate);
+
+  const byCategory = {};
+  doneThisWeek.forEach(t => {
+    const c = t.category || 'kategorisiz';
+    byCategory[c] = (byCategory[c] || 0) + 1;
+  });
+  const topCategoryEntry = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0];
+
+  // Pomodoro toplam (pomoHistory varsa)
+  let pomoTotal = 0;
+  const pomoHistory = data.pomoHistory || {};
+  for (const [d, n] of Object.entries(pomoHistory)) {
+    if (d >= weekStart && d <= today) pomoTotal += (n || 0);
+  }
+  // Bugünün pomoToday'ı pomoHistory'de yoksa ekle
+  if (data.pomoToday?.date === today && !pomoHistory[today]) {
+    pomoTotal += data.pomoToday.count || 0;
+  }
+
+  // Zaman tahmini doğruluğu
+  const withBothEst = doneThisWeek.filter(t => t.estimateMin && t.actualMin);
+  let estimateNote = '';
+  if (withBothEst.length >= 3) {
+    const avgEst = withBothEst.reduce((s, t) => s + t.estimateMin, 0) / withBothEst.length;
+    const avgAct = withBothEst.reduce((s, t) => s + t.actualMin, 0) / withBothEst.length;
+    const ratio = (avgAct / avgEst).toFixed(1);
+    estimateNote = `Tahmin ${Math.round(avgEst)}dk → gerçek ${Math.round(avgAct)}dk (${ratio}x)`;
+  }
+
+  const catLabels = { odev: 'Ödev', ders: 'Özel Ders', ev: 'Ev', kisisel: 'Kişisel' };
+  const factsForAi = [
+    `Bu hafta ${doneThisWeek.length} görev bitirdi.`,
+    mitDoneThisWeek.length ? `MIT olarak ${mitDoneThisWeek.length} tanesini bitirdi.` : '',
+    topCategoryEntry ? `En çok ${catLabels[topCategoryEntry[0]] || topCategoryEntry[0]} kategorisinde çalıştı (${topCategoryEntry[1]}).` : '',
+    pomoTotal ? `${pomoTotal} pomodoro yaptı.` : '',
+    overdueNow.length ? `${overdueNow.length} gecikmiş görev hâlâ bekliyor.` : '',
+    estimateNote ? `Tahmin doğruluğu: ${estimateNote}.` : '',
+  ].filter(Boolean).join(' ');
+
+  let aiComment = '';
+  try {
+    const r = await env.AI.run(AI_MODEL, {
+      messages: [
+        { role: 'system', content: "Sen Aidan'sın, Salim'in ADHD asistanı. Hafta sonu özetinde KISA (2-3 cümle), TÜRKÇE, samimi, övgü öncelikli ama somut bir yorum yaz. Önce başarı (sayıyla), sonra 1 ince öneri. ASLA yargılayıcı/eleştirel olma. ASLA İngilizce yazma. ADHD'li için her bitirilen iş zaferdir." },
+        { role: 'user', content: `Bu haftanın özeti:\n${factsForAi}\n\nKısa hafta yorumu yaz (en fazla 3 cümle, sıcak ama somut).` },
+      ],
+      max_tokens: 220,
+      temperature: 0.7,
+    });
+    aiComment = (r.response || '').trim();
+    if (/^(i'm|i am|as an ai|please provide|your input)/i.test(aiComment)) aiComment = '';
+  } catch (e) {
+    console.error('Weekly AI fail:', e);
+  }
+
+  const lines = [`📊 Hafta özeti (${weekStart} → ${today})`];
+  lines.push('');
+  lines.push(`✅ Bitirilen: ${doneThisWeek.length} görev`);
+  if (mitDoneThisWeek.length) lines.push(`⭐ MIT bitiş: ${mitDoneThisWeek.length}`);
+  if (topCategoryEntry) {
+    const emoji = { odev: '📚', ders: '📖', ev: '🏠', kisisel: '💜' }[topCategoryEntry[0]] || '🏷️';
+    lines.push(`🏆 En aktif: ${emoji} ${catLabels[topCategoryEntry[0]] || topCategoryEntry[0]} (${topCategoryEntry[1]})`);
+  }
+  if (pomoTotal) lines.push(`🎧 Pomodoro: ${pomoTotal}`);
+  if (overdueNow.length) lines.push(`⚠️ Gecikmiş bekleyen: ${overdueNow.length}`);
+  if (estimateNote) lines.push(`⏱️ ${estimateNote}`);
+  if (aiComment) {
+    lines.push('');
+    lines.push(`💜 ${aiComment}`);
+  }
+  if (doneThisWeek.length === 0) {
+    lines.push('');
+    lines.push('💜 Bu hafta görev bitmemiş — bazen sadece var olmak da yeterli. Yarın yeni hafta.');
+  }
+  return { title: '📊 Haftalık review', message: lines.join('\n') };
+}
+
 function buildDeadlineAlerts(data) {
   const today = trToday();
   const tasks = data.tasks || [];
@@ -311,6 +404,7 @@ async function runCronJob(env, type) {
     case 'noon':     payload = buildNoon(data); break;
     case 'evening':  payload = buildEvening(data); break;
     case 'deadline': payload = buildDeadlineAlerts(data); break;
+    case 'weekly':   payload = await buildWeekly(env, data); break;
     default: throw new Error(`Bilinmeyen tip: ${type}`);
   }
   if (!payload) return { type, sent: false, reason: 'no-content' };
@@ -348,6 +442,42 @@ function parseDueText(s) {
     return `${year}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
   }
   return null;
+}
+
+// Seri planlama yardımcıları (MCP'deki Python helper'larının JS karşılığı)
+function countAvailDays(startIso, deadlineIso, skipWeekends) {
+  let n = 0;
+  const d = new Date(startIso + 'T00:00:00Z');
+  const end = new Date(deadlineIso + 'T00:00:00Z');
+  while (d <= end) {
+    const dow = d.getUTCDay();
+    if (!(skipWeekends && (dow === 0 || dow === 6))) n++;
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return n;
+}
+
+function planSeriesDays(startIso, deadlineIso, parts, skipWeekends) {
+  if (parts <= 0) return [];
+  const avail = [];
+  const d = new Date(startIso + 'T00:00:00Z');
+  const end = new Date(deadlineIso + 'T00:00:00Z');
+  while (d <= end) {
+    const dow = d.getUTCDay();
+    if (!(skipWeekends && (dow === 0 || dow === 6))) {
+      avail.push(d.toISOString().slice(0, 10));
+    }
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  if (!avail.length) return new Array(parts).fill(deadlineIso);
+  if (avail.length >= parts) {
+    if (parts === 1) return [avail[0]];
+    const step = (avail.length - 1) / (parts - 1);
+    return Array.from({ length: parts }, (_, i) => avail[Math.round(i * step)]);
+  }
+  const out = [...avail];
+  while (out.length < parts) out.push(deadlineIso);
+  return out;
 }
 
 const TOOL_HANDLERS = {
@@ -530,6 +660,214 @@ const TOOL_HANDLERS = {
     ctx.dirty = true;
     return { ok: true, reply: `🧠 Eklendi (dump): ${text}` };
   },
+
+  async update_task(args, ctx) {
+    const q = String(args.query || '').trim().toLowerCase();
+    if (!q) return { ok: false, reply: '❌ Hangi görev?' };
+    const tasks = ctx.data.tasks || [];
+    const matches = tasks.filter(t => !t.done && (t.text || '').toLowerCase().includes(q));
+    if (!matches.length) return { ok: false, reply: `❌ "${q}" eşleşmedi.` };
+    if (matches.length > 1) {
+      const list = matches.slice(0, 5).map(t => `• ${t.text}`).join('\n');
+      return { ok: false, reply: `🤔 Birden fazla eşleşme:\n${list}\nDaha net belirt.` };
+    }
+    const t = matches[0];
+    const changes = [];
+    if (args.text) { t.text = String(args.text).trim(); changes.push(`metin → ${t.text}`); }
+    if (['urgent','normal','low'].includes(args.priority)) {
+      t.priority = args.priority;
+      changes.push(`öncelik → ${args.priority === 'urgent' ? '🔴 acil' : args.priority}`);
+    }
+    if (['odev','ders','ev','kisisel'].includes(args.category)) {
+      t.category = args.category;
+      changes.push(`kategori → ${({odev:'Ödev',ders:'Özel Ders',ev:'Ev',kisisel:'Kişisel'})[args.category]}`);
+    }
+    if (args.due !== undefined && args.due !== null && args.due !== '') {
+      const d = parseDueText(args.due);
+      if (d) { t.due = d; changes.push(`📅 → ${d}`); }
+    }
+    if (args.estimate_min !== undefined && args.estimate_min !== null) {
+      const e = parseInt(args.estimate_min);
+      if (!isNaN(e)) { t.estimateMin = e; changes.push(`tahmin → ${e}dk`); }
+    }
+    if (args.reminder_time && /^\d{1,2}:\d{2}$/.test(args.reminder_time)) {
+      t.reminderTime = args.reminder_time;
+      changes.push(`🔔 → ${args.reminder_time}`);
+    }
+    if (!changes.length) return { ok: false, reply: '❌ Değişecek bir şey yok.' };
+    ctx.dirty = true;
+    return { ok: true, reply: `✏️ "${t.text}" güncellendi: ${changes.join(', ')}` };
+  },
+
+  async add_subtask(args, ctx) {
+    const q = String(args.query || '').trim().toLowerCase();
+    const text = String(args.text || '').trim();
+    if (!q) return { ok: false, reply: '❌ Hangi göreve?' };
+    if (!text) return { ok: false, reply: '❌ Alt adım metni boş.' };
+    const tasks = ctx.data.tasks || [];
+    const matches = tasks.filter(t => !t.done && (t.text || '').toLowerCase().includes(q));
+    if (!matches.length) return { ok: false, reply: `❌ "${q}" eşleşmedi.` };
+    if (matches.length > 1) {
+      const list = matches.slice(0, 5).map(t => `• ${t.text}`).join('\n');
+      return { ok: false, reply: `🤔 Birden fazla eşleşme:\n${list}\nDaha net belirt.` };
+    }
+    const t = matches[0];
+    t.subtasks = t.subtasks || [];
+    t.subtasks.push({ text, done: false });
+    ctx.dirty = true;
+    return { ok: true, reply: `➕ "${t.text}" → alt adım: ${text}` };
+  },
+
+  async find_task(args, ctx) {
+    const q = String(args.query || '').trim().toLowerCase();
+    if (!q) return { ok: false, reply: '❌ Ne arıyorsun?' };
+    const tasks = ctx.data.tasks || [];
+    const hits = tasks.filter(t =>
+      (t.text || '').toLowerCase().includes(q) ||
+      (t.subtasks || []).some(s => (s.text || '').toLowerCase().includes(q))
+    );
+    if (!hits.length) return { ok: true, reply: `🔍 "${q}" eşleşmedi.` };
+    const today = trToday();
+    const lines = [`🔍 ${hits.length} eşleşme:`];
+    hits.slice(0, 10).forEach(t => {
+      const marks = [t.done ? '✅' : '⬜'];
+      if (t.priority === 'urgent' && !t.done) marks.push('🔴');
+      if (t.mitDate === today && !t.done) marks.push('⭐');
+      if (t.due) marks.push(`📅${t.due}`);
+      lines.push(`${marks.join(' ')} ${t.text}`);
+    });
+    if (hits.length > 10) lines.push(`... ve ${hits.length - 10} tane daha`);
+    return { ok: true, reply: lines.join('\n') };
+  },
+
+  async add_homework_series(args, ctx) {
+    const name = String(args.name || '').trim();
+    if (!name) return { ok: false, reply: '❌ Ödev adı boş.' };
+    const deadline = parseDueText(args.deadline);
+    if (!deadline) return { ok: false, reply: `❌ Son tarih anlaşılamadı: "${args.deadline || '?'}"` };
+    const today = trToday();
+    const startIso = args.start ? (parseDueText(args.start) || today) : today;
+    if (deadline < startIso) return { ok: false, reply: '❌ Son tarih başlangıçtan önce.' };
+
+    const skipW = !!args.skip_weekends;
+    let items = [];
+    if (Array.isArray(args.chunk_labels) && args.chunk_labels.length) {
+      items = args.chunk_labels.map(s => `${name}: ${String(s)}`);
+    } else if (args.pages_from !== undefined && args.pages_to !== undefined) {
+      const pf = parseInt(args.pages_from);
+      const pt = parseInt(args.pages_to);
+      if (isNaN(pf) || isNaN(pt) || pt < pf) return { ok: false, reply: '❌ Sayfa aralığı hatalı.' };
+      const totalPages = pt - pf + 1;
+      const availDays = countAvailDays(startIso, deadline, skipW);
+      const n = args.chunks ? parseInt(args.chunks) : Math.max(1, Math.min(totalPages, availDays));
+      const per = Math.floor(totalPages / n);
+      const rem = totalPages % n;
+      let cur = pf;
+      for (let i = 0; i < n; i++) {
+        const extra = i < rem ? 1 : 0;
+        const end = cur + per - 1 + extra;
+        items.push(`${name}: s.${cur}-${end}`);
+        cur = end + 1;
+      }
+    } else if (args.chunks) {
+      const n = parseInt(args.chunks);
+      if (isNaN(n) || n <= 0) return { ok: false, reply: '❌ chunks geçersiz.' };
+      for (let i = 0; i < n; i++) items.push(`${name} — ${i + 1}/${n}`);
+    } else {
+      return { ok: false, reply: '❌ Ya pages_from/pages_to, ya chunks/chunk_labels ver.' };
+    }
+
+    const days = planSeriesDays(startIso, deadline, items.length, skipW);
+    const seriesId = String(Date.now());
+    const createdNow = new Date(Date.now() + TR_OFFSET_MS).toISOString().replace('T', ' ').slice(0, 16);
+    const dailyMin = args.daily_minutes ? parseInt(args.daily_minutes) : null;
+    const reminderTime = args.reminder_time && /^\d{1,2}:\d{2}$/.test(args.reminder_time) ? args.reminder_time : null;
+    const cat = ['odev','ders','ev','kisisel'].includes(args.category) ? args.category : 'odev';
+    const mitFirst = args.mit_first !== false;
+
+    const tasks = ctx.data.tasks = ctx.data.tasks || [];
+    const added = [];
+    for (let i = 0; i < items.length; i++) {
+      const day = days[i];
+      const t = {
+        id: Date.now() + i,
+        text: items[i],
+        done: false,
+        doneDate: null,
+        subtasks: [],
+        created: createdNow,
+        priority: 'normal',
+        category: cat,
+        due: day,
+        estimateMin: dailyMin,
+        actualMin: null,
+        repeat: null,
+        reminderTime,
+        lastReminded: null,
+        mitDate: (mitFirst && i === 0 && day === today) ? today : null,
+        streakCount: 0,
+        lastStreakDate: null,
+        seriesId,
+        seriesName: name,
+        seriesIndex: i + 1,
+        seriesTotal: items.length,
+      };
+      tasks.push(t);
+      added.push({ day, text: items[i] });
+    }
+    ctx.dirty = true;
+
+    const lines = [`📚 "${name}" planlandı: ${items.length} parça, son ${deadline}`];
+    added.slice(0, 8).forEach(({ day, text }) => lines.push(`  • ${day}: ${text}`));
+    if (added.length > 8) lines.push(`  ... ve ${added.length - 8} parça daha`);
+    if (dailyMin) lines.push(`⏱️ Her parça ~${dailyMin}dk`);
+    if (reminderTime) lines.push(`🔔 Her gün ${reminderTime}`);
+    if (mitFirst && added[0]?.day === today) lines.push(`⭐ İlk parça bugünün MIT'inde`);
+    return { ok: true, reply: lines.join('\n') };
+  },
+
+  async reschedule_series(args, ctx) {
+    const sname = String(args.series_name || '').trim().toLowerCase();
+    if (!sname) return { ok: false, reply: '❌ Hangi seri? (series_name lazım)' };
+    const newDeadline = parseDueText(args.new_deadline);
+    if (!newDeadline) return { ok: false, reply: `❌ Yeni son tarih anlaşılamadı: "${args.new_deadline || '?'}"` };
+    const tasks = ctx.data.tasks || [];
+    const items = tasks.filter(t => (t.seriesName || '').toLowerCase().includes(sname));
+    if (!items.length) return { ok: false, reply: `❌ "${sname}" eşleşen seri yok.` };
+    items.sort((a, b) => (a.seriesIndex || 0) - (b.seriesIndex || 0));
+    const pending = items.filter(t => !t.done);
+    if (!pending.length) return { ok: true, reply: `✅ "${items[0].seriesName}" zaten tamamen bitmiş.` };
+    const today = trToday();
+    if (newDeadline < today) return { ok: false, reply: '❌ Yeni son tarih geçmişte.' };
+    const days = planSeriesDays(today, newDeadline, pending.length, !!args.skip_weekends);
+    for (let i = 0; i < pending.length; i++) pending[i].due = days[i];
+    ctx.dirty = true;
+    return { ok: true, reply: `🔄 "${items[0].seriesName}" yeniden planlandı: ${pending.length} parça → ${newDeadline}'a kadar dağıtıldı.` };
+  },
+
+  async list_series(args, ctx) {
+    const tasks = ctx.data.tasks || [];
+    const groups = {};
+    for (const t of tasks) {
+      if (t.seriesId) {
+        const sid = String(t.seriesId);
+        (groups[sid] = groups[sid] || []).push(t);
+      }
+    }
+    const keys = Object.keys(groups);
+    if (!keys.length) return { ok: true, reply: '📭 Hiç ödev serisi yok.' };
+    const lines = [`📚 ${keys.length} seri:`];
+    for (const sid of keys) {
+      const items = groups[sid].sort((a, b) => (a.seriesIndex || 0) - (b.seriesIndex || 0));
+      const done = items.filter(t => t.done).length;
+      const total = items.length;
+      const name = items[0].seriesName || '?';
+      const next = items.find(t => !t.done);
+      const nextStr = next ? ` · Sıradaki: ${next.text}${next.due ? ` (${next.due})` : ''}` : ' · ✅ Bitti';
+      lines.push(`• ${name}: ${done}/${total}${nextStr}`);
+    }
+    return { ok: true, reply: lines.join('\n') };
+  },
 };
 
 const TOOL_SCHEMAS = [
@@ -650,6 +988,102 @@ const TOOL_SCHEMAS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'update_task',
+      description: 'Mevcut görevin alanlarını güncelle (metin/tarih/saat/öncelik/kategori/tahmin). "X\'in saatini 18\'e al", "X\'i acil yap", "X\'in tahminini 30dk yap" denirse.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Hangi görev (metninden parça)' },
+          text: { type: 'string', description: 'Yeni görev metni' },
+          priority: { type: 'string', enum: ['urgent','normal','low'] },
+          category: { type: 'string', enum: ['odev','ders','ev','kisisel'] },
+          due: { type: 'string', description: 'Yeni son tarih (bugün/yarın/salı/DD.MM.YYYY)' },
+          estimate_min: { type: 'integer', description: 'Yeni tahmini dakika' },
+          reminder_time: { type: 'string', description: 'Yeni saat hatırlatma HH:MM' },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_subtask',
+      description: 'Bir göreve alt adım/madde ekle. "X görevine şu adımı ekle", "X\'in altına şunu yaz" denirse.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Ana görevin metninden parça' },
+          text: { type: 'string', description: 'Alt adım metni' },
+        },
+        required: ['query', 'text'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'find_task',
+      description: 'Görev metni veya alt adım metninde arama yap. "X\'e dair ne var", "matematikle ilgili görevler" denirse.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: 'Aranacak kelime' } },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_homework_series',
+      description: 'Bir ödevi otomatik günlere böl. "tarih kitabı 50-100 sayfa salıya bitsin", "fizik 5 konuyu önümüzdeki haftaya yay" denirse.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Ödev adı (örn: "Tarih kitabı", "Fizik test")' },
+          deadline: { type: 'string', description: 'Son tarih: yarın, salı, gelecek hafta, DD.MM.YYYY' },
+          pages_from: { type: 'integer', description: 'Başlangıç sayfası' },
+          pages_to: { type: 'integer', description: 'Bitiş sayfası' },
+          chunks: { type: 'integer', description: 'Kaç parçaya bölünsün (sayfa yoksa)' },
+          chunk_labels: { type: 'array', items: { type: 'string' }, description: 'Her parçanın metni listesi (örn: ["Konu 1","Konu 2"])' },
+          daily_minutes: { type: 'integer', description: 'Her parça için tahmini dk' },
+          category: { type: 'string', enum: ['odev','ders','ev','kisisel'] },
+          reminder_time: { type: 'string', description: 'Her gün HH:MM hatırlatma' },
+          start: { type: 'string', description: 'Başlangıç günü (varsayılan bugün)' },
+          skip_weekends: { type: 'boolean', description: 'Hafta sonu atla' },
+          mit_first: { type: 'boolean', description: 'İlk parçayı bugünün MIT\'sine ekle (varsayılan true)' },
+        },
+        required: ['name','deadline'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'reschedule_series',
+      description: 'Bir ödev serisinin bitmemiş parçalarını yeni son tarihe göre yeniden dağıt. "tarih serisini cumaya kaydır" denirse.',
+      parameters: {
+        type: 'object',
+        properties: {
+          series_name: { type: 'string', description: 'Seri adından parça (örn: "tarih")' },
+          new_deadline: { type: 'string', description: 'Yeni son tarih' },
+          skip_weekends: { type: 'boolean' },
+        },
+        required: ['series_name','new_deadline'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_series',
+      description: 'Tüm ödev serilerini ve ilerlemelerini listele. "seriler", "kaç ödev kaldı" denirse.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
 ];
 
 // ============================================================
@@ -687,6 +1121,12 @@ NE ZAMAN TOOL ÇAĞIR:
 - "X'i MIT yap / öncelikli olsun / bugünün 3'üne ekle" → set_mit
 - "X'i MIT'ten çıkar" → unset_mit
 - "X'i yarına at / salıya ertele / kaydır" → postpone_task
+- "X'in saatini değiştir / X'i acil yap / X'in tahmini şu kadar" → update_task
+- "X'e şu adımı ekle / altına şunu yaz" → add_subtask
+- "X'e dair ne var / X ile ilgili görevler" → find_task
+- "tarih kitabı 50-100 sayfa salıya / fizik 5 konuyu haftaya yay / ödev böl" → add_homework_series
+- "X serisini cumaya kaydır / yeniden dağıt" → reschedule_series
+- "seriler / kaç ödev kaldı" → list_series
 - "şunu unutma/aklımda olsun" → brain_dump
 
 NE ZAMAN TOOL ÇAĞIRMA (sadece sohbet):
@@ -724,6 +1164,15 @@ Sen: "Görev ekleyebilirim, listeleyebilirim, mood kaydederim, bugünün özetin
 "matematik ödevini MIT yap" → set_mit(query="matematik")
 "tarih kitabını yarına at" → postpone_task(query="tarih", to="yarın")
 "fizik ödevini salıya kaydır" → postpone_task(query="fizik", to="salı")
+"matematik ödevini 30 dakika yap / tahmini değiştir" → update_task(query="matematik", estimate_min=30)
+"fizik ödevinin saatini 18:30'a al" → update_task(query="fizik", reminder_time="18:30")
+"tarih ödevini acil yap" → update_task(query="tarih", priority="urgent")
+"matematik ödevine 'soruları çöz' adımını ekle" → add_subtask(query="matematik", text="soruları çöz")
+"fizikle ilgili ne var" → find_task(query="fizik")
+"tarih kitabı 50-100 sayfa salıya bitsin" → add_homework_series(name="Tarih kitabı", deadline="salı", pages_from=50, pages_to=100, category="odev")
+"fizik 5 konuyu önümüzdeki haftaya yay" → add_homework_series(name="Fizik", deadline="gelecek hafta", chunks=5, category="odev")
+"tarih serisini cumaya kaydır" → reschedule_series(series_name="tarih", new_deadline="cuma")
+"kaç ödev serisi var" → list_series()
 
 ASLA "tool çağırıyorum" yazma. Doğrudan çağır. Tool sonrası ek yorum yazma.`;
 }
@@ -820,7 +1269,7 @@ async function handleWebhook(request, env) {
     await sendTg(env, {
       chatId,
       title: 'Komutlar',
-      message: 'Doğal dille yaz veya 🎤 sesli mesaj at, anlarım.\n\n📝 EKLEMEK:\n• "yarın matematik ödevi"\n• "akşam 8\'de ilaç hatırlat"\n• "alışveriş yapmam lazım"\n\n📋 GÖRMEK:\n• "ne var bugün"\n• "acil olanlar"\n• "bitenleri göster"\n\n✅ BİTİRMEK:\n• "matematik bitti"\n• "X yaptım"\n\n🗑️ SİLMEK:\n• "X\'i sil"\n\n🌅 ÖZET:\n• "bugün ne yapayım"\n• "durum"\n• "brifing"\n\n🧠 BRAIN DUMP:\n• "şunu unutma..."\n• "aklımda olsun..."'
+      message: 'Doğal dille yaz veya 🎤 sesli mesaj at.\n\n📝 EKLEMEK:\n• "yarın matematik ödevi"\n• "akşam 8\'de ilaç hatırlat"\n• "her salı 17:00 fizik özel ders"\n\n📋 GÖRMEK:\n• "ne var bugün" · "acil olanlar"\n• "X ile ilgili görevler" (arama)\n• "seriler" / "kaç ödev var"\n\n✅ BİTİRMEK / SİLMEK:\n• "matematik bitti" · "X\'i sil"\n\n✏️ DÜZENLEMEK:\n• "matematik tahminini 30dk yap"\n• "fizik saatini 18:30\'a al"\n• "tarih ödevini acil yap"\n• "matematiğe \'soruları çöz\' ekle" (alt adım)\n\n📅 ERTELEMEK:\n• "X\'i yarına at" · "X\'i salıya kaydır"\n\n⭐ MIT (bugünün 3\'ü):\n• "X\'i MIT yap" · "X\'i MIT\'ten çıkar"\n\n📚 ÖDEV SERİSİ:\n• "tarih kitabı 50-100 sayfa salıya bitsin"\n• "fizik 5 konuyu haftaya yay"\n• "tarih serisini cumaya kaydır"\n\n🌅 ÖZET:\n• "bugün ne yapayım" · "durum" · "brifing"\n\n🧠 BRAIN DUMP:\n• "şunu unutma..." · "aklımda olsun..."'
     });
     return new Response('OK');
   }
@@ -999,6 +1448,7 @@ export default {
       case '0 6 * * *':  type = 'deadline'; break;
       case '0 9 * * *':  type = 'noon'; break;
       case '0 18 * * *': type = 'evening'; break;
+      case '0 18 * * SUN': type = 'weekly'; break;
       default:           type = 'morning';
     }
     ctx.waitUntil(runCronJob(env, type));
