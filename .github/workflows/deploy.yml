@@ -37,5 +37,5 @@ jobs:
       - name: Deploy to Cloudflare Pages
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_ACCOUNT_ID: dd37c3eb3e7fbab35ee16f1a6db4cce1
         run: python aidan-pages-deploy.py
