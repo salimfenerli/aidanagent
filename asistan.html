@@ -652,6 +652,52 @@
   .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .modal-actions button { flex: 1; min-width: 110px; }
   .modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.84em; margin-top: 12px; width: 100%; padding: 8px; letter-spacing: 0.01em; box-shadow: none; }
+
+  /* Takvim modal */
+  .cal-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .cal-month { font-size:1.05em; font-weight:600; color:var(--text); letter-spacing:-0.01em; }
+  .cal-nav { background:none; border:1px solid var(--border-soft); color:var(--text-muted); width:32px; height:32px; border-radius:8px; cursor:pointer; font-size:1.2em; line-height:1; display:flex; align-items:center; justify-content:center; box-shadow:none; }
+  .cal-nav:hover { background:var(--surface-hover); color:var(--text); }
+  .cal-dow { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:6px; }
+  .cal-dow span { text-align:center; font-size:0.66em; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; font-weight:600; padding:4px 0; }
+  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+  .cal-day {
+    aspect-ratio: 1;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    border: 1px solid transparent;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.88em;
+    font-variant-numeric: tabular-nums;
+    position: relative;
+    transition: background 0.12s, border-color 0.12s;
+    box-shadow: none;
+    padding: 0;
+  }
+  .cal-day:hover { background: var(--surface-hover); }
+  .cal-day.cal-empty { cursor: default; visibility: hidden; }
+  .cal-day.cal-today { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+  .cal-day.cal-selected { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+  .cal-day.cal-selected.cal-today { background: var(--accent); color: #fff; }
+  .cal-dots { display: flex; gap: 3px; margin-top: 3px; height: 5px; align-items: center; }
+  .cal-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--text-muted); }
+  .cal-day.cal-selected .cal-dot { background: rgba(255,255,255,0.9); }
+  .cal-dot.cat-odev { background: #4f9eff; }
+  .cal-dot.cat-ders { background: #ffc640; }
+  .cal-dot.cat-ev { background: #6dd47e; }
+  .cal-dot.cat-kisisel { background: #e066d3; }
+  .cal-day-panel { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-soft); }
+  .cal-day-title { font-size: 0.92em; font-weight: 600; color: var(--text); margin-bottom: 10px; }
+  .cal-day-list { display:flex; flex-direction:column; gap:6px; max-height: 220px; overflow-y: auto; }
+  .cal-day-item { display: flex; gap: 8px; padding: 8px 10px; background: var(--surface-hover); border-radius: 8px; font-size: 0.88em; align-items: flex-start; }
+  .cal-day-item.done { opacity: 0.5; text-decoration: line-through; }
+  .cal-day-item .cal-day-cat { font-size: 0.95em; }
+  .cal-day-empty { color: var(--text-muted); font-style: italic; font-size: 0.85em; padding: 10px 0; text-align: center; }
   .modal-close:hover { color: var(--text); background: var(--surface-hover); border-radius: var(--radius-sm); box-shadow: none; }
 
   /* Postpone hızlı menü */
@@ -1450,7 +1496,7 @@
       <img class="brand-logo-icon" src="icon.png" alt="Aidan" width="32" height="32">
       <div class="brand-name">Aidan</div>
     </div>
-    <button class="brand-action" title="Bugünün tarihi" aria-label="Tarih" onclick="event.preventDefault();">📅</button>
+    <button class="brand-action" title="Takvim" aria-label="Takvim" onclick="openCalendarModal()">📅</button>
   </div>
   <h1 id="dateHero">Bugün</h1>
   <p class="subtitle" id="appSubtitle">sakin bir gün</p>
@@ -1661,6 +1707,26 @@
       <button class="danger small" id="seriesDeleteBtn" onclick="deleteSeriesFromModal()">🗑️ Seriyi sil</button>
     </div>
     <button class="modal-close" onclick="closeSeriesModal()">Kapat</button>
+  </div>
+</div>
+
+<!-- Takvim modal -->
+<div class="modal-overlay" id="calendarModal" onclick="if(event.target.id==='calendarModal')closeCalendarModal()">
+  <div class="modal" style="max-width:480px;">
+    <div class="cal-head">
+      <button class="cal-nav" onclick="calMonthShift(-1)" aria-label="Önceki ay">‹</button>
+      <div class="cal-month" id="calMonthLabel">—</div>
+      <button class="cal-nav" onclick="calMonthShift(1)" aria-label="Sonraki ay">›</button>
+    </div>
+    <div class="cal-dow">
+      <span>Pzt</span><span>Sal</span><span>Çar</span><span>Per</span><span>Cum</span><span>Cmt</span><span>Paz</span>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="cal-day-panel">
+      <div class="cal-day-title" id="calDayTitle">—</div>
+      <div class="cal-day-list" id="calDayList"></div>
+    </div>
+    <button class="modal-close" onclick="closeCalendarModal()">Kapat</button>
   </div>
 </div>
 
@@ -3479,6 +3545,111 @@ function parseDateInput(s) {
     return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
   }
   return null;
+}
+
+// ============ TAKVİM MODAL ============
+const calState = { year: null, month: null, selected: null };
+
+function openCalendarModal() {
+  const now = new Date();
+  calState.year = now.getFullYear();
+  calState.month = now.getMonth();
+  calState.selected = today();
+  renderCalendar();
+  document.getElementById('calendarModal').classList.add('active');
+}
+
+function closeCalendarModal() {
+  document.getElementById('calendarModal').classList.remove('active');
+}
+
+function calMonthShift(delta) {
+  calState.month += delta;
+  if (calState.month < 0) { calState.month = 11; calState.year--; }
+  if (calState.month > 11) { calState.month = 0; calState.year++; }
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const { year, month, selected } = calState;
+  const monthNames = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+  document.getElementById('calMonthLabel').textContent = `${monthNames[month]} ${year}`;
+
+  const todayStr = today();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const daysInMonth = lastDay.getDate();
+  let leading = firstDay.getDay() - 1; // Sunday=0 → -1, Monday=1 → 0
+  if (leading < 0) leading = 6;
+
+  // Görevleri tarihe göre grupla (due tarihi)
+  const tasksByDate = {};
+  (data.tasks || []).forEach(t => {
+    if (!t.due) return;
+    (tasksByDate[t.due] = tasksByDate[t.due] || []).push(t);
+  });
+
+  const cells = [];
+  for (let i = 0; i < leading; i++) cells.push('<div class="cal-day cal-empty"></div>');
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday = dateStr === todayStr;
+    const isSelected = dateStr === selected;
+    const dayTasks = tasksByDate[dateStr] || [];
+    const cats = [...new Set(dayTasks.map(t => t.category).filter(Boolean))].slice(0, 4);
+    const dotsHtml = cats.length
+      ? `<div class="cal-dots">${cats.map(c => `<div class="cal-dot cat-${c}"></div>`).join('')}</div>`
+      : '<div class="cal-dots"></div>';
+    const cls = ['cal-day'];
+    if (isToday) cls.push('cal-today');
+    if (isSelected) cls.push('cal-selected');
+    cells.push(`<div class="${cls.join(' ')}" onclick="selectCalDay('${dateStr}')">${d}${dotsHtml}</div>`);
+  }
+  document.getElementById('calGrid').innerHTML = cells.join('');
+  renderCalDayPanel();
+}
+
+function selectCalDay(dateStr) {
+  calState.selected = dateStr;
+  renderCalendar();
+}
+
+function renderCalDayPanel() {
+  const dateStr = calState.selected;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  const dayNames = ['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];
+  const monthNames = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+  const titleEl = document.getElementById('calDayTitle');
+  const isToday = dateStr === today();
+  titleEl.textContent = `${isToday ? '📌 ' : ''}${d} ${monthNames[m-1]} · ${dayNames[dt.getDay()]}`;
+
+  const dayTasks = (data.tasks || []).filter(t => t.due === dateStr);
+  const catEmoji = { odev: '📚', ders: '📖', ev: '🏠', kisisel: '💜' };
+  const listEl = document.getElementById('calDayList');
+
+  if (dayTasks.length === 0) {
+    listEl.innerHTML = '<div class="cal-day-empty">Bu güne deadline yok</div>';
+    return;
+  }
+
+  // Önce bitmemiş, sonra bitmiş; öncelik → acil önde
+  dayTasks.sort((a, b) => {
+    if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+    const pa = a.priority === 'urgent' ? 0 : 1;
+    const pb = b.priority === 'urgent' ? 0 : 1;
+    return pa - pb;
+  });
+
+  listEl.innerHTML = dayTasks.map(t => {
+    const cat = t.category ? (catEmoji[t.category] || '🏷️') : '·';
+    const time = t.reminderTime ? ` <span style="color:var(--text-muted)">· ${t.reminderTime}</span>` : '';
+    const urgent = t.priority === 'urgent' ? '🔥 ' : '';
+    return `<div class="cal-day-item ${t.done ? 'done' : ''}">
+      <span class="cal-day-cat">${cat}</span>
+      <span style="flex:1">${urgent}${escapeHtml(t.text)}${time}</span>
+    </div>`;
+  }).join('');
 }
 
 // ============ PWA: Service Worker Kaydı ============

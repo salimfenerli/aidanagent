@@ -90,7 +90,7 @@ function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-async function sendTg(env, { title, message, chatId, silent = false, replyToMessageId = null }) {
+async function sendTg(env, { title, message, chatId, silent = false, replyToMessageId = null, replyMarkup = null }) {
   const token = env.TELEGRAM_BOT_TOKEN;
   const cid = chatId || env.TELEGRAM_CHAT_ID;
   if (!token || !cid) throw new Error('Telegram config eksik');
@@ -100,12 +100,31 @@ async function sendTg(env, { title, message, chatId, silent = false, replyToMess
     disable_notification: silent, disable_web_page_preview: true,
   };
   if (replyToMessageId) body.reply_to_message_id = replyToMessageId;
+  if (replyMarkup) body.reply_markup = replyMarkup;
   const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   if (!r.ok) console.error('Telegram send fail:', r.status, await r.text());
+}
+
+async function answerCallback(env, callbackQueryId, text, showAlert = false) {
+  const token = env.TELEGRAM_BOT_TOKEN;
+  await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ callback_query_id: callbackQueryId, text: text || '', show_alert: showAlert }),
+  }).catch(() => {});
+}
+
+async function clearReplyMarkup(env, chatId, messageId) {
+  const token = env.TELEGRAM_BOT_TOKEN;
+  await fetch(`https://api.telegram.org/bot${token}/editMessageReplyMarkup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } }),
+  }).catch(() => {});
 }
 
 async function sendTyping(env, chatId) {
@@ -193,11 +212,12 @@ function buildMorning(data) {
   const overdue = tasks.filter(t => t.due && t.due < today && !t.done);
 
   const lines = [`🌅 Günaydın Salim`];
+  let replyMarkup = null;
   if (mit.length) {
     lines.push('', `⭐ Bugünün 3'ü:`);
     mit.forEach(t => lines.push(`  • ${t.text}`));
   } else {
-    // MIT seçilmediyse akıllı öneri yap
+    // MIT seçilmediyse akıllı öneri yap + inline butonlar
     const suggestions = suggestMitFromTasks(data);
     if (suggestions.length) {
       lines.push('', `🎯 Bugünün 3'ü için öneri:`);
@@ -211,7 +231,15 @@ function buildMorning(data) {
         const tail = extras.length ? ` (${extras.join(' · ')})` : '';
         lines.push(`  ${i + 1}. ${t.text}${tail}`);
       });
-      lines.push('', `💡 Uygunsa PWA'da ⭐'lara tıkla, ya da bana "MIT 1 2 3" yaz.`);
+      lines.push('', `💡 Aşağıdaki butonlara tık → MIT'e ekle.`);
+      // Telegram inline keyboard
+      const ids = suggestions.map(t => String(t.id));
+      const row = suggestions.map((t, i) => ({
+        text: `⭐ ${i + 1}`,
+        callback_data: `mit:${t.id}`
+      }));
+      const allBtn = { text: '⭐ Hepsi', callback_data: `mit:all:${ids.join(',')}` };
+      replyMarkup = { inline_keyboard: [row, [allBtn]] };
     } else {
       lines.push('', `⭐ MIT seçilmedi ve aktif görev yok. Yeni bir görev ekleyerek başla.`);
     }
@@ -234,7 +262,7 @@ function buildMorning(data) {
   }
   const totalLeft = tasks.filter(t => !t.done).length;
   lines.push('', `📊 Toplam bekleyen: ${totalLeft} görev`);
-  return { title: '🌅 Sabah brifingi', message: lines.join('\n') };
+  return { title: '🌅 Sabah brifingi', message: lines.join('\n'), replyMarkup };
 }
 
 function buildNoon(data) {
@@ -1211,6 +1239,103 @@ async function transcribeVoice(env, fileId) {
   return (transcribe.text || '').trim();
 }
 
+// Inline button (callback_query) — sabah brifingi MIT öneri butonları
+async function handleCallback(cb, env) {
+  const chatId = cb.message?.chat?.id;
+  const userId = cb.from?.id;
+  const messageId = cb.message?.message_id;
+
+  // Sadece sahibine cevap
+  if (String(userId) !== String(env.TELEGRAM_CHAT_ID)) {
+    await answerCallback(env, cb.id, 'Yetkisiz', true);
+    return new Response('OK');
+  }
+
+  const data = cb.data || '';
+  if (!data.startsWith('mit:')) {
+    await answerCallback(env, cb.id, '');
+    return new Response('OK');
+  }
+
+  // Parse: "mit:<taskId>" veya "mit:all:<id1,id2,id3>"
+  const rest = data.slice(4);
+  let taskIds = [];
+  if (rest.startsWith('all:')) {
+    taskIds = rest.slice(4).split(',').filter(Boolean);
+  } else if (rest) {
+    taskIds = [rest];
+  }
+  if (!taskIds.length) {
+    await answerCallback(env, cb.id, '❌ Geçersiz buton');
+    return new Response('OK');
+  }
+
+  // Aidan verisini al
+  let session, tasks, today;
+  try {
+    session = await fetchAidan(env);
+    tasks = session.data.tasks || [];
+    today = trToday();
+  } catch (e) {
+    await answerCallback(env, cb.id, `❌ Veri okunamadı: ${e.message}`, true);
+    return new Response('OK');
+  }
+
+  const currentMitCount = tasks.filter(t => t.mitDate === today && !t.done).length;
+  let slotsLeft = Math.max(0, 3 - currentMitCount);
+  if (slotsLeft === 0) {
+    await answerCallback(env, cb.id, '❌ Bugünün 3\'ü dolu. Önce birini bitir.', true);
+    return new Response('OK');
+  }
+
+  const added = [];
+  const alreadyMit = [];
+  const notFound = [];
+  for (const tid of taskIds) {
+    if (slotsLeft <= 0) break;
+    const t = tasks.find(x => String(x.id) === String(tid));
+    if (!t) { notFound.push(tid); continue; }
+    if (t.done) { notFound.push(tid); continue; }
+    if (t.mitDate === today) { alreadyMit.push(t.text); continue; }
+    t.mitDate = today;
+    added.push(t.text);
+    slotsLeft--;
+  }
+
+  if (added.length === 0) {
+    const msg = alreadyMit.length
+      ? `⭐ Zaten MIT'sinde (${alreadyMit.length})`
+      : '❌ Görev bulunamadı';
+    await answerCallback(env, cb.id, msg);
+    return new Response('OK');
+  }
+
+  // Kaydet
+  try {
+    await saveAidan(env, session.data, session);
+  } catch (e) {
+    await answerCallback(env, cb.id, `❌ Kayıt hatası: ${e.message}`, true);
+    return new Response('OK');
+  }
+
+  // Popup feedback
+  const popup = added.length === 1
+    ? `⭐ MIT'e eklendi`
+    : `⭐ ${added.length} görev MIT'e eklendi`;
+  await answerCallback(env, cb.id, popup);
+
+  // Butonları kaldır + kısa onay mesajı
+  if (chatId && messageId) {
+    await clearReplyMarkup(env, chatId, messageId);
+  }
+  const confirmLines = [`✅ MIT'e eklendi:`];
+  added.forEach(name => confirmLines.push(`  ⭐ ${name}`));
+  if (alreadyMit.length) confirmLines.push(`(zaten MIT'inde: ${alreadyMit.length})`);
+  await sendTg(env, { chatId, message: confirmLines.join('\n'), silent: true });
+
+  return new Response('OK');
+}
+
 async function handleWebhook(request, env) {
   // Auth
   const provided = request.headers.get('X-Telegram-Bot-Api-Secret-Token');
@@ -1219,6 +1344,12 @@ async function handleWebhook(request, env) {
   }
 
   const update = await request.json();
+
+  // Inline button tıklaması
+  if (update.callback_query) {
+    return await handleCallback(update.callback_query, env);
+  }
+
   const msg = update.message || update.edited_message;
   if (!msg) return new Response('OK');
 
