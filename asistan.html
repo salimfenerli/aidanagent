@@ -698,6 +698,30 @@
   .cal-day-item.done { opacity: 0.5; text-decoration: line-through; }
   .cal-day-item .cal-day-cat { font-size: 0.95em; }
   .cal-day-empty { color: var(--text-muted); font-style: italic; font-size: 0.85em; padding: 10px 0; text-align: center; }
+
+  /* Aktif görev banner (Şu an bunu yapıyorum) */
+  .active-task-banner {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(90deg, var(--accent-soft), transparent 80%);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+  .active-task-banner.show { display: flex; }
+  .active-task-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .active-task-label { font-size: 0.66em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; display: flex; gap: 6px; align-items: center; }
+  .active-task-name { font-size: 0.95em; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .active-task-elapsed { font-size: 0.78em; color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .active-task-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulseDot 2s ease-in-out infinite; flex-shrink: 0; }
+  @keyframes pulseDot { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; box-shadow: 0 0 8px var(--accent); } }
+  .active-task-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .active-task-actions button { background: transparent; border: 1px solid var(--border-soft); color: var(--text-muted); padding: 6px 9px; border-radius: 8px; cursor: pointer; font-size: 0.95em; box-shadow: none; line-height: 1; }
+  .active-task-actions button:hover { background: var(--surface-hover); color: var(--text); border-color: var(--accent); }
+  .task.active-focus { border-left-color: var(--accent) !important; border-left-width: 4px; background: linear-gradient(90deg, var(--accent-soft), transparent 25%); }
   .modal-close:hover { color: var(--text); background: var(--surface-hover); border-radius: var(--radius-sm); box-shadow: none; }
 
   /* Postpone hızlı menü */
@@ -1541,6 +1565,18 @@
       <div class="stat"><div class="stat-num" id="statDone">0</div><div class="stat-label">Bitti</div></div>
       <div class="stat"><div class="stat-num" id="statLeft">0</div><div class="stat-label">Kaldı</div></div>
     </div>
+    <div class="active-task-banner" id="activeTaskBanner">
+      <div class="active-task-info">
+        <div class="active-task-label"><span class="active-task-pulse"></span>ŞU AN ÇALIŞIYORSUN</div>
+        <div class="active-task-name" id="activeTaskName">—</div>
+        <div class="active-task-elapsed" id="activeTaskElapsed">⏱ 0 dk</div>
+      </div>
+      <div class="active-task-actions">
+        <button onclick="showTab('focus', document.querySelector('[data-tab=focus]'))" title="Odak ekranına geç">🎧</button>
+        <button onclick="completeFocusTask()" title="Bitir + sayacı kaydet">✅</button>
+        <button onclick="dropFocusTask()" title="Bırak — odağı temizle">✕</button>
+      </div>
+    </div>
     <div class="mit-box">
       <div class="mit-title">
         <span>⭐ Bugünün 3'ü</span>
@@ -2150,15 +2186,17 @@ function toggleMit(id) {
 function startTaskNow(id, quickTry) {
   const t = data.tasks.find(x => x.id === id);
   if (!t) return;
-  currentFocusTaskId = id;
+  const mins = quickTry ? 2 : (t.estimateMin || 25);
+  setTimer(mins, quickTry ? 1 : 5);  // resetTimer çağırır, currentFocusTaskId'i null'lar
+  currentFocusTaskId = id;            // sonra set et
   focusStartTime = Date.now();
   const focusEl = document.getElementById('focusTask');
   focusEl.textContent = (quickTry ? '⚡ Sadece 2 dakika dene — başlaman yeter: ' : '🎯 ') + t.text;
   focusEl.classList.remove('empty');
-  const mins = quickTry ? 2 : (t.estimateMin || 25);
-  setTimer(mins, quickTry ? 1 : 5);
   showTab('focus');
   setTimeout(() => startTimer(), 200);
+  updateActiveTaskBanner();
+  renderTasks();
   if (quickTry) showToast('⚡ 2 dakika. Bitince devam edip etmeme kararını sonra ver.', 'info', 4000);
 }
 
@@ -2454,12 +2492,14 @@ function taskAgeDays(t) {
 function renderTaskItem(t) {
   const todayStr = today();
   const isMit = t.mitDate === todayStr;
+  const isActive = !t.done && currentFocusTaskId === t.id;
   const cls = [
     t.done ? 'done' : '',
     t.priority === 'urgent' ? 'urgent' : '',
     t.priority === 'low' ? 'low' : '',
     t.category ? 'cat-' + t.category : '',
-    isMit ? 'mit' : ''
+    isMit ? 'mit' : '',
+    isActive ? 'active-focus' : ''
   ].filter(x => x).join(' ');
   const due = dueLabel(t.due);
   const age = t.done ? 0 : taskAgeDays(t);
@@ -2548,6 +2588,7 @@ function renderTasks() {
   renderCapacity();
   renderEveningSummary();
   updateFilterCounts();
+  updateActiveTaskBanner();
 }
 
 function renderEveningSummary() {
@@ -2826,12 +2867,22 @@ function startTimer() {
       running = false;
       if (!isBreak) {
         data.pomoToday.count++;
+        // Aktif görev varsa, pomodoro süresini actualMin'e ekle
+        if (currentFocusTaskId) {
+          const ft = data.tasks.find(x => x.id === currentFocusTaskId);
+          if (ft) {
+            ft.actualMin = (ft.actualMin || 0) + workMin;
+            focusStartTime = Date.now(); // sayacı sıfırla
+          }
+        }
         save();
         document.getElementById('pomoCount').textContent = data.pomoToday.count;
         notify('🎧 Seans bitti!', 'Harika iş! Şimdi ' + breakMin + ' dk mola.');
         isBreak = true;
         timerSec = breakMin * 60;
         totalSec = breakMin * 60;
+        updateActiveTaskBanner();
+        renderTasks();
       } else {
         notify('☕ Mola bitti!', 'Hadi devam, ' + workMin + ' dk daha.');
         isBreak = false;
@@ -3651,6 +3702,73 @@ function renderCalDayPanel() {
     </div>`;
   }).join('');
 }
+
+// ============ AKTİF GÖREV (Şu an çalışıyorsun) ============
+function updateActiveTaskBanner() {
+  const banner = document.getElementById('activeTaskBanner');
+  if (!banner) return;
+  if (!currentFocusTaskId) {
+    banner.classList.remove('show');
+    return;
+  }
+  const t = data.tasks.find(x => x.id === currentFocusTaskId);
+  if (!t || t.done) {
+    currentFocusTaskId = null;
+    focusStartTime = null;
+    banner.classList.remove('show');
+    return;
+  }
+  banner.classList.add('show');
+  document.getElementById('activeTaskName').textContent = t.text;
+  const sessionMin = focusStartTime ? Math.floor((Date.now() - focusStartTime) / 60000) : 0;
+  const totalMin = (t.actualMin || 0) + sessionMin;
+  const left = (t.estimateMin && t.estimateMin > totalMin) ? ` · ${t.estimateMin - totalMin}dk hedef` : '';
+  document.getElementById('activeTaskElapsed').textContent = `⏱ ${totalMin}dk${left}`;
+}
+
+function completeFocusTask() {
+  if (!currentFocusTaskId) return;
+  const t = data.tasks.find(x => x.id === currentFocusTaskId);
+  if (!t) return;
+  // Devam eden seans varsa actualMin'e ekle
+  if (focusStartTime && !t.done) {
+    const elapsedMin = Math.floor((Date.now() - focusStartTime) / 60000);
+    if (elapsedMin > 0) t.actualMin = (t.actualMin || 0) + elapsedMin;
+  }
+  const taskId = currentFocusTaskId;
+  // Odak temizle (pomodoro durdurmadan — kullanıcı isterse devam etsin)
+  currentFocusTaskId = null;
+  focusStartTime = null;
+  updateActiveTaskBanner();
+  // Görevi bitir (toggleTask zaten save + renderTasks çağırır)
+  toggleTask(taskId);
+}
+
+function dropFocusTask() {
+  if (currentFocusTaskId && focusStartTime) {
+    const t = data.tasks.find(x => x.id === currentFocusTaskId);
+    if (t) {
+      const elapsedMin = Math.floor((Date.now() - focusStartTime) / 60000);
+      if (elapsedMin > 0) {
+        t.actualMin = (t.actualMin || 0) + elapsedMin;
+        save();
+      }
+    }
+  }
+  currentFocusTaskId = null;
+  focusStartTime = null;
+  const focusEl = document.getElementById('focusTask');
+  if (focusEl) {
+    focusEl.textContent = 'Bir görev seç ya da serbest çalış';
+    focusEl.classList.add('empty');
+  }
+  updateActiveTaskBanner();
+  renderTasks();
+  showToast('Odak temizlendi', 'info', 1800);
+}
+
+// Her dakika banner güncelle (geçen süre takibi için)
+setInterval(updateActiveTaskBanner, 30000);
 
 // ============ PWA: Service Worker Kaydı ============
 if ('serviceWorker' in navigator) {

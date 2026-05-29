@@ -173,6 +173,60 @@ function scoreTaskForMit(t, today, tomorrow) {
   return score;
 }
 
+// Yarın için MIT skoru — gecikmiş + yarın deadline + acil önde
+function scoreTaskForTomorrowMit(t, today, tomorrow, dayAfter) {
+  let score = 0;
+  if (t.due) {
+    if (t.due < today) score += 130;       // çoktan gecikmiş, yarın yap
+    else if (t.due === today) score += 30; // bugün yapılmadıysa son şans yarın
+    else if (t.due === tomorrow) score += 100;
+    else if (t.due === dayAfter) score += 60;
+    else {
+      const days = Math.max(1, Math.round((new Date(t.due) - new Date(tomorrow)) / 86400000));
+      if (days <= 7) score += Math.max(10, 40 - days * 4);
+    }
+  }
+  if (t.priority === 'urgent') score += 60;
+  if (t.priority === 'low') score -= 15;
+  if (t.estimateMin) {
+    if (t.estimateMin <= 30) score += 20;
+    else if (t.estimateMin <= 60) score += 15;
+    else if (t.estimateMin > 120) score -= 10;
+  }
+  if (t.reminderTime) score += 8;
+  if (t.category === 'odev') score += 8;
+  if (t.category === 'ders') score += 12;
+  if (t.seriesId) score += 10;
+  return score;
+}
+
+function suggestMitForTomorrow(data) {
+  const today = trToday();
+  const tomorrow = trDate(1);
+  const dayAfter = trDate(2);
+  const tasks = (data.tasks || []).filter(t => !t.done && t.mitDate !== tomorrow);
+  if (!tasks.length) return [];
+  const scored = tasks
+    .map(t => ({ t, score: scoreTaskForTomorrowMit(t, today, tomorrow, dayAfter) }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+  const out = [];
+  const usedCats = new Set();
+  for (const { t } of scored) {
+    if (out.length >= 3) break;
+    if (out.length < 2 && t.category && usedCats.has(t.category)) continue;
+    out.push(t);
+    if (t.category) usedCats.add(t.category);
+  }
+  if (out.length < 3) {
+    for (const { t } of scored) {
+      if (out.length >= 3) break;
+      if (!out.includes(t)) out.push(t);
+    }
+  }
+  return out;
+}
+
 function suggestMitFromTasks(data) {
   const today = trToday();
   const tomorrow = trDate(1);
@@ -291,29 +345,62 @@ function buildNoon(data) {
 
 function buildEvening(data) {
   const today = trToday();
+  const tomorrow = trDate(1);
   const tasks = data.tasks || [];
   const doneToday = tasks.filter(t => t.doneDate === today);
   const mit = tasks.filter(t => t.mitDate === today);
   const mitDone = mit.filter(t => t.done).length;
   const pomoToday = data.pomoToday?.date === today ? (data.pomoToday.count || 0) : 0;
+  const tomorrowMit = tasks.filter(t => t.mitDate === tomorrow && !t.done);
 
   const lines = [`🌙 Günü kapatma`];
   lines.push('', `✅ Bitirdiklerin: ${doneToday.length}`);
   doneToday.slice(0, 5).forEach(t => lines.push(`  • ${t.text}`));
   lines.push('', `⭐ MIT: ${mitDone}/${mit.length}`);
   lines.push(`🍅 Pomodoro: ${pomoToday}`);
-  const tomorrow = trDate(1);
-  const tomorrowTasks = tasks.filter(t => t.due === tomorrow && !t.done);
-  if (tomorrowTasks.length) {
-    lines.push('', `📅 Yarın için ${tomorrowTasks.length} görev:`);
-    tomorrowTasks.slice(0, 4).forEach(t => lines.push(`  • ${t.text}`));
+
+  // Yarın için MIT — seçilmemişse akıllı öneri + inline butonlar
+  let replyMarkup = null;
+  if (tomorrowMit.length > 0) {
+    lines.push('', `⭐ Yarının MIT'i: ${tomorrowMit.length}/3 seçili`);
+    tomorrowMit.slice(0, 3).forEach(t => lines.push(`  • ${t.text}`));
+  } else {
+    const suggestions = suggestMitForTomorrow(data);
+    if (suggestions.length) {
+      lines.push('', `🎯 Yarın için 3 öneri:`);
+      suggestions.forEach((t, i) => {
+        const extras = [];
+        if (t.due === tomorrow) extras.push('yarın son');
+        else if (t.due && t.due < tomorrow) extras.push('⚠️ gecikti');
+        if (t.priority === 'urgent') extras.push('🔴 acil');
+        if (t.estimateMin) extras.push(`${t.estimateMin}dk`);
+        const tail = extras.length ? ` (${extras.join(' · ')})` : '';
+        lines.push(`  ${i + 1}. ${t.text}${tail}`);
+      });
+      lines.push('', `💡 Butona tık → sabah hazır.`);
+      const ids = suggestions.map(t => String(t.id));
+      const row = suggestions.map((t, i) => ({
+        text: `⭐ ${i + 1}`,
+        callback_data: `mit_tmrw:${t.id}`
+      }));
+      const allBtn = { text: '⭐ Hepsi', callback_data: `mit_tmrw:all:${ids.join(',')}` };
+      replyMarkup = { inline_keyboard: [row, [allBtn]] };
+    }
   }
+
+  // Yarınki deadline'lı görevler (öneriden bağımsız bilgi)
+  const tomorrowDue = tasks.filter(t => t.due === tomorrow && !t.done);
+  if (tomorrowDue.length) {
+    lines.push('', `📅 Yarın son tarih (${tomorrowDue.length}):`);
+    tomorrowDue.slice(0, 4).forEach(t => lines.push(`  • ${t.text}`));
+  }
+
   if (doneToday.length === 0 && mit.length === 0) {
     lines.push('', `💜 Bugün zor bir gün olmuş olabilir. Yarın yeni bir başlangıç.`);
   } else if (mitDone === mit.length && mit.length > 0) {
     lines.push('', `🎉 Tüm MIT'leri bitirdin, harika gün!`);
   }
-  return { title: '🌙 Akşam özet', message: lines.join('\n') };
+  return { title: '🌙 Akşam özet', message: lines.join('\n'), replyMarkup };
 }
 
 function getWeekStartIso() {
@@ -1252,13 +1339,21 @@ async function handleCallback(cb, env) {
   }
 
   const data = cb.data || '';
-  if (!data.startsWith('mit:')) {
+  let targetDate, rest, isTomorrow;
+  if (data.startsWith('mit_tmrw:')) {
+    targetDate = trDate(1);
+    rest = data.slice('mit_tmrw:'.length);
+    isTomorrow = true;
+  } else if (data.startsWith('mit:')) {
+    targetDate = trToday();
+    rest = data.slice(4);
+    isTomorrow = false;
+  } else {
     await answerCallback(env, cb.id, '');
     return new Response('OK');
   }
 
-  // Parse: "mit:<taskId>" veya "mit:all:<id1,id2,id3>"
-  const rest = data.slice(4);
+  // Parse: "<taskId>" veya "all:<id1,id2,id3>"
   let taskIds = [];
   if (rest.startsWith('all:')) {
     taskIds = rest.slice(4).split(',').filter(Boolean);
@@ -1271,20 +1366,20 @@ async function handleCallback(cb, env) {
   }
 
   // Aidan verisini al
-  let session, tasks, today;
+  let session, tasks;
   try {
     session = await fetchAidan(env);
     tasks = session.data.tasks || [];
-    today = trToday();
   } catch (e) {
     await answerCallback(env, cb.id, `❌ Veri okunamadı: ${e.message}`, true);
     return new Response('OK');
   }
 
-  const currentMitCount = tasks.filter(t => t.mitDate === today && !t.done).length;
+  const currentMitCount = tasks.filter(t => t.mitDate === targetDate && !t.done).length;
   let slotsLeft = Math.max(0, 3 - currentMitCount);
+  const dayLabel = isTomorrow ? 'Yarının' : 'Bugünün';
   if (slotsLeft === 0) {
-    await answerCallback(env, cb.id, '❌ Bugünün 3\'ü dolu. Önce birini bitir.', true);
+    await answerCallback(env, cb.id, `❌ ${dayLabel} 3'ü dolu.`, true);
     return new Response('OK');
   }
 
@@ -1296,15 +1391,15 @@ async function handleCallback(cb, env) {
     const t = tasks.find(x => String(x.id) === String(tid));
     if (!t) { notFound.push(tid); continue; }
     if (t.done) { notFound.push(tid); continue; }
-    if (t.mitDate === today) { alreadyMit.push(t.text); continue; }
-    t.mitDate = today;
+    if (t.mitDate === targetDate) { alreadyMit.push(t.text); continue; }
+    t.mitDate = targetDate;
     added.push(t.text);
     slotsLeft--;
   }
 
   if (added.length === 0) {
     const msg = alreadyMit.length
-      ? `⭐ Zaten MIT'sinde (${alreadyMit.length})`
+      ? `⭐ Zaten ${dayLabel.toLowerCase()} MIT'inde (${alreadyMit.length})`
       : '❌ Görev bulunamadı';
     await answerCallback(env, cb.id, msg);
     return new Response('OK');
@@ -1319,18 +1414,20 @@ async function handleCallback(cb, env) {
   }
 
   // Popup feedback
+  const target = isTomorrow ? 'yarına' : "MIT'e";
   const popup = added.length === 1
-    ? `⭐ MIT'e eklendi`
-    : `⭐ ${added.length} görev MIT'e eklendi`;
+    ? `⭐ ${target} eklendi`
+    : `⭐ ${added.length} görev ${target} eklendi`;
   await answerCallback(env, cb.id, popup);
 
   // Butonları kaldır + kısa onay mesajı
   if (chatId && messageId) {
     await clearReplyMarkup(env, chatId, messageId);
   }
-  const confirmLines = [`✅ MIT'e eklendi:`];
+  const confirmTitle = isTomorrow ? `✅ Yarına MIT eklendi:` : `✅ MIT'e eklendi:`;
+  const confirmLines = [confirmTitle];
   added.forEach(name => confirmLines.push(`  ⭐ ${name}`));
-  if (alreadyMit.length) confirmLines.push(`(zaten MIT'inde: ${alreadyMit.length})`);
+  if (alreadyMit.length) confirmLines.push(`(zaten ${dayLabel.toLowerCase()} MIT'inde: ${alreadyMit.length})`);
   await sendTg(env, { chatId, message: confirmLines.join('\n'), silent: true });
 
   return new Response('OK');
