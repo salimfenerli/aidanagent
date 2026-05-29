@@ -8,6 +8,8 @@ on:
       - '404.html'
       - 'sw.js'
       - 'manifest.webmanifest'
+      - 'icon.png'
+      - 'icon-maskable.png'
       - 'icon.svg'
       - 'icon-maskable.svg'
       - '_headers'

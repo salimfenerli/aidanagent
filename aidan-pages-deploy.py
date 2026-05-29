@@ -29,6 +29,8 @@ INCLUDE = [
     ("404.html", "/404.html"),
     ("sw.js", "/sw.js"),
     ("manifest.webmanifest", "/manifest.webmanifest"),
+    ("icon.png", "/icon.png"),
+    ("icon-maskable.png", "/icon-maskable.png"),
     ("icon.svg", "/icon.svg"),
     ("icon-maskable.svg", "/icon-maskable.svg"),
 ]
@@ -41,6 +43,7 @@ MIME_MAP = {
     ".js":   "application/javascript; charset=utf-8",
     ".webmanifest": "application/manifest+json",
     ".svg":  "image/svg+xml",
+    ".png":  "image/png",
 }
 
 

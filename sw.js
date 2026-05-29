@@ -1,7 +1,9 @@
-const CACHE = 'aidan-v7-0';
+const CACHE = 'aidan-v7-1';
 const ASSETS = [
   '/',
   '/manifest.webmanifest',
+  '/icon.png',
+  '/icon-maskable.png',
   '/icon.svg',
   '/icon-maskable.svg'
 ];

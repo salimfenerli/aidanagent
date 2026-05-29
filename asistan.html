@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1e1e2e">
+<meta name="theme-color" content="#0a0b0f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Aidan">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" type="image/svg+xml" href="icon.svg">
-<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <title>Aidan - ADHD Asistanım</title>
 <style>
@@ -948,10 +948,9 @@
   .brand-logo-icon {
     width: 32px; height: 32px;
     border-radius: 9px;
-    background: linear-gradient(135deg, #6463ff 0%, #9b8eff 100%);
-    display: flex; align-items: center; justify-content: center;
-    color: white; font-weight: 700; font-size: 15px;
-    box-shadow: 0 4px 12px rgba(100, 99, 255, 0.3);
+    object-fit: cover;
+    display: block;
+    box-shadow: 0 4px 12px rgba(100, 99, 255, 0.18);
   }
   .brand-name { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; color: var(--text); }
   .brand-action {
@@ -1448,7 +1447,7 @@
 <div class="container">
   <div class="brand-row">
     <div class="brand-logo">
-      <div class="brand-logo-icon">A</div>
+      <img class="brand-logo-icon" src="icon.png" alt="Aidan" width="32" height="32">
       <div class="brand-name">Aidan</div>
     </div>
     <button class="brand-action" title="Bugünün tarihi" aria-label="Tarih" onclick="event.preventDefault();">📅</button>
