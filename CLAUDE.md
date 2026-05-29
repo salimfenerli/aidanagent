@@ -38,8 +38,9 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - **Deploy:** `py aidan-pages-deploy.py` ile Direct Upload API → 5 sn'de canlı
 - **Bulut:** Supabase (`fluhzvzulrnfyqogrgfi.supabase.co`)
 - **Bildirim:** Telegram bot (eski ntfy.sh deprecate edildi, kota sorunu)
-- **PWA:** Manifest + Service Worker (network-first stratejisi) + icon.svg
-- **Cache versiyonu:** `aidan-v6-3` (sw.js içinde, her büyük değişikte artırılır)
+- **PWA:** Manifest + Service Worker (network-first stratejisi) + **icon.png** (yeni bulut mascot)
+- **Tasarım dili:** **Stitch-inspired dark mode** (May 28-29, 2026) — indigo `#6463ff`, koyu `#0a0b0f`, soft amber `#ffc640` yıldız. Inter font.
+- **Cache versiyonu:** `aidan-v7-1` (sw.js içinde, her büyük değişikte artırılır)
 - **AI:** Cloudflare Workers AI — **Llama 3.3 70B** (intent + tool use) + **Whisper** (sesli → metin). Bedava.
 - **MCP Server (PC):** Python, Claude Desktop bağlanır, doğrudan Supabase'e operasyon yapar
 - **Cloudflare Worker:** Cron brifing + Telegram webhook handler (artık static serve etmiyor, sadece backend)
@@ -51,8 +52,11 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - `asistan.html` — ana uygulama. Pages'te `/index.html` olarak servis ediliyor (auto-strip redirect loop'u önlemek için)
 - `404.html` — Aidan stilinde dark mode error sayfası, `_redirects` 404 hedefi
 - `manifest.webmanifest` — PWA manifest (start_url + scope = `/`)
-- `sw.js` — service worker (network-first, otomatik update mesajı, cache `aidan-v6-3`)
-- `icon.svg`, `icon-maskable.svg` — PWA ikonları
+- `sw.js` — service worker (network-first, otomatik update mesajı, cache `aidan-v7-1`)
+- `icon.png` — **ana PWA ikonu** (1024x1024, mor bulut mascot, Recraft AI üretimi May 29)
+- `icon-maskable.png` — maskable PWA ikonu (%80 safe area, dark navy `#0a0b0f` padding)
+- `icon.svg`, `icon-maskable.svg` — legacy fallback SVG ikonları (manifest'te de var)
+- `logo-concepts/` — 3 farklı logo varyantı + PDF→PNG dönüştürme scriptleri (yedek, deploy edilmiyor)
 - `_headers` — Cloudflare Pages config: 8 security header (CSP, HSTS, X-Frame, COOP, Permissions-Policy, Referrer-Policy, X-Content-Type, X-XSS)
 - `_redirects` — Pages config: `/asistan.html` → `/`, sensitive paths (`/CLAUDE.md`, `/aidan-mcp/*`, `/aidan-worker/*`, `/.env*`, `/.git*`, `/.claude/*`, `/netlify.toml`, `/blackjack.html`) → 404
 - `aidan-pages-deploy.py` — Cloudflare Pages Direct Upload script (multipart `_headers`/`_redirects` field + asset manifest)
@@ -296,6 +300,32 @@ Veya manuel API çağrısı (deploy.py inline). Wrangler yok.
 - **🔒 Güvenlik sıkılaştırma:** Worker GET endpoint'i artık `?secret=` zorunlu. Netlify security headers (CSP, HSTS, X-Frame, Referrer-Policy, Permissions-Policy, X-Content-Type, COOP). Supabase RLS 4 senaryoda canlıda doğrulandı (anon=hiçbir şey, auth=sadece kendi user_id).
 - **Cache:** v5-0 → v6-0
 
+### Mayıs 28-29, 2026 (Stitch tasarım yenilemesi + yeni mascot logo)
+- **Tam tasarım yenilemesi** Google Stitch (eski Galileo AI) ile mockup üretildi, CSS Stitch'in design token'larına uyduruldu
+- **Yeni renk paleti:** indigo accent `#6463ff` (eski `#7c6ff7` yerine), koyu `#0a0b0f` (eski `#090b0f`), soft amber `#ffc640` (eski `#e5a117`)
+- **Tipografi:** Inter font, h1 dev (30px) tarih hero, brand 21px, body 14-15px
+- **Header yenilendi:** sol küçük bulut logo + "Aidan" + sağ takvim ikonu; altında DEV tarih ("Perşembe, 28 Mayıs") + mor nokta + mood subtitle ("☀️ yeni başlangıç" / "🌆 akşam toparlanma" gibi)
+- **Topbar küçültüldü** (sade tek satır), **stats (0/0/0) kaldırıldı** (görsel gürültü)
+- **Quick capture** pill + soft glow focus
+- **Tabs** segmented pill (Görevler/Odak/Ayarlar)
+- **MIT box** sade: sarı yıldız (★) + 3 görev satırı (kart değil)
+- **Görev kartları** Stitch tarzı: sol kalın renkli border (priority/category) + round checkbox + sade chip
+- **Action butonları** (⭐⚡✏️🗑️) subtle gri, hover'da belirginleşiyor (opacity 0.55 → 1)
+- **Filter chip'leri** nötr, aktif olan dolu mor (renkli karmaşa yok)
+- **"Şu an ne yapayım?"** ghost button (transparent + border, parlak mor değil)
+- **Yeni mascot logo:** mor bulut karakter (Recraft AI üretimi, Salim seçimi) — 2 göz + sevimli ifade, sağda sarı yıldız aksı (logoda küçük PDF gelmedi, PNG'ye çevrildi)
+- **3 logo varyantı `logo-concepts/`'te** — flat (büyük gözler), refined (aktif), 3d (beyaz-mor dramatic). Değiştirmek için sadece kopyala-yapıştır.
+- **Theme color** `#1e1e2e` → `#0a0b0f` (manifest + meta tag)
+- **Otomatik deploy çalışıyor:** GitHub Actions `deploy.yml` her push'ta tetikleniyor — drag-drop gereksiz, `git push` yeter
+- **Stitch.withgoogle.com** (eski Galileo AI) ücretsiz tier mockup için kullanıldı — 350 Gemini 2.5 Flash gen/ay
+- **Cache:** v6-4 → v7-0 (tasarım) → v7-1 (logo + manifest)
+
+### ⚠️ Güvenlik açık: Cloudflare API token leak (May 29)
+- `.github/workflows/deploy.yml`'de `CF_API_TOKEN` fallback olarak **açık commit edildi**: `cfut_dLXSejO...`
+- Git history'de duruyor → token'ı Cloudflare dashboard'dan **revoke et**, yeni token oluştur, GitHub repo `Settings → Secrets → Actions`'a `CF_API_TOKEN` adıyla ekle
+- Workflow zaten secret'ı önce kontrol ediyor (`${{ secrets.CF_API_TOKEN || 'cfut_...' }}`) — secret eklendiğinde fallback bypass olur
+- Bu yapılana kadar repo private kalmalı
+
 ### Mayıs 27, 2026 (Netlify → Cloudflare Pages göçü + URL temizliği)
 - **Netlify free tier kotası tükendi** — "This team has exceeded the credit limit" 503 hatası
 - **Cloudflare Pages'e geçildi** — Direct Upload API ile (wrangler yok), Python script ile multipart upload
@@ -315,9 +345,11 @@ Veya manuel API çağrısı (deploy.py inline). Wrangler yok.
 
 ### ✅ Çalışıyor
 - iPhone + PC PWA, otomatik senkron (`aidanapp.pages.dev`)
+- **Stitch-inspired tasarım v7-1** canlıda — indigo accent, mor bulut mascot logo
 - Supabase auth + realtime sync + **RLS test edildi/doğrulandı**
 - MCP server Claude Desktop'a bağlı
-- Pages deploy (`py aidan-pages-deploy.py` → 5 sn canlı)
+- **GitHub Actions otomatik deploy** — her `git push` Cloudflare Pages'e gider (`.github/workflows/deploy.yml`)
+- Manuel deploy alternatifi: `py aidan-pages-deploy.py` → 5 sn canlı
 - Cloudflare Worker 4 cron schedule
 - Telegram bot iki yönlü (yazılı + 🎤 sesli)
 - Llama 3.3 70B intent + tool use
@@ -355,6 +387,9 @@ Veya manuel API çağrısı (deploy.py inline). Wrangler yok.
 - ✅ **Network-first SW** — cache vs deploy çatışmasını kalıcı çözdü
 - ✅ **Düşük öncelik kaldırıldı** — Normal + Acil yeter, decision paralysis önler
 - ✅ **2dk dene butonu** — task initiation altın kuralı
+- ✅ **Stitch-inspired tasarım dili (May 29)** — Google Stitch mockup → CSS, indigo+amber paleti, sade kart yapısı. Mevcut JS hiç değişmedi, sadece görsel.
+- ✅ **Mascot logo: mor bulut karakter (May 29)** — Recraft AI üretimi, Salim seçti. 3 varyant `logo-concepts/`'te yedek.
+- ✅ **GitHub Actions otomatik deploy (önce vardı, May 29 cementli)** — `git push` yeter, drag-drop ya da manuel `py deploy.py` gereksiz.
 - ⏳ **Hibrit AI (Llama + Claude)** — kullanım sonrası karar
 - ⏳ **Borsa modülü** — Salim "sona, daha detaylı" dedi, planlanmadı
 - ⏳ **Native app yok** — PWA yeterli
@@ -381,17 +416,24 @@ Veya manuel API çağrısı (deploy.py inline). Wrangler yok.
 - **AskUserQuestion** tek karar gerekiyorsa kullan
 - Her büyük değişiklikten sonra `sw.js` cache versiyonunu artır
 
-## Deploy Süreci (Cloudflare Pages Direct Upload)
+## Deploy Süreci (GitHub Actions otomatik — varsayılan)
 
 1. Ben dosyaları düzenliyorum
-2. `sw.js` cache versiyonunu artırıyorum (örn `v6-3` → `v6-4`)
-3. `py aidan-pages-deploy.py` (env'de `CF_API_TOKEN` + `CF_ACCOUNT_ID` lazım)
-4. 5 sn içinde `https://aidanapp.pages.dev/` canlı
-5. Telefonda PWA: yeni SW otomatik aktif olur, toast "🔄 güncellendi" çıkar, sayfa yenilenir
-6. Bilgisayarda PWA aynı şekilde
-7. Opsiyonel: `git add -A && git commit -m "..." && git push` (yedek/history için)
+2. `sw.js` cache versiyonunu artırıyorum (örn `v7-1` → `v7-2`)
+3. `git add <changed-files> && git commit -m "..." && git push`
+4. **GitHub Actions** `.github/workflows/deploy.yml` push'u yakalar (asistan.html, sw.js, manifest, icon.*, deploy.py, workflow değişince tetiklenir)
+5. Workflow Python kurar, `httpx` install eder, `py aidan-pages-deploy.py` çalıştırır (~30sn-2dk)
+6. `https://aidanapp.pages.dev/` canlı
+7. Telefonda + bilgisayarda PWA: yeni SW otomatik aktif olur, toast "🔄 güncellendi" çıkar, sayfa yenilenir
+8. Doğrulama: `curl -s https://aidanapp.pages.dev/sw.js | head -1` → yeni cache versiyonunu göster
 
-⚠️ Netlify ve drag-drop yöntemi artık **GEREKSİZ**. Salim'e söyleme bile, Pages otomatik.
+### Manuel deploy (yedek, token elinde varsa)
+```bash
+export CF_API_TOKEN=<token> CF_ACCOUNT_ID=dd37c3eb3e7fbab35ee16f1a6db4cce1
+py aidan-pages-deploy.py
+```
+
+⚠️ Netlify ve drag-drop yöntemi artık **GEREKSİZ**. Salim'e söyleme bile, otomatik akıyor.
 
 ## Test Edilmesi Gereken
 
@@ -472,21 +514,27 @@ Veya manuel API çağrısı (deploy.py inline). Wrangler yok.
 ## Hızlı Komutlar (yeni sohbette başlangıç için)
 
 ```bash
-# Aidan deploy (Cloudflare Pages Direct Upload)
+# Aidan deploy (GitHub Actions otomatik — varsayılan)
 cd /c/Users/Salim/Desktop/claudedeneme
+git add asistan.html sw.js  # neyi değiştirdiysen
+git commit -m "..."
+git push                     # ~30sn-2dk içinde canlı
+
+# Manuel deploy (yedek, token elinde varsa)
 export CF_API_TOKEN=<token> CF_ACCOUNT_ID=dd37c3eb3e7fbab35ee16f1a6db4cce1
 py aidan-pages-deploy.py
 
-# Git yedek (opsiyonel, history için)
-git -C "C:/Users/Salim/Desktop/claudedeneme" add -A && \
-  git -C "C:/Users/Salim/Desktop/claudedeneme" commit -m "..." && \
-  git -C "C:/Users/Salim/Desktop/claudedeneme" push
+# Logo değiştirme (logo-concepts'ten birini aktif et)
+cp logo-concepts/logo-1-flat.png icon.png   # ya da -2-refined / -3-3d
+py logo-concepts/make_icons.py              # maskable yeniden üret
+# sonra: sw.js cache version artır + git push
 
 # Worker manuel test
 curl "https://aidan-pusher.fenerlisalim04.workers.dev/?type=morning&secret=<WEBHOOK_SECRET>"
 
 # Aidan'ın live durumu kontrol
 curl -sI "https://aidanapp.pages.dev/" | grep -i "content-security-policy"
+curl -s "https://aidanapp.pages.dev/sw.js" | head -1  # cache versiyonu
 
 # Telegram webhook info
 curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo
@@ -494,10 +542,12 @@ curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo
 
 ## Yeni Sohbet Başlıyorsa — Önce Bunları Yap
 
-1. **Salim'in test sonuçlarını sor**: sesli Telegram çalıştı mı? Sabah brifingi geldi mi?
+1. **Salim'in test sonuçlarını sor**: sesli Telegram çalıştı mı? Sabah brifingi geldi mi? Yeni tasarımı + bulut logoyu beğendi mi?
 2. **PWA'yı yeni URL'den yükledi mi?** (`aidanapp.pages.dev`) — eski Netlify URL'i ölü
 3. **Sıradaki feature** için karar: Borsa modülü en olası (Salim "sona, daha detaylı" dedi)
-4. ⚠️ **Netlify / drag-drop deploy ASLA önerme** — Pages Direct Upload kullanıyoruz
+4. ⚠️ **Netlify / drag-drop deploy ASLA önerme** — `git push` → GitHub Actions otomatik deploy var
 5. ⚠️ **ntfy.sh'tan asla bahsetme**, Telegram bot kullanılıyor
 6. ⚠️ **Mood/check-in'den bahsetme**, kaldırıldı
-7. ⚠️ **CF_API_TOKEN paylaşıldıysa revoke ettirmeyi unutma** — eski token'lar dashboard'da kalmasın
+7. ⚠️ **CF_API_TOKEN paylaşıldıysa revoke ettirmeyi unutma** — eski token'lar dashboard'da kalmasın. ÖZEL: `.github/workflows/deploy.yml`'de token açık commit edilmiş (May 29) — Salim'e revoke + secret ekleme hatırlatması yap
+8. ⚠️ **Tasarım dili Stitch-inspired v7-1** — yeni renkler `#6463ff` indigo, `#0a0b0f` koyu, `#ffc640` amber. Eski mor `#7c6ff7` ve eski emoji 🧠 logo artık YOK. Brand-logo-icon = mor bulut karakter PNG.
+9. ⚠️ **Logo değiştirmek istenirse** `logo-concepts/logo-{1,2,3}-{flat,refined,3d}.png`'den biri `icon.png` üzerine kopyalanır, `make_icons.py` ile maskable yenilenir, push edilir.
