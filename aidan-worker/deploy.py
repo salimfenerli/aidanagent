@@ -77,9 +77,23 @@ CRON_LIST = [
 
 def upload_script(worker_js: str):
     url = f"{API}/accounts/{ACCOUNT}/workers/scripts/{SCRIPT_NAME}"
+    # bindings: AI binding ŞART (env.AI.run için) + secret'ları inherit ile koru.
+    # inherit = önceki Worker versiyonundaki secret'ı aynen tut (değer GitHub Actions env'inde olmasa bile kaybolmaz).
     metadata = {
         "main_module": "worker.js",
         "compatibility_date": "2025-01-01",
+        "bindings": [
+            {"type": "ai", "name": "AI"},
+            {"type": "inherit", "name": "SUPABASE_URL"},
+            {"type": "inherit", "name": "SUPABASE_KEY"},
+            {"type": "inherit", "name": "AIDAN_EMAIL"},
+            {"type": "inherit", "name": "AIDAN_PASSWORD"},
+            {"type": "inherit", "name": "TELEGRAM_BOT_TOKEN"},
+            {"type": "inherit", "name": "TELEGRAM_CHAT_ID"},
+            {"type": "inherit", "name": "WEBHOOK_SECRET"},
+            {"type": "inherit", "name": "VAPID_PUBLIC_KEY"},
+            {"type": "inherit", "name": "VAPID_PRIVATE_KEY"},
+        ],
     }
     files = {
         "metadata": (None, json.dumps(metadata), "application/json"),
