@@ -357,8 +357,16 @@ Veya manuel API çağrısı (deploy.py inline). Wrangler yok.
   - Şifreleme Python round-trip ile doğrulandı → **Apple push servisi HTTP 201 ile kabul etti, Salim'in iPhone'unda test edildi ✅**
   - `deploy.py` secret listesine `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` eklendi
 - **🔐 Token temizliği:** Worker deploy için Salim geçici token verdi (sohbette ifşa oldu) → deploy sonrası Salim Cloudflare'den sildi, `/user/tokens/verify` "Invalid" doğrulandı. GitHub Actions deploy kalan token'la çalışıyor (sw.js marker push ile teyit). **May 29 leaked token meselesi de bununla kapandı — artık tek temiz token var.**
-- **Cache:** v7-1 → v7-6
-- ⏳ **Sıradaki:** AI'ı PWA'ya taşı (Telegram'dan kademeli çıkış), sonra multi-user (Yol A: davetli arkadaşlar)
+- **Cache:** v7-1 → v7-7
+- **🧠 AI'ı PWA'ya taşındı (Telegram'dan kademeli çıkışın 1. adımı):**
+  - Worker'a **`POST /ai`** endpoint (`handleAiApi`): Telegram'la AYNI pipeline — `aiInterpret` + `TOOL_HANDLERS` + `saveAidan`, JSON döner. Supabase access-token auth (`verifyUser`), MVP'de sadece hesap sahibi. CORS = `aidanapp.pages.dev`.
+  - Frontend: quick capture'a **🧠 butonu** (`quickCaptureAI`) — metni `/ai`'ye yollar, Worker Supabase'e yazar, realtime sync + `manualPull` ile PWA güncellenir. Sesli giriş (🎙️) + 🧠 = Telegram sesli akışının PWA karşılığı.
+  - `_headers` CSP `connect-src`'e Worker URL eklendi.
+  - **GitHub Actions artık Worker'ı da otomatik deploy ediyor** (`deploy.yml`'e Worker step + `aidan-worker/**` paths). Token GitHub Secrets'ta, `git push` yeter — Worker için elle deploy/token gerekmez.
+  - ⚠️ **BULUNAN+DÜZELTİLEN BUG:** `deploy.py` metadata'sında `bindings` yoktu → her Worker deploy'unda **AI binding (`env.AI`) düşüyordu** (hem /ai hem Telegram AI "env.AI undefined" veriyordu). Düzeltme: metadata.bindings'e `{type:ai,name:AI}` + tüm secret'lar `{type:inherit}` (deploy'da kaybolmasın). **Artık deploy AI binding'i korur.**
+  - Uçtan uca test: Supabase login → `/ai` "bugun ne yapayim" → reply döndü ✅
+- **Cache:** v7-6 → v7-7 (AI butonu)
+- ⏳ **Sıradaki:** Telegram'ı emekli et (AI + sesli + bildirim artık PWA'da) · multi-user (Yol A: davetli arkadaşlar)
 
 ## Mevcut Durum
 
