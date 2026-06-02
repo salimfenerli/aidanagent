@@ -152,6 +152,7 @@ if __name__ == "__main__":
     secret_names = [
         "SUPABASE_URL", "SUPABASE_KEY", "AIDAN_EMAIL", "AIDAN_PASSWORD",
         "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "WEBHOOK_SECRET",
+        "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY",
     ]
     for k in secret_names:
         v = os.environ.get(k, "")

@@ -511,8 +511,144 @@ function buildDeadlineAlerts(data) {
   return { title: '⏰ Deadline uyarısı', message: alerts.join('\n') };
 }
 
+// ============================================================
+// Web Push (RFC 8291 aes128gcm payload + RFC 8292 VAPID)
+// Cloudflare Workers crypto.subtle ile — harici kütüphane yok
+// ============================================================
+function b64urlToBytes(s) {
+  s = String(s).replace(/-/g, '+').replace(/_/g, '/');
+  const pad = s.length % 4 ? '='.repeat(4 - (s.length % 4)) : '';
+  const bin = atob(s + pad);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+function bytesToB64url(bytes) {
+  const arr = new Uint8Array(bytes);
+  let bin = '';
+  for (let i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i]);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function concatBytes(...arrays) {
+  let total = 0;
+  for (const a of arrays) total += a.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const a of arrays) { out.set(a, off); off += a.length; }
+  return out;
+}
+
+// VAPID private key (base64url raw 32 byte) + public → CryptoKey (ECDSA P-256, sign)
+async function importVapidPrivateKey(env) {
+  const d = b64urlToBytes(env.VAPID_PRIVATE_KEY);
+  const pub = b64urlToBytes(env.VAPID_PUBLIC_KEY); // 65 byte uncompressed (0x04 X Y)
+  const jwk = {
+    kty: 'EC', crv: 'P-256',
+    d: bytesToB64url(d),
+    x: bytesToB64url(pub.slice(1, 33)),
+    y: bytesToB64url(pub.slice(33, 65)),
+    ext: true, key_ops: ['sign'],
+  };
+  return crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+}
+
+// VAPID JWT (ES256) — push servisine kimlik kanıtı
+async function makeVapidJwt(audience, env) {
+  const header = { typ: 'JWT', alg: 'ES256' };
+  const payload = {
+    aud: audience,
+    exp: Math.floor(Date.now() / 1000) + 12 * 3600,
+    sub: 'mailto:' + (env.AIDAN_EMAIL || 'aidan@example.com'),
+  };
+  const enc = (o) => bytesToB64url(new TextEncoder().encode(JSON.stringify(o)));
+  const unsigned = `${enc(header)}.${enc(payload)}`;
+  const key = await importVapidPrivateKey(env);
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(unsigned));
+  return `${unsigned}.${bytesToB64url(new Uint8Array(sig))}`; // WebCrypto ES256 = raw r||s (JWT formatı)
+}
+
+async function hkdf(salt, ikm, info, length) {
+  const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, key, length * 8);
+  return new Uint8Array(bits);
+}
+
+// RFC 8291 payload şifreleme (aes128gcm)
+async function encryptPayload(subscription, payloadStr) {
+  const clientPub = b64urlToBytes(subscription.keys.p256dh); // 65 byte
+  const authSecret = b64urlToBytes(subscription.keys.auth);  // 16 byte
+
+  const serverKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const serverPub = new Uint8Array(await crypto.subtle.exportKey('raw', serverKeys.publicKey)); // 65 byte
+
+  const clientKey = await crypto.subtle.importKey('raw', clientPub, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: clientKey }, serverKeys.privateKey, 256));
+
+  // IKM = HKDF(auth, shared, "WebPush: info\0"+clientPub+serverPub, 32)
+  const keyInfo = concatBytes(new TextEncoder().encode('WebPush: info\0'), clientPub, serverPub);
+  const ikm = await hkdf(authSecret, shared, keyInfo, 32);
+
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const cek = await hkdf(salt, ikm, new TextEncoder().encode('Content-Encoding: aes128gcm\0'), 16);
+  const nonce = await hkdf(salt, ikm, new TextEncoder().encode('Content-Encoding: nonce\0'), 12);
+
+  // plaintext + record delimiter (0x02 = son ve tek record)
+  const padded = concatBytes(new TextEncoder().encode(payloadStr), new Uint8Array([0x02]));
+  const aesKey = await crypto.subtle.importKey('raw', cek, { name: 'AES-GCM' }, false, ['encrypt']);
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, aesKey, padded));
+
+  // Header: salt(16) + recordSize(4 big-endian=4096) + idlen(1=65) + serverPub(65)
+  const header = concatBytes(salt, new Uint8Array([0, 0, 0x10, 0]), new Uint8Array([serverPub.length]), serverPub);
+  return concatBytes(header, ciphertext);
+}
+
+async function sendWebPush(subscription, payloadStr, env) {
+  const url = new URL(subscription.endpoint);
+  const jwt = await makeVapidJwt(`${url.protocol}//${url.host}`, env);
+  const body = await encryptPayload(subscription, payloadStr);
+  const r = await fetch(subscription.endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `vapid t=${jwt}, k=${env.VAPID_PUBLIC_KEY}`,
+      'Content-Encoding': 'aes128gcm',
+      'Content-Type': 'application/octet-stream',
+      'TTL': '86400',
+      'Urgency': 'normal',
+    },
+    body,
+  });
+  return r.status; // 201 = ok; 404/410 = ölü subscription
+}
+
+// Tüm kayıtlı cihazlara push + ölü subscription temizliği
+async function sendPushToAll(env, data, payload, sessionInfo) {
+  if (!env.VAPID_PRIVATE_KEY || !env.VAPID_PUBLIC_KEY) return; // push kurulu değil — sessizce atla
+  const subs = (data.settings && data.settings.pushSubs) || [];
+  if (!subs.length) return;
+  const payloadStr = JSON.stringify({
+    title: payload.title || '🔔 Aidan',
+    body: payload.message || '',
+    tag: 'aidan-cron',
+    data: { url: '/' },
+  });
+  const dead = [];
+  for (const sub of subs) {
+    if (!sub.endpoint || !sub.keys) continue;
+    try {
+      const status = await sendWebPush(sub, payloadStr, env);
+      if (status === 404 || status === 410) dead.push(sub.endpoint);
+    } catch (e) {
+      console.error('Push fail:', e.message);
+    }
+  }
+  if (dead.length) {
+    data.settings.pushSubs = subs.filter(s => !dead.includes(s.endpoint));
+    try { await saveAidan(env, data, sessionInfo); } catch (e) { console.error('pushSub cleanup save fail', e.message); }
+  }
+}
+
 async function runCronJob(env, type) {
-  const { data } = await fetchAidan(env);
+  const { data, token, userId } = await fetchAidan(env);
   let payload = null;
   switch (type) {
     case 'morning':  payload = buildMorning(data); break;
@@ -524,6 +660,7 @@ async function runCronJob(env, type) {
   }
   if (!payload) return { type, sent: false, reason: 'no-content' };
   await sendTg(env, payload);
+  await sendPushToAll(env, data, payload, { token, userId });
   return { type, sent: true };
 }
 

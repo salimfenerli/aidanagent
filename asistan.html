@@ -3798,17 +3798,73 @@ function renderMuteState() {
 
 // ============ BİLDİRİM ============
 // PWA'da (özellikle iOS Safari) `new Notification()` çalışmaz — SW üzerinden göndermek lazım.
+
+// VAPID public key — background push için (private key Worker secret'ta). Açıkta olması güvenli.
+const VAPID_PUBLIC_KEY = 'BLDDq-zIRkPMlVLlceD_P8HThl1AszV6EzWY4caDvoAG5e3NiY8YUf1D6KMHOfZBJ-0WM5Ab06KKfFvLuBZV4v8';
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+
+// Bu cihazı background push'a kaydet — subscription data.settings.pushSubs'a yazılır, Supabase'e sync olur
+async function subscribeToPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    console.log('Push API desteklenmiyor (eski iOS / tarayıcı)');
+    return false;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+    }
+    savePushSub(sub);
+    return true;
+  } catch (e) {
+    console.warn('Push subscribe başarısız:', e);
+    return false;
+  }
+}
+
+function savePushSub(sub) {
+  const json = sub.toJSON();
+  if (!json || !json.endpoint) return;
+  data.settings = data.settings || {};
+  data.settings.pushSubs = data.settings.pushSubs || [];
+  const entry = {
+    endpoint: json.endpoint,
+    keys: json.keys,
+    ua: (navigator.userAgent || '').slice(0, 80),
+    added: today()
+  };
+  const idx = data.settings.pushSubs.findIndex(s => s.endpoint === json.endpoint);
+  if (idx >= 0) data.settings.pushSubs[idx] = entry;
+  else data.settings.pushSubs.push(entry);
+  save();
+}
+
 function askNotif() {
   if (!('Notification' in window)) {
     showToast('Bu cihaz bildirimi desteklemiyor', 'warning');
     return;
   }
-  Notification.requestPermission().then(p => {
+  Notification.requestPermission().then(async p => {
     const banner = document.getElementById('notifBanner');
     if (p === 'granted') {
       if (banner) banner.style.display = 'none';
       notify('✅ Aidan hazır!', 'Hatırlatmalar artık bildirim olarak gelecek.');
       showToast('🔔 Bildirimler açıldı', 'success');
+      // Telefon kapalıyken de bildirim için background push'a kaydol
+      const ok = await subscribeToPush();
+      if (ok) showToast('📲 Bu cihaz kayıt edildi — Aidan kapalıyken de bildirim gelir', 'success', 4000);
     } else if (p === 'denied') {
       showToast('Bildirim izni reddedildi. Telefon ayarlarından açabilirsin.', 'warning', 5000);
     }
@@ -3850,8 +3906,14 @@ function renderNotifSettings() {
   }
   const perm = Notification.permission;
   if (perm === 'granted') {
+    const subCount = (data.settings && data.settings.pushSubs || []).length;
+    const pushLine = subCount > 0
+      ? `<div style="color:var(--text-muted);font-size:0.85em;margin-top:4px;">📲 ${subCount} cihaz kayıtlı — Aidan kapalıyken de bildirim gelir</div>`
+      : `<div style="color:var(--text-muted);font-size:0.85em;margin-top:4px;">Bu cihaz henüz arka plan bildirimine kayıtlı değil</div>
+         <button class="small secondary" style="margin-top:6px;" onclick="enablePushHere()">📲 Bu cihazı kaydet</button>`;
     el.innerHTML = `
       <div style="color:var(--success);">✅ Bildirimler açık</div>
+      ${pushLine}
       <button class="small" style="margin-top:8px;" onclick="testNotif()">🔔 Test bildirimi gönder</button>
     `;
   } else if (perm === 'denied') {
@@ -3871,9 +3933,20 @@ function testNotif() {
   notify('🎯 Test bildirimi', 'Aidan hatırlatma sistemi çalışıyor.', { tag: 'aidan-test' });
 }
 
+async function enablePushHere() {
+  const ok = await subscribeToPush();
+  if (ok) showToast('📲 Bu cihaz kaydedildi', 'success', 3000);
+  else showToast('Kayıt başarısız — PWA olarak ana ekrana ekli mi?', 'warning', 4000);
+  renderNotifSettings();
+}
+
 if ('Notification' in window && Notification.permission === 'default') {
   const banner = document.getElementById('notifBanner');
   if (banner) banner.style.display = 'block';
+}
+// İzin zaten verilmişse, sayfa açılışında subscription'ı tazele (cihaz kaydı eksikse tamamla)
+if ('Notification' in window && Notification.permission === 'granted') {
+  setTimeout(() => subscribeToPush(), 2500);
 }
 
 // ============ SUPABASE BULUT SENKRONU ============
