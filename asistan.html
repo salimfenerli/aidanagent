@@ -1732,7 +1732,8 @@
   <div class="quick-capture">
     <input type="text" id="quickCapture" placeholder="⚡ Aklına geleni hızlıca yaz, Enter'la ekle..." aria-label="Hızlı görev ekle" onkeydown="quickCaptureKey(event)">
     <button class="quick-capture-btn mic-btn" id="quickCaptureMic" onclick="quickCaptureMic()" title="Sesli ekle" aria-label="Sesli görev ekle">🎙️</button>
-    <button class="quick-capture-btn" onclick="quickCaptureSubmit()" title="Ekle">＋</button>
+    <button class="quick-capture-btn mic-btn" id="quickCaptureAI" onclick="quickCaptureAI()" title="AI'a sor — akıllı ekle (tarih/kategori/seri çıkarır)" aria-label="AI ile akıllı ekle">🧠</button>
+    <button class="quick-capture-btn" onclick="quickCaptureSubmit()" title="Düz ekle">＋</button>
   </div>
 
   <div class="tabs">
@@ -2285,6 +2286,43 @@ function quickCaptureMic() {
   } catch (err) {
     cleanup();
     showToast('Mikrofon başlatılamadı: ' + (err.message || err), 'error', 3500);
+  }
+}
+
+// PWA AI — quick capture metnini Worker /ai'ye yollar, AI akıllı görev(ler) ekler (tarih/kategori/seri çıkarır)
+const AI_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/ai';
+async function quickCaptureAI() {
+  const inp = document.getElementById('quickCapture');
+  const text = inp.value.trim();
+  if (!text) { showToast('Önce yaz, sonra 🧠 bas — örn "salı matematik sınavı, 3 güne böl"', 'info', 4000); return; }
+  if (!window._supa || !window._user) {
+    showToast('🧠 AI için bulut girişi gerekli — Ayarlar → giriş yap', 'warning', 4500);
+    return;
+  }
+  const btn = document.getElementById('quickCaptureAI');
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳';
+  try {
+    const { data: sess } = await window._supa.auth.getSession();
+    const token = sess && sess.session && sess.session.access_token;
+    if (!token) throw new Error('oturum bulunamadı, tekrar giriş yap');
+    const r = await fetch(AI_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ text }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || ('sunucu hatası ' + r.status));
+    inp.value = '';
+    showToast('🧠 ' + (j.reply || 'Tamam'), 'success', 5500);
+    // Worker Supabase'e yazdıysa realtime sync getirir; garanti için kısa süre sonra pull + render
+    if (j.changed) {
+      setTimeout(() => { if (typeof manualPull === 'function') manualPull(); else renderTasks(); }, 700);
+    }
+  } catch (e) {
+    showToast('🧠 AI hatası: ' + e.message, 'error', 4500);
+  } finally {
+    btn.disabled = false; btn.textContent = orig;
   }
 }
 

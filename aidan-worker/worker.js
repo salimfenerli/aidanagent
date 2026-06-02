@@ -1711,6 +1711,85 @@ async function handleWebhook(request, env) {
 }
 
 // ============================================================
+// PWA AI endpoint — Telegram'daki AI beynini PWA'dan erişilebilir yapar
+// ============================================================
+function jsonCors(obj, status, cors) {
+  return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', ...cors } });
+}
+
+async function verifyUser(env, userToken) {
+  if (!userToken) return null;
+  try {
+    const r = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: env.SUPABASE_KEY, Authorization: `Bearer ${userToken}` },
+    });
+    if (!r.ok) return null;
+    const u = await r.json();
+    return u && u.email ? u : null;
+  } catch { return null; }
+}
+
+async function handleAiApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const text = (body.text || '').trim();
+  if (!text) return jsonCors({ error: 'empty' }, 400, cors);
+  if (text.length > 500) return jsonCors({ error: 'too long' }, 400, cors);
+
+  // Auth — kullanıcının Supabase access token'ını doğrula
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  // MVP: sadece hesap sahibi (multi-user'da bu kontrol kalkar, herkes kendi verisine yazar)
+  if (env.AIDAN_EMAIL && user.email && user.email.toLowerCase() !== env.AIDAN_EMAIL.toLowerCase()) {
+    return jsonCors({ error: 'forbidden' }, 403, cors);
+  }
+
+  try {
+    const session = await fetchAidan(env);
+    const ctx = { data: session.data, dirty: false };
+    const ai = await aiInterpret(env, session.data, text);
+    const toolCalls = ai.tool_calls || [];
+    const replies = [];
+
+    if (toolCalls.length > 0) {
+      for (const call of toolCalls) {
+        const name = call.name || (call.function && call.function.name);
+        let args = call.arguments || (call.function && call.function.arguments) || {};
+        if (typeof args === 'string') { try { args = JSON.parse(args); } catch { args = {}; } }
+        const handler = TOOL_HANDLERS[name];
+        if (!handler) { replies.push(`Bilinmeyen komut: ${name}`); continue; }
+        try {
+          const result = await handler(args, ctx);
+          replies.push(result.reply);
+        } catch (e) {
+          replies.push(`❌ ${name}: ${e.message}`);
+        }
+      }
+      if (ctx.dirty) await saveAidan(env, ctx.data, session);
+    } else {
+      let reply = (ai.response || '').trim();
+      if (!reply || /your input is not sufficient|please provide|^i'?m sorry|^as an ai|^i cannot/i.test(reply)) {
+        reply = 'Anlamadım, biraz daha açar mısın? Örn: "yarın matematik ödevi" 💜';
+      }
+      replies.push(reply);
+    }
+    return jsonCors({ reply: replies.join('\n\n'), changed: ctx.dirty }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
+// ============================================================
 // Static file serving (PWA host)
 // ============================================================
 // __STATIC_FILES__ deploy.py tarafından base64 dict ile değiştirilir.
@@ -1773,6 +1852,11 @@ export default {
     // Telegram webhook
     if (url.pathname === '/webhook' && request.method === 'POST') {
       return handleWebhook(request, env);
+    }
+
+    // PWA AI endpoint (POST metin → AI → görev operasyonu, CORS'lu)
+    if (url.pathname === '/ai') {
+      return handleAiApi(request, env);
     }
 
     // Static serve (PWA) — '/' → asistan.html, ve diğer asset'ler

@@ -15,6 +15,8 @@ on:
       - '_headers'
       - '_redirects'
       - 'aidan-pages-deploy.py'
+      - 'aidan-worker/worker.js'
+      - 'aidan-worker/deploy.py'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
@@ -41,3 +43,12 @@ jobs:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CF_ACCOUNT_ID: dd37c3eb3e7fbab35ee16f1a6db4cce1
         run: python aidan-pages-deploy.py
+
+      # Worker'ı da deploy et — worker.js degisince /ai, push, cron guncellenir.
+      # Secret'lar (SUPABASE/TELEGRAM/VAPID) env'de verilmez → deploy.py atlar,
+      # Cloudflare'deki mevcut secret'lar KORUNUR (sadece kod + cron guncellenir).
+      - name: Deploy Worker
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: dd37c3eb3e7fbab35ee16f1a6db4cce1
+        run: python aidan-worker/deploy.py
