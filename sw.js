@@ -1,5 +1,4 @@
 const CACHE = 'aidan-v7-6';
-// deploy-check-0602 (token yenileme sonrasi GitHub Actions dogrulama)
 const ASSETS = [
   '/',
   '/manifest.webmanifest',
