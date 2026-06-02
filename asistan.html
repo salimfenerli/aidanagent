@@ -692,6 +692,79 @@
   }
   .suggest-btn:hover { background: var(--accent-hover); box-shadow: 0 4px 18px var(--accent-glow); }
   .suggest-btn:active { transform: scale(0.99); }
+  .action-row { display: flex; gap: 8px; margin-bottom: 14px; }
+  .action-row .suggest-btn { margin-bottom: 0; flex: 1; }
+  .suggest-btn.ghost {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    box-shadow: none;
+    flex: 0 0 auto;
+    padding: 13px 16px;
+  }
+  .suggest-btn.ghost:hover { background: rgba(99,102,241,0.08); color: var(--accent); border-color: var(--accent); box-shadow: none; }
+
+  /* Şablon modal */
+  .tpl-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 4px; max-height: 50vh; overflow-y: auto; }
+  .tpl-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    transition: border-color 0.12s, background 0.12s, transform 0.1s;
+  }
+  .tpl-card:hover { border-color: var(--accent); background: rgba(99,102,241,0.06); }
+  .tpl-card:active { transform: scale(0.99); }
+  .tpl-emoji { font-size: 1.5em; flex-shrink: 0; line-height: 1; }
+  .tpl-info { flex: 1; min-width: 0; }
+  .tpl-name { font-weight: 600; color: var(--text); font-size: 0.95em; }
+  .tpl-sub { color: var(--text-muted); font-size: 0.8em; margin-top: 2px; }
+  .tpl-del {
+    background: transparent; border: 0; color: var(--text-faint);
+    cursor: pointer; font-size: 1em; padding: 6px 8px; border-radius: 6px; flex-shrink: 0;
+  }
+  .tpl-del:hover { background: rgba(239,68,68,0.12); color: #ef4444; }
+  .tpl-add-btn {
+    width: 100%; padding: 11px; margin-top: 6px;
+    background: transparent; border: 1px dashed var(--border); color: var(--text-muted);
+    border-radius: 10px; cursor: pointer; font-size: 0.9em; transition: border-color 0.12s, color 0.12s;
+  }
+  .tpl-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Enerji seçim çubuğu (Şu an ne yapayım modalı) */
+  .energy-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .energy-label { font-size: 0.82em; color: var(--text-muted); margin-right: 2px; }
+  .energy-btn {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 6px 11px;
+    border-radius: 20px;
+    font-size: 0.82em;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .energy-btn:hover { border-color: var(--accent); color: var(--text); }
+  .energy-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
 
   /* Modal */
   .modal-overlay {
@@ -1710,7 +1783,10 @@
       <div class="evening-summary-stats" id="eveningStats"></div>
       <div class="evening-list" id="eveningList"></div>
     </div>
-    <button class="suggest-btn" onclick="suggestTask()">🎯 Şu an ne yapayım?</button>
+    <div class="action-row">
+      <button class="suggest-btn" onclick="suggestTask()">🎯 Şu an ne yapayım?</button>
+      <button class="suggest-btn ghost" onclick="openTemplateModal()" title="Hazır görev paketleri">📋 Şablonlar</button>
+    </div>
     <details class="add-task-section" id="addTaskSection">
       <summary>➕ Görev ekle</summary>
       <div class="add-task-inner">
@@ -1887,6 +1963,12 @@
 <!-- Şu an ne yapayım? Modal -->
 <div class="modal-overlay" id="suggestModal" onclick="if(event.target.id==='suggestModal')closeSuggestModal()">
   <div class="modal">
+    <div class="energy-row" id="energyRow">
+      <span class="energy-label">⚡ Enerjin:</span>
+      <button class="energy-btn" data-energy="low" onclick="suggestTask('low')">🔋 Düşük</button>
+      <button class="energy-btn" data-energy="mid" onclick="suggestTask('mid')">⚡ Orta</button>
+      <button class="energy-btn" data-energy="high" onclick="suggestTask('high')">🚀 Yüksek</button>
+    </div>
     <div class="modal-title" id="suggestReason">Sana bir görev önerdim</div>
     <div class="modal-task" id="suggestTaskText">—</div>
     <div class="modal-meta" id="suggestMeta"></div>
@@ -1894,6 +1976,17 @@
       <button onclick="acceptSuggestion(false)">▶️ Başla</button>
     </div>
     <button class="modal-close" onclick="closeSuggestModal()">Kapat</button>
+  </div>
+</div>
+
+<!-- Şablon Modal -->
+<div class="modal-overlay" id="templateModal" onclick="if(event.target.id==='templateModal')closeTemplateModal()">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-title">📋 Görev şablonları</div>
+    <div class="modal-task" style="font-size:0.88em; font-weight:400; color:var(--text-muted); margin-bottom:6px;">Tek tıkla hazır görev paketi ekle</div>
+    <div class="tpl-list" id="templateList"></div>
+    <button class="tpl-add-btn" onclick="createTemplate()">➕ Kendi şablonunu kaydet</button>
+    <button class="modal-close" onclick="closeTemplateModal()">Kapat</button>
   </div>
 </div>
 
@@ -1906,6 +1999,7 @@ data.routines = data.routines || [];
 data.pomoToday = data.pomoToday || { date: today(), count: 0 };
 data.settings = data.settings || {};
 if (data.lastWeeklyView === undefined) data.lastWeeklyView = null;
+data.templates = data.templates || [];
 if (data.pomoToday.date !== today()) data.pomoToday = { date: today(), count: 0 };
 
 // Geriye uyumluluk: eski görevlere yeni alanlar ekle
@@ -2001,6 +2095,117 @@ function updateEstimateStats() {
     🎯 Tahminlerinin <b>%${accuratePct}</b>'ı doğru (±20% içinde).<br>
     ${comment}
   `;
+}
+
+// ============ GÖREV ŞABLONLARI ============
+// Ortak görev objesi üreteci — şablonlar ve diğer ekleme noktaları için
+function makeTask(opts = {}) {
+  return {
+    id: opts.id || Date.now(),
+    text: opts.text || '',
+    done: false, doneDate: null,
+    subtasks: opts.subtasks || [],
+    created: timeStr(),
+    priority: opts.priority || 'normal',
+    category: opts.category || null,
+    due: opts.due || null,
+    estimateMin: opts.estimateMin || null,
+    actualMin: null,
+    repeat: opts.repeat || null,
+    reminderTime: opts.reminderTime || null,
+    lastReminded: null,
+    mitDate: null,
+    streakCount: 0, lastStreakDate: null,
+    seriesId: null, seriesName: null, seriesIndex: null, seriesTotal: null
+  };
+}
+
+const BUILTIN_TEMPLATES = [
+  { id: 'tpl-sinav', name: 'Sınav haftası', emoji: '📝', builtin: true, tasks: [
+    { text: 'Konuları listele ve böl', category: 'odev', estimateMin: 15 },
+    { text: 'Özet/not çıkar', category: 'odev', estimateMin: 45 },
+    { text: 'Soru çöz', category: 'odev', estimateMin: 60 },
+    { text: 'Deneme sınavı yap', category: 'odev', estimateMin: 90 },
+    { text: 'Yanlışları gözden geçir', category: 'odev', estimateMin: 30 },
+  ]},
+  { id: 'tpl-odev-oturum', name: 'Ödev oturumu', emoji: '📚', builtin: true, tasks: [
+    { text: 'Telefonu başka odaya koy', category: 'kisisel', estimateMin: 1 },
+    { text: '25 dk odaklan (pomodoro)', category: 'odev', estimateMin: 25 },
+    { text: '5 dk mola — su iç, uzan', category: 'kisisel', estimateMin: 5 },
+  ]},
+  { id: 'tpl-ev', name: 'Ev toparlama', emoji: '🏠', builtin: true, tasks: [
+    { text: 'Bulaşıkları yık', category: 'ev', estimateMin: 15 },
+    { text: 'Çamaşır koy', category: 'ev', estimateMin: 5 },
+    { text: 'Odayı topla', category: 'ev', estimateMin: 15 },
+    { text: 'Çöpü at', category: 'ev', estimateMin: 5 },
+  ]},
+  { id: 'tpl-sabah', name: 'Sabah başlangıç', emoji: '🌅', builtin: true, tasks: [
+    { text: 'Su iç + kahvaltı', category: 'kisisel', estimateMin: 15 },
+    { text: 'Bugünün 3\'ünü seç (⭐ MIT)', category: 'kisisel', estimateMin: 5 },
+    { text: 'En zor işi ilk yap', category: 'kisisel', estimateMin: 30 },
+  ]},
+];
+
+function getAllTemplates() {
+  return [...BUILTIN_TEMPLATES, ...(data.templates || [])];
+}
+
+function openTemplateModal() {
+  renderTemplateList();
+  document.getElementById('templateModal').classList.add('active');
+}
+function closeTemplateModal() {
+  document.getElementById('templateModal').classList.remove('active');
+}
+
+function renderTemplateList() {
+  const el = document.getElementById('templateList');
+  el.innerHTML = getAllTemplates().map(tpl => {
+    const delBtn = tpl.builtin ? '' :
+      `<button class="tpl-del" onclick="event.stopPropagation(); deleteTemplate('${tpl.id}')" title="Şablonu sil">🗑️</button>`;
+    return `
+      <div class="tpl-card" onclick="applyTemplate('${tpl.id}')">
+        <span class="tpl-emoji">${tpl.emoji || '📋'}</span>
+        <div class="tpl-info">
+          <div class="tpl-name">${escapeHtml(tpl.name)}</div>
+          <div class="tpl-sub">${tpl.tasks.length} görev${tpl.builtin ? '' : ' · senin şablonun'}</div>
+        </div>
+        ${delBtn}
+      </div>`;
+  }).join('');
+}
+
+function applyTemplate(tplId) {
+  const tpl = getAllTemplates().find(t => t.id === tplId);
+  if (!tpl) return;
+  const base = Date.now();
+  // Sırayı koru: ters çevirip unshift → ilk görev en üstte kalır
+  tpl.tasks.slice().reverse().forEach((tt, i) => {
+    data.tasks.unshift(makeTask({ ...tt, id: base + i }));
+  });
+  save(); renderTasks();
+  closeTemplateModal();
+  showToast(`📋 "${tpl.name}" — ${tpl.tasks.length} görev eklendi`, 'success', 3000);
+}
+
+async function createTemplate() {
+  const name = await aidanPrompt('Yeni şablon', 'Şablona bir isim ver (örn "Spor günü")', '');
+  if (name === null || !name.trim()) return;
+  const lines = await aidanPrompt(`"${name.trim()}" şablonu`, 'Her satıra bir görev yaz:', '', true);
+  if (lines === null) return;
+  const tasks = lines.split('\n').map(s => s.trim()).filter(Boolean).map(text => ({ text }));
+  if (tasks.length === 0) { showToast('En az bir görev yaz', 'warning'); return; }
+  data.templates.push({ id: 'tpl-user-' + Date.now(), name: name.trim(), emoji: '⭐', builtin: false, tasks });
+  save();
+  renderTemplateList();
+  showToast(`✅ "${name.trim()}" kaydedildi (${tasks.length} görev)`, 'success', 3000);
+}
+
+function deleteTemplate(tplId) {
+  data.templates = data.templates.filter(t => t.id !== tplId);
+  save();
+  renderTemplateList();
+  showToast('🗑️ Şablon silindi', 'info', 2000);
 }
 
 // ============ GÖREVLER ============
@@ -2614,8 +2819,10 @@ document.addEventListener('keydown', e => {
 // ============ ŞU AN NE YAPAYIM? ============
 let _suggestedTaskId = null;
 let _recentSuggestions = [];
+let _currentEnergy = null;
 
-function suggestTask() {
+function suggestTask(energy = _currentEnergy) {
+  _currentEnergy = energy;
   const pending = data.tasks.filter(t => !t.done);
   if (pending.length === 0) {
     alert('🎉 Tüm görevlerini bitirmişsin!\n\nYeni görev ekle veya dinlen. Bonus her şey hediye. 💜');
@@ -2623,32 +2830,55 @@ function suggestTask() {
   }
 
   const todayStr = today();
+
+  // Enerjiye göre havuzu daralt — ADHD enerji dalgasına uy. Boş kalırsa tüm havuza düş.
+  let pool = pending;
+  if (energy === 'low') {
+    const easy = pending.filter(t => !t.estimateMin || t.estimateMin <= 20);
+    if (easy.length) pool = easy;
+  } else if (energy === 'high') {
+    const hard = pending.filter(t => (t.estimateMin && t.estimateMin >= 30) || t.priority === 'urgent' || (t.due && t.due <= todayStr));
+    if (hard.length) pool = hard;
+  }
+
   const buckets = [
-    { reason: '⭐ Bugünün 3\'ünden', tasks: pending.filter(t => t.mitDate === todayStr) },
-    { reason: '🔥 Acil görevin var', tasks: pending.filter(t => t.priority === 'urgent' && t.mitDate !== todayStr) },
-    { reason: '⏰ Bunu geçirme — son gün bugün', tasks: pending.filter(t => t.due === todayStr && t.priority !== 'urgent' && t.mitDate !== todayStr) },
-    { reason: '🚨 Bu zaten gecikti', tasks: pending.filter(t => t.due && t.due < todayStr && t.mitDate !== todayStr && t.priority !== 'urgent') },
-    { reason: '💡 Kısa bir şey: bunu yap', tasks: pending.filter(t => t.estimateMin && t.estimateMin <= 15 && !t.mitDate && t.priority !== 'urgent' && (!t.due || t.due > todayStr)) },
-    { reason: '🎲 Rastgele bir şey', tasks: pending.filter(t => !t.mitDate && t.priority !== 'urgent' && (!t.due || t.due > todayStr)) }
+    { reason: '⭐ Bugünün 3\'ünden', tasks: pool.filter(t => t.mitDate === todayStr) },
+    { reason: '🔥 Acil görevin var', tasks: pool.filter(t => t.priority === 'urgent' && t.mitDate !== todayStr) },
+    { reason: '⏰ Bunu geçirme — son gün bugün', tasks: pool.filter(t => t.due === todayStr && t.priority !== 'urgent' && t.mitDate !== todayStr) },
+    { reason: '🚨 Bu zaten gecikti', tasks: pool.filter(t => t.due && t.due < todayStr && t.mitDate !== todayStr && t.priority !== 'urgent') },
+    { reason: '💡 Kısa bir şey: bunu yap', tasks: pool.filter(t => t.estimateMin && t.estimateMin <= 15 && !t.mitDate && t.priority !== 'urgent' && (!t.due || t.due > todayStr)) },
+    { reason: '🎲 Rastgele bir şey', tasks: pool.filter(t => !t.mitDate && t.priority !== 'urgent' && (!t.due || t.due > todayStr)) }
   ];
+
+  // Düşük enerjide: önce kısa işi öne al (kolay kazanım = momentum)
+  if (energy === 'low') buckets.unshift(buckets.splice(4, 1)[0]);
 
   let selected = null, reason = '';
   for (const b of buckets) {
     if (b.tasks.length > 0) {
       // Son 5 öneride olmayanları tercih et
       const fresh = b.tasks.filter(t => !_recentSuggestions.includes(t.id));
-      const pool = fresh.length > 0 ? fresh : b.tasks;
-      selected = pool[Math.floor(Math.random() * pool.length)];
+      const candidatePool = fresh.length > 0 ? fresh : b.tasks;
+      selected = candidatePool[Math.floor(Math.random() * candidatePool.length)];
       reason = b.reason;
       break;
     }
   }
 
   if (!selected) {
-    // Hiç filtre eşleşmediyse pending'ten rastgele
-    selected = pending[Math.floor(Math.random() * pending.length)];
+    // Hiç filtre eşleşmediyse havuzdan rastgele
+    selected = pool[Math.floor(Math.random() * pool.length)];
     reason = '🎲 Bunu deneyebilirsin';
   }
+
+  // Enerji ipucu — seçilmişse reason'a ekle
+  if (energy === 'low') reason = '🔋 Düşük enerji · ' + reason;
+  else if (energy === 'high') reason = '🚀 Yüksek enerji · ' + reason;
+
+  // Enerji butonlarının aktif halini güncelle
+  document.querySelectorAll('#energyRow .energy-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.energy === energy);
+  });
 
   _suggestedTaskId = selected.id;
   _recentSuggestions.push(selected.id);
@@ -2683,6 +2913,7 @@ function acceptSuggestion(fiveMinMode) {
 function closeSuggestModal() {
   document.getElementById('suggestModal').classList.remove('active');
   _suggestedTaskId = null;
+  _currentEnergy = null;
 }
 
 document.addEventListener('keydown', e => {
