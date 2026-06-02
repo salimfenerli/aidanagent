@@ -1,4 +1,4 @@
-const CACHE = 'aidan-v7-3';
+const CACHE = 'aidan-v7-4';
 const ASSETS = [
   '/',
   '/manifest.webmanifest',
@@ -19,6 +19,35 @@ self.addEventListener('activate', e => {
     ).then(() => self.clients.claim())
      .then(() => self.clients.matchAll({ type: 'window' }))
      .then(clients => clients.forEach(c => c.postMessage({ type: 'SW_UPDATED', cache: CACHE })))
+  );
+});
+
+// Bildirime tıklayınca uygulamayı aç (varsa odakla, yoksa yeni pencere)
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+      for (const c of clients) {
+        if ('focus' in c) return c.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(url);
+    })
+  );
+});
+
+// Background push (ileride VAPID + Worker ile devreye girecek)
+self.addEventListener('push', e => {
+  let payload = { title: '🔔 Aidan', body: 'Yeni hatırlatma' };
+  try { if (e.data) payload = e.data.json(); } catch (err) { try { payload.body = e.data.text(); } catch (e2) {} }
+  e.waitUntil(
+    self.registration.showNotification(payload.title || '🔔 Aidan', {
+      body: payload.body || '',
+      icon: '/icon.png',
+      badge: '/icon.png',
+      tag: payload.tag || 'aidan-push',
+      data: payload.data || { url: '/' }
+    })
   );
 });
 

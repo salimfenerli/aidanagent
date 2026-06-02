@@ -473,6 +473,25 @@
   }
   .quick-capture-btn:hover { background: var(--accent-hover); box-shadow: 0 2px 8px var(--accent-glow); }
   .quick-capture-btn:active { transform: scale(0.95); }
+  .quick-capture-btn.mic-btn {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    box-shadow: none;
+    font-size: 1.1em;
+    padding: 0 14px;
+  }
+  .quick-capture-btn.mic-btn:hover { background: rgba(99,102,241,0.08); color: var(--accent); }
+  .quick-capture-btn.mic-btn.recording {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.4);
+    animation: mic-pulse 1s ease-in-out infinite;
+  }
+  @keyframes mic-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(239,68,68,0); }
+  }
 
   /* Done dopamine — kutlama efektleri */
   @keyframes done-pop {
@@ -528,6 +547,56 @@
   }
   .stat-num { font-size: 1.5em; font-weight: 700; color: var(--text); letter-spacing: -0.03em; }
   .stat-label { font-size: 0.73em; color: var(--text-muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; }
+
+  /* Haftalık insight kartı (pazartesi sabah açılınca) */
+  .weekly-insight {
+    background: linear-gradient(135deg, rgba(99,102,241,0.10), rgba(255,198,64,0.06));
+    border: 1px solid rgba(99,102,241,0.25);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    position: relative;
+    animation: insight-in 0.4s ease-out;
+  }
+  .weekly-insight .wi-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: transparent;
+    border: 0;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1.1em;
+    padding: 4px 8px;
+    border-radius: 6px;
+    line-height: 1;
+  }
+  .weekly-insight .wi-close:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+  .weekly-insight .wi-title {
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 6px;
+    font-size: 0.95em;
+  }
+  .weekly-insight .wi-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    margin: 8px 0;
+    font-size: 0.88em;
+    color: var(--text);
+  }
+  .weekly-insight .wi-stat b { color: var(--accent); font-weight: 700; }
+  .weekly-insight .wi-note {
+    color: var(--text-muted);
+    font-size: 0.85em;
+    margin-top: 6px;
+    line-height: 1.45;
+  }
+  @keyframes insight-in {
+    from { transform: translateY(-6px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
 
   /* Bugünün 3'ü */
   .mit-box {
@@ -797,6 +866,27 @@
   .toast.error { border-left-color: var(--danger); }
   .toast.info { border-left-color: var(--info); }
   .toast.fade-out { animation: toast-out 0.3s ease-in forwards; }
+  .toast-undo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 240px;
+  }
+  .toast-undo .undo-btn {
+    background: var(--accent);
+    color: #fff;
+    border: 0;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: filter 0.15s;
+  }
+  .toast-undo .undo-btn:hover { filter: brightness(1.15); }
+  .toast-undo .undo-btn:active { transform: scale(0.96); }
   @keyframes toast-in {
     from { transform: translateX(110%); opacity: 0; }
     to { transform: translateX(0); opacity: 1; }
@@ -1023,6 +1113,25 @@
     box-shadow: 0 4px 12px rgba(100, 99, 255, 0.18);
   }
   .brand-name { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; color: var(--text); }
+  .sync-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--text-faint, #555);
+    display: inline-block;
+    margin-left: 2px;
+    cursor: help;
+    flex-shrink: 0;
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+  .sync-dot.ok { background: #22c55e; box-shadow: 0 0 0 0 rgba(34,197,94,0.6); animation: dot-pulse 2.5s ease-out infinite; }
+  .sync-dot.slow { background: #eab308; }
+  .sync-dot.offline { background: #6b7280; }
+  .sync-dot.error { background: #ef4444; }
+  @keyframes dot-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); }
+    70% { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+    100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+  }
   .brand-action {
     width: 40px; height: 40px;
     border-radius: 50%;
@@ -1519,6 +1628,7 @@
     <div class="brand-logo">
       <img class="brand-logo-icon" src="icon.png" alt="Aidan" width="32" height="32">
       <div class="brand-name">Aidan</div>
+      <span id="syncDot" class="sync-dot offline" title="Bulut bağlantısı yok"></span>
     </div>
     <button class="brand-action" title="Takvim" aria-label="Takvim" onclick="openCalendarModal()">📅</button>
   </div>
@@ -1548,6 +1658,7 @@
   <!-- HIZLI YAKALAMA — aklına geleni 2 sn'de yaz, sonra düşün -->
   <div class="quick-capture">
     <input type="text" id="quickCapture" placeholder="⚡ Aklına geleni hızlıca yaz, Enter'la ekle..." aria-label="Hızlı görev ekle" onkeydown="quickCaptureKey(event)">
+    <button class="quick-capture-btn mic-btn" id="quickCaptureMic" onclick="quickCaptureMic()" title="Sesli ekle" aria-label="Sesli görev ekle">🎙️</button>
     <button class="quick-capture-btn" onclick="quickCaptureSubmit()" title="Ekle">＋</button>
   </div>
 
@@ -1577,6 +1688,7 @@
         <button onclick="dropFocusTask()" title="Bırak — odağı temizle">✕</button>
       </div>
     </div>
+    <div id="weeklyInsight" class="weekly-insight" style="display:none;"></div>
     <div class="mit-box">
       <div class="mit-title">
         <span>⭐ Bugünün 3'ü</span>
@@ -1675,11 +1787,17 @@
 
     <div class="settings-row">
       <label>📱 Bildirimler</label>
+      <div id="notifSettings" style="margin-bottom:8px;"></div>
       <div class="settings-help">
-        Bildirimler artık <b>Telegram bot</b> üzerinden geliyor: <a href="https://t.me/salim_aidan_bot" target="_blank" style="color:var(--accent);">t.me/salim_aidan_bot</a>.
-        Sabah brifingi, deadline uyarısı, öğle/akşam özeti — hepsi Telegram'da.
-        Tarayıcı bildirimi için yukarıdaki "🔔 Bildirimlere izin ver" banner'ına bas.
+        Bildirimler iki kanaldan gelir:<br>
+        • <b>Aidan bildirimi</b> (tarayıcı/PWA) — görev saatleri ve yerel hatırlatmalar<br>
+        • <b>Telegram bot</b> — <a href="https://t.me/salim_aidan_bot" target="_blank" style="color:var(--accent);">t.me/salim_aidan_bot</a> — sabah brifingi, deadline, akşam özeti
       </div>
+    </div>
+
+    <div class="settings-row">
+      <label>🔕 Bildirim sustur (odak modu)</label>
+      <div id="muteState"></div>
     </div>
 
     <div class="settings-row">
@@ -1787,6 +1905,7 @@ data.dumps = data.dumps || [];
 data.routines = data.routines || [];
 data.pomoToday = data.pomoToday || { date: today(), count: 0 };
 data.settings = data.settings || {};
+if (data.lastWeeklyView === undefined) data.lastWeeklyView = null;
 if (data.pomoToday.date !== today()) data.pomoToday = { date: today(), count: 0 };
 
 // Geriye uyumluluk: eski görevlere yeni alanlar ekle
@@ -1839,7 +1958,11 @@ function showTab(name, btn) {
   document.getElementById(name).classList.add('active');
   if (btn) btn.classList.add('active');
   else document.querySelector(`[data-tab="${name}"]`).classList.add('active');
-  if (name === 'settings') updateEstimateStats();
+  if (name === 'settings') {
+    updateEstimateStats();
+    renderNotifSettings();
+    renderMuteState();
+  }
 }
 
 // ============ ZAMAN TAHMİN DOĞRULUĞU (ADHD self-awareness) ============
@@ -1889,6 +2012,74 @@ function quickCaptureKey(e) {
   } else if (e.key === 'Escape') {
     document.getElementById('quickCapture').value = '';
     document.getElementById('quickCapture').blur();
+  }
+}
+
+// Web Speech API — tarayıcıda Türkçe sesli giriş (iOS Safari 14.5+, Chrome, Edge)
+let _speechRec = null;
+function quickCaptureMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    showToast('Bu tarayıcı sesli girişi desteklemiyor. Safari/Chrome güncel olmalı.', 'warning', 4500);
+    return;
+  }
+  const inp = document.getElementById('quickCapture');
+  const btn = document.getElementById('quickCaptureMic');
+  const origPlaceholder = inp.placeholder;
+  // Zaten kayıt yapıyorsa: durdur
+  if (_speechRec) {
+    try { _speechRec.stop(); } catch (e) {}
+    return;
+  }
+  const rec = new SR();
+  rec.lang = 'tr-TR';
+  rec.interimResults = true;
+  rec.continuous = false;
+  rec.maxAlternatives = 1;
+  _speechRec = rec;
+
+  const cleanup = () => {
+    if (btn) btn.classList.remove('recording');
+    inp.placeholder = origPlaceholder;
+    _speechRec = null;
+  };
+
+  rec.onstart = () => {
+    if (btn) btn.classList.add('recording');
+    inp.placeholder = '🎙️ Dinliyorum... (tekrar bas: durdur)';
+    inp.value = '';
+    inp.focus();
+  };
+  rec.onresult = (e) => {
+    let final = '', interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) final += t;
+      else interim += t;
+    }
+    inp.value = (final || interim).trim();
+  };
+  rec.onerror = (e) => {
+    cleanup();
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      showToast('Mikrofon izni reddedildi. Site ayarlarından açabilirsin.', 'warning', 4500);
+    } else if (e.error === 'no-speech') {
+      showToast('Ses duyulmadı, tekrar dene', 'info', 2500);
+    } else if (e.error !== 'aborted') {
+      showToast('Sesli giriş hatası: ' + e.error, 'warning', 3500);
+    }
+  };
+  rec.onend = () => {
+    cleanup();
+    // Otomatik göndermiyoruz — Salim Enter ile onaylasın (yanlış kelime olabilir)
+    if (inp.value.trim()) inp.focus();
+  };
+
+  try {
+    rec.start();
+  } catch (err) {
+    cleanup();
+    showToast('Mikrofon başlatılamadı: ' + (err.message || err), 'error', 3500);
   }
 }
 
@@ -2002,6 +2193,8 @@ async function splitTask() {
 function toggleTask(id) {
   const t = data.tasks.find(x => x.id === id);
   const wasDone = t.done;
+  const oldDoneDate = t.doneDate;
+  const oldActualMin = t.actualMin;
   t.done = !t.done;
   t.doneDate = t.done ? today() : null;
   const justFinished = t.done && !wasDone;
@@ -2033,6 +2226,17 @@ function toggleTask(id) {
   // Done dopamine — DOM güncellendikten sonra
   if (justFinished) {
     setTimeout(() => celebrateDone(id), 30);
+    // Undo: yanlışlıkla bittiyse 5sn geri alma şansı
+    const preview = (t.text || '').slice(0, 28);
+    showUndoToast(`✅ "${preview}" bitti`, () => {
+      const tt = data.tasks.find(x => x.id === id);
+      if (!tt) return;
+      tt.done = false;
+      tt.doneDate = oldDoneDate;
+      tt.actualMin = oldActualMin;
+      save(); renderTasks();
+      showToast('↩️ Geri alındı', 'info', 2000);
+    });
   }
   if (mitFullCelebration) {
     setTimeout(() => {
@@ -2059,9 +2263,17 @@ function toggleSub(tid, idx) {
 }
 
 function deleteTask(id) {
-  if (!confirm('Görevi sil?')) return;
-  data.tasks = data.tasks.filter(x => x.id !== id);
+  const idx = data.tasks.findIndex(x => x.id === id);
+  if (idx < 0) return;
+  const taskCopy = JSON.parse(JSON.stringify(data.tasks[idx]));
+  data.tasks.splice(idx, 1);
   save(); renderTasks();
+  const preview = (taskCopy.text || '').slice(0, 30);
+  showUndoToast(`🗑️ "${preview}" silindi`, () => {
+    data.tasks.splice(Math.min(idx, data.tasks.length), 0, taskCopy);
+    save(); renderTasks();
+    showToast('↩️ Geri yüklendi', 'success', 2000);
+  });
 }
 
 async function postponeTask(id) {
@@ -2297,6 +2509,39 @@ function showToast(message, type = 'info', duration = 3500) {
   toast.addEventListener('click', () => {
     toast.classList.add('fade-out');
     setTimeout(() => toast.remove(), 300);
+  });
+}
+
+// Undo toast — mesaj + "Geri al" butonu, 5sn timeout
+function showUndoToast(message, onUndo, duration = 5000) {
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+  const toast = document.createElement('div');
+  toast.className = 'toast info';
+  const inner = document.createElement('div');
+  inner.className = 'toast-undo';
+  const msg = document.createElement('span');
+  msg.textContent = message;
+  const btn = document.createElement('button');
+  btn.className = 'undo-btn';
+  btn.textContent = '↩️ Geri al';
+  inner.appendChild(msg);
+  inner.appendChild(btn);
+  toast.appendChild(inner);
+  container.appendChild(toast);
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    toast.classList.add('fade-out');
+    setTimeout(() => toast.remove(), 300);
+  };
+  const timer = setTimeout(close, duration);
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    clearTimeout(timer);
+    close();
+    try { onUndo(); } catch (err) { console.error('Undo failed', err); }
   });
 }
 
@@ -2587,8 +2832,109 @@ function renderTasks() {
   renderMit();
   renderCapacity();
   renderEveningSummary();
+  renderWeeklyInsight();
   updateFilterCounts();
   updateActiveTaskBanner();
+}
+
+// ============ HAFTALIK INSIGHT (Pazartesi açılınca otomatik) ============
+function getISOWeekStr(d) {
+  const date = new Date(d);
+  date.setHours(0,0,0,0);
+  // Pazartesi = 1 ... Pazar = 7
+  const day = (date.getDay() + 6) % 7 + 1;
+  date.setDate(date.getDate() + 4 - day);
+  const yearStart = new Date(date.getFullYear(), 0, 1);
+  const week = Math.ceil(((date - yearStart) / 86400000 + 1) / 7);
+  return `${date.getFullYear()}-W${String(week).padStart(2,'0')}`;
+}
+function getMondayIso(daysAgo = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  const day = (d.getDay() + 6) % 7; // Pazartesi=0, Pazar=6
+  d.setDate(d.getDate() - day);
+  return d.toISOString().slice(0,10);
+}
+
+function renderWeeklyInsight() {
+  const el = document.getElementById('weeklyInsight');
+  if (!el) return;
+  const todayD = new Date();
+  const dayOfWeek = (todayD.getDay() + 6) % 7; // Pzt=0, Sal=1, ... Paz=6
+  const thisWeekISO = getISOWeekStr(todayD);
+
+  // Sadece Pzt/Sal/Çar göster; sonraki günlerde kapanır
+  if (dayOfWeek > 2) { el.style.display = 'none'; return; }
+  // Daha önce bu hafta görüntüleyip kapattıysa: gösterme
+  if (data.lastWeeklyView === thisWeekISO) { el.style.display = 'none'; return; }
+
+  // Geçen haftanın aralığı: önceki pazartesi → önceki pazar
+  const thisMon = getMondayIso(0);
+  const lastMon = getMondayIso(7);
+  const lastSun = getMondayIso(1);
+
+  const doneLast = data.tasks.filter(t => t.doneDate && t.doneDate >= lastMon && t.doneDate <= lastSun);
+  // Hiç görev bitmediyse insight'a değmez — gizle
+  if (doneLast.length === 0) { el.style.display = 'none'; return; }
+
+  // Bu hafta — karşılaştırma için
+  const doneThis = data.tasks.filter(t => t.doneDate && t.doneDate >= thisMon);
+
+  // Top category
+  const catLabels = { odev: '📚 Ödev', ders: '📖 Özel Ders', ev: '🏠 Ev', kisisel: '💜 Kişisel' };
+  const byCat = {};
+  doneLast.forEach(t => {
+    const c = t.category || 'kategorisiz';
+    byCat[c] = (byCat[c] || 0) + 1;
+  });
+  const topCat = Object.entries(byCat).sort((a,b) => b[1]-a[1])[0];
+
+  // En verimli gün
+  const byDay = {};
+  doneLast.forEach(t => { byDay[t.doneDate] = (byDay[t.doneDate]||0) + 1; });
+  const topDayEntry = Object.entries(byDay).sort((a,b) => b[1]-a[1])[0];
+  let topDayLabel = '';
+  if (topDayEntry && topDayEntry[1] >= 2) {
+    const dn = ['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'][new Date(topDayEntry[0]).getDay()];
+    topDayLabel = `${dn} (${topDayEntry[1]})`;
+  }
+
+  // MIT bitiş
+  const mitDoneLast = doneLast.filter(t => t.mitDate && t.mitDate === t.doneDate).length;
+
+  // Gecikmiş bekleyen (şu an)
+  const todayStr = today();
+  const overdueCount = data.tasks.filter(t => !t.done && t.due && t.due < todayStr).length;
+
+  // Bir cümle pattern note
+  let note = '';
+  if (topDayLabel) note = `En verimli günün: ${topDayLabel}. Bu hafta da o gün için zor şeyleri sakla.`;
+  else if (mitDoneLast >= 3) note = `${mitDoneLast} MIT bitirdin — bu güzel ritm.`;
+  else if (topCat) note = `En çok ${catLabels[topCat[0]] || topCat[0]}'da çalıştın.`;
+  else note = 'Yeni hafta, yeni başlangıç. 💜';
+
+  const compare = doneThis.length === 0 ? '' :
+    (doneThis.length >= doneLast.length ? ` · Bu hafta zaten <b>${doneThis.length}</b> tane biten var 🚀` : '');
+
+  el.innerHTML = `
+    <button class="wi-close" onclick="closeWeeklyInsight()" aria-label="Kapat">×</button>
+    <div class="wi-title">💜 Geçen hafta özetin</div>
+    <div class="wi-stats">
+      <span class="wi-stat"><b>${doneLast.length}</b> görev bitti</span>
+      ${mitDoneLast ? `<span class="wi-stat">⭐ <b>${mitDoneLast}</b> MIT</span>` : ''}
+      ${topCat ? `<span class="wi-stat">🏆 ${catLabels[topCat[0]] || topCat[0]} (${topCat[1]})</span>` : ''}
+      ${overdueCount ? `<span class="wi-stat" style="color:var(--warning,#e5a117);">⚠️ ${overdueCount} gecikmiş bekliyor</span>` : ''}
+    </div>
+    <div class="wi-note">${note}${compare}</div>
+  `;
+  el.style.display = 'block';
+}
+
+function closeWeeklyInsight() {
+  const el = document.getElementById('weeklyInsight');
+  if (el) el.style.display = 'none';
+  data.lastWeeklyView = getISOWeekStr(new Date());
+  save();
 }
 
 function renderEveningSummary() {
@@ -3126,8 +3472,47 @@ function updateTopbar() {
 setInterval(updateTopbar, 10000);
 updateTopbar();
 
+// ============ SYNC STATUS DOT ============
+function updateSyncDot() {
+  const dot = document.getElementById('syncDot');
+  if (!dot) return;
+  if (!window._supa || !window._user) {
+    dot.className = 'sync-dot offline';
+    dot.title = 'Yerel mod — bulut bağlı değil. Ayarlar\'dan giriş yap.';
+    return;
+  }
+  const last = parseInt(localStorage.getItem('aidan_lastPush') || '0', 10);
+  if (!last) {
+    dot.className = 'sync-dot slow';
+    dot.title = 'Bulut bağlı, henüz senkron yok';
+    return;
+  }
+  const ageSec = Math.round((Date.now() - last) / 1000);
+  const ageLabel = ageSec < 60 ? ageSec + ' sn önce'
+    : ageSec < 3600 ? Math.round(ageSec/60) + ' dk önce'
+    : Math.round(ageSec/3600) + ' sa önce';
+  if (ageSec < 90) {
+    dot.className = 'sync-dot ok';
+    dot.title = `☁️ Senkron — son: ${ageLabel}`;
+  } else if (ageSec < 600) {
+    dot.className = 'sync-dot slow';
+    dot.title = `Bekliyor — son: ${ageLabel}`;
+  } else {
+    dot.className = 'sync-dot offline';
+    dot.title = `Uzun süredir push yok — son: ${ageLabel}`;
+  }
+}
+setInterval(updateSyncDot, 5000);
+updateSyncDot();
+
 // ============ RUTİN + GÖREV HATIRLATMA KONTROL ============
+function isMutedNow() {
+  const m = data.settings && data.settings.muteUntil;
+  if (!m) return false;
+  return Date.now() < m;
+}
 setInterval(() => {
+  if (isMutedNow()) return;
   const now = new Date();
   const hhmm = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
   const todayStr = today();
@@ -3138,30 +3523,126 @@ setInterval(() => {
     if (t.lastReminded === todayStr) return;
     t.lastReminded = todayStr;
     changed = true;
-    notify('🎯 Görev hatırlatması', t.text);
+    notify('🎯 Görev hatırlatması', t.text, { tag: 'reminder-' + t.id });
     playBeep();
   });
   if (changed) save();
 }, 30000);
 
-// ============ BİLDİRİM ============
-function askNotif() {
-  Notification.requestPermission().then(p => {
-    if (p === 'granted') {
-      document.getElementById('notifBanner').style.display = 'none';
-      notify('✅ Aidan hazır!', 'Hatırlatmalar artık çalışacak.');
-    }
-  });
+// ============ BİLDİRİM SUSTUR ============
+function muteFor(minutes) {
+  data.settings = data.settings || {};
+  data.settings.muteUntil = Date.now() + minutes * 60000;
+  save();
+  renderMuteState();
+  const until = new Date(data.settings.muteUntil);
+  const hhmm = String(until.getHours()).padStart(2,'0') + ':' + String(until.getMinutes()).padStart(2,'0');
+  showToast(`🔕 Bildirimler ${hhmm}'e kadar susuyor`, 'info', 3500);
 }
-
-function notify(title, body) {
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(title, { body });
+function muteUnset() {
+  if (data.settings) data.settings.muteUntil = null;
+  save();
+  renderMuteState();
+  showToast('🔔 Bildirimler tekrar açık', 'success', 2500);
+}
+function renderMuteState() {
+  const el = document.getElementById('muteState');
+  if (!el) return;
+  if (isMutedNow()) {
+    const until = new Date(data.settings.muteUntil);
+    const hhmm = String(until.getHours()).padStart(2,'0') + ':' + String(until.getMinutes()).padStart(2,'0');
+    el.innerHTML = `
+      <div style="color:var(--warning,#e5a117);">🔕 Şu an susmuş — ${hhmm}'e kadar</div>
+      <button class="small" style="margin-top:6px;" onclick="muteUnset()">🔔 Aç</button>
+    `;
+  } else {
+    el.innerHTML = `
+      <div style="color:var(--text-muted);font-size:0.85em;margin-bottom:6px;">Görev hatırlatmalarını + sesleri kısa süre sustur.</div>
+      <button class="small secondary" onclick="muteFor(60)">1 saat</button>
+      <button class="small secondary" onclick="muteFor(180)">3 saat</button>
+      <button class="small secondary" onclick="muteFor(480)">Bugün (8sa)</button>
+    `;
   }
 }
 
+// ============ BİLDİRİM ============
+// PWA'da (özellikle iOS Safari) `new Notification()` çalışmaz — SW üzerinden göndermek lazım.
+function askNotif() {
+  if (!('Notification' in window)) {
+    showToast('Bu cihaz bildirimi desteklemiyor', 'warning');
+    return;
+  }
+  Notification.requestPermission().then(p => {
+    const banner = document.getElementById('notifBanner');
+    if (p === 'granted') {
+      if (banner) banner.style.display = 'none';
+      notify('✅ Aidan hazır!', 'Hatırlatmalar artık bildirim olarak gelecek.');
+      showToast('🔔 Bildirimler açıldı', 'success');
+    } else if (p === 'denied') {
+      showToast('Bildirim izni reddedildi. Telefon ayarlarından açabilirsin.', 'warning', 5000);
+    }
+    renderNotifSettings();
+  });
+}
+
+// SW üzerinden bildirim — PWA ve iOS uyumlu. Fallback olarak window Notification.
+function notify(title, body, opts = {}) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const notifOptions = {
+    body,
+    icon: '/icon.png',
+    badge: '/icon.png',
+    tag: opts.tag || 'aidan-' + Date.now(),
+    renotify: true,
+    data: { url: opts.url || '/', taskId: opts.taskId || null },
+    ...opts
+  };
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.ready.then(reg => {
+      reg.showNotification(title, notifOptions).catch(() => {
+        // Son çare: window Notification (masaüstü)
+        try { new Notification(title, notifOptions); } catch (e) {}
+      });
+    });
+  } else {
+    try { new Notification(title, notifOptions); } catch (e) {}
+  }
+}
+
+// Ayarlar ekranında bildirim durumunu göster
+function renderNotifSettings() {
+  const el = document.getElementById('notifSettings');
+  if (!el) return;
+  if (!('Notification' in window)) {
+    el.innerHTML = `<div style="color:var(--text-muted);font-size:0.85em;">Bu cihaz bildirimi desteklemiyor.</div>`;
+    return;
+  }
+  const perm = Notification.permission;
+  if (perm === 'granted') {
+    el.innerHTML = `
+      <div style="color:var(--success);">✅ Bildirimler açık</div>
+      <button class="small" style="margin-top:8px;" onclick="testNotif()">🔔 Test bildirimi gönder</button>
+    `;
+  } else if (perm === 'denied') {
+    el.innerHTML = `
+      <div style="color:var(--danger);">❌ Bildirim reddedildi</div>
+      <div style="color:var(--text-muted);font-size:0.85em;margin-top:4px;">Telefonda Ayarlar → Safari → Bildirimler'den açabilirsin.</div>
+    `;
+  } else {
+    el.innerHTML = `
+      <button class="small" onclick="askNotif()">🔔 Bildirimleri aç</button>
+      <div style="color:var(--text-muted);font-size:0.85em;margin-top:4px;">Görev saatleri geldiğinde Aidan sana hatırlatır.</div>
+    `;
+  }
+}
+
+function testNotif() {
+  notify('🎯 Test bildirimi', 'Aidan hatırlatma sistemi çalışıyor.', { tag: 'aidan-test' });
+}
+
 if ('Notification' in window && Notification.permission === 'default') {
-  document.getElementById('notifBanner').style.display = 'block';
+  const banner = document.getElementById('notifBanner');
+  if (banner) banner.style.display = 'block';
 }
 
 // ============ SUPABASE BULUT SENKRONU ============
