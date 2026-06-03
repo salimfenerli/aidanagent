@@ -368,6 +368,16 @@ Veya manuel API çağrısı (deploy.py inline). Wrangler yok.
 - **Cache:** v7-6 → v7-7 (AI butonu)
 - ⏳ **Sıradaki:** Telegram'ı emekli et (AI + sesli + bildirim artık PWA'da) · multi-user (Yol A: davetli arkadaşlar)
 
+### Haziran 3, 2026 (background push görünmeme bug'ı ÇÖZÜLDÜ)
+- 🔴 Açık iş kapandı: Apple HTTP 201 alıyordu ama Salim banner göremiyordu. Sebep tek değildi, **3'lü düzeltmeyle** çözüldü:
+  - **Worker:** `Urgency: normal` → **`high`** (WebKit dokümantasyonu: lock ekranı için şart, normal ertelenebilir/drop edilebilir)
+  - **SW push handler savunmacı:** decrypt/parse hatasında bile `showNotification` çağırır (iOS izin iptalini önler, hata mesajı body'ye düşer → teşhis kolaylaşır). Tek showNotification per push şartı garanti altında.
+  - **PWA Ayarlar'a "🔄 Push'u sıfırla" butonu:** stale subscription'ı unsubscribe + pushSubs'tan sil + fresh subscribe yapar. Push handler eklenmeden önce yapılmış eski subscription'ları kurtarır.
+- **Test:** Salim Aidan kapalı + telefon kilitliyken `?type=noon&secret=...` ile manuel tetiklendi → **kilit ekranında banner ✅ çıktı**. Background push artık güvenilir.
+- **⚠️ Secret rotate gerekli:** Test için sohbette geçici `WEBHOOK_SECRET` paylaşıldı (`aidan-push-test-2026-03-x9k7m2`). Salim Cloudflare → aidan-pusher → Variables → WEBHOOK_SECRET'ı yeni değerle güncelleyebilir (mecbur değil ama temiz).
+- **Cache:** v7-7 → v7-8
+- ⏳ **Sıradaki artık net:** Telegram'ı emekliye ayır (bildirim ✅ + AI ✅ + sesli ✅ PWA'da) → sonra multi-user (Yol A).
+
 ## Mevcut Durum
 
 ### ✅ Çalışıyor
@@ -573,18 +583,18 @@ curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo
 
 ## Yeni Sohbet Başlıyorsa — Önce Bunları Yap
 
-0. 🔴 **AÇIK İŞ — background push görünmüyor:** Apple HTTP 201 veriyor (kabul) ama Salim iPhone'da banner GÖRMEDİ. EN OLASI sebep: iOS PWA **açıkken** banner göstermez (Salim test sırasında uygulamayı açık tutuyordu). DOĞRU test: Aidan'ı TAMAMEN kapat → telefonu kilitle → bekle → kilit ekranı/bildirim merkezi. Olmazsa: iPhone Ayarlar→Bildirimler→Aidan açık mı (Aidan listede yoksa = PWA bildirim izni iOS'a düşmemiş). **Yeni sohbette İLK bunu sor: "Aidan'ı kapatıp kilitleyince bildirim geldi mi?"** Bu çözülmeden Telegram emekli EDİLEMEZ.
-1. **Salim'in test sonuçlarını sor**: 🧠 AI butonu çalıştı mı (görev ekledi mi)? Yeni özellikler (undo / şablon / energy / sesli giriş / sync dot) nasıl gidiyor?
+0. ✅ **Background push ÇÖZÜLDÜ (Haz 3):** Salim kilit ekranında banner gördü, doğrulandı. Düzeltme = Urgency `normal→high` + SW push handler savunmacı + "Push'u sıfırla" butonu. Artık Telegram emekliliğine engel YOK.
+1. **Salim'in test sonuçlarını sor**: 🧠 AI butonu (PWA quick capture) çalıştı mı (görev ekledi mi)? Yeni özellikler (undo / şablon / energy / sesli giriş / sync dot) nasıl gidiyor?
 2. **PWA'yı yeni URL'den yükledi mi?** (`aidanapp.pages.dev`) — eski Netlify URL'i ölü
 3. **Sıradaki feature** (öncelik sırası):
-   - 🥇 **AI'ı PWA'ya taşı** — Telegram'daki Llama görev-ekleme beyni Worker'da, PWA'dan yeni endpoint ile çağrılacak. Hedef: Telegram'dan kademeli çıkış (push ✅ → AI taşı → Telegram emekli). Salim "telegramdan kurtulalım" dedi.
+   - 🥇 **Telegram emekliliği** — push ✅ + AI ✅ + sesli ✅ PWA'da. Adımlar: (a) PWA'da test sürüşü Salim'le birkaç gün (b) Telegram cron'u kapat / push tek kanal yap (c) webhook silmek opsiyonel (geri açmak kolay olsun diye saklanabilir). Salim "telegramdan kurtulalım" dedi.
    - 🥈 **Multi-user (Yol A: davetli arkadaşlar)** — Salim arkadaşını eklemek istiyor. RLS+auth zaten hazır. Gereken: Worker'ı çok-kullanıcıya çevir (şu an tek `AIDAN_EMAIL` hesabına bakıyor → tüm aidan_data satırlarını dolaş), davet kodu, email onayı. Background push zaten multi-user uyumlu (her user kendi pushSubs'u). Telegram tek kişilik kalır (Salim'in chat_id'sine kilitli).
    - 🥉 Borsa modülü (Salim "sona, daha detaylı" demişti)
 4. ⚠️ **Netlify / drag-drop deploy ASLA önerme** — `git push` → GitHub Actions otomatik deploy var
 5. ⚠️ **ntfy.sh'tan asla bahsetme**, Telegram bot kullanılıyor
 6. ⚠️ **Mood/check-in'den bahsetme**, kaldırıldı
 7. ✅ **Token durumu temiz (Haz 2)** — May 29 leaked + geçici deploy token'ları silindi, GitHub Actions tek temiz token'la (GitHub Secrets `CF_API_TOKEN`) çalışıyor. Yeni token ifşa olursa yine sildirip doğrula (`/user/tokens/verify`).
-8. ⚠️ **Worker deploy = `py aidan-worker/deploy.py`** (token + env gerek, Salim terminal kullanamaz → ya geçici token verir ben yaparım ya da Salim Cloudflare dashboard). GitHub Actions SADECE Pages'i deploy eder, Worker'ı DEĞİL. **Windows'ta `PYTHONIOENCODING=utf-8` şart** (emoji print yoksa cp1254 hatası).
-9. ⚠️ **Background push test:** subscription Supabase'e `data.settings.pushSubs`'ta (Salim'in 1 cihazı kayıtlı: web.push.apple.com, iOS 18.7). Test için aidan-mcp/.env'den Supabase login → pushSubs çek → Python VAPID web-push (RFC 8291 encrypt + ES256 JWT, geçici script, credentials içerir, çalıştır-sil). **Apple 201 = kabul ama görünüm AYRI mesele** (yukarıda madde 0). iOS'ta push SADECE ana ekrana ekli PWA'da + uygulama KAPALI/arka planda iken görünür.
-10. ⚠️ **Tasarım dili Stitch-inspired** — renkler `#6463ff` indigo, `#0a0b0f` koyu, `#ffc640` amber. Eski mor `#7c6ff7` ve emoji 🧠 logo YOK. Brand-logo-icon = mor bulut karakter PNG. Cache artık **v7-6**.
+8. ✅ **Worker deploy GitHub Actions'ta** — `.github/workflows/deploy.yml` Pages + Worker'ı birden deploy eder (`aidan-worker/worker.js` veya `aidan-worker/deploy.py` değişince tetiklenir). Token GitHub Secrets'ta, `git push` yeter. Manuel `py aidan-worker/deploy.py` sadece acil/yedek (Windows'ta `PYTHONIOENCODING=utf-8` şart). **CLAUDE.md eski versiyonunda "Worker DEĞİL" yazıyordu, AI taşıma sonrası güncellendi.**
+9. ⚠️ **Background push (Haz 3 itibarıyla çalışıyor):** Apple lock ekranına ulaşması için 3 şart birden gerekli: (a) Worker `Urgency: high` (b) SW push handler her halükarda `showNotification` çağırmalı (iOS aksi halde izni iptal eder) (c) subscription fresh olmalı (eski SW'lerde oluşturulmuş subscription'lar bozuk). Sorun çıkarsa: Salim Ayarlar'dan "🔄 Push'u sıfırla" → manuel cron tetikle (`?type=noon&secret=<WEBHOOK_SECRET>`). subscription Supabase'de `data.settings.pushSubs[]`'ta.
+10. ⚠️ **Tasarım dili Stitch-inspired** — renkler `#6463ff` indigo, `#0a0b0f` koyu, `#ffc640` amber. Eski mor `#7c6ff7` ve emoji 🧠 logo YOK. Brand-logo-icon = mor bulut karakter PNG. Cache artık **v7-8**.
 11. ⚠️ **Logo değiştirmek istenirse** `logo-concepts/logo-{1,2,3}-{flat,refined,3d}.png`'den biri `icon.png` üzerine kopyalanır, `make_icons.py` ile maskable yenilenir, push edilir.
