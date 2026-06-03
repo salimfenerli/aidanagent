@@ -354,7 +354,7 @@ Veya manuel API çağrısı (deploy.py inline). Wrangler yok.
   - VAPID P-256 anahtar çifti üretildi: **public koda gömülü** (`VAPID_PUBLIC_KEY` asistan.html'de, güvenli), **private Worker secret** (`VAPID_PRIVATE_KEY`)
   - Frontend: `subscribeToPush()` → `pushManager.subscribe` → subscription `data.settings.pushSubs[]`'a yazılır, Supabase'e sync olur (yeni tablo YOK)
   - Worker: **RFC 8291 aes128gcm** payload şifreleme + **RFC 8292 VAPID JWT (ES256)**, saf `crypto.subtle`, harici kütüphane YOK. `sendPushToAll()` her cron brifingini Telegram + push gönderir, ölü sub (404/410) temizler. **VAPID env yoksa sessizce atlar (Telegram bozulmaz).**
-  - Şifreleme Python round-trip ile doğrulandı → **Apple push servisi HTTP 201 ile kabul etti, Salim'in iPhone'unda test edildi ✅**
+  - Şifreleme Python round-trip ile doğrulandı → **Apple push servisi HTTP 201 ile kabul ediyor (3 kez)** ⚠️ AMA Salim telefonda banner GÖRMEDİ — şüphe: iOS foreground'da banner göstermez (test sırasında uygulama açıktı) VEYA iOS Ayarlar→Bildirimler→Aidan kapalı. **Görünüm doğrulaması bekliyor** (Salim'e "Aidan'ı kapat+kilitle+bekle" testi verildi).
   - `deploy.py` secret listesine `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` eklendi
 - **🔐 Token temizliği:** Worker deploy için Salim geçici token verdi (sohbette ifşa oldu) → deploy sonrası Salim Cloudflare'den sildi, `/user/tokens/verify` "Invalid" doğrulandı. GitHub Actions deploy kalan token'la çalışıyor (sw.js marker push ile teyit). **May 29 leaked token meselesi de bununla kapandı — artık tek temiz token var.**
 - **Cache:** v7-1 → v7-7
@@ -573,7 +573,8 @@ curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo
 
 ## Yeni Sohbet Başlıyorsa — Önce Bunları Yap
 
-1. **Salim'in test sonuçlarını sor**: background push telefonda geldi mi (sürekli)? Yeni özellikler (undo / şablon / energy / sesli giriş / sync dot) nasıl gidiyor?
+0. 🔴 **AÇIK İŞ — background push görünmüyor:** Apple HTTP 201 veriyor (kabul) ama Salim iPhone'da banner GÖRMEDİ. EN OLASI sebep: iOS PWA **açıkken** banner göstermez (Salim test sırasında uygulamayı açık tutuyordu). DOĞRU test: Aidan'ı TAMAMEN kapat → telefonu kilitle → bekle → kilit ekranı/bildirim merkezi. Olmazsa: iPhone Ayarlar→Bildirimler→Aidan açık mı (Aidan listede yoksa = PWA bildirim izni iOS'a düşmemiş). **Yeni sohbette İLK bunu sor: "Aidan'ı kapatıp kilitleyince bildirim geldi mi?"** Bu çözülmeden Telegram emekli EDİLEMEZ.
+1. **Salim'in test sonuçlarını sor**: 🧠 AI butonu çalıştı mı (görev ekledi mi)? Yeni özellikler (undo / şablon / energy / sesli giriş / sync dot) nasıl gidiyor?
 2. **PWA'yı yeni URL'den yükledi mi?** (`aidanapp.pages.dev`) — eski Netlify URL'i ölü
 3. **Sıradaki feature** (öncelik sırası):
    - 🥇 **AI'ı PWA'ya taşı** — Telegram'daki Llama görev-ekleme beyni Worker'da, PWA'dan yeni endpoint ile çağrılacak. Hedef: Telegram'dan kademeli çıkış (push ✅ → AI taşı → Telegram emekli). Salim "telegramdan kurtulalım" dedi.
@@ -584,6 +585,6 @@ curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo
 6. ⚠️ **Mood/check-in'den bahsetme**, kaldırıldı
 7. ✅ **Token durumu temiz (Haz 2)** — May 29 leaked + geçici deploy token'ları silindi, GitHub Actions tek temiz token'la (GitHub Secrets `CF_API_TOKEN`) çalışıyor. Yeni token ifşa olursa yine sildirip doğrula (`/user/tokens/verify`).
 8. ⚠️ **Worker deploy = `py aidan-worker/deploy.py`** (token + env gerek, Salim terminal kullanamaz → ya geçici token verir ben yaparım ya da Salim Cloudflare dashboard). GitHub Actions SADECE Pages'i deploy eder, Worker'ı DEĞİL. **Windows'ta `PYTHONIOENCODING=utf-8` şart** (emoji print yoksa cp1254 hatası).
-9. ⚠️ **Background push test:** subscription Supabase'e `data.settings.pushSubs`'ta. Test için aidan-mcp/.env'den Supabase login → pushSubs çek → Python VAPID push (geçici script, credentials içerir, çalıştır-sil). iOS'ta push SADECE ana ekrana ekli PWA'da çalışır.
+9. ⚠️ **Background push test:** subscription Supabase'e `data.settings.pushSubs`'ta (Salim'in 1 cihazı kayıtlı: web.push.apple.com, iOS 18.7). Test için aidan-mcp/.env'den Supabase login → pushSubs çek → Python VAPID web-push (RFC 8291 encrypt + ES256 JWT, geçici script, credentials içerir, çalıştır-sil). **Apple 201 = kabul ama görünüm AYRI mesele** (yukarıda madde 0). iOS'ta push SADECE ana ekrana ekli PWA'da + uygulama KAPALI/arka planda iken görünür.
 10. ⚠️ **Tasarım dili Stitch-inspired** — renkler `#6463ff` indigo, `#0a0b0f` koyu, `#ffc640` amber. Eski mor `#7c6ff7` ve emoji 🧠 logo YOK. Brand-logo-icon = mor bulut karakter PNG. Cache artık **v7-6**.
 11. ⚠️ **Logo değiştirmek istenirse** `logo-concepts/logo-{1,2,3}-{flat,refined,3d}.png`'den biri `icon.png` üzerine kopyalanır, `make_icons.py` ile maskable yenilenir, push edilir.
