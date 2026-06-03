@@ -377,6 +377,7 @@ Veya manuel API çağrısı (deploy.py inline). Wrangler yok.
 - **⚠️ Secret rotate gerekli:** Test için sohbette geçici `WEBHOOK_SECRET` paylaşıldı (`aidan-push-test-2026-03-x9k7m2`). Salim Cloudflare → aidan-pusher → Variables → WEBHOOK_SECRET'ı yeni değerle güncelleyebilir (mecbur değil ama temiz).
 - **Cache:** v7-7 → v7-8
 - ⏳ **Sıradaki artık net:** Telegram'ı emekliye ayır (bildirim ✅ + AI ✅ + sesli ✅ PWA'da) → sonra multi-user (Yol A).
+- 🚦 **Telegram emeklilik Faz 1 başladı (Haz 3 gece):** Salim 3 gün boyunca Telegram'a HİÇ yazmayacak, tüm etkileşim PWA'dan (🧠 AI / 🎙️ sesli / quick capture / push bildirimleri). Kod değişikliği YOK, paralel çalışıyorlar. Çıkış kriteri: 3 gün sorunsuz → Faz 2 (Worker'dan `sendTg` cron çağrısı yorum satırı yap, push tek kanal). 4 fazlı plan CLAUDE.md'de yok ama sohbet geçmişinde tartışıldı — özet: F1 deneme / F2 cron-only-push / F3 webhook-cevap-modu / F4 kod-temizliği. Her faz tek commit, `git revert` ile geri.
 
 ## Mevcut Durum
 
