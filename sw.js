@@ -1,4 +1,4 @@
-const CACHE = 'aidan-v7-7';
+const CACHE = 'aidan-v7-8';
 const ASSETS = [
   '/',
   '/manifest.webmanifest',
@@ -36,19 +36,44 @@ self.addEventListener('notificationclick', e => {
   );
 });
 
-// Background push (ileride VAPID + Worker ile devreye girecek)
+// Background push (VAPID + Worker'dan gelir). iOS PWA: HER ZAMAN bir notification göstermeli, yoksa izin iptal olur.
 self.addEventListener('push', e => {
-  let payload = { title: '🔔 Aidan', body: 'Yeni hatırlatma' };
-  try { if (e.data) payload = e.data.json(); } catch (err) { try { payload.body = e.data.text(); } catch (e2) {} }
-  e.waitUntil(
-    self.registration.showNotification(payload.title || '🔔 Aidan', {
-      body: payload.body || '',
-      icon: '/icon.png',
-      badge: '/icon.png',
-      tag: payload.tag || 'aidan-push',
-      data: payload.data || { url: '/' }
-    })
-  );
+  e.waitUntil((async () => {
+    let title = '🔔 Aidan';
+    let body = 'Yeni hatırlatma';
+    let tag = 'aidan-push';
+    let url = '/';
+    let parseErr = null;
+    if (e.data) {
+      try {
+        const p = e.data.json();
+        title = p.title || title;
+        body = p.body || body;
+        tag = p.tag || tag;
+        url = (p.data && p.data.url) || url;
+      } catch (err) {
+        parseErr = err && err.message;
+        try { const t = e.data.text(); if (t) body = t; } catch (e2) { parseErr = (parseErr || '') + ' / text: ' + (e2 && e2.message); }
+      }
+    }
+    try {
+      await self.registration.showNotification(title, {
+        body,
+        icon: '/icon.png',
+        badge: '/icon.png',
+        tag,
+        renotify: true,
+        data: { url }
+      });
+    } catch (err) {
+      // Minimum güvenli fallback — iOS izin iptalini önler
+      try {
+        await self.registration.showNotification('🔔 Aidan', {
+          body: 'Push geldi (hata: ' + (err && err.message || 'bilinmiyor') + (parseErr ? ' | parse: ' + parseErr : '') + ')'
+        });
+      } catch (e3) {}
+    }
+  })());
 });
 
 self.addEventListener('fetch', e => {

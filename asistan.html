@@ -3952,7 +3952,11 @@ function renderNotifSettings() {
     el.innerHTML = `
       <div style="color:var(--success);">✅ Bildirimler açık</div>
       ${pushLine}
-      <button class="small" style="margin-top:8px;" onclick="testNotif()">🔔 Test bildirimi gönder</button>
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="small" onclick="testNotif()">🔔 Test bildirimi gönder</button>
+        <button class="small secondary" onclick="resubscribePush()">🔄 Push'u sıfırla</button>
+      </div>
+      <div style="color:var(--text-muted);font-size:0.78em;margin-top:6px;">Sıfırla = telefonu kapalıyken bildirim gelmiyorsa subscription'ı yenile.</div>
     `;
   } else if (perm === 'denied') {
     el.innerHTML = `
@@ -3975,6 +3979,36 @@ async function enablePushHere() {
   const ok = await subscribeToPush();
   if (ok) showToast('📲 Bu cihaz kaydedildi', 'success', 3000);
   else showToast('Kayıt başarısız — PWA olarak ana ekrana ekli mi?', 'warning', 4000);
+  renderNotifSettings();
+}
+
+// Push subscription stale ise (ör. SW push handler eklenmeden önce subscribe olunmuşsa)
+// unsubscribe + pushSubs temizle + fresh subscribe yapar.
+async function resubscribePush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    showToast('Bu cihaz push desteklemiyor', 'warning', 3000);
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) {
+      const oldEndpoint = existing.endpoint;
+      await existing.unsubscribe();
+      // pushSubs listesinden eski endpoint'i sil
+      if (data.settings && Array.isArray(data.settings.pushSubs)) {
+        data.settings.pushSubs = data.settings.pushSubs.filter(s => s.endpoint !== oldEndpoint);
+      }
+    }
+    const ok = await subscribeToPush();
+    if (ok) {
+      showToast('🔄 Push sıfırlandı + yeniden kayıt edildi', 'success', 4000);
+    } else {
+      showToast('Yeniden kayıt başarısız', 'warning', 4000);
+    }
+  } catch (e) {
+    showToast('Sıfırlama hatası: ' + (e && e.message || e), 'warning', 4000);
+  }
   renderNotifSettings();
 }
 
