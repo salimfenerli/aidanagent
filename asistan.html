@@ -106,6 +106,11 @@
   .topbar-value.next { color: var(--warning); }
   .topbar-value.session { color: var(--success); }
 
+  /* iOS klavye için input scroll buffer'ı — scrollIntoView klavye üstüne yerleştirir */
+  input, textarea, [contenteditable="true"] {
+    scroll-margin-bottom: 220px;
+    scroll-margin-top: 80px;
+  }
   /* Lucide-style SVG icon helper — currentColor stroke, font'a hizalı */
   .icon {
     width: 1.05em;
@@ -901,7 +906,7 @@
   .postpone-menu {
     position: fixed;
     left: 50%;
-    bottom: 24px;
+    bottom: calc(24px + var(--kb-h, 0px));
     transform: translate(-50%, 20px);
     background: var(--surface);
     border: 1px solid var(--border);
@@ -1765,8 +1770,8 @@
   <!-- HIZLI YAKALAMA — aklına geleni 2 sn'de yaz, sonra düşün -->
   <div class="quick-capture">
     <input type="text" id="quickCapture" placeholder="⚡ Aklına geleni hızlıca yaz, Enter'la ekle..." aria-label="Hızlı görev ekle" onkeydown="quickCaptureKey(event)">
-    <button class="quick-capture-btn mic-btn" id="quickCaptureMic" onclick="quickCaptureMic()" title="Sesli ekle" aria-label="Sesli görev ekle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
-    <button class="quick-capture-btn mic-btn" id="quickCaptureAI" onclick="quickCaptureAI()" title="AI'a sor — akıllı ekle (tarih/kategori/seri çıkarır)" aria-label="AI ile akıllı ekle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg></button>
+    <button class="quick-capture-btn mic-btn" id="quickCaptureMic" onclick="quickCaptureMic()" title="Sesli ekle" aria-label="Sesli görev ekle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/></svg></button>
+    <button class="quick-capture-btn mic-btn" id="quickCaptureAI" onclick="quickCaptureAI()" title="AI'a sor — akıllı ekle (tarih/kategori/seri çıkarır)" aria-label="AI ile akıllı ekle"><svg class="icon fill" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 L13.6 10.4 L22 12 L13.6 13.6 L12 22 L10.4 13.6 L2 12 L10.4 10.4 Z"/></svg></button>
     <button class="quick-capture-btn" onclick="quickCaptureSubmit()" title="Ekle" aria-label="Görev ekle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
   </div>
 
@@ -4682,6 +4687,34 @@ if ('serviceWorker' in navigator) {
     if (reg && reg.update) reg.update();
   });
 }
+
+// ============ iOS KLAVYE HANDLER ============
+// iOS PWA klasik problemi: klavye açılınca focused input klavyenin altında kalıyor, sayfa kendiliğinden
+// kaydırmıyor. 1) focusin'de input'u görünür yap. 2) visualViewport ile klavye yüksekliğini CSS var'a yaz —
+// position:fixed (postpone-menu vs) elementler klavye üstüne kayar.
+(() => {
+  let _focusScrollTimer = null;
+  document.addEventListener('focusin', (e) => {
+    const el = e.target;
+    if (!el || !(el.matches && el.matches('input, textarea, [contenteditable="true"]'))) return;
+    // iOS klavyesinin yerleşmesini bekle, sonra elementi görüş alanına getir
+    clearTimeout(_focusScrollTimer);
+    _focusScrollTimer = setTimeout(() => {
+      try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+    }, 320);
+  });
+
+  // Klavye yüksekliği = window.innerHeight - visualViewport.height (klavye açıkken aradaki fark)
+  if (window.visualViewport) {
+    const updateKb = () => {
+      const kb = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
+      document.documentElement.style.setProperty('--kb-h', kb + 'px');
+    };
+    window.visualViewport.addEventListener('resize', updateKb);
+    window.visualViewport.addEventListener('scroll', updateKb);
+    updateKb();
+  }
+})();
 
 // ============ İLK RENDER ============
 loadSettings();
