@@ -106,6 +106,19 @@
   .topbar-value.next { color: var(--warning); }
   .topbar-value.session { color: var(--success); }
 
+  /* Lucide-style SVG icon helper — currentColor stroke, font'a hizalı */
+  .icon {
+    width: 1.05em;
+    height: 1.05em;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vertical-align: -0.18em;
+    flex-shrink: 0;
+  }
+  .icon.fill { fill: currentColor; }
   .tabs {
     display: flex;
     gap: 3px;
@@ -130,6 +143,9 @@
     transition: all 0.15s ease;
     font-family: inherit;
     letter-spacing: 0.01em;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
   .tab:hover { background: var(--surface-hover); color: var(--text); }
   .tab.active {
@@ -499,6 +515,10 @@
     border-color: rgba(239, 68, 68, 0.4);
     animation: mic-pulse 1s ease-in-out infinite;
   }
+  /* AI butonu "düşünüyor" animasyonu — SVG ikonu döner */
+  .quick-capture-btn.loading { pointer-events: none; opacity: 0.85; }
+  .quick-capture-btn.loading .icon { animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes mic-pulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
     50% { box-shadow: 0 0 0 6px rgba(239,68,68,0); }
@@ -1672,6 +1692,9 @@
     min-width: auto;
     line-height: 1;
     font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   .task-actions button:hover { background: var(--surface-hover); color: var(--text); box-shadow: none; }
   .task-actions button.danger { background: transparent; color: var(--danger); }
@@ -1742,15 +1765,15 @@
   <!-- HIZLI YAKALAMA — aklına geleni 2 sn'de yaz, sonra düşün -->
   <div class="quick-capture">
     <input type="text" id="quickCapture" placeholder="⚡ Aklına geleni hızlıca yaz, Enter'la ekle..." aria-label="Hızlı görev ekle" onkeydown="quickCaptureKey(event)">
-    <button class="quick-capture-btn mic-btn" id="quickCaptureMic" onclick="quickCaptureMic()" title="Sesli ekle" aria-label="Sesli görev ekle">🎙️</button>
-    <button class="quick-capture-btn mic-btn" id="quickCaptureAI" onclick="quickCaptureAI()" title="AI'a sor — akıllı ekle (tarih/kategori/seri çıkarır)" aria-label="AI ile akıllı ekle">🧠</button>
-    <button class="quick-capture-btn" onclick="quickCaptureSubmit()" title="Düz ekle">＋</button>
+    <button class="quick-capture-btn mic-btn" id="quickCaptureMic" onclick="quickCaptureMic()" title="Sesli ekle" aria-label="Sesli görev ekle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
+    <button class="quick-capture-btn mic-btn" id="quickCaptureAI" onclick="quickCaptureAI()" title="AI'a sor — akıllı ekle (tarih/kategori/seri çıkarır)" aria-label="AI ile akıllı ekle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg></button>
+    <button class="quick-capture-btn" onclick="quickCaptureSubmit()" title="Ekle" aria-label="Görev ekle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
   </div>
 
   <div class="tabs">
-    <button class="tab active" data-tab="tasks" onclick="showTab('tasks', this)">📋 Görevler</button>
-    <button class="tab" data-tab="focus" onclick="showTab('focus', this)">🎧 Odak</button>
-    <button class="tab" data-tab="settings" onclick="showTab('settings', this)">⚙️ Ayarlar</button>
+    <button class="tab active" data-tab="tasks" onclick="showTab('tasks', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 17 5 19 9 15"/><polyline points="3 7 5 9 9 5"/><line x1="13" y1="6" x2="21" y2="6"/><line x1="13" y1="12" x2="21" y2="12"/><line x1="13" y1="18" x2="21" y2="18"/></svg>Görevler</button>
+    <button class="tab" data-tab="focus" onclick="showTab('focus', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>Odak</button>
+    <button class="tab" data-tab="settings" onclick="showTab('settings', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ayarlar</button>
   </div>
 
   <!-- GÖREVLER -->
@@ -2311,8 +2334,7 @@ async function quickCaptureAI() {
     return;
   }
   const btn = document.getElementById('quickCaptureAI');
-  const orig = btn.textContent;
-  btn.disabled = true; btn.textContent = '⏳';
+  btn.disabled = true; btn.classList.add('loading');
   try {
     const { data: sess } = await window._supa.auth.getSession();
     const token = sess && sess.session && sess.session.access_token;
@@ -2325,15 +2347,15 @@ async function quickCaptureAI() {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || ('sunucu hatası ' + r.status));
     inp.value = '';
-    showToast('🧠 ' + (j.reply || 'Tamam'), 'success', 5500);
+    showToast(j.reply || 'Tamam', 'success', 5500);
     // Worker Supabase'e yazdıysa realtime sync getirir; garanti için kısa süre sonra pull + render
     if (j.changed) {
       setTimeout(() => { if (typeof manualPull === 'function') manualPull(); else renderTasks(); }, 700);
     }
   } catch (e) {
-    showToast('🧠 AI hatası: ' + e.message, 'error', 4500);
+    showToast('AI hatası: ' + e.message, 'error', 4500);
   } finally {
-    btn.disabled = false; btn.textContent = orig;
+    btn.disabled = false; btn.classList.remove('loading');
   }
 }
 
@@ -3059,13 +3081,13 @@ function renderTaskItem(t) {
         ` : ''}
       </div>
       <div class="task-actions">
-        <button class="small ${isMit ? 'mit-on' : 'secondary'}" onclick="toggleMit(${t.id})" title="${isMit ? 'Bugünün 3\'ünden çıkar' : 'Bugünün 3\'üne ekle'}">${isMit ? '⭐' : '☆'}</button>
-        <button class="small" onclick="startTaskNow(${t.id}, false)" title="Şimdi başla — odak moduna geçer">▶️</button>
-        ${t.done || !t.estimateMin || t.estimateMin <= 5 ? '' : `<button class="small secondary" onclick="startTaskNow(${t.id}, true)" title="Sadece 2 dakika dene — başlamanın altın kuralı">⚡2dk</button>`}
-        ${t.done ? '' : `<button class="small secondary" onclick="postponeTask(${t.id})" title="Ertele — başka güne kaydır">📅</button>`}
-        ${t.done ? '' : `<button class="small secondary" onclick="addSubtask(${t.id})" title="Alt adım ekle">✂️</button>`}
-        <button class="small secondary" onclick="editTask(${t.id})" title="Düzenle">✏️</button>
-        <button class="small danger" onclick="deleteTask(${t.id})">🗑️</button>
+        <button class="small ${isMit ? 'mit-on' : 'secondary'}" onclick="toggleMit(${t.id})" title="${isMit ? 'Bugünün 3\'ünden çıkar' : 'Bugünün 3\'üne ekle'}" aria-label="${isMit ? 'MIT' : 'MIT yap'}"><svg class="icon${isMit ? ' fill' : ''}" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+        <button class="small" onclick="startTaskNow(${t.id}, false)" title="Şimdi başla — odak moduna geçer" aria-label="Başla"><svg class="icon fill" viewBox="0 0 24 24" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>
+        ${t.done || !t.estimateMin || t.estimateMin <= 5 ? '' : `<button class="small secondary" onclick="startTaskNow(${t.id}, true)" title="Sadece 2 dakika dene — başlamanın altın kuralı" aria-label="2 dakika dene"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>2dk</button>`}
+        ${t.done ? '' : `<button class="small secondary" onclick="postponeTask(${t.id})" title="Ertele — başka güne kaydır" aria-label="Ertele"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>`}
+        ${t.done ? '' : `<button class="small secondary" onclick="addSubtask(${t.id})" title="Alt adım ekle" aria-label="Alt adım ekle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg></button>`}
+        <button class="small secondary" onclick="editTask(${t.id})" title="Düzenle" aria-label="Düzenle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
+        <button class="small danger" onclick="deleteTask(${t.id})" title="Sil" aria-label="Sil"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
       </div>
     </div>
   `;
