@@ -506,6 +506,44 @@
   .stocks-hint { font-size: 0.8em; color: var(--text-faint); margin-top: 14px; line-height: 1.5; text-align: center; }
   .stocks-empty { font-size: 0.88em; color: var(--text-muted); text-align: center; padding: 28px 12px; line-height: 1.6; }
 
+  /* Portföy özeti */
+  .portfolio-summary {
+    background: linear-gradient(135deg, rgba(99,102,241,0.10), rgba(99,102,241,0.03));
+    border: 1px solid rgba(99,102,241,0.25);
+    border-radius: var(--radius-lg);
+    padding: 16px 18px;
+    margin-bottom: 14px;
+  }
+  .pf-label { font-size: 0.72em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .pf-value { font-size: 1.7em; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; margin-top: 2px; }
+  .pf-pl { font-size: 1.0em; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .pf-pl.up { color: #34c759; }
+  .pf-pl.down { color: #ef4444; }
+  .pf-pl.flat { color: var(--text-muted); }
+  .pf-sub { font-size: 0.78em; color: var(--text-faint); margin-top: 8px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .pf-sub b { color: var(--text-muted); font-weight: 600; }
+
+  /* Kart içi pozisyon (holding) */
+  .stock-position {
+    margin-top: 11px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-soft);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .stock-position-info { font-size: 0.8em; color: var(--text-muted); line-height: 1.5; }
+  .stock-position-info b { color: var(--text); font-weight: 600; }
+  .stock-position-pl { text-align: right; flex-shrink: 0; }
+  .stock-position-pl-val { font-size: 0.95em; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stock-position-pl-pct { font-size: 0.78em; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stock-position-pl.up .stock-position-pl-val, .stock-position-pl.up .stock-position-pl-pct { color: #34c759; }
+  .stock-position-pl.down .stock-position-pl-val, .stock-position-pl.down .stock-position-pl-pct { color: #ef4444; }
+  .stock-position-pl.flat .stock-position-pl-val, .stock-position-pl.flat .stock-position-pl-pct { color: var(--text-muted); }
+  .stock-actions button.pos:hover { color: var(--accent); }
+
   /* Görev kartları */
   .task {
     background: var(--bg-elev);
@@ -2215,6 +2253,7 @@
   <!-- BORSA -->
   <div id="stocks" class="panel">
     <h2>📈 Borsa</h2>
+    <div class="portfolio-summary" id="portfolioSummary" style="display:none;"></div>
     <div class="stocks-add">
       <input type="text" id="stockSymInput" placeholder="Hisse kodu (örn THYAO, GARAN, ASELS)" maxlength="12" onkeydown="if(event.key==='Enter')addStock()" autocapitalize="characters">
       <button onclick="addStock()" id="stockAddBtn">➕ Ekle</button>
@@ -3215,6 +3254,7 @@ function addStock() {
   data.watchlist.unshift({
     symbol: sym, name: sym, price: null, prevClose: null, changePct: null, currency: 'TRY',
     alarmAbove: null, alarmBelow: null, lastAlertedAbove: false, lastAlertedBelow: false,
+    qty: null, cost: null,
     fetchedAt: null, error: null
   });
   inp.value = '';
@@ -3322,8 +3362,9 @@ function renderStocks() {
   if (!list) return;
   const wl = data.watchlist || [];
   if (upd) upd.textContent = stocksUpdatedLabel();
+  renderPortfolioSummary();
   if (wl.length === 0) {
-    list.innerHTML = '<div class="stocks-empty">Henüz hisse yok.<br>Yukarıdan BIST kodu ekle (örn THYAO).<br>Fiyatını gör, alarm kur 🔔</div>';
+    list.innerHTML = '<div class="stocks-empty">Henüz hisse yok.<br>Yukarıdan BIST kodu ekle (örn THYAO).<br>Fiyatını gör, pozisyon gir, alarm kur 🔔</div>';
     return;
   }
   list.innerHTML = wl.map(w => {
@@ -3333,6 +3374,31 @@ function renderStocks() {
     const alarmBadges = [];
     if (w.alarmAbove != null) alarmBadges.push(`<span class="stock-alarm-badge">▲ ${formatStockPrice(w.alarmAbove)}</span>`);
     if (w.alarmBelow != null) alarmBadges.push(`<span class="stock-alarm-badge">▼ ${formatStockPrice(w.alarmBelow)}</span>`);
+
+    // Pozisyon (holding) — adet + ortalama maliyet
+    let positionHtml = '';
+    if (w.qty != null && w.qty > 0 && w.cost != null) {
+      const costBasis = w.qty * w.cost;
+      let plHtml = '';
+      if (w.price != null) {
+        const value = w.qty * w.price;
+        const pl = value - costBasis;
+        const plPct = costBasis > 0 ? (pl / costBasis) * 100 : 0;
+        const pdir = pl > 0 ? 'up' : (pl < 0 ? 'down' : 'flat');
+        const psign = pl > 0 ? '+' : '';
+        plHtml = `
+          <div class="stock-position-pl ${pdir}">
+            <div class="stock-position-pl-val">${psign}${formatStockPrice(pl)} ${escapeHtml(w.currency||'TL')}</div>
+            <div class="stock-position-pl-pct">${psign}${plPct.toFixed(2)}% · ${formatStockPrice(value)}</div>
+          </div>`;
+      }
+      positionHtml = `
+        <div class="stock-position">
+          <div class="stock-position-info"><b>${formatLot(w.qty)}</b> adet × <b>${formatStockPrice(w.cost)}</b> maliyet</div>
+          ${plHtml}
+        </div>`;
+    }
+
     return `
       <div class="stock-card ${cardDir}">
         <div class="stock-card-top">
@@ -3346,9 +3412,11 @@ function renderStocks() {
           </div>
         </div>
         ${w.error ? `<div class="stock-err">⚠️ ${escapeHtml(w.error)} — kod doğru mu?</div>` : ''}
+        ${positionHtml}
         <div class="stock-card-bottom">
           ${alarmBadges.join('')}
           <div class="stock-actions">
+            <button class="pos" onclick="setPosition('${w.symbol}')" title="Pozisyon (adet + maliyet)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>${w.qty != null && w.qty > 0 ? 'Pozisyon' : 'Pozisyon ekle'}</button>
             <button onclick="setStockAlarm('${w.symbol}')" title="Alarm kur"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>Alarm</button>
             <button class="del" onclick="removeStock('${w.symbol}')" title="Listeden çıkar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
           </div>
@@ -3356,6 +3424,65 @@ function renderStocks() {
       </div>
     `;
   }).join('');
+}
+
+function formatLot(n) {
+  if (n == null) return '—';
+  // Tam sayıysa ondalık gösterme
+  return Number.isInteger(n) ? String(n) : Number(n).toLocaleString('tr-TR', { maximumFractionDigits: 4 });
+}
+
+// Adet + ortalama maliyet gir → pozisyon
+async function setPosition(sym) {
+  const w = (data.watchlist || []).find(x => x.symbol === sym);
+  if (!w) return;
+  const qtyIn = await aidanPrompt(`${sym} — kaç adet?`, `Elindeki lot/adet sayısı. Boş = pozisyonu kaldır.`, w.qty != null ? String(w.qty) : '');
+  if (qtyIn === null) return; // iptal
+  const qtyStr = (qtyIn || '').trim().replace(',', '.');
+  if (!qtyStr) {
+    // Pozisyonu kaldır
+    w.qty = null; w.cost = null;
+    save(); renderStocks();
+    showToast(`${sym} pozisyonu kaldırıldı`, 'info', 2000);
+    return;
+  }
+  const qty = parseFloat(qtyStr);
+  if (!isFinite(qty) || qty <= 0) { showToast('Geçersiz adet', 'warning', 2500); return; }
+  const costIn = await aidanPrompt(`${sym} — ortalama maliyet`, `Ortalama alış fiyatın (lot başı TL).`, w.cost != null ? String(w.cost) : '');
+  if (costIn === null) return;
+  const cost = parseFloat((costIn || '').trim().replace(',', '.'));
+  if (!isFinite(cost) || cost <= 0) { showToast('Geçersiz maliyet', 'warning', 2500); return; }
+  w.qty = qty; w.cost = cost;
+  save(); renderStocks();
+  showToast(`💼 ${sym}: ${formatLot(qty)} adet × ${formatStockPrice(cost)}`, 'success', 3000);
+}
+
+// Toplam portföy özeti — sadece pozisyonu olan + fiyatı gelmiş hisseler
+function renderPortfolioSummary() {
+  const el = document.getElementById('portfolioSummary');
+  if (!el) return;
+  const holdings = (data.watchlist || []).filter(w => w.qty != null && w.qty > 0 && w.cost != null);
+  if (holdings.length === 0) { el.style.display = 'none'; return; }
+  let totalCost = 0, totalValue = 0, pricedCount = 0;
+  for (const w of holdings) {
+    totalCost += w.qty * w.cost;
+    if (w.price != null) { totalValue += w.qty * w.price; pricedCount++; }
+    else { totalValue += w.qty * w.cost; } // fiyat yoksa maliyetle say (nötr)
+  }
+  const pl = totalValue - totalCost;
+  const plPct = totalCost > 0 ? (pl / totalCost) * 100 : 0;
+  const pdir = pl > 0 ? 'up' : (pl < 0 ? 'down' : 'flat');
+  const psign = pl > 0 ? '+' : '';
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div class="pf-label">💼 Portföy değeri</div>
+    <div class="pf-value">${formatStockPrice(totalValue)} <span style="font-size:0.5em;color:var(--text-faint);font-weight:600;">TL</span></div>
+    <div class="pf-pl ${pdir}">${psign}${formatStockPrice(pl)} TL · ${psign}${plPct.toFixed(2)}%</div>
+    <div class="pf-sub">
+      <span>Maliyet: <b>${formatStockPrice(totalCost)} TL</b></span>
+      <span><b>${holdings.length}</b> pozisyon${pricedCount < holdings.length ? ` · ${holdings.length - pricedCount} fiyat bekliyor` : ''}</span>
+    </div>
+  `;
 }
 
 function addTask() {
