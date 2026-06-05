@@ -668,8 +668,24 @@ async function runCronJob(env, type) {
   if (!payload) return { type, sent: false, reason: 'no-content' };
   // Telegram emekli ise sadece push gönder, değilse iki kanaldan da
   if (!TELEGRAM_RETIRED) await sendTg(env, payload);
+  const subs = (data.settings && data.settings.pushSubs) || [];
   await sendPushToAll(env, data, payload, { token, userId });
+  // Bildirim geçmişi — PWA "📬 Son 7 gün" listesinde gösterilir
+  logPush(data, type, payload, subs.length);
+  try { await saveAidan(env, data, { token, userId }); } catch (e) { console.error('pushLog save fail', e.message); }
   return { type, sent: true, channel: TELEGRAM_RETIRED ? 'push-only' : 'push+telegram' };
+}
+
+// Bildirim kaydını data.pushLog'a ekle (son 7 gün + max 60 kayıt)
+function logPush(data, type, payload, deviceCount) {
+  data.pushLog = data.pushLog || [];
+  const title = (payload.title || '🔔 Aidan');
+  // Mesajı kısalt — HTML etiketlerini ayıkla, ilk 140 karakter
+  let body = String(payload.message || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  if (body.length > 140) body = body.slice(0, 140) + '…';
+  data.pushLog.unshift({ type, title, body, when: Date.now(), devices: deviceCount });
+  const weekAgo = Date.now() - 7 * 86400000;
+  data.pushLog = data.pushLog.filter(e => e.when >= weekAgo).slice(0, 60);
 }
 
 // ============================================================

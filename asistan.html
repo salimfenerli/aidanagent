@@ -359,6 +359,31 @@
   .braindump-item-actions button.del:hover { color: var(--danger); }
   .braindump-empty { font-size: 0.85em; color: var(--text-faint); text-align: center; padding: 8px 0; }
 
+  /* Bildirim geçmişi (push log) */
+  .pushlog-section { border: 1px solid var(--border-soft); border-radius: 8px; overflow: hidden; }
+  .pushlog-section summary {
+    padding: 9px 12px; cursor: pointer; color: var(--text-muted); font-size: 0.85em;
+    font-weight: 500; display: flex; align-items: center; gap: 8px; list-style: none;
+  }
+  .pushlog-section summary::-webkit-details-marker { display: none; }
+  .pushlog-section summary::before { content: '▸'; font-size: 0.9em; transition: transform 0.2s; display: inline-block; }
+  .pushlog-section[open] summary::before { transform: rotate(90deg); }
+  .pushlog-section summary:hover { color: var(--text); }
+  .pushlog-badge {
+    margin-left: auto; background: var(--surface-hover); color: var(--text-muted);
+    font-size: 0.76em; font-weight: 600; padding: 1px 8px; border-radius: 10px;
+  }
+  .pushlog-badge:empty { display: none; }
+  .pushlog-list { padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 7px; }
+  .pushlog-item {
+    padding: 8px 10px; background: var(--surface); border-radius: 7px;
+    border-left: 2px solid var(--accent); font-size: 0.85em; line-height: 1.4;
+  }
+  .pushlog-item-title { font-weight: 600; color: var(--text); display: flex; justify-content: space-between; gap: 8px; }
+  .pushlog-item-when { font-size: 0.85em; color: var(--text-faint); font-weight: 400; white-space: nowrap; }
+  .pushlog-item-body { color: var(--text-muted); margin-top: 2px; }
+  .pushlog-empty { font-size: 0.82em; color: var(--text-faint); text-align: center; padding: 10px 0; }
+
   /* Görev kartları */
   .task {
     background: var(--bg-elev);
@@ -2070,10 +2095,14 @@
       <label>📱 Bildirimler</label>
       <div id="notifSettings" style="margin-bottom:8px;"></div>
       <div class="settings-help">
-        Bildirimler iki kanaldan gelir:<br>
-        • <b>Aidan bildirimi</b> (tarayıcı/PWA) — görev saatleri ve yerel hatırlatmalar<br>
-        • <b>Telegram bot</b> — <a href="https://t.me/salim_aidan_bot" target="_blank" style="color:var(--accent);">t.me/salim_aidan_bot</a> — sabah brifingi, deadline, akşam özeti
+        Bildirimler doğrudan Aidan'dan gelir (tarayıcı/PWA):<br>
+        • Görev saatleri ve yerel hatırlatmalar<br>
+        • Sabah brifingi · deadline uyarısı · akşam özeti (telefon kapalıyken bile)
       </div>
+      <details class="pushlog-section" id="pushlogSection" style="margin-top:10px;">
+        <summary>📬 Son 7 gün <span class="pushlog-badge" id="pushlogBadge"></span></summary>
+        <div class="pushlog-list" id="pushlogList"></div>
+      </details>
     </div>
 
     <div class="settings-row">
@@ -2200,6 +2229,7 @@
 let data = JSON.parse(localStorage.getItem('aidan') || '{}');
 data.tasks = data.tasks || [];
 data.dumps = data.dumps || [];
+data.pushLog = data.pushLog || [];
 data.routines = data.routines || [];
 data.pomoToday = data.pomoToday || { date: today(), count: 0 };
 data.settings = data.settings || {};
@@ -4563,6 +4593,42 @@ function renderNotifSettings() {
       <div style="color:var(--text-muted);font-size:0.85em;margin-top:4px;">Görev saatleri geldiğinde Aidan sana hatırlatır.</div>
     `;
   }
+  renderPushLog();
+}
+
+// Bildirim geçmişi — Worker'ın gönderdiği push'ları gösterir (data.pushLog)
+function pushLogRelTime(when) {
+  const diff = Date.now() - when;
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return 'az önce';
+  if (min < 60) return `${min} dk önce`;
+  const d = new Date(when);
+  const todayMid = new Date(); todayMid.setHours(0,0,0,0);
+  const itemMid = new Date(when); itemMid.setHours(0,0,0,0);
+  const dayDiff = Math.round((todayMid - itemMid) / 86400000);
+  const hhmm = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  if (dayDiff === 0) return `bugün ${hhmm}`;
+  if (dayDiff === 1) return `dün ${hhmm}`;
+  const names = ['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
+  return `${names[d.getDay()]} ${hhmm}`;
+}
+
+function renderPushLog() {
+  const list = document.getElementById('pushlogList');
+  const badge = document.getElementById('pushlogBadge');
+  if (!list) return;
+  const log = data.pushLog || [];
+  if (badge) badge.textContent = log.length ? String(log.length) : '';
+  if (log.length === 0) {
+    list.innerHTML = '<div class="pushlog-empty">Henüz bildirim gelmedi.<br>Sabah/öğle/akşam brifingleri burada birikir.</div>';
+    return;
+  }
+  list.innerHTML = log.map(e => `
+    <div class="pushlog-item">
+      <div class="pushlog-item-title"><span>${escapeHtml(e.title || '🔔 Aidan')}</span><span class="pushlog-item-when">${pushLogRelTime(e.when)}</span></div>
+      ${e.body ? `<div class="pushlog-item-body">${escapeHtml(e.body)}</div>` : ''}
+    </div>
+  `).join('');
 }
 
 function testNotif() {
