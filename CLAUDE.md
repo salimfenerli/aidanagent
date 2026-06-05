@@ -379,6 +379,22 @@ Veya manuel API çağrısı (deploy.py inline). Wrangler yok.
 - ⏳ **Sıradaki artık net:** Telegram'ı emekliye ayır (bildirim ✅ + AI ✅ + sesli ✅ PWA'da) → sonra multi-user (Yol A).
 - 🚦 **Telegram emeklilik Faz 1 başladı (Haz 3 gece):** Salim 3 gün boyunca Telegram'a HİÇ yazmayacak, tüm etkileşim PWA'dan (🧠 AI / 🎙️ sesli / quick capture / push bildirimleri). Kod değişikliği YOK, paralel çalışıyorlar. Çıkış kriteri: 3 gün sorunsuz → Faz 2 (Worker'dan `sendTg` cron çağrısı yorum satırı yap, push tek kanal). 4 fazlı plan CLAUDE.md'de yok ama sohbet geçmişinde tartışıldı — özet: F1 deneme / F2 cron-only-push / F3 webhook-cevap-modu / F4 kod-temizliği. Her faz tek commit, `git revert` ile geri.
 
+### Haziran 4, 2026 (Telegram EMEKLİ — F2 + F3 birleşik)
+- Salim F1 (3 gün deneme) atladı, doğrudan F2 + F3'e geçildi. Push güvenilir çalışıyor, AI butonu (+ akıllı parser) ve sesli giriş PWA'da hazır → Telegram'a ihtiyaç kalmadı.
+- **Tek bayrak: `TELEGRAM_RETIRED = true`** (worker.js başında). Açıp kapatmak için tek satır flip + deploy.
+  - **Cron:** `runCronJob` artık `sendTg` çağırmıyor (bayrak true iken). Push tek kanal. `channel: 'push-only'` döner.
+  - **Webhook:** `handleWebhook` sahibi (Salim) yazarsa tek bilgi mesajı dönüyor — "Aidan artık aidanapp.pages.dev'de, mesajın işlenmedi". AI/Whisper/tool processing YOK. Diğer kullanıcılara sessiz 200 OK.
+  - Eski kod yorum satırı değil, IF altında — bayrak false dönerse normal akış geri gelir.
+- **Faz 4 (kod silme) yapılmadı.** Eski Telegram pipeline aynen duruyor (`sendTg`, `transcribeVoice`, `aiInterpret`, `TOOL_HANDLERS`). Rollback risk yok.
+- **Telegram bot BotFather'da hâlâ duruyor** — silinmedi. Gerek olursa bayrak çevrilir, bot tekrar canlı. Salim isterse `/deletebot` ile sonradan kapatabilir.
+- **Bildirim akışı:** Sadece PWA push (web.push.apple.com) → iOS lock ekranı. Telegram bildirimleri çıkmaz.
+- ⏳ Sıradaki adımlar — eksik analizi sohbetinden:
+  - 🥇 Brain dump UI (Telegram'dan kaybedilen tek özellik PWA'da yok)
+  - 🥈 Bildirim geçmişi (push log)
+  - 🥉 Sesli akşam günlüğü (Whisper + AI özet)
+  - Sonra: multi-user · borsa · onboarding
+- **Cache:** v7-13 (frontend değişmedi, sadece Worker)
+
 ## Mevcut Durum
 
 ### ✅ Çalışıyor
@@ -588,9 +604,12 @@ curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo
 1. **Salim'in test sonuçlarını sor**: 🧠 AI butonu (PWA quick capture) çalıştı mı (görev ekledi mi)? Yeni özellikler (undo / şablon / energy / sesli giriş / sync dot) nasıl gidiyor?
 2. **PWA'yı yeni URL'den yükledi mi?** (`aidanapp.pages.dev`) — eski Netlify URL'i ölü
 3. **Sıradaki feature** (öncelik sırası):
-   - 🥇 **Telegram emekliliği** — push ✅ + AI ✅ + sesli ✅ PWA'da. Adımlar: (a) PWA'da test sürüşü Salim'le birkaç gün (b) Telegram cron'u kapat / push tek kanal yap (c) webhook silmek opsiyonel (geri açmak kolay olsun diye saklanabilir). Salim "telegramdan kurtulalım" dedi.
-   - 🥈 **Multi-user (Yol A: davetli arkadaşlar)** — Salim arkadaşını eklemek istiyor. RLS+auth zaten hazır. Gereken: Worker'ı çok-kullanıcıya çevir (şu an tek `AIDAN_EMAIL` hesabına bakıyor → tüm aidan_data satırlarını dolaş), davet kodu, email onayı. Background push zaten multi-user uyumlu (her user kendi pushSubs'u). Telegram tek kişilik kalır (Salim'in chat_id'sine kilitli).
-   - 🥉 Borsa modülü (Salim "sona, daha detaylı" demişti)
+   - 🥇 **Brain dump UI** — Telegram emeklilikten kaybedilen tek özellik PWA'da yok. `data.dumps` field zaten var. "Aklıma X geldi" hızlı ekle + liste.
+   - 🥈 **Bildirim geçmişi** — Worker push gönderirken Supabase'e log, PWA'da "📬 Son 7 gün" listesi. "Sabah brifingi geldi mi gelmedi mi" merakı kalmasın.
+   - 🥉 **Sesli akşam günlüğü** — Gün sonu konuş, Whisper text'e, AI özetle. ADHD decompression ritüeli.
+   - **Multi-user (Yol A: davetli arkadaşlar)** — Worker tek `AIDAN_EMAIL`'e bakıyor → tüm aidan_data satırlarını dolaş, davet kodu, email onayı. Background push zaten multi-user uyumlu.
+   - **Borsa modülü** — BIST + ABD watchlist (Salim "sona, daha detaylı" demişti)
+   - **Faz 4 (Telegram kod temizliği)** — Multi-user oturduktan sonra `sendTg`/`transcribeVoice`/`aiInterpret`/Telegram tool'ları silinir. Hangisinin sadece Telegram'a özel olduğunu bilmek için: `if (!TELEGRAM_RETIRED)` altında olanlar.
 4. ⚠️ **Netlify / drag-drop deploy ASLA önerme** — `git push` → GitHub Actions otomatik deploy var
 5. ⚠️ **ntfy.sh'tan asla bahsetme**, Telegram bot kullanılıyor
 6. ⚠️ **Mood/check-in'den bahsetme**, kaldırıldı

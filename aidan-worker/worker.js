@@ -21,6 +21,13 @@
 const TR_OFFSET_MS = 3 * 60 * 60 * 1000;
 const AI_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
+// === TELEGRAM EMEKLİLİĞİ ===
+// Haz 4 2026: Salim PWA-only kullanıma geçti (push ✅ + AI ✅ + sesli ✅).
+// true iken: webhook auto-reply, cron sendTg yorum satırı (push tek kanal).
+// false iken: eski davranış (webhook AI/Whisper işler, cron Telegram + push).
+// Rollback için bu tek satırı çevir, deploy et.
+const TELEGRAM_RETIRED = true;
+
 // ============================================================
 // Zaman yardımcıları (Türkiye saati)
 // ============================================================
@@ -659,9 +666,10 @@ async function runCronJob(env, type) {
     default: throw new Error(`Bilinmeyen tip: ${type}`);
   }
   if (!payload) return { type, sent: false, reason: 'no-content' };
-  await sendTg(env, payload);
+  // Telegram emekli ise sadece push gönder, değilse iki kanaldan da
+  if (!TELEGRAM_RETIRED) await sendTg(env, payload);
   await sendPushToAll(env, data, payload, { token, userId });
-  return { type, sent: true };
+  return { type, sent: true, channel: TELEGRAM_RETIRED ? 'push-only' : 'push+telegram' };
 }
 
 // ============================================================
@@ -1578,6 +1586,28 @@ async function handleWebhook(request, env) {
   }
 
   const update = await request.json();
+
+  // === TELEGRAM EMEKLİ (Faz 3, Haz 4 2026) ===
+  // Gelen her mesaja tek bir auto-reply: "Aidan artık PWA'da". AI/Whisper/tool processing YOK
+  // (token + quota tasarrufu). Sahibine bir kez bilgi mesajı gönder, sonra herkes için sessiz.
+  // Rollback: bu if-bloğunu kaldır → eski webhook akışı tekrar çalışır.
+  // Faz 4 = bu blok + altındaki tüm kodun silinmesi.
+  if (TELEGRAM_RETIRED) {
+    try {
+      const msg0 = update.message || update.edited_message;
+      const chatId = msg0 && msg0.chat && msg0.chat.id;
+      const senderId = msg0 && msg0.from && msg0.from.id;
+      // Sadece hesap sahibine bilgi mesajı, anti-flood için günlük 1 kez (in-memory KV yok, hep gönder)
+      if (chatId && String(senderId) === String(env.TELEGRAM_CHAT_ID)) {
+        await sendTg(env, {
+          chatId,
+          title: '🌙 Aidan emekli',
+          message: 'Aidan artık tarayıcıdan çalışıyor:\n\n📲 https://aidanapp.pages.dev\n\nGörev ekleme, sesli giriş, AI yorumlama, bildirim — hepsi orada. Telegram bot sessiz, mesajların işlenmiyor. PWA\'yı kullan 💜',
+        });
+      }
+    } catch (e) { console.error('emekli reply hatası', e.message); }
+    return new Response('OK');
+  }
 
   // Inline button tıklaması
   if (update.callback_query) {
