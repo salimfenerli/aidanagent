@@ -255,6 +255,110 @@
     .task-input { grid-template-columns: 1fr; }
   }
 
+  /* Zihin boşalt (brain dump) — add-task-section ile aynı katlanır yapı */
+  .braindump-section {
+    background: var(--bg-elev);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .braindump-section summary {
+    padding: 11px 16px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.88em;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    list-style: none;
+  }
+  .braindump-section summary::-webkit-details-marker { display: none; }
+  .braindump-section summary::before {
+    content: '▸';
+    font-size: 0.9em;
+    transition: transform 0.2s ease;
+    display: inline-block;
+  }
+  .braindump-section[open] summary::before { transform: rotate(90deg); }
+  .braindump-section summary:hover { color: var(--text); background: var(--surface-hover); }
+  .braindump-badge {
+    margin-left: auto;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.78em;
+    font-weight: 600;
+    padding: 1px 8px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+  }
+  .braindump-badge:empty { display: none; }
+  .braindump-inner { padding: 4px 14px 14px; }
+  .braindump-hint {
+    font-size: 0.8em;
+    color: var(--text-faint);
+    line-height: 1.45;
+    margin-bottom: 10px;
+  }
+  .braindump-input-row { display: flex; gap: 7px; margin-bottom: 12px; }
+  .braindump-input-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 12px;
+    font-size: 0.92em;
+  }
+  .braindump-mic, .braindump-add {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 0 13px;
+    cursor: pointer;
+    box-shadow: none;
+    display: inline-flex;
+    align-items: center;
+  }
+  .braindump-add { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .braindump-mic:hover { background: rgba(99,102,241,0.08); color: var(--accent); }
+  .braindump-mic.recording {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.4);
+    animation: mic-pulse 1s ease-in-out infinite;
+  }
+  .braindump-list { display: flex; flex-direction: column; gap: 6px; }
+  .braindump-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 9px 11px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    font-size: 0.9em;
+    line-height: 1.4;
+  }
+  .braindump-item-text { flex: 1; word-break: break-word; }
+  .braindump-item-when { font-size: 0.72em; color: var(--text-faint); margin-top: 3px; }
+  .braindump-item-actions { display: flex; gap: 3px; flex-shrink: 0; }
+  .braindump-item-actions button {
+    background: transparent;
+    border: none;
+    color: var(--text-faint);
+    cursor: pointer;
+    padding: 3px 5px;
+    border-radius: 5px;
+    box-shadow: none;
+    display: inline-flex;
+    align-items: center;
+  }
+  .braindump-item-actions button:hover { background: var(--surface-hover); color: var(--text); }
+  .braindump-item-actions button.to-task:hover { color: var(--success); }
+  .braindump-item-actions button.del:hover { color: var(--danger); }
+  .braindump-empty { font-size: 0.85em; color: var(--text-faint); text-align: center; padding: 8px 0; }
+
   /* Görev kartları */
   .task {
     background: var(--bg-elev);
@@ -1876,6 +1980,18 @@
       <button class="suggest-btn" onclick="suggestTask()">🎯 Şu an ne yapayım?</button>
       <button class="suggest-btn ghost" onclick="openTemplateModal()" title="Hazır görev paketleri">📋 Şablonlar</button>
     </div>
+    <details class="braindump-section" id="braindumpSection">
+      <summary>🧠 Zihin boşalt <span class="braindump-badge" id="braindumpBadge"></span></summary>
+      <div class="braindump-inner">
+        <div class="braindump-hint">Aklını kurcalayan her şeyi dök — görev olmasın, sadece kafandan çıksın. Sonra düşünürsün.</div>
+        <div class="braindump-input-row">
+          <input type="text" id="braindumpInput" placeholder="Aklındakini yaz, Enter'la dök..." onkeydown="if(event.key==='Enter')addDump()">
+          <button class="braindump-mic" id="braindumpMic" onclick="dumpVoice()" title="Sesli dök" aria-label="Sesli dök"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/></svg></button>
+          <button class="braindump-add" onclick="addDump()" title="Dök"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+        </div>
+        <div class="braindump-list" id="braindumpList"></div>
+      </div>
+    </details>
     <details class="add-task-section" id="addTaskSection">
       <summary>➕ Görev ekle</summary>
       <div class="add-task-inner">
@@ -2614,6 +2730,116 @@ function quickCaptureSubmit() {
   const head = `✅ ${p.text.slice(0, 40)}${p.text.length > 40 ? '…' : ''}`;
   const suffix = p.detected.length ? `\n${p.detected.join(' · ')}` : '';
   showToast(head + suffix, 'success', p.detected.length ? 3500 : 2200);
+}
+
+// ============ ZİHİN BOŞALT (BRAIN DUMP) ============
+// data.dumps = [{ text, when }]  — when = benzersiz epoch ms (çakışmada +1)
+let _lastDumpWhen = 0;
+function uniqueDumpWhen() {
+  let w = Date.now();
+  if (w <= _lastDumpWhen) w = _lastDumpWhen + 1; // aynı ms'de çakışma → benzersizle
+  _lastDumpWhen = w;
+  return w;
+}
+function addDump() {
+  const inp = document.getElementById('braindumpInput');
+  const text = inp.value.trim();
+  if (!text) return;
+  data.dumps = data.dumps || [];
+  data.dumps.unshift({ text, when: uniqueDumpWhen() });
+  inp.value = '';
+  save();
+  renderDumps();
+  showToast('🧠 Kafandan çıktı', 'success', 1800);
+}
+
+function deleteDump(when) {
+  data.dumps = (data.dumps || []).filter(d => d.when !== when);
+  save();
+  renderDumps();
+}
+
+function dumpToTask(when) {
+  const d = (data.dumps || []).find(x => x.when === when);
+  if (!d) return;
+  // Akıllı parser'dan geçir — tarih/saat/kategori yakalasın
+  const p = parseQuickInput(d.text);
+  const task = makeTask({
+    text: p.text, priority: p.priority || 'normal', category: p.category,
+    due: p.due, estimateMin: p.estimateMin, reminderTime: p.reminderTime
+  });
+  data.tasks.unshift(task);
+  data.dumps = (data.dumps || []).filter(x => x.when !== when);
+  save();
+  renderTasks();
+  const suffix = p.detected.length ? `\n${p.detected.join(' · ')}` : '';
+  showToast(`✅ Göreve çevrildi: ${p.text.slice(0, 30)}${suffix}`, 'success', 3000);
+}
+
+function dumpRelTime(when) {
+  const diff = Date.now() - when;
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return 'az önce';
+  if (min < 60) return `${min} dk önce`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} saat önce`;
+  const d = Math.floor(h / 24);
+  if (d === 1) return 'dün';
+  return `${d} gün önce`;
+}
+
+function renderDumps() {
+  const list = document.getElementById('braindumpList');
+  const badge = document.getElementById('braindumpBadge');
+  if (!list) return;
+  const dumps = data.dumps || [];
+  if (badge) badge.textContent = dumps.length ? String(dumps.length) : '';
+  if (dumps.length === 0) {
+    list.innerHTML = '<div class="braindump-empty">Henüz bir şey yok — kafanı boşalt 🧠</div>';
+    return;
+  }
+  list.innerHTML = dumps.map(d => `
+    <div class="braindump-item">
+      <div class="braindump-item-text">${escapeHtml(d.text)}<div class="braindump-item-when">${dumpRelTime(d.when)}</div></div>
+      <div class="braindump-item-actions">
+        <button class="to-task" onclick="dumpToTask(${d.when})" title="Göreve çevir" aria-label="Göreve çevir"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+        <button class="del" onclick="deleteDump(${d.when})" title="Sil" aria-label="Sil"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// Brain dump için sesli giriş — quickCaptureMic'in dump versiyonu
+function dumpVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    showToast('Bu tarayıcı sesli girişi desteklemiyor.', 'warning', 4000);
+    return;
+  }
+  const inp = document.getElementById('braindumpInput');
+  const btn = document.getElementById('braindumpMic');
+  if (_speechRec) { try { _speechRec.stop(); } catch (e) {} return; }
+  const rec = new SR();
+  rec.lang = 'tr-TR'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+  _speechRec = rec;
+  const origPh = inp.placeholder;
+  const cleanup = () => { if (btn) btn.classList.remove('recording'); inp.placeholder = origPh; _speechRec = null; };
+  rec.onstart = () => { if (btn) btn.classList.add('recording'); inp.placeholder = '🎙️ Dinliyorum...'; inp.value = ''; inp.focus(); };
+  rec.onresult = (e) => {
+    let final = '', interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) final += t; else interim += t;
+    }
+    inp.value = (final || interim).trim();
+  };
+  rec.onerror = (e) => {
+    cleanup();
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') showToast('Mikrofon izni reddedildi.', 'warning', 4000);
+    else if (e.error === 'no-speech') showToast('Ses duyulmadı, tekrar dene', 'info', 2500);
+  };
+  rec.onend = () => { cleanup(); if (inp.value.trim()) inp.focus(); };
+  try { rec.start(); } catch (err) { cleanup(); showToast('Mikrofon başlatılamadı', 'error', 3000); }
 }
 
 function addTask() {
@@ -3369,6 +3595,7 @@ function renderTasks() {
   renderCapacity();
   renderEveningSummary();
   renderWeeklyInsight();
+  renderDumps();
   updateFilterCounts();
   updateActiveTaskBanner();
   // Swipe gestures: render'dan sonra her task'a touch handler bağla
