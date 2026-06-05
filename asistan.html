@@ -283,6 +283,16 @@
   .task.done .task-text { text-decoration: line-through; }
   .task > div:first-child { padding-top: 2px; }
   .task-text { flex: 1; font-size: 0.93em; line-height: 1.45; }
+  .task-notes {
+    margin-top: 4px;
+    font-size: 0.82em;
+    color: var(--text-muted);
+    line-height: 1.4;
+    white-space: pre-wrap;
+    border-left: 2px solid var(--border-soft);
+    padding-left: 8px;
+    opacity: 0.9;
+  }
   .task-meta { font-size: 0.73em; color: var(--text-muted); margin-top: 5px; display: flex; flex-wrap: wrap; gap: 4px; }
   .task-meta .badge {
     display: inline-flex;
@@ -1677,6 +1687,44 @@
   }
 
   /* Task actions: subtle, hover-revealed */
+  /* Swipe gestures — sağa: tamamla, sola: sil. Task .task-row içine sarılır; bg sibling olarak konur. */
+  .task-row {
+    position: relative;
+    border-radius: var(--radius);
+  }
+  .task {
+    position: relative;
+    z-index: 1;
+    touch-action: pan-y; /* JS yatay swipe'ı kontrol eder; tarayıcı dikey scroll yapar */
+  }
+  .task.swiping { transition: none; }
+  .task.snap-back { transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+  .task-swipe-bg {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    border-radius: var(--radius);
+    pointer-events: none;
+    z-index: 0;
+    font-weight: 600;
+    font-size: 0.95em;
+    color: white;
+    padding: 0 22px;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+  .task-swipe-bg.right {
+    background: linear-gradient(90deg, #34c759 0%, #34c759 55%, rgba(52, 199, 89, 0) 100%);
+    justify-content: flex-start;
+  }
+  .task-swipe-bg.left {
+    background: linear-gradient(270deg, #ef4444 0%, #ef4444 55%, rgba(239, 68, 68, 0) 100%);
+    justify-content: flex-end;
+  }
+  .task-swipe-bg .icon { width: 1.3em; height: 1.3em; margin-right: 8px; }
+  .task-swipe-bg.left .icon { margin-right: 0; margin-left: 8px; order: 2; }
+
   .task-actions {
     display: flex;
     gap: 2px;
@@ -2157,7 +2205,7 @@ function makeTask(opts = {}) {
     lastReminded: null,
     mitDate: null,
     streakCount: 0, lastStreakDate: null,
-    seriesId: null, seriesName: null, seriesIndex: null, seriesTotal: null
+    seriesId: null, seriesName: null, seriesIndex: null, seriesTotal: null, notes: null
   };
 }
 
@@ -2556,7 +2604,8 @@ function quickCaptureSubmit() {
     seriesId: null,
     seriesName: null,
     seriesIndex: null,
-    seriesTotal: null
+    seriesTotal: null,
+    notes: null
   };
   data.tasks.unshift(task);
   inp.value = '';
@@ -2591,7 +2640,8 @@ function addTask() {
     seriesId: null,
     seriesName: null,
     seriesIndex: null,
-    seriesTotal: null
+    seriesTotal: null,
+    notes: null
   };
   data.tasks.push(task);
   document.getElementById('taskInput').value = '';
@@ -2811,7 +2861,7 @@ async function editTask(id) {
   const t = data.tasks.find(x => x.id === id);
   if (!t) return;
   const yeni = await aidanPrompt('Görev düzenle', 'Görev metni:', t.text);
-  if (yeni === null) return; // iptal
+  if (yeni === null) return; // iptal — notlar adımına da geçme
   const trimmed = yeni.trim();
   if (!trimmed) {
     if (confirm('Boş bıraktın. Görevi silmek mi istedin?')) {
@@ -2820,10 +2870,17 @@ async function editTask(id) {
     }
     return;
   }
-  if (trimmed === t.text) return;
-  t.text = trimmed;
-  save(); renderTasks();
-  showToast('Görev güncellendi ✏️', 'success');
+  let changed = false;
+  if (trimmed !== t.text) { t.text = trimmed; changed = true; }
+
+  // Notlar adımı (opsiyonel — boş bırakılabilir, iptal = atla)
+  const notesIn = await aidanPrompt('Notlar (opsiyonel)', 'Detay, link, açıklama — boş bırakırsan not eklenmez', t.notes || '', true);
+  if (notesIn !== null) {
+    const n = notesIn.trim();
+    const newNotes = n || null;
+    if ((t.notes || null) !== newNotes) { t.notes = newNotes; changed = true; }
+  }
+  if (changed) { save(); renderTasks(); showToast('Görev güncellendi', 'success'); }
 }
 
 function toggleMit(id) {
@@ -3226,10 +3283,12 @@ function renderTaskItem(t) {
   const age = t.done ? 0 : taskAgeDays(t);
   const showAge = !t.done && age >= 5 && !t.repeat;
   return `
-    <div class="task ${cls}">
+    <div class="task-row">
+    <div class="task ${cls}" data-id="${t.id}">
       <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask(${t.id})">
       <div style="flex:1;">
         <div class="task-text">${isMit ? '⭐ ' : ''}${escapeHtml(t.text)}</div>
+        ${t.notes ? `<div class="task-notes">${escapeHtml(t.notes)}</div>` : ''}
         <div class="task-meta">
           ${t.priority === 'urgent' ? '<span class="badge" style="background:#ff5555;color:white;">🔥 ACİL</span>' : ''}
           ${t.category ? `<span class="badge">${({odev:'📚 Ödev',ders:'📖 Özel Ders',ev:'🏠 Ev',kisisel:'💜 Kişisel'})[t.category] || t.category}</span>` : ''}
@@ -3263,6 +3322,7 @@ function renderTaskItem(t) {
         <button class="small secondary" onclick="editTask(${t.id})" title="Düzenle" aria-label="Düzenle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
         <button class="small danger" onclick="deleteTask(${t.id})" title="Sil" aria-label="Sil"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
       </div>
+    </div>
     </div>
   `;
 }
@@ -3311,6 +3371,106 @@ function renderTasks() {
   renderWeeklyInsight();
   updateFilterCounts();
   updateActiveTaskBanner();
+  // Swipe gestures: render'dan sonra her task'a touch handler bağla
+  document.querySelectorAll('.task[data-id]').forEach(el => {
+    if (el._swipeAttached) return;
+    const id = parseInt(el.dataset.id);
+    if (id) { attachSwipe(el, id); el._swipeAttached = true; }
+  });
+}
+
+// Sağa swipe = toggleTask (tamamla, undo'lu) · Sola swipe = deleteTask (sil, undo'lu)
+const SWIPE_CHECK_ICON = '<svg class="icon fill" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const SWIPE_TRASH_ICON = '<svg class="icon" viewBox="0 0 24 24" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>';
+
+function attachSwipe(taskEl, taskId) {
+  let startX = 0, startY = 0, dx = 0, dy = 0;
+  let axis = null;
+  let bg = null;
+  const THRESHOLD = 80;
+
+  const ensureBg = () => {
+    if (!bg) {
+      bg = document.createElement('div');
+      bg.className = 'task-swipe-bg';
+      // bg, .task-row içine sibling olarak girer — task translate edince sabit kalır
+      const row = taskEl.parentElement;
+      if (row && row.classList.contains('task-row')) row.insertBefore(bg, taskEl);
+      else taskEl.insertBefore(bg, taskEl.firstChild); // fallback
+    }
+    return bg;
+  };
+
+  const reset = () => {
+    taskEl.style.transform = '';
+    taskEl.classList.remove('swiping');
+    taskEl.classList.add('snap-back');
+    setTimeout(() => taskEl.classList.remove('snap-back'), 260);
+    if (bg) { bg.remove(); bg = null; }
+    axis = null; dx = 0; dy = 0;
+  };
+
+  taskEl.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    // Action butonlarına ya da checkbox'a tıklarken swipe başlatma — onların kendi handler'ı var
+    const target = e.target;
+    if (target && target.closest('button, input, a, .badge.series-badge')) return;
+    const t = e.touches[0];
+    startX = t.clientX; startY = t.clientY;
+    dx = 0; dy = 0; axis = null;
+    taskEl.classList.remove('snap-back');
+  }, { passive: true });
+
+  taskEl.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 1 || startX === 0 && startY === 0) return;
+    const t = e.touches[0];
+    dx = t.clientX - startX;
+    dy = t.clientY - startY;
+
+    if (axis === null) {
+      if (Math.abs(dx) + Math.abs(dy) < 8) return;
+      // Yatay hareket dikeyin 1.3 katından fazlaysa yatay swipe; aksi halde dikey scroll için bırak
+      axis = Math.abs(dx) > Math.abs(dy) * 1.3 ? 'x' : 'y';
+      if (axis === 'x') taskEl.classList.add('swiping');
+    }
+
+    if (axis !== 'x') return;
+    e.preventDefault();
+
+    // Threshold'dan sonra direnç (Apple Mail tarzı)
+    let visible = dx;
+    if (Math.abs(dx) > THRESHOLD * 1.8) {
+      const overflow = Math.abs(dx) - THRESHOLD * 1.8;
+      visible = Math.sign(dx) * (THRESHOLD * 1.8 + overflow * 0.4);
+    }
+    taskEl.style.transform = `translateX(${visible}px)`;
+
+    const b = ensureBg();
+    const active = Math.abs(dx) > THRESHOLD;
+    if (dx > 0) {
+      b.className = 'task-swipe-bg right';
+      b.innerHTML = SWIPE_CHECK_ICON + `<span>${active ? 'Tamamla ✓' : 'Tamamla'}</span>`;
+    } else {
+      b.className = 'task-swipe-bg left';
+      b.innerHTML = `<span>${active ? '✗ Sil' : 'Sil'}</span>` + SWIPE_TRASH_ICON;
+    }
+    b.style.opacity = Math.min(1, Math.abs(dx) / THRESHOLD);
+  }, { passive: false });
+
+  const endHandler = () => {
+    if (axis === 'x' && Math.abs(dx) > THRESHOLD) {
+      // Aksiyon — re-render zaten taskEl'i yok edecek, animasyon kaba ama undo toast var
+      if (dx > 0) {
+        if (typeof toggleTask === 'function') toggleTask(taskId);
+      } else {
+        if (typeof deleteTask === 'function') deleteTask(taskId);
+      }
+    } else {
+      reset();
+    }
+  };
+  taskEl.addEventListener('touchend', endHandler);
+  taskEl.addEventListener('touchcancel', reset);
 }
 
 // ============ HAFTALIK INSIGHT (Pazartesi açılınca otomatik) ============
