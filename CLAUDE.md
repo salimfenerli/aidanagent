@@ -395,6 +395,20 @@ Veya manuel API çağrısı (deploy.py inline). Wrangler yok.
   - Sonra: multi-user · borsa · onboarding
 - **Cache:** v7-13 (frontend değişmedi, sadece Worker)
 
+### Haziran 4, 2026 (gece — 3 yeni özellik + UI cilası + mobil fix)
+Telegram emekliliği sonrası tek seansta çok iş yapıldı (v7-13 → v7-16):
+- **🎯 Akıllı + butonu (parseQuickInput):** quick capture'da "yarın 14:00 dişçi" → AI'sız lokal regex ile tarih/saat/kategori/öncelik/süre parse. Türkçe boundary helper (JS `\b` ş/ı/ç sonunda kırılır). Telegram AI parse'ının PWA karşılığı, $0 + anında.
+- **👆 Swipe gestures:** görev kartı `.task-row` içine sarıldı. Sağa = tamamla (yeşil), sola = sil (kırmızı), ikisi undo'lu. Axis detect (|dx|>|dy|*1.3), threshold 80px + direnç.
+- **📝 Görev notu (task.notes):** editTask'a 2. adım (multiline prompt), kartta gri italik border-left.
+- **🎨 SVG ikon refactor:** tab/quick capture/aksiyon butonu emoji'leri Lucide inline SVG. `.icon` helper (currentColor stroke). Kategori/öncelik emoji'leri (📚🔥💜) ADHD anchor olarak korundu. AI=4-uçlu simetrik yıldız, mic=sade.
+- **📱 Mobil fix:** (a) yana kayma — html/body overflow-x:hidden + overscroll-behavior-x:none + touch-action:pan-y (b) iOS klavye — focusin scrollIntoView + visualViewport --kb-h.
+- **🧠 Zihin boşalt (brain dump UI):** Görevler tabında katlanır panel. `data.dumps[]`, input/sesli/+ ile dök, ✓göreve çevir (parser'dan geçer) / ✗sil, badge. uniqueDumpWhen() — Date.now() çakışma bug'ı fix. **Telegram'dan kaybedilen son özellik PWA'da.**
+- **📬 Bildirim geçmişi:** Worker `logPush()` her cron'da `data.pushLog[]`'a yazar (son 7 gün, max 60). PWA Ayarlar > "📬 Son 7 gün" katlanır liste (başlık + rel-zaman + gövde). "Brifing geldi mi" merakı biter.
+- **🌙 Sesli akşam günlüğü:** Worker `POST /journal` (handleJournalApi) → Llama supportive yansıma (tool YOK, yargısız system prompt, biten görev sayısı context). PWA journalModal: textarea + 🎙️ Web Speech continuous (tarayıcı çevirir, Whisper'sız $0) + "Aidan'a yorumlat"/"Sadece kaydet". `data.journal[]` günde 1 upsert, son 60 gün. Akşam özeti kartında buton. AI fail olsa lokal kaydeder. ADHD decompression ritüeli.
+- **Veri modeli yeni alanlar:** `task.notes`, `data.pushLog[]`, `data.journal[]`
+- **Cache:** v7-13 → v7-16
+- ⏳ Sıradaki: eksik analizinden kalan — auto-archive eski bitenler · çoklu kategori · multi-user · borsa · Faz 4 Telegram kod temizliği. Ölü field temizliği (streakCount/checkins/pomoHistory/routines/ntfyTopic/hyperfocus) de bekliyor.
+
 ## Mevcut Durum
 
 ### ✅ Çalışıyor
