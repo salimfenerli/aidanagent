@@ -1836,6 +1836,55 @@ async function handleAiApi(request, env) {
 }
 
 // ============================================================
+// Akşam günlüğü — sesli/yazılı gün özeti, AI sıcak yansıma döner (tool YOK)
+// ============================================================
+async function handleJournalApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const text = (body.text || '').trim();
+  if (!text) return jsonCors({ error: 'empty' }, 400, cors);
+  if (text.length > 2000) return jsonCors({ error: 'too long' }, 400, cors);
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (env.AIDAN_EMAIL && user.email && user.email.toLowerCase() !== env.AIDAN_EMAIL.toLowerCase()) {
+    return jsonCors({ error: 'forbidden' }, 403, cors);
+  }
+
+  try {
+    // Bugün biten görev sayısı — yansımaya somutluk katar
+    const session = await fetchAidan(env);
+    const todayStr = trToday();
+    const doneToday = (session.data.tasks || []).filter(t => t.doneDate === todayStr).length;
+
+    const r = await env.AI.run(AI_MODEL, {
+      messages: [
+        { role: 'system', content: "Sen Aidan'sın, Salim'in ADHD asistanı. Salim sana gününü anlatıyor (akşam günlüğü). Görevin: KISA (3-4 cümle), TÜRKÇE, sıcak, yargısız bir yansıma yaz. Önce duygusunu duyduğunu göster (validate et), sonra günün içinden 1 olumlu şey vurgula, gerekirse nazik 1 küçük öneri. ASLA ders verme, ASLA 'ama şunu da yapmalıydın' deme. ADHD'li biri için kendini suçlamadan günü kapatmak çok değerli. ASLA İngilizce yazma." },
+        { role: 'user', content: `Bugün tamamladığım görev sayısı: ${doneToday}.\n\nGünüm hakkında:\n${text}\n\nBana kısa, sıcak bir akşam yansıması yaz.` },
+      ],
+      max_tokens: 300,
+    });
+    let reflection = (r.response || '').trim();
+    if (!reflection || /^i'?m sorry|^as an ai|your input/i.test(reflection)) {
+      reflection = 'Bugünü buraya bıraktın, bu bile yeterli. Yarın yeni bir gün 💜';
+    }
+    return jsonCors({ reflection, doneToday }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
+// ============================================================
 // Static file serving (PWA host)
 // ============================================================
 // __STATIC_FILES__ deploy.py tarafından base64 dict ile değiştirilir.
@@ -1903,6 +1952,11 @@ export default {
     // PWA AI endpoint (POST metin → AI → görev operasyonu, CORS'lu)
     if (url.pathname === '/ai') {
       return handleAiApi(request, env);
+    }
+
+    // Akşam günlüğü (POST gün özeti → AI sıcak yansıma, tool YOK)
+    if (url.pathname === '/journal') {
+      return handleJournalApi(request, env);
     }
 
     // Static serve (PWA) — '/' → asistan.html, ve diğer asset'ler

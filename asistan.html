@@ -384,6 +384,80 @@
   .pushlog-item-body { color: var(--text-muted); margin-top: 2px; }
   .pushlog-empty { font-size: 0.82em; color: var(--text-faint); text-align: center; padding: 10px 0; }
 
+  /* Akşam günlüğü */
+  .evening-journal-btn {
+    margin-top: 12px;
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 9px;
+    border-radius: 8px;
+    font-size: 0.88em;
+    cursor: pointer;
+    box-shadow: none;
+    transition: all 0.15s;
+  }
+  .evening-journal-btn:hover { background: var(--surface-hover); color: var(--text); border-color: var(--accent); }
+  .journal-input-wrap { position: relative; }
+  #journalText {
+    width: 100%;
+    padding: 12px 44px 12px 12px;
+    font-size: 0.95em;
+    line-height: 1.5;
+    resize: vertical;
+    font-family: inherit;
+  }
+  .journal-mic {
+    position: absolute;
+    right: 8px;
+    top: 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    border-radius: 7px;
+    padding: 6px 9px;
+    cursor: pointer;
+    box-shadow: none;
+    display: inline-flex;
+    align-items: center;
+  }
+  .journal-mic:hover { background: rgba(99,102,241,0.08); color: var(--accent); }
+  .journal-mic.recording {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.4);
+    animation: mic-pulse 1s ease-in-out infinite;
+  }
+  .journal-reflection {
+    margin-top: 14px;
+    padding: 14px 16px;
+    background: rgba(99,102,241,0.08);
+    border: 1px solid rgba(99,102,241,0.2);
+    border-radius: 10px;
+    font-size: 0.92em;
+    line-height: 1.55;
+    color: var(--text);
+    white-space: pre-wrap;
+  }
+  .journal-reflection.loading { color: var(--text-muted); font-style: italic; }
+  .journal-reflection-label { font-size: 0.74em; color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .journal-history { margin-top: 18px; display: flex; flex-direction: column; gap: 10px; max-height: 240px; overflow-y: auto; }
+  .journal-history-item {
+    padding: 10px 12px;
+    background: var(--bg-elev);
+    border-radius: 8px;
+    border-left: 2px solid var(--border-soft);
+    font-size: 0.86em;
+    line-height: 1.45;
+  }
+  .journal-history-date { font-size: 0.78em; color: var(--text-faint); margin-bottom: 4px; font-weight: 600; }
+  .journal-history-text { color: var(--text-muted); white-space: pre-wrap; }
+  .journal-history-reflection { color: var(--accent); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-soft); white-space: pre-wrap; }
+  .journal-history-del { float: right; background: none; border: none; color: var(--text-faint); cursor: pointer; font-size: 0.9em; padding: 0; box-shadow: none; }
+  .journal-history-del:hover { color: var(--danger); }
+  .journal-empty { font-size: 0.82em; color: var(--text-faint); text-align: center; padding: 8px 0; }
+
   /* Görev kartları */
   .task {
     background: var(--bg-elev);
@@ -2000,6 +2074,7 @@
       <div class="evening-summary-title" id="eveningTitle">🌙 Bugünün özeti</div>
       <div class="evening-summary-stats" id="eveningStats"></div>
       <div class="evening-list" id="eveningList"></div>
+      <button class="evening-journal-btn" onclick="openJournalModal()">🌙 Bugünü Aidan'a anlat</button>
     </div>
     <div class="action-row">
       <button class="suggest-btn" onclick="suggestTask()">🎯 Şu an ne yapayım?</button>
@@ -2224,12 +2299,31 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="journalModal" onclick="if(event.target.id==='journalModal')closeJournalModal()">
+  <div class="modal" style="max-width:500px;">
+    <div class="modal-title">🌙 Akşam günlüğü</div>
+    <div class="modal-task" style="font-size:0.9em; font-weight:400; color:var(--text-muted); margin-bottom:12px;">Günün nasıldı? Konuş ya da yaz — Aidan dinler, kısa bir yansıma yapar. Doğru cevap yok, sadece günü kapat.</div>
+    <div class="journal-input-wrap">
+      <textarea id="journalText" placeholder="Bugün... (canını ne sıktı, ne iyi gitti, ne kaldı...)" rows="5"></textarea>
+      <button class="journal-mic" id="journalMic" onclick="journalVoice()" title="Konuşarak anlat" aria-label="Sesli günlük"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/></svg></button>
+    </div>
+    <div class="journal-reflection" id="journalReflection" style="display:none;"></div>
+    <div class="modal-actions" style="margin-top:14px;">
+      <button onclick="submitJournal()" id="journalSubmitBtn">✨ Aidan'a yorumlat</button>
+      <button class="secondary" onclick="saveJournalOnly()">Sadece kaydet</button>
+    </div>
+    <div class="journal-history" id="journalHistory"></div>
+    <button class="modal-close" onclick="closeJournalModal()">Kapat</button>
+  </div>
+</div>
+
 <script>
 // ============ VERİ ============
 let data = JSON.parse(localStorage.getItem('aidan') || '{}');
 data.tasks = data.tasks || [];
 data.dumps = data.dumps || [];
 data.pushLog = data.pushLog || [];
+data.journal = data.journal || [];
 data.routines = data.routines || [];
 data.pomoToday = data.pomoToday || { date: today(), count: 0 };
 data.settings = data.settings || {};
@@ -2869,6 +2963,165 @@ function dumpVoice() {
     else if (e.error === 'no-speech') showToast('Ses duyulmadı, tekrar dene', 'info', 2500);
   };
   rec.onend = () => { cleanup(); if (inp.value.trim()) inp.focus(); };
+  try { rec.start(); } catch (err) { cleanup(); showToast('Mikrofon başlatılamadı', 'error', 3000); }
+}
+
+// ============ AKŞAM GÜNLÜĞÜ ============
+// data.journal = [{ date:'YYYY-MM-DD', text, reflection, when }]
+const JOURNAL_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/journal';
+
+function openJournalModal() {
+  document.getElementById('journalModal').classList.add('active');
+  const ta = document.getElementById('journalText');
+  // Bugün zaten yazdıysa onu yükle (üzerine yaz)
+  const todayEntry = (data.journal || []).find(j => j.date === today());
+  ta.value = todayEntry ? todayEntry.text : '';
+  const refEl = document.getElementById('journalReflection');
+  if (todayEntry && todayEntry.reflection) {
+    refEl.style.display = 'block';
+    refEl.classList.remove('loading');
+    refEl.innerHTML = `<div class="journal-reflection-label">💜 Aidan</div>${escapeHtml(todayEntry.reflection)}`;
+  } else {
+    refEl.style.display = 'none';
+    refEl.innerHTML = '';
+  }
+  renderJournalHistory();
+  setTimeout(() => ta.focus(), 100);
+}
+
+function closeJournalModal() {
+  document.getElementById('journalModal').classList.remove('active');
+  if (_speechRec) { try { _speechRec.stop(); } catch (e) {} }
+}
+
+// Bugünün girişini kaydet/güncelle (reflection opsiyonel)
+function upsertJournal(text, reflection) {
+  data.journal = data.journal || [];
+  const todayStr = today();
+  const existing = data.journal.find(j => j.date === todayStr);
+  if (existing) {
+    existing.text = text;
+    if (reflection !== undefined) existing.reflection = reflection;
+    existing.when = Date.now();
+  } else {
+    data.journal.unshift({ date: todayStr, text, reflection: reflection || null, when: Date.now() });
+  }
+  // Son 60 gün tut
+  data.journal = data.journal.slice(0, 60);
+  save();
+}
+
+function saveJournalOnly() {
+  const text = document.getElementById('journalText').value.trim();
+  if (!text) { showToast('Önce bir şeyler yaz', 'info', 2000); return; }
+  upsertJournal(text);
+  renderJournalHistory();
+  showToast('🌙 Günlük kaydedildi', 'success', 2000);
+}
+
+async function submitJournal() {
+  const text = document.getElementById('journalText').value.trim();
+  if (!text) { showToast('Önce gününü anlat', 'info', 2500); return; }
+  if (!window._supa || !window._user) {
+    // Bulut yoksa AI çağrısı yapılamaz — yine de lokal kaydet
+    upsertJournal(text);
+    renderJournalHistory();
+    showToast('🌙 Kaydedildi (AI yorum için Ayarlar → giriş yap)', 'info', 4000);
+    return;
+  }
+  const btn = document.getElementById('journalSubmitBtn');
+  const refEl = document.getElementById('journalReflection');
+  btn.disabled = true; btn.textContent = '💭 Aidan düşünüyor...';
+  refEl.style.display = 'block';
+  refEl.classList.add('loading');
+  refEl.innerHTML = 'Aidan gününü okuyor...';
+  try {
+    const { data: sess } = await window._supa.auth.getSession();
+    const token = sess && sess.session && sess.session.access_token;
+    if (!token) throw new Error('oturum yok, tekrar giriş yap');
+    const r = await fetch(JOURNAL_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ text }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || ('sunucu hatası ' + r.status));
+    const reflection = j.reflection || '';
+    refEl.classList.remove('loading');
+    refEl.innerHTML = `<div class="journal-reflection-label">💜 Aidan</div>${escapeHtml(reflection)}`;
+    upsertJournal(text, reflection);
+    renderJournalHistory();
+  } catch (e) {
+    refEl.classList.remove('loading');
+    refEl.innerHTML = `<div class="journal-reflection-label">💜 Aidan</div>Şu an yorum yapamadım ama gününü kaydettim. (${escapeHtml(e.message)})`;
+    upsertJournal(text); // AI başarısız olsa da kaydet
+    renderJournalHistory();
+  } finally {
+    btn.disabled = false; btn.textContent = '✨ Aidan\'a yorumlat';
+  }
+}
+
+function deleteJournal(date) {
+  data.journal = (data.journal || []).filter(j => j.date !== date);
+  save();
+  renderJournalHistory();
+}
+
+function journalDateLabel(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  const todayStr = today();
+  if (dateStr === todayStr) return 'Bugün';
+  const yd = new Date(); yd.setDate(yd.getDate() - 1);
+  if (dateStr === yd.toISOString().slice(0,10)) return 'Dün';
+  const months = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+  const days = ['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];
+  return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]}`;
+}
+
+function renderJournalHistory() {
+  const el = document.getElementById('journalHistory');
+  if (!el) return;
+  const journal = (data.journal || []).filter(j => j.date !== today()); // bugünü modalın üstünde gösteriyoruz
+  if (journal.length === 0) {
+    el.innerHTML = '<div class="journal-empty">Geçmiş günlükler burada birikecek 🌙</div>';
+    return;
+  }
+  el.innerHTML = journal.map(j => `
+    <div class="journal-history-item">
+      <button class="journal-history-del" onclick="deleteJournal('${j.date}')" title="Sil">×</button>
+      <div class="journal-history-date">${journalDateLabel(j.date)}</div>
+      <div class="journal-history-text">${escapeHtml(j.text)}</div>
+      ${j.reflection ? `<div class="journal-history-reflection">💜 ${escapeHtml(j.reflection)}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function journalVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast('Bu tarayıcı sesli girişi desteklemiyor.', 'warning', 4000); return; }
+  const ta = document.getElementById('journalText');
+  const btn = document.getElementById('journalMic');
+  if (_speechRec) { try { _speechRec.stop(); } catch (e) {} return; }
+  const rec = new SR();
+  rec.lang = 'tr-TR'; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
+  _speechRec = rec;
+  const baseText = ta.value ? ta.value + ' ' : '';
+  const cleanup = () => { if (btn) btn.classList.remove('recording'); _speechRec = null; };
+  rec.onstart = () => { if (btn) btn.classList.add('recording'); ta.focus(); };
+  rec.onresult = (e) => {
+    let final = '', interim = '';
+    for (let i = 0; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) final += t + ' '; else interim += t;
+    }
+    ta.value = (baseText + final + interim).trim();
+  };
+  rec.onerror = (e) => {
+    cleanup();
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') showToast('Mikrofon izni reddedildi.', 'warning', 4000);
+    else if (e.error === 'no-speech') showToast('Ses duyulmadı', 'info', 2000);
+  };
+  rec.onend = () => { cleanup(); };
   try { rec.start(); } catch (err) { cleanup(); showToast('Mikrofon başlatılamadı', 'error', 3000); }
 }
 
