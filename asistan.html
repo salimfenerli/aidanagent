@@ -458,6 +458,54 @@
   .journal-history-del:hover { color: var(--danger); }
   .journal-empty { font-size: 0.82em; color: var(--text-faint); text-align: center; padding: 8px 0; }
 
+  /* Borsa */
+  .stocks-add { display: flex; gap: 8px; margin-bottom: 12px; }
+  .stocks-add input { flex: 1; min-width: 0; padding: 11px 13px; font-size: 0.95em; text-transform: uppercase; }
+  .stocks-add input::placeholder { text-transform: none; }
+  .stocks-add button { white-space: nowrap; }
+  .stocks-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .stocks-updated { font-size: 0.78em; color: var(--text-faint); }
+  .stocks-refresh {
+    background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+    padding: 6px 12px; border-radius: 8px; font-size: 0.82em; cursor: pointer; box-shadow: none;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .stocks-refresh:hover { background: var(--surface-hover); color: var(--text); }
+  .stocks-refresh.spinning .icon { animation: spin 0.8s linear infinite; }
+  .stocks-list { display: flex; flex-direction: column; gap: 8px; }
+  .stock-card {
+    background: var(--bg-elev); border: 1px solid var(--border-soft);
+    border-radius: var(--radius); padding: 13px 15px;
+    border-left: 3px solid var(--border-soft);
+  }
+  .stock-card.up { border-left-color: #34c759; }
+  .stock-card.down { border-left-color: #ef4444; }
+  .stock-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .stock-sym { font-weight: 700; font-size: 1.05em; color: var(--text); letter-spacing: 0.02em; }
+  .stock-name { font-size: 0.76em; color: var(--text-faint); margin-top: 2px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stock-price-wrap { text-align: right; flex-shrink: 0; }
+  .stock-price { font-size: 1.15em; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+  .stock-change { font-size: 0.82em; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .stock-change.up { color: #34c759; }
+  .stock-change.down { color: #ef4444; }
+  .stock-change.flat { color: var(--text-muted); }
+  .stock-card-bottom { display: flex; align-items: center; gap: 6px; margin-top: 11px; flex-wrap: wrap; }
+  .stock-alarm-badge {
+    font-size: 0.74em; padding: 2px 8px; border-radius: 5px;
+    background: rgba(99,102,241,0.12); color: var(--accent); border: 1px solid rgba(99,102,241,0.25);
+  }
+  .stock-actions { margin-left: auto; display: flex; gap: 3px; }
+  .stock-actions button {
+    background: transparent; border: none; color: var(--text-faint); cursor: pointer;
+    padding: 4px 7px; border-radius: 6px; box-shadow: none; font-size: 0.8em;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .stock-actions button:hover { background: var(--surface-hover); color: var(--text); }
+  .stock-actions button.del:hover { color: var(--danger); }
+  .stock-err { font-size: 0.8em; color: var(--warning); margin-top: 6px; }
+  .stocks-hint { font-size: 0.8em; color: var(--text-faint); margin-top: 14px; line-height: 1.5; text-align: center; }
+  .stocks-empty { font-size: 0.88em; color: var(--text-muted); text-align: center; padding: 28px 12px; line-height: 1.6; }
+
   /* Görev kartları */
   .task {
     background: var(--bg-elev);
@@ -1361,8 +1409,9 @@
     .topbar-item { min-width: 0; flex: 1; }
     .topbar-label { font-size: 0.6em; }
     .topbar-value { font-size: 1.05em; }
-    .tabs { padding: 3px; gap: 2px; }
-    .tab { padding: 7px 10px; font-size: 0.83em; }
+    .tabs { padding: 3px; gap: 2px; flex-wrap: nowrap; }
+    .tab { padding: 7px 7px; font-size: 0.78em; gap: 4px; flex: 1; justify-content: center; min-width: 0; }
+    .tab .icon { width: 0.95em; height: 0.95em; }
     .panel { padding: 16px 13px; border-radius: var(--radius); }
     .timer-ring { width: 220px; height: 220px; }
     .timer-inner { width: 196px; height: 196px; }
@@ -2030,6 +2079,7 @@
   <div class="tabs">
     <button class="tab active" data-tab="tasks" onclick="showTab('tasks', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 17 5 19 9 15"/><polyline points="3 7 5 9 9 5"/><line x1="13" y1="6" x2="21" y2="6"/><line x1="13" y1="12" x2="21" y2="12"/><line x1="13" y1="18" x2="21" y2="18"/></svg>Görevler</button>
     <button class="tab" data-tab="focus" onclick="showTab('focus', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>Odak</button>
+    <button class="tab" data-tab="stocks" onclick="showTab('stocks', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Borsa</button>
     <button class="tab" data-tab="settings" onclick="showTab('settings', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ayarlar</button>
   </div>
 
@@ -2160,6 +2210,21 @@
       </div>
       <div class="session-count">Bugün: <span id="pomoCount">0</span> seans 🎧</div>
     </div>
+  </div>
+
+  <!-- BORSA -->
+  <div id="stocks" class="panel">
+    <h2>📈 Borsa</h2>
+    <div class="stocks-add">
+      <input type="text" id="stockSymInput" placeholder="Hisse kodu (örn THYAO, GARAN, ASELS)" maxlength="12" onkeydown="if(event.key==='Enter')addStock()" autocapitalize="characters">
+      <button onclick="addStock()" id="stockAddBtn">➕ Ekle</button>
+    </div>
+    <div class="stocks-toolbar">
+      <span class="stocks-updated" id="stocksUpdated">—</span>
+      <button class="stocks-refresh" onclick="refreshStocks()" id="stocksRefreshBtn" title="Fiyatları güncelle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg> Yenile</button>
+    </div>
+    <div class="stocks-list" id="stocksList"></div>
+    <div class="stocks-hint" id="stocksHint">BIST hisseleri · fiyatlar Yahoo Finance'tan · alarm kurarsan eşik geçilince bildirim gelir (hafta içi 10–18 arası kontrol).</div>
   </div>
 
   <!-- AYARLAR -->
@@ -2324,6 +2389,7 @@ data.tasks = data.tasks || [];
 data.dumps = data.dumps || [];
 data.pushLog = data.pushLog || [];
 data.journal = data.journal || [];
+data.watchlist = data.watchlist || [];
 data.routines = data.routines || [];
 data.pomoToday = data.pomoToday || { date: today(), count: 0 };
 data.settings = data.settings || {};
@@ -2385,6 +2451,13 @@ function showTab(name, btn) {
     updateEstimateStats();
     renderNotifSettings();
     renderMuteState();
+  }
+  if (name === 'stocks') {
+    renderStocks();
+    // Fiyatlar 2 dk'dan eskiyse otomatik tazele
+    const wl = data.watchlist || [];
+    const latest = Math.max(0, ...wl.map(w => w.fetchedAt || 0));
+    if (wl.length && (Date.now() - latest > 120000)) refreshStocks();
   }
 }
 
@@ -3123,6 +3196,166 @@ function journalVoice() {
   };
   rec.onend = () => { cleanup(); };
   try { rec.start(); } catch (err) { cleanup(); showToast('Mikrofon başlatılamadı', 'error', 3000); }
+}
+
+// ============ BORSA ============
+// data.watchlist = [{ symbol, name, price, prevClose, changePct, currency, alarmAbove, alarmBelow, lastAlertedAbove, lastAlertedBelow, fetchedAt, error }]
+const STOCKS_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/stocks';
+
+function addStock() {
+  const inp = document.getElementById('stockSymInput');
+  const sym = (inp.value || '').trim().toUpperCase().replace(/[^A-Z0-9.=-]/g, '');
+  if (!sym) return;
+  data.watchlist = data.watchlist || [];
+  if (data.watchlist.some(w => w.symbol === sym)) {
+    showToast(`${sym} zaten listede`, 'info', 2000);
+    inp.value = '';
+    return;
+  }
+  data.watchlist.unshift({
+    symbol: sym, name: sym, price: null, prevClose: null, changePct: null, currency: 'TRY',
+    alarmAbove: null, alarmBelow: null, lastAlertedAbove: false, lastAlertedBelow: false,
+    fetchedAt: null, error: null
+  });
+  inp.value = '';
+  save();
+  renderStocks();
+  refreshStocks(); // hemen fiyat çek
+}
+
+function removeStock(sym) {
+  data.watchlist = (data.watchlist || []).filter(w => w.symbol !== sym);
+  save();
+  renderStocks();
+}
+
+async function setStockAlarm(sym) {
+  const w = (data.watchlist || []).find(x => x.symbol === sym);
+  if (!w) return;
+  const cur = w.price != null ? ` (şu an ${formatStockPrice(w.price)})` : '';
+  const above = await aidanPrompt(`${sym} — üst alarm`, `Bu fiyatın ÜSTÜNE çıkınca haber ver${cur}. Boş = alarm yok.`, w.alarmAbove != null ? String(w.alarmAbove) : '');
+  if (above === null) return; // iptal
+  const below = await aidanPrompt(`${sym} — alt alarm`, `Bu fiyatın ALTINA inince haber ver. Boş = alarm yok.`, w.alarmBelow != null ? String(w.alarmBelow) : '');
+  if (below === null) return;
+  const parseNum = (s) => {
+    s = (s || '').trim().replace(',', '.');
+    if (!s) return null;
+    const n = parseFloat(s);
+    return isFinite(n) ? n : null;
+  };
+  w.alarmAbove = parseNum(above);
+  w.alarmBelow = parseNum(below);
+  w.lastAlertedAbove = false;
+  w.lastAlertedBelow = false;
+  save();
+  renderStocks();
+  if (w.alarmAbove != null || w.alarmBelow != null) {
+    showToast(`🔔 ${sym} alarmı kuruldu`, 'success', 2500);
+  } else {
+    showToast(`${sym} alarmı kapatıldı`, 'info', 2000);
+  }
+}
+
+function formatStockPrice(n) {
+  if (n == null) return '—';
+  return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+async function refreshStocks() {
+  const wl = data.watchlist || [];
+  if (!wl.length) { renderStocks(); return; }
+  const btn = document.getElementById('stocksRefreshBtn');
+  if (btn) btn.classList.add('spinning');
+  try {
+    if (!window._supa || !window._user) {
+      showToast('Fiyatlar için bulut girişi gerekli — Ayarlar → giriş yap', 'warning', 4000);
+      return;
+    }
+    const { data: sess } = await window._supa.auth.getSession();
+    const token = sess && sess.session && sess.session.access_token;
+    if (!token) throw new Error('oturum yok');
+    const r = await fetch(STOCKS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ symbols: wl.map(w => w.symbol) }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || ('hata ' + r.status));
+    const bySym = {};
+    (j.quotes || []).forEach(q => { bySym[q.symbol] = q; });
+    wl.forEach(w => {
+      const q = bySym[w.symbol];
+      if (!q) return;
+      if (q.error) { w.error = q.error; return; }
+      w.error = null;
+      w.name = q.name || w.name;
+      w.price = q.price;
+      w.prevClose = q.prevClose;
+      w.changePct = q.changePct;
+      w.currency = q.currency || w.currency;
+      w.fetchedAt = j.at || Date.now();
+    });
+    save();
+    renderStocks();
+  } catch (e) {
+    showToast('Borsa güncellenemedi: ' + e.message, 'error', 4000);
+  } finally {
+    if (btn) btn.classList.remove('spinning');
+  }
+}
+
+function stocksUpdatedLabel() {
+  const wl = data.watchlist || [];
+  const times = wl.map(w => w.fetchedAt).filter(Boolean);
+  if (!times.length) return 'Henüz güncellenmedi';
+  const latest = Math.max(...times);
+  const min = Math.floor((Date.now() - latest) / 60000);
+  if (min < 1) return 'Az önce güncellendi';
+  if (min < 60) return `${min} dk önce güncellendi`;
+  const d = new Date(latest);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} güncellendi`;
+}
+
+function renderStocks() {
+  const list = document.getElementById('stocksList');
+  const upd = document.getElementById('stocksUpdated');
+  if (!list) return;
+  const wl = data.watchlist || [];
+  if (upd) upd.textContent = stocksUpdatedLabel();
+  if (wl.length === 0) {
+    list.innerHTML = '<div class="stocks-empty">Henüz hisse yok.<br>Yukarıdan BIST kodu ekle (örn THYAO).<br>Fiyatını gör, alarm kur 🔔</div>';
+    return;
+  }
+  list.innerHTML = wl.map(w => {
+    const dir = w.changePct == null ? 'flat' : (w.changePct > 0 ? 'up' : (w.changePct < 0 ? 'down' : 'flat'));
+    const cardDir = dir === 'flat' ? '' : dir;
+    const sign = w.changePct == null ? '' : (w.changePct > 0 ? '+' : '');
+    const alarmBadges = [];
+    if (w.alarmAbove != null) alarmBadges.push(`<span class="stock-alarm-badge">▲ ${formatStockPrice(w.alarmAbove)}</span>`);
+    if (w.alarmBelow != null) alarmBadges.push(`<span class="stock-alarm-badge">▼ ${formatStockPrice(w.alarmBelow)}</span>`);
+    return `
+      <div class="stock-card ${cardDir}">
+        <div class="stock-card-top">
+          <div>
+            <div class="stock-sym">${escapeHtml(w.symbol)}</div>
+            <div class="stock-name">${escapeHtml(w.name || '')}</div>
+          </div>
+          <div class="stock-price-wrap">
+            <div class="stock-price">${w.price != null ? formatStockPrice(w.price) + ' <span style="font-size:0.7em;color:var(--text-faint);">' + escapeHtml(w.currency||'') + '</span>' : '—'}</div>
+            ${w.changePct != null ? `<div class="stock-change ${dir}">${sign}${w.changePct.toFixed(2)}%</div>` : ''}
+          </div>
+        </div>
+        ${w.error ? `<div class="stock-err">⚠️ ${escapeHtml(w.error)} — kod doğru mu?</div>` : ''}
+        <div class="stock-card-bottom">
+          ${alarmBadges.join('')}
+          <div class="stock-actions">
+            <button onclick="setStockAlarm('${w.symbol}')" title="Alarm kur"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>Alarm</button>
+            <button class="del" onclick="removeStock('${w.symbol}')" title="Listeden çıkar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 function addTask() {

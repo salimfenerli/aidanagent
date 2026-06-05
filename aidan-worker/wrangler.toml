@@ -10,6 +10,7 @@ crons = [
   "0 9 * * *",   # 12:00 TR — öğle ping
   "0 18 * * *",  # 21:00 TR — akşam özet
   "0 18 * * SUN",  # Pazar 21:00 TR — haftalık review (AI yorumlu)
+  "*/30 7-15 * * 1-5",  # BIST saatleri (10-18 TR, hafta içi) — borsa alarm kontrol
 ]
 
 # NOT: Environment değişkenlerini KOD'A YAZMA.

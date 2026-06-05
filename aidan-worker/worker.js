@@ -1885,6 +1885,127 @@ async function handleJournalApi(request, env) {
 }
 
 // ============================================================
+// Borsa — Yahoo Finance bedava API proxy (CORS yüzünden tarayıcı direkt çekemez)
+// ============================================================
+// BIST sembolü .IS ile biter (THYAO -> THYAO.IS). Kullanıcı sembolü yalın girer.
+function bistSymbol(sym) {
+  const s = String(sym || '').trim().toUpperCase();
+  if (!s) return null;
+  // Zaten suffix varsa dokunma (USDTRY=X, AAPL, BTC-USD gibi ileride)
+  if (s.includes('.') || s.includes('=') || s.includes('-')) return s;
+  return s + '.IS';
+}
+
+async function fetchStockQuotes(symbols) {
+  const out = [];
+  // Yahoo'yu sembol başına çek (chart endpoint tek sembol alır, paralel)
+  const jobs = symbols.map(async (raw) => {
+    const ySym = bistSymbol(raw);
+    if (!ySym) return null;
+    try {
+      const r = await fetch(
+        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySym)}?interval=1d&range=1d`,
+        { headers: { 'User-Agent': 'Mozilla/5.0' }, cf: { cacheTtl: 60, cacheEverything: true } }
+      );
+      if (!r.ok) return { symbol: String(raw).toUpperCase(), error: `http ${r.status}` };
+      const j = await r.json();
+      const meta = j && j.chart && j.chart.result && j.chart.result[0] && j.chart.result[0].meta;
+      if (!meta || meta.regularMarketPrice == null) return { symbol: String(raw).toUpperCase(), error: 'veri yok' };
+      const price = meta.regularMarketPrice;
+      const prev = meta.chartPreviousClose != null ? meta.chartPreviousClose : meta.previousClose;
+      const changePct = (prev && prev > 0) ? ((price - prev) / prev) * 100 : null;
+      return {
+        symbol: String(raw).toUpperCase(),
+        ySymbol: ySym,
+        name: meta.longName || meta.shortName || String(raw).toUpperCase(),
+        price,
+        prevClose: prev != null ? prev : null,
+        changePct: changePct != null ? Math.round(changePct * 100) / 100 : null,
+        currency: meta.currency || 'TRY',
+      };
+    } catch (e) {
+      return { symbol: String(raw).toUpperCase(), error: e.message };
+    }
+  });
+  const results = await Promise.all(jobs);
+  for (const r of results) if (r) out.push(r);
+  return out;
+}
+
+async function handleStocksApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  let symbols = Array.isArray(body.symbols) ? body.symbols : [];
+  symbols = symbols.map(s => String(s).trim()).filter(Boolean).slice(0, 30); // max 30
+  if (!symbols.length) return jsonCors({ quotes: [] }, 200, cors);
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+
+  try {
+    const quotes = await fetchStockQuotes(symbols);
+    return jsonCors({ quotes, at: Date.now() }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
+// Borsa alarm cron — watchlist fiyatlarını kontrol et, eşik geçildiyse push
+async function runStockCheck(env) {
+  const { data, token, userId } = await fetchAidan(env);
+  const wl = (data.watchlist) || [];
+  if (!wl.length) return { type: 'stocks', checked: 0 };
+  const quotes = await fetchStockQuotes(wl.map(w => w.symbol));
+  const bySym = {};
+  for (const q of quotes) bySym[q.symbol] = q;
+
+  const alerts = [];
+  let dirty = false;
+  for (const w of wl) {
+    const q = bySym[(w.symbol || '').toUpperCase()];
+    if (!q || q.price == null) continue;
+    // ÜST eşik
+    if (w.alarmAbove != null && q.price >= w.alarmAbove) {
+      if (!w.lastAlertedAbove) {
+        alerts.push(`📈 ${w.symbol} ${formatPrice(q.price)} ${q.currency} — ${formatPrice(w.alarmAbove)} üstünü geçti!`);
+        w.lastAlertedAbove = true; dirty = true;
+      }
+    } else if (w.lastAlertedAbove) { w.lastAlertedAbove = false; dirty = true; } // tekrar altına indi → reset
+    // ALT eşik
+    if (w.alarmBelow != null && q.price <= w.alarmBelow) {
+      if (!w.lastAlertedBelow) {
+        alerts.push(`📉 ${w.symbol} ${formatPrice(q.price)} ${q.currency} — ${formatPrice(w.alarmBelow)} altına düştü!`);
+        w.lastAlertedBelow = true; dirty = true;
+      }
+    } else if (w.lastAlertedBelow) { w.lastAlertedBelow = false; dirty = true; }
+  }
+
+  if (alerts.length) {
+    const payload = { title: '🔔 Borsa alarmı', message: alerts.join('\n') };
+    await sendPushToAll(env, data, payload, { token, userId });
+    logPush(data, 'stocks', payload, ((data.settings && data.settings.pushSubs) || []).length);
+    dirty = true;
+  }
+  if (dirty) { try { await saveAidan(env, data, { token, userId }); } catch (e) { console.error('stock save fail', e.message); } }
+  return { type: 'stocks', checked: wl.length, alerts: alerts.length };
+}
+
+function formatPrice(n) {
+  if (n == null) return '—';
+  return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ============================================================
 // Static file serving (PWA host)
 // ============================================================
 // __STATIC_FILES__ deploy.py tarafından base64 dict ile değiştirilir.
@@ -1959,6 +2080,11 @@ export default {
       return handleJournalApi(request, env);
     }
 
+    // Borsa fiyatları (POST {symbols} → Yahoo proxy)
+    if (url.pathname === '/stocks') {
+      return handleStocksApi(request, env);
+    }
+
     // Static serve (PWA) — '/' → asistan.html, ve diğer asset'ler
     if (request.method === 'GET') {
       let path = url.pathname;
@@ -1972,7 +2098,9 @@ export default {
           return new Response('Not found', { status: 404 });
         }
         try {
-          const result = await runCronJob(env, cronType);
+          const result = cronType === 'stocks'
+            ? await runStockCheck(env)
+            : await runCronJob(env, cronType);
           return new Response(JSON.stringify(result, null, 2), {
             headers: { 'Content-Type': 'application/json' },
           });
@@ -1991,6 +2119,11 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
+    // Borsa alarm cron — BIST saatlerinde fiyat kontrol (push)
+    if (event.cron === '*/30 7-15 * * 1-5') {
+      ctx.waitUntil(runStockCheck(env));
+      return;
+    }
     let type;
     switch (event.cron) {
       case '0 5 * * *':  type = 'morning'; break;
