@@ -407,7 +407,21 @@ Telegram emekliliği sonrası tek seansta çok iş yapıldı (v7-13 → v7-16):
 - **🌙 Sesli akşam günlüğü:** Worker `POST /journal` (handleJournalApi) → Llama supportive yansıma (tool YOK, yargısız system prompt, biten görev sayısı context). PWA journalModal: textarea + 🎙️ Web Speech continuous (tarayıcı çevirir, Whisper'sız $0) + "Aidan'a yorumlat"/"Sadece kaydet". `data.journal[]` günde 1 upsert, son 60 gün. Akşam özeti kartında buton. AI fail olsa lokal kaydeder. ADHD decompression ritüeli.
 - **Veri modeli yeni alanlar:** `task.notes`, `data.pushLog[]`, `data.journal[]`
 - **Cache:** v7-13 → v7-16
-- ⏳ Sıradaki: eksik analizinden kalan — auto-archive eski bitenler · çoklu kategori · multi-user · borsa · Faz 4 Telegram kod temizliği. Ölü field temizliği (streakCount/checkins/pomoHistory/routines/ntfyTopic/hyperfocus) de bekliyor.
+
+### Haziran 6, 2026 (📈 Borsa modülü — 4. sekme)
+- **Veri kaynağı doğrulandı:** Yahoo Finance bedava API (`query1.finance.yahoo.com/v8/finance/chart/THYAO.IS`) — API key YOK, BIST + ABD + döviz + kripto hepsi. THYAO=297 TRY, AAPL=307 USD, USDTRY=46 test edildi. CORS yüzünden tarayıcı direkt çekemez → **Worker proxy**.
+- **Kararlar (Salim):** 4. sekme (Görevler/Odak/**Borsa**/Ayarlar), watchlist+alarm full paket, şimdilik sadece BIST.
+- **Worker:**
+  - `POST /stocks` (`handleStocksApi`) — `{symbols:[...]}` → Yahoo'dan paralel çek, `[{symbol,price,prevClose,changePct,currency,name}]`. Auth (verifyUser), CORS. `bistSymbol()` yalın koda `.IS` ekler (THYAO→THYAO.IS). Cache 60sn.
+  - `runStockCheck()` cron — watchlist fiyat kontrol, `alarmAbove`/`alarmBelow` eşik geçilince push + `lastAlertedAbove/Below` ile spam önler (fiyat geri dönünce reset).
+  - **Yeni cron:** `*/30 7-15 * * 1-5` (BIST saatleri 10-18 TR, hafta içi) → deploy.py + wrangler.toml. scheduled() bu cron'u runStockCheck'e yönlendirir. Manuel test: `?type=stocks&secret=...`.
+- **PWA:**
+  - 4. sekme 📈 Borsa (trending-up SVG). `data.watchlist[]`.
+  - Hisse ekle (sembol input), fiyat kartı (sol border + %değişim yeşil/kırmızı), Yenile (spin), alarm kur (üst/alt eşik aidanPrompt), sil. Sekme açılınca 2dk+ eskiyse auto-refresh.
+  - Mobilde 4 tab tek satıra sığdırıldı (`.tab` padding/font/icon küçült, flex:1, nowrap).
+- **Veri modeli:** `data.watchlist[] = [{symbol,name,price,prevClose,changePct,currency,alarmAbove,alarmBelow,lastAlertedAbove,lastAlertedBelow,fetchedAt,error}]`
+- **Cache:** v7-16 → v7-17
+- ⏳ Sıradaki: ABD/döviz/kripto watchlist'e ekle (bistSymbol zaten suffix'li sembolü atlıyor, kolay) · auto-archive · çoklu kategori · multi-user · ölü field temizliği · Faz 4 Telegram kod silme.
 
 ## Mevcut Durum
 
