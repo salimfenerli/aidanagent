@@ -969,6 +969,7 @@
     pointer-events: auto;
     animation: toast-in 0.2s ease-out;
     line-height: 1.4;
+    white-space: pre-line;
   }
   .toast.success { border-left-color: var(--success); }
   .toast.warning { border-left-color: var(--warning); }
@@ -2364,24 +2365,190 @@ async function quickCaptureAI() {
   }
 }
 
+// Akıllı quick-capture parser — AI'ya gitmeden tarih/saat/kategori/öncelik/süreyi tespit eder.
+// "yarın 14:00 dişçi" -> { text:'dişçi', due:yarın, reminderTime:14:00, category:'kisisel' }
+function parseQuickInput(raw) {
+  let text = ' ' + raw + ' ';
+  const detected = [];
+  const today = new Date();
+  const isoDate = (d) => d.toISOString().slice(0, 10);
+  const addDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return isoDate(d); };
+  // 0=Pazar (JS), 1=Pzt ... 6=Cmt
+  const trDays = { 'pazartesi':1, 'salı':2, 'sali':2, 'çarşamba':3, 'carsamba':3, 'çarsamba':3, 'perşembe':4, 'persembe':4, 'cuma':5, 'cumartesi':6, 'pazar':0,
+                   'pzt':1, 'çar':3, 'car':3, 'per':4, 'cum':5, 'cmt':6, 'paz':0 };
+  // 'sal' kısaltması "salı" için kullanılır ama isim olabilir — ayrı bir liste
+  const trDaysShort = { 'sal':2 };
+
+  let due = null, reminderTime = null, category = null, priority = null, estimateMin = null;
+
+  // --- TARİH ---
+  if (/(^|\s)bugün(\s|$)/i.test(text)) { due = isoDate(today); text = text.replace(/(^|\s)bugün(\s|$)/i, ' '); detected.push('📅 bugün'); }
+  else if (/(^|\s)yarın(\s|$)/i.test(text)) { due = addDays(1); text = text.replace(/(^|\s)yarın(\s|$)/i, ' '); detected.push('📅 yarın'); }
+  else if (/(^|\s)(öbürgün|ertesi gün)(\s|$)/i.test(text)) { due = addDays(2); text = text.replace(/(^|\s)(öbürgün|ertesi gün)(\s|$)/i, ' '); detected.push('📅 öbürgün'); }
+  else if (/(^|\s)haftaya(\s|$)/i.test(text)) { due = addDays(7); text = text.replace(/(^|\s)haftaya(\s|$)/i, ' '); detected.push('📅 haftaya'); }
+  else if (/(^|\s)hafta\s*sonu(\s|$)/i.test(text)) {
+    const wd = today.getDay(); const diff = ((6 - wd + 7) % 7) || 7;
+    due = addDays(diff); text = text.replace(/(^|\s)hafta\s*sonu(\s|$)/i, ' '); detected.push('📅 hafta sonu');
+  } else {
+    const ng = text.match(/(^|\s)(\d+)\s*gün(?:e|den|ün)?\s*(sonra|içinde|içerisinde)\b/i);
+    if (ng) { const n = parseInt(ng[2]); due = addDays(n); text = text.replace(ng[0], ' '); detected.push(`📅 ${n} gün sonra`); }
+  }
+  if (!due) {
+    for (const [name, num] of Object.entries(trDays)) {
+      const re = new RegExp(`(^|\\s)${name}(\\s|$)`, 'i');
+      if (re.test(text)) {
+        let diff = ((num - today.getDay()) + 7) % 7;
+        if (diff === 0) diff = 7;
+        due = addDays(diff); text = text.replace(re, ' '); detected.push(`📅 ${name}`); break;
+      }
+    }
+  }
+  if (!due) {
+    for (const [name, num] of Object.entries(trDaysShort)) {
+      const re = new RegExp(`(^|\\s)${name}(\\s|$)`, 'i');
+      if (re.test(text)) {
+        let diff = ((num - today.getDay()) + 7) % 7;
+        if (diff === 0) diff = 7;
+        due = addDays(diff); text = text.replace(re, ' '); detected.push(`📅 ${name}`); break;
+      }
+    }
+  }
+  if (!due) {
+    // DD.MM[.YYYY] veya DD/MM[/YYYY] — dikkat: saat HH.MM ile karışmasın → 12'den büyük 2.kısım = ay olamaz
+    const dm = text.match(/(^|\s)(\d{1,2})[.\/](\d{1,2})(?:[.\/](\d{2,4}))?(\s|$)/);
+    if (dm) {
+      const d = parseInt(dm[2]), mo = parseInt(dm[3]);
+      let y = dm[4] ? parseInt(dm[4]) : today.getFullYear();
+      if (y < 100) y += 2000;
+      if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12) {
+        due = `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        text = text.replace(dm[0], ' '); detected.push(`📅 ${due.slice(5)}`);
+      }
+    }
+  }
+
+  // --- SAAT ---
+  const tm = text.match(/(^|\s)(\d{1,2}):(\d{2})(\s|$)/) || text.match(/(^|\s)(\d{1,2})\.(\d{2})(\s|$)/);
+  if (tm) {
+    const h = parseInt(tm[2]), m = parseInt(tm[3]);
+    if (h <= 23 && m <= 59) {
+      reminderTime = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+      text = text.replace(tm[0], ' '); detected.push(`🕐 ${reminderTime}`);
+    }
+  }
+  if (!reminderTime) {
+    const periods = [
+      { re: /(^|\s)akşam\s*(\d{1,2})(\s|$)/i, addPm: true, label: 'akşam' },
+      { re: /(^|\s)öğle(?:n)?\s*(\d{1,2})(\s|$)/i, addPm: true, label: 'öğlen' },
+      { re: /(^|\s)sabah\s*(\d{1,2})(\s|$)/i, addPm: false, label: 'sabah' },
+      { re: /(^|\s)gece\s*(\d{1,2})(\s|$)/i, addPm: true, label: 'gece' },
+      { re: /(^|\s)ikindi\s*(\d{1,2})(\s|$)/i, addPm: true, label: 'ikindi' },
+    ];
+    for (const p of periods) {
+      const mm = text.match(p.re);
+      if (mm) {
+        let h = parseInt(mm[2]);
+        if (p.addPm && h < 12) h += 12;
+        if (h <= 23) {
+          reminderTime = `${String(h).padStart(2,'0')}:00`;
+          text = text.replace(mm[0], ' '); detected.push(`🕐 ${p.label} ${mm[2]}`); break;
+        }
+      }
+    }
+  }
+  if (!reminderTime) {
+    const sm = text.match(/(^|\s)saat\s*(\d{1,2})(\s|$)/i) || text.match(/(^|\s)(\d{1,2})['']?(?:de|da|te|ta)(\s|$)/i);
+    if (sm) {
+      const h = parseInt(sm[2]);
+      if (h >= 0 && h <= 23) {
+        reminderTime = `${String(h).padStart(2,'0')}:00`;
+        text = text.replace(sm[0], ' '); detected.push(`🕐 ${reminderTime}`);
+      }
+    }
+  }
+  if (!reminderTime) {
+    const standalone = { 'sabah': '09:00', 'öğle': '12:00', 'öğlen': '12:00', 'ikindi': '16:00', 'akşam': '19:00', 'gece': '22:00' };
+    for (const [name, time] of Object.entries(standalone)) {
+      const re = new RegExp(`(^|\\s)${name}(\\s|$)`, 'i');
+      if (re.test(text)) {
+        reminderTime = time;
+        text = text.replace(re, ' '); detected.push(`🕐 ${name}`); break;
+      }
+    }
+  }
+
+  // --- SÜRE TAHMİNİ ---
+  let em = text.match(/(^|\s)(\d+)\s*(?:saat|sa|h)\s*(\d+)\s*(?:dakika|dk|min)(\s|$)/i);
+  if (em) {
+    estimateMin = parseInt(em[2]) * 60 + parseInt(em[3]);
+    text = text.replace(em[0], ' '); detected.push(`⏱ ${estimateMin}dk`);
+  } else {
+    em = text.match(/(^|\s)(\d+(?:[.,]\d+)?)\s*(?:saat|sa|hour|hr)(\s|$)/i);
+    if (em) {
+      estimateMin = Math.round(parseFloat(em[2].replace(',', '.')) * 60);
+      text = text.replace(em[0], ' '); detected.push(`⏱ ${estimateMin}dk`);
+    } else {
+      em = text.match(/(^|\s)(\d+)\s*(?:dakika|dk|min)(\s|$)/i);
+      if (em) {
+        estimateMin = parseInt(em[2]);
+        text = text.replace(em[0], ' '); detected.push(`⏱ ${estimateMin}dk`);
+      }
+    }
+  }
+
+  // Saat HH:MM bulunduysa, yetim "öğlen/sabah/akşam" kelimelerini de temizle
+  if (reminderTime) {
+    text = text.replace(/(^|\s)(sabah|öğle|öğlen|ikindi|akşam|gece)(\s|$)/gi, ' ');
+  }
+
+  // BOUNDARY helper: JS `\b` Türkçe karakter sonunda kırılır (ş, ı, ö, ü, ç, ğ).
+  // (?:^|[\s,.!?]) ... (?=[\s,.!?]|$) — açık delimiter ile her dilde çalışır.
+  const word = (alts) => new RegExp(`(?:^|[\\s,.!?])(${alts})(?=[\\s,.!?]|$)`, 'i');
+
+  // --- ÖNCELİK (text'ten silmiyoruz, başlıkta kalabilir) ---
+  if (word('acil|acele|hemen|asap|ivedi').test(text)) {
+    priority = 'urgent'; detected.push('🔥 acil');
+  }
+
+  // --- KATEGORİ (text'ten silmiyoruz — anahtar kelime başlığın anlamını taşıyor) ---
+  if (word('sınav|sinav|ders|matematik|fizik|kimya|tarih|edebiyat|coğrafya|cografya|biyoloji|ödev|odev|test|deneme|konu|özet|ozet|çalış|calis|oku|kitap|sayfa').test(text)) {
+    category = 'odev'; detected.push('📚 ödev');
+  } else if (word('ev|temizlik|çamaşır|camasir|bulaşık|bulasik|yemek|yatak|banyo|toparla|süpür|supur|mutfak|piknik|alışveriş|alisveris').test(text)) {
+    category = 'ev'; detected.push('🏠 ev');
+  } else if (word('doktor|dişçi|disci|spor|yürüyüş|yuruyus|koş|kos|gym|randevu|berber|kuaför|kuafor|banka').test(text)) {
+    category = 'kisisel'; detected.push('💜 kişisel');
+  }
+
+  // Temizlik
+  text = text.replace(/\s+/g, ' ').trim();
+  text = text.replace(/^(ve|da|de|ki)\s+/i, '').replace(/\s+(ve|da|de|ki)$/i, '').trim();
+
+  return {
+    text: text || raw.trim(),
+    due, reminderTime, category, priority, estimateMin,
+    detected
+  };
+}
+
 function quickCaptureSubmit() {
   const inp = document.getElementById('quickCapture');
-  const text = inp.value.trim();
-  if (!text) return;
+  const raw = inp.value.trim();
+  if (!raw) return;
+  const p = parseQuickInput(raw);
   const task = {
     id: Date.now(),
-    text,
+    text: p.text,
     done: false,
     doneDate: null,
     subtasks: [],
     created: timeStr(),
-    priority: 'normal',
-    category: null,
-    due: null,
-    estimateMin: null,
+    priority: p.priority || 'normal',
+    category: p.category,
+    due: p.due,
+    estimateMin: p.estimateMin,
     actualMin: null,
     repeat: null,
-    reminderTime: null,
+    reminderTime: p.reminderTime,
     lastReminded: null,
     mitDate: null,
     streakCount: 0,
@@ -2395,7 +2562,9 @@ function quickCaptureSubmit() {
   inp.value = '';
   save();
   renderTasks();
-  showToast(`✅ Eklendi: ${text.slice(0, 40)}${text.length > 40 ? '…' : ''}`, 'success', 2200);
+  const head = `✅ ${p.text.slice(0, 40)}${p.text.length > 40 ? '…' : ''}`;
+  const suffix = p.detected.length ? `\n${p.detected.join(' · ')}` : '';
+  showToast(head + suffix, 'success', p.detected.length ? 3500 : 2200);
 }
 
 function addTask() {
