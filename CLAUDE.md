@@ -488,7 +488,14 @@ Telegram emekliliği sonrası tek seansta çok iş yapıldı (v7-13 → v7-16):
 - **PWA gösterim:** Portföy özeti altında `renderPortfolioHistory` — baskın para birimi (en yüksek değerli) için **SVG sparkline** (`sparkline()`, son≥ilk yeşil/kırmızı) + **Dün · Hafta · Ay** yüzde değişim chip'leri (N gün önceki en yakın snapshot'a göre). En az 2 günlük geçmiş gerekir.
 - **Akşam push'a eklendi:** `runPortfolioSummary` mesajına "Hafta +Y% · Ay +Z%" satırı (geçmiş varsa, `histFor` ile).
 - **Cache:** v7-24 → v7-25
-- ⏳ Sıradaki: auto-archive · çoklu kategori · multi-user (Yol A) · ölü field temizliği · Faz 4 Telegram kod silme.
+
+### Haziran 9, 2026 (🗄️ Otomatik arşiv + 💪 erteleme farkındalığı)
+- Salim seçti (genel uygulama için): otomatik arşiv + erteleme farkındalığı.
+- **🗄️ Otomatik arşiv:** `isArchivedDone(t)` = `done && doneDate < bugün-7gün`. `filterTasks` default ('all') görünümünde eski bitenleri gizler (ana liste temiz). "Bitenler" filtresinde son 7 gün üstte, eskiler katlanır **"📦 Arşiv (N)"** `<details>` bölümünde. Yeni alan/field YOK — doneDate'ten hesaplanır.
+- **💪 Erteleme farkındalığı:** `applyPostpone` her ertelemede `task.postponeCount++`. 3+ ertelenmiş (ve `!nudgeDismissed`) görevde kartta nazik **nudge çubuğu**: "🔄 N kez ertelendi · dokun, kolaylaştıralım 💜". Tıklayınca `postponeNudge` menüsü: ✂️ küçük adımlara böl (`addSubtask`) / ⚡ 2dk dene (`startTaskNow true`) / 👍 böyle kalsın (`nudgeDismissed=true`, bir daha gösterme). Utançsız dil — ADHP prokrastinasyon döngüsü.
+- **Veri modeli yeni alanlar:** `task.postponeCount`, `task.nudgeDismissed`.
+- **Cache:** v7-25 → v7-26
+- ⏳ Sıradaki: çoklu kategori · multi-user (Yol A) · sabah AI MIT önerisi · esnek tekrar günleri · ölü field temizliği · Faz 4 Telegram kod silme.
 
 ## Mevcut Durum
 

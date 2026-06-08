@@ -638,6 +638,19 @@
     padding-left: 8px;
     opacity: 0.9;
   }
+  .postpone-nudge {
+    margin-top: 6px;
+    font-size: 0.78em;
+    color: var(--warning);
+    background: rgba(210,153,34,0.10);
+    border: 1px solid rgba(210,153,34,0.25);
+    border-radius: 7px;
+    padding: 6px 10px;
+    cursor: pointer;
+    display: inline-block;
+    transition: background 0.15s;
+  }
+  .postpone-nudge:hover { background: rgba(210,153,34,0.18); }
   .task-meta { font-size: 0.73em; color: var(--text-muted); margin-top: 5px; display: flex; flex-wrap: wrap; gap: 4px; }
   .task-meta .badge {
     display: inline-flex;
@@ -2537,6 +2550,8 @@ data.tasks.forEach(t => {
   if (t.seriesName === undefined) t.seriesName = null;
   if (t.seriesIndex === undefined) t.seriesIndex = null;
   if (t.seriesTotal === undefined) t.seriesTotal = null;
+  if (t.postponeCount === undefined) t.postponeCount = 0;   // kaç kez ertelendi (farkındalık nudge için)
+  if (t.nudgeDismissed === undefined) t.nudgeDismissed = false;
 });
 
 function today() { return new Date().toISOString().slice(0,10); }
@@ -4135,6 +4150,7 @@ function applyPostpone(id, dateIso) {
   if (!t) return;
   const oldDue = t.due;
   t.due = dateIso;
+  t.postponeCount = (t.postponeCount || 0) + 1; // erteleme farkındalığı için say
   // Yarına atıldıysa bugünün MIT'inden çıkar
   if (t.mitDate === today() && dateIso !== today()) t.mitDate = null;
   save();
@@ -4153,6 +4169,34 @@ async function applyPostponePick(id) {
   const parsed = parseDateInput(inp.trim());
   if (!parsed) { showToast('Tarih anlaşılamadı', 'warning'); return; }
   applyPostpone(id, parsed);
+}
+
+// Erteleme farkındalığı — çok ertelenen görev için nazik müdahale (utançsız)
+function postponeNudge(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  closePostponeMenu();
+  const menu = document.createElement('div');
+  menu.id = 'postponeMenu';
+  menu.className = 'postpone-menu';
+  menu.innerHTML = `
+    <div class="postpone-title">🔄 Bu görevi ${t.postponeCount} kez erteledin</div>
+    <div style="font-size:0.82em;color:var(--text-muted);padding:2px 4px 10px;line-height:1.5;">Belki çok büyük ya da belirsiz geliyor. Utanç yok — birlikte kolaylaştıralım 💜</div>
+    <button onclick="nudgeSplit(${id})">✂️ Küçük adımlara böl</button>
+    <button onclick="nudgeTry(${id})">⚡ Şimdi 2 dakika dene</button>
+    <button class="secondary" onclick="nudgeDismiss(${id})">👍 Tamam, böyle kalsın</button>
+  `;
+  document.body.appendChild(menu);
+  setTimeout(() => menu.classList.add('open'), 10);
+  setTimeout(() => document.addEventListener('click', _postponeOutsideClick, { once: true }), 100);
+}
+function nudgeSplit(id) { closePostponeMenu(); addSubtask(id); }
+function nudgeTry(id) { closePostponeMenu(); startTaskNow(id, true); }
+function nudgeDismiss(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (t) { t.nudgeDismissed = true; save(); renderTasks(); }
+  closePostponeMenu();
+  showToast('Tamam, baskı yok. Hazır olunca 💜', 'info', 2500);
 }
 
 async function addSubtask(id) {
@@ -4263,6 +4307,13 @@ function initFilter() {
   else { _taskFilter = 'all'; document.querySelector('[data-filter="all"]').classList.add('active'); }
 }
 
+// 7+ gün önce bitmiş görev = arşivlik (ana görünümde gizlenir, "Bitenler"de arşiv bölümünde)
+function isArchivedDone(t) {
+  if (!t.done || !t.doneDate) return false;
+  const d = new Date(); d.setDate(d.getDate() - 7);
+  return t.doneDate < d.toISOString().slice(0, 10);
+}
+
 function filterTasks(tasks) {
   const ts = today();
   let filtered;
@@ -4288,7 +4339,8 @@ function filterTasks(tasks) {
       filtered = tasks.filter(t => t.done);
       break;
     default:
-      filtered = tasks;
+      // Ana görünüm: eski bitenler (7+ gün) gizli — temiz kalsın (arşiv "Bitenler"de)
+      filtered = tasks.filter(t => !isArchivedDone(t));
   }
   // Arama uygula
   const searchEl = document.getElementById('taskSearch');
@@ -4608,6 +4660,7 @@ function renderTaskItem(t) {
       <div style="flex:1;">
         <div class="task-text">${isMit ? '⭐ ' : ''}${escapeHtml(t.text)}</div>
         ${t.notes ? `<div class="task-notes">${escapeHtml(t.notes)}</div>` : ''}
+        ${(!t.done && (t.postponeCount || 0) >= 3 && !t.nudgeDismissed) ? `<div class="postpone-nudge" onclick="postponeNudge(${t.id})">🔄 ${t.postponeCount} kez ertelendi · dokun, kolaylaştıralım 💜</div>` : ''}
         <div class="task-meta">
           ${t.priority === 'urgent' ? '<span class="badge" style="background:#ff5555;color:white;">🔥 ACİL</span>' : ''}
           ${t.category ? `<span class="badge">${({odev:'📚 Ödev',ders:'📖 Özel Ders',ev:'🏠 Ev',kisisel:'💜 Kişisel'})[t.category] || t.category}</span>` : ''}
@@ -4670,6 +4723,24 @@ function renderTasks() {
           </summary>
           <div style="margin-top: 6px;">
             ${sonra.map(renderTaskItem).join('')}
+          </div>
+        </details>
+      `;
+    }
+    list.innerHTML = html;
+  } else if (_taskFilter === 'done') {
+    // Bitenler: son 7 gün üstte, daha eskiler katlanır "📦 Arşiv" bölümünde
+    const recent = sorted.filter(t => !isArchivedDone(t));
+    const archived = sorted.filter(t => isArchivedDone(t));
+    let html = recent.map(renderTaskItem).join('');
+    if (archived.length > 0) {
+      html += `
+        <details style="margin-top: 14px;">
+          <summary style="cursor:pointer; padding: 10px 14px; background: var(--bg-elev); border-radius: 8px; border: 1px solid var(--border-soft); color: var(--text-muted); font-size: 0.88em; user-select: none;">
+            📦 Arşiv · 7+ gün önce bitenler (${archived.length})
+          </summary>
+          <div style="margin-top: 6px;">
+            ${archived.map(renderTaskItem).join('')}
           </div>
         </details>
       `;
