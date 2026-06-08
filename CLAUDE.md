@@ -471,6 +471,13 @@ Telegram emekliliği sonrası tek seansta çok iş yapıldı (v7-13 → v7-16):
 - **Son fiyat sütunu:** AI prompt'a `price` (güncel/son fiyat) okuma eklendi (maliyetten ayrı sütun), `extractHoldingsJson` parse eder (`parseNum` + `h.son`/`h.guncel` fallback). Onay modalı **2 kademeli karta** çevrildi: üst satır = sembol + piyasa select + sil; alt satır = **Adet | Alım fiyatı | Son fiyat** (mini etiketli `<label>`, mobilde sığar). `confirmPortfolioImport` yeni hisseye `price`'ı geçici yazar (Yahoo yenileyene kadar kâr/zarar hemen görünür). Test: THYAO alım 1280.5 / son 1297 ✓.
 - **💼 Akşam portföy özeti push** (yeni cron `30 15 * * 1-5` = 18:30 TR hafta içi, BIST kapanışı sonrası): `runPortfolioSummary` — pozisyonlu hisselerin güncel değer + **günlük** (price−prevClose) + **toplam** (price−cost) kâr/zararını para birimine göre gruplu hesaplar, tek push: "Değer / Bugün / Toplam". `sendPushToAll` + `logPush` (📬 geçmişe de düşer). Manuel test: `?type=portfolio&secret=<WEBHOOK_SECRET>`. scheduled() routing + deploy.py + wrangler.toml güncellendi.
 - **Cache:** v7-22 → v7-23
+
+### Haziran 8, 2026 (📈 Borsa — gün içi canlı fiyat güncelleme)
+- Salim: "anlık fiyata göre portföy gün içi hareket edecek mi?" — etmiyordu (sadece sekme açılışında 2dk+ eskiyse ya da manuel Yenile).
+- **`startStockAutoRefresh`/`stopStockAutoRefresh`:** Borsa sekmesi açıkken **60 sn'de bir** `refreshStocks` (sessiz, başarıda toast yok, sadece spin). `showTab` stocks'a girince başlatır, çıkınca durdurur. Interval içinde `document.hidden` (telefon kilitli/arka plan) ve sekme aktif kontrolü → **pil + Cloudflare kotası dostu**.
+- **`visibilitychange`:** Sayfa tekrar görünür olunca (kilit açılınca) borsa sekmesindeyse hemen bir tazele.
+- ⚠️ Yahoo ücretsiz BIST verisi **~15 dk gecikmeli** olabilir — "canlı otomatik güncelleme" ama tam "anlık/tick" değil.
+- **Cache:** v7-23 → v7-24
 - ⏳ Sıradaki: auto-archive · çoklu kategori · multi-user (Yol A) · ölü field temizliği · Faz 4 Telegram kod silme.
 
 ## Mevcut Durum

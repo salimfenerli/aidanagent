@@ -2560,14 +2560,39 @@ function showTab(name, btn) {
     renderNotifSettings();
     renderMuteState();
   }
+  // Borsa sekmesinden çıkınca canlı güncellemeyi durdur (batarya/kota)
+  if (name !== 'stocks') stopStockAutoRefresh();
   if (name === 'stocks') {
     renderStocks();
     // Fiyatlar 2 dk'dan eskiyse otomatik tazele
     const wl = data.watchlist || [];
     const latest = Math.max(0, ...wl.map(w => w.fetchedAt || 0));
     if (wl.length && (Date.now() - latest > 120000)) refreshStocks();
+    startStockAutoRefresh(); // sekme açıkken gün içi canlı güncelle
   }
 }
+
+// Borsa sekmesi açıkken gün içi otomatik fiyat güncelleme (60 sn).
+// Sayfa gizliyse (telefon kilitli / başka uygulama) atlar — pil + kota dostu.
+let _stockAutoTimer = null;
+function startStockAutoRefresh() {
+  stopStockAutoRefresh();
+  _stockAutoTimer = setInterval(() => {
+    if (document.hidden) return;                       // sayfa görünmüyorsa boşa çekme
+    if (!document.getElementById('stocks').classList.contains('active')) { stopStockAutoRefresh(); return; }
+    if (!(data.watchlist || []).length) return;        // hisse yoksa gereksiz
+    refreshStocks();                                   // sessiz tazele (başarıda toast yok)
+  }, 60000);
+}
+function stopStockAutoRefresh() {
+  if (_stockAutoTimer) { clearInterval(_stockAutoTimer); _stockAutoTimer = null; }
+}
+// Sayfa tekrar görünür olunca (kilidi açınca) borsa sekmesindeyse hemen bir tazele
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && document.getElementById('stocks').classList.contains('active')) {
+    if ((data.watchlist || []).length) refreshStocks();
+  }
+});
 
 // ============ ZAMAN TAHMİN DOĞRULUĞU (ADHD self-awareness) ============
 function updateEstimateStats() {
