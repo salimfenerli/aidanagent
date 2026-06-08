@@ -456,6 +456,15 @@ Telegram emekliliği sonrası tek seansta çok iş yapıldı (v7-13 → v7-16):
   - **(2) Response formatı:** Bu modelde `env.AI.run` cevabı `r.response` bazen **string değil dizi/obje** gelir (`[object Object]`). `String()` ile değil, `typeof rr === 'string' ? rr : JSON.stringify(rr)` ile stringleyip `extractHoldingsJson`'a ver.
   - **Teşhis yöntemi (gelecekte işe yarar):** `aidan-mcp/.env`'deki `AIDAN_EMAIL/PASSWORD` + `SUPABASE_URL/KEY` ile Supabase password login (`/auth/v1/token?grant_type=password`) → access_token al → endpoint'i Python `urllib` ile çağır. **DİKKAT:** urllib default User-Agent Cloudflare'de `403 error 1010` yer → `User-Agent: Mozilla/...` + `Origin: https://aidanapp.pages.dev` header ekle. Pillow ile sahte portföy görseli üretip test edilebilir.
 - ✅ **DOĞRULANDI:** Test görselinden THYAO/GARAN/ASELS adet+maliyet **eksiksiz** okundu. Worker'da `debug` alanı (holdings boşsa tam `r` yapısını döndürür) teşhis için kaldı — zararsız.
+
+### Haziran 8, 2026 (📷 Görselden portföy — doğruluk + hız ayarı)
+- Salim: "hesaplamalar yanlış + okuma uzun sürüyor". Kendi test scriptimle (Pillow ile sahte portföy görseli + login) teşhis edildi:
+- **Hız:** Server tarafı zaten hızlı (2.5–5.5 sn, lisans onayı kalıcı — her istekte tekrarlanmıyor). Yavaşlık **büyük telefon fotosunun mobil upload'ı**. İyileştirme: görsel 1280→**1100px**, `max_tokens` 1536→**1024**, PWA status "10–15 sn sürebilir" beklenti mesajı (ADHD panik yapmasın).
+- **Doğruluk — 3 sorun çözüldü:**
+  - (a) Model bazen **satır atlıyordu** → prompt "TÜM satırları atlamadan oku".
+  - (b) Maliyet/güncel/tutar **sütun karışması** → prompt "cost = lot başı ortalama maliyet, güncel fiyat/tutar DEĞİL".
+  - (c) 🔑 **Türk sayı formatı (en sinsi):** `"2.145,00"` → model `2.145` number döndürüp binlik noktayı ondalık sanıyordu (2145 yerine 2.145). **Çözüm:** prompt artık sayıları **görseldeki haliyle STRING** istiyor (`"2.145,00"`), `parseNum()` güvenli çözer (virgül=ondalık+nokta=binlik; virgülsüzde "tüm gruplar 3 hane → binlik" sezgisi). 10 test durumu + endpoint testi (TUPRS 2.145,00 dahil 5 hisse) tam doğru.
+- **Cache:** v7-21 → v7-22 (frontend: resize+status). Sonraki Worker-only düzeltmeler cache'i etkilemez.
 - ⏳ Sıradaki: auto-archive · çoklu kategori · multi-user (Yol A) · ölü field temizliği · Faz 4 Telegram kod silme.
 
 ## Mevcut Durum
