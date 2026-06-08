@@ -2070,33 +2070,39 @@ async function handlePortfolioImageApi(request, env) {
     'Hiç varlık göremezsen [] döndür.',
   ].join('\n');
 
-  // Cloudflare bu model için iki farklı input şeması belgeliyor (örnekler çelişiyor).
-  // İkisini de dene, hangisi hisse döndürürse onu al. Sonuncu ham cevabı debug için sakla.
   const dataUri = String(image);
-  const attempts = [
-    // A) byte array + prompt (model sayfasındaki örnek)
-    { image: bytes, prompt, max_tokens: 1536 },
-    // B) messages + image data URI string (vision tutorial örneği)
-    { messages: [{ role: 'user', content: prompt }], image: dataUri, max_tokens: 1536 },
-  ];
   let lastRaw = '';
   let lastErr = '';
-  for (const input of attempts) {
-    try {
-      const r = await env.AI.run(VISION_MODEL, input);
-      lastRaw = (r && (r.response || r.description || r.text)) || '';
-      const holdings = extractHoldingsJson(lastRaw);
-      if (holdings.length) return jsonCors({ holdings }, 200, cors);
-    } catch (e) {
-      lastErr = e.message;
-    }
+  try {
+    const r = await visionRun(env, { image: bytes, prompt, max_tokens: 1536 });
+    lastRaw = (r && (r.response || r.description || r.text)) || '';
+    const holdings = extractHoldingsJson(lastRaw);
+    if (holdings.length) return jsonCors({ holdings }, 200, cors);
+  } catch (e) {
+    lastErr = e.message;
   }
-  // Hiçbir format hisse döndürmedi — debug için ham cevabı/hatayı geri yolla
+  // Hisse bulunamadı — debug için ham cevabı/hatayı geri yolla
   return jsonCors({
     holdings: [],
     raw: String(lastRaw || '').slice(0, 400),
     aiError: lastErr || undefined,
   }, 200, cors);
+}
+
+// Vision modeli çağır. Llama 3.2 Vision, Meta lisansı yüzünden ilk kullanımda
+// 5016 hatası verir ("you must submit the prompt 'agree'"). Bunu yakalayıp bir
+// kez 'agree' gönderir (lisans kabulü, hesap için kalıcı), sonra asıl isteği tekrarlar.
+async function visionRun(env, input) {
+  try {
+    return await env.AI.run(VISION_MODEL, input);
+  } catch (e) {
+    const msg = String(e && e.message || '');
+    if (msg.includes('5016') || /submit the prompt .?agree/i.test(msg)) {
+      try { await env.AI.run(VISION_MODEL, { prompt: 'agree' }); } catch (_) {}
+      return await env.AI.run(VISION_MODEL, input); // lisans kabul edildi, tekrar dene
+    }
+    throw e;
+  }
 }
 
 // Borsa alarm cron — watchlist fiyatlarını kontrol et, eşik geçildiyse push
