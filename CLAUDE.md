@@ -450,8 +450,12 @@ Telegram emekliliği sonrası tek seansta çok iş yapıldı (v7-13 → v7-16):
   - `_pfImportHoldings` geçici liste, `updatePfImport`/`removePfImport` ile düzenlenir.
 - **CSP:** Değişiklik gerekmedi — `img-src` zaten `data: blob:` (canvas), `connect-src` Worker'ı içeriyor.
 - **Veri modeli:** Yeni alan yok — mevcut `watchlist[i].qty/cost/symbol/ySymbol/market` kullanılıyor.
-- **Cache:** v7-19 → v7-20
-- ⚠️ **Test bekliyor:** Vision modelin Türkçe aracı kurum ekranlarında OCR doğruluğu bilinmiyor (ilk deneme). Onay modalı yanlışlara karşı güvenlik ağı. Salim gerçek ss ile deneyecek.
+- **Cache:** v7-19 → v7-21
+- 🔴 **ÇÖZÜLEN 2 BUG (Salim "okuyamadı" dedi → kendi test scriptimle teşhis):**
+  - **(1) Llama Vision lisans onayı (5016):** Llama 3.2 Vision, Meta lisansı yüzünden ilk kullanımda `5016: you must submit the prompt 'agree'` hatası verir. Çözüm: `visionRun()` helper — `env.AI.run` 5016 dönerse bir kez `{prompt:'agree'}` gönderir (lisans kabulü hesap için kalıcı), sonra asıl isteği tekrarlar. **Workers AI'da yeni bir lisanslı model kullanılırsa bu gerekebilir — model dökümanında "agree" notu var mı bak.**
+  - **(2) Response formatı:** Bu modelde `env.AI.run` cevabı `r.response` bazen **string değil dizi/obje** gelir (`[object Object]`). `String()` ile değil, `typeof rr === 'string' ? rr : JSON.stringify(rr)` ile stringleyip `extractHoldingsJson`'a ver.
+  - **Teşhis yöntemi (gelecekte işe yarar):** `aidan-mcp/.env`'deki `AIDAN_EMAIL/PASSWORD` + `SUPABASE_URL/KEY` ile Supabase password login (`/auth/v1/token?grant_type=password`) → access_token al → endpoint'i Python `urllib` ile çağır. **DİKKAT:** urllib default User-Agent Cloudflare'de `403 error 1010` yer → `User-Agent: Mozilla/...` + `Origin: https://aidanapp.pages.dev` header ekle. Pillow ile sahte portföy görseli üretip test edilebilir.
+- ✅ **DOĞRULANDI:** Test görselinden THYAO/GARAN/ASELS adet+maliyet **eksiksiz** okundu. Worker'da `debug` alanı (holdings boşsa tam `r` yapısını döndürür) teşhis için kaldı — zararsız.
 - ⏳ Sıradaki: auto-archive · çoklu kategori · multi-user (Yol A) · ölü field temizliği · Faz 4 Telegram kod silme.
 
 ## Mevcut Durum
