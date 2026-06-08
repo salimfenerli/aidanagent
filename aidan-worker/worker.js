@@ -1996,7 +1996,9 @@ function base64ToBytes(b64) {
   return bytes;
 }
 
-// Sayı parse — hem number hem Türk formatlı string ("1.250,75" / "280,50") güvenli çevrilir
+// Sayı parse — hem number hem Türk formatlı string ("1.250,75" / "280,50" / "2.145") güvenli çevrilir.
+// NOT: model sayıları STRING ham haliyle döndürür (prompt'ta isteniyor) ki binlik/ondalık bilgisi
+// kaybolmasın — number'a çevirseydi "2.145,00" → 2.145 olur, binlik ayracı ondalık sanılırdı.
 function parseNum(v) {
   if (v == null) return null;
   if (typeof v === 'number') return isFinite(v) ? v : null;
@@ -2005,8 +2007,16 @@ function parseNum(v) {
   if (s.includes(',')) {
     // Virgül var → ondalık virgül (Türk format). Noktalar binlik ayracı → sil.
     s = s.replace(/\./g, '').replace(',', '.');
+  } else if (s.includes('.')) {
+    // Virgül yok, nokta var → binlik mi ondalık mı belirsiz.
+    // Tüm nokta-gruplarının sonrası 3 hane ise binlik ayracı say (1.280 → 1280, 29.700 → 29700).
+    // Aksi halde ondalık nokta bırak (280.5 → 280.5).
+    const parts = s.split('.');
+    const allGroupsThree = parts.slice(1).every(p => p.length === 3);
+    if (parts.length > 1 && allGroupsThree && parts[0].length <= 3) {
+      s = parts.join('');
+    }
   }
-  // Virgül yoksa nokta olduğu gibi kalır (ondalık nokta varsayımı)
   const n = Number(s);
   return isFinite(n) ? n : null;
 }
@@ -2077,17 +2087,17 @@ async function handlePortfolioImageApi(request, env) {
     'Bu bir borsa/yatırım uygulamasının portföy ekran görüntüsü.',
     'Görseldeki TÜM satırları, baştan sona, HİÇBİRİNİ ATLAMADAN oku. Her hisse/varlık satırı için:',
     '- symbol: hisse/varlık kodu (örn THYAO, AAPL, BTC). Büyük harf.',
-    '- qty: elindeki ADET/LOT sayısı (sayı). "Adet", "Lot", "Miktar" sütunu. Yoksa null.',
+    '- qty: elindeki ADET/LOT sayısı. "Adet", "Lot", "Miktar" sütunu. Yoksa null.',
     '- cost: lot başı ORTALAMA ALIŞ MALİYETİ (birim fiyat). "Maliyet" veya "Ort. Maliyet" sütunu.',
     '  ÖNEMLİ: cost güncel/anlık fiyat DEĞİL, toplam tutar da DEĞİL — birim alış maliyeti. Yoksa null.',
     '- market: "bist" (Türk hissesi), "abd" (ABD hissesi), "fx" (döviz), "crypto" (kripto). Emin değilsen "bist".',
     '',
-    'SAYI FORMATI (Türkçe): nokta = binlik ayracı, virgül = ondalık.',
-    '  Örnek: "1.250,75" → 1250.75 yaz.  "280,50" → 280.5 yaz.  "29.700" → 29700 yaz.',
-    '  Çıktıda ondalık için NOKTA kullan, binlik ayracı KOYMA.',
+    'SAYILARI GÖRSELDEKİ HALİYLE, STRING olarak yaz — değiştirme, yuvarlamadan.',
+    '  Görselde "2.145,00" yazıyorsa cost:"2.145,00" yaz. "95,20" → cost:"95,20". "100" → qty:"100".',
+    '  Sayıyı number\'a çevirme, binlik/ondalık ayracını OLDUĞU GİBİ bırak. Çözümünü ben yapacağım.',
     '',
     'SADECE geçerli bir JSON dizisi döndür, başka hiçbir açıklama/metin yazma. Örnek:',
-    '[{"symbol":"THYAO","qty":100,"cost":280.5,"market":"bist"},{"symbol":"GARAN","qty":50,"cost":95.2,"market":"bist"}]',
+    '[{"symbol":"THYAO","qty":"100","cost":"1.280,50","market":"bist"},{"symbol":"GARAN","qty":"50","cost":"95,20","market":"bist"}]',
     'Hiç varlık göremezsen [] döndür.',
   ].join('\n');
 
