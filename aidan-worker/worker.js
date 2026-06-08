@@ -2070,12 +2070,15 @@ async function handlePortfolioImageApi(request, env) {
     'Hiç varlık göremezsen [] döndür.',
   ].join('\n');
 
-  const dataUri = String(image);
   let lastRaw = '';
+  let debug = '';
   let lastErr = '';
   try {
     const r = await visionRun(env, { image: bytes, prompt, max_tokens: 1536 });
-    lastRaw = (r && (r.response || r.description || r.text)) || '';
+    // r.response bazen string, bazen obje/dizi olabilir — düzgün string'e çevir
+    const rr = r && (r.response != null ? r.response : (r.description != null ? r.description : r.text));
+    lastRaw = (typeof rr === 'string') ? rr : JSON.stringify(rr);
+    debug = (typeof r === 'object') ? JSON.stringify(r).slice(0, 700) : String(r).slice(0, 700);
     const holdings = extractHoldingsJson(lastRaw);
     if (holdings.length) return jsonCors({ holdings }, 200, cors);
   } catch (e) {
@@ -2085,6 +2088,7 @@ async function handlePortfolioImageApi(request, env) {
   return jsonCors({
     holdings: [],
     raw: String(lastRaw || '').slice(0, 400),
+    debug: debug || undefined,
     aiError: lastErr || undefined,
   }, 200, cors);
 }
