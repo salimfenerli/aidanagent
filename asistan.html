@@ -471,6 +471,31 @@
   .stocks-add input { flex: 1; min-width: 0; padding: 11px 13px; font-size: 0.95em; text-transform: uppercase; }
   .stocks-add input::placeholder { text-transform: none; }
   .stocks-add button { white-space: nowrap; }
+  .stocks-photo-btn {
+    width: 100%; margin-bottom: 12px; padding: 11px 14px;
+    background: rgba(99,102,241,0.10); border: 1px dashed rgba(99,102,241,0.4);
+    color: var(--accent); border-radius: var(--radius); font-size: 0.9em; font-weight: 600;
+    cursor: pointer; box-shadow: none; display: flex; align-items: center; justify-content: center; gap: 7px;
+    transition: background 0.15s;
+  }
+  .stocks-photo-btn:hover { background: rgba(99,102,241,0.18); }
+  .stocks-photo-btn .icon { width: 18px; height: 18px; }
+  /* Görselden portföy onay modalı */
+  .pf-import-status { font-size: 0.9em; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5; }
+  .pf-import-status.error { color: var(--warning); }
+  .pf-import-list { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; }
+  .pf-import-row { display: flex; gap: 6px; align-items: center; background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: 10px; padding: 8px 10px; }
+  .pf-import-row input { padding: 7px 8px; font-size: 0.85em; border-radius: 7px; min-width: 0; }
+  .pf-import-row .pf-imp-sym { flex: 1.2; text-transform: uppercase; font-weight: 600; }
+  .pf-import-row .pf-imp-qty, .pf-import-row .pf-imp-cost { flex: 1; }
+  .pf-import-row select.pf-imp-mkt { flex: 0.9; padding: 7px 4px; font-size: 0.78em; border-radius: 7px; background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+  .pf-import-row .pf-imp-del { background: transparent; border: none; box-shadow: none; color: var(--text-faint); cursor: pointer; padding: 4px 6px; font-size: 1em; flex-shrink: 0; }
+  .pf-import-row .pf-imp-del:hover { color: var(--danger); }
+  .pf-import-head { display: flex; gap: 6px; font-size: 0.68em; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em; padding: 0 10px; margin-bottom: 2px; }
+  .pf-import-head span:nth-child(1) { flex: 1.2; }
+  .pf-import-head span:nth-child(2), .pf-import-head span:nth-child(3) { flex: 1; }
+  .pf-import-head span:nth-child(4) { flex: 0.9; }
+  .pf-import-head span:nth-child(5) { width: 26px; }
   .stocks-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
   .stocks-updated { font-size: 0.78em; color: var(--text-faint); }
   .stocks-refresh {
@@ -2284,6 +2309,11 @@
       <input type="text" id="stockSymInput" placeholder="THYAO, GARAN, ASELS, TUPRS" maxlength="15" onkeydown="if(event.key==='Enter')addStock()" autocapitalize="characters">
       <button onclick="addStock()" id="stockAddBtn">➕ Ekle</button>
     </div>
+    <button class="stocks-photo-btn" id="stocksPhotoBtn" onclick="document.getElementById('portfolioPhotoInput').click()">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      Ekran görüntüsünden portföy ekle
+    </button>
+    <input type="file" id="portfolioPhotoInput" accept="image/*" style="display:none;" onchange="handlePortfolioPhoto(event)">
     <div class="stocks-toolbar">
       <span class="stocks-updated" id="stocksUpdated">—</span>
       <button class="stocks-refresh" onclick="refreshStocks()" id="stocksRefreshBtn" title="Fiyatları güncelle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg> Yenile</button>
@@ -2444,6 +2474,20 @@
     </div>
     <div class="journal-history" id="journalHistory"></div>
     <button class="modal-close" onclick="closeJournalModal()">Kapat</button>
+  </div>
+</div>
+
+<!-- Portföy görseli onay modalı -->
+<div class="modal-overlay" id="portfolioImportModal" onclick="if(event.target.id==='portfolioImportModal')closePortfolioImport()">
+  <div class="modal" style="max-width:540px;">
+    <div class="modal-title">📷 Görselden portföy</div>
+    <div id="portfolioImportStatus" class="pf-import-status">Görsel okunuyor…</div>
+    <div id="portfolioImportList" class="pf-import-list"></div>
+    <div class="modal-actions" id="portfolioImportActions" style="margin-top:14px; display:none;">
+      <button onclick="confirmPortfolioImport()" id="pfImportConfirmBtn">✅ Portföye ekle</button>
+      <button class="secondary" onclick="closePortfolioImport()">İptal</button>
+    </div>
+    <button class="modal-close" onclick="closePortfolioImport()">Kapat</button>
   </div>
 </div>
 
@@ -3597,6 +3641,163 @@ function renderPortfolioSummary() {
     <div class="pf-label">💼 Portföy · ${holdings.length} pozisyon (${currencies.length} para birimi)</div>
     <div class="pf-multi">${rows}</div>
   `;
+}
+
+// ====== Görselden portföy (AI vision) ======
+const PORTFOLIO_IMAGE_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/portfolio-image';
+let _pfImportHoldings = []; // AI'nın bulduğu + kullanıcının düzenlediği geçici liste
+
+// Seçilen fotoğrafı canvas ile küçült (max kenar 1280px), jpeg base64 döndür — yükleme küçük kalsın
+function resizeImageToDataUrl(file, maxSide = 1280, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > maxSide || height > maxSide) {
+        const scale = maxSide / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('görsel açılamadı')); };
+    img.src = url;
+  });
+}
+
+async function handlePortfolioPhoto(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = ''; // aynı dosya tekrar seçilebilsin
+  if (!file) return;
+
+  if (!window._supa || !window._user) {
+    showToast('Önce Ayarlar → bulut girişi yap', 'warning', 4000);
+    return;
+  }
+  // Modalı aç, "okunuyor" göster
+  openPortfolioImport();
+  setPfImportStatus('📷 Görsel hazırlanıyor…');
+
+  try {
+    const dataUrl = await resizeImageToDataUrl(file);
+    setPfImportStatus('🧠 Aidan görseli okuyor… (birkaç saniye)');
+    const { data: sess } = await window._supa.auth.getSession();
+    const token = sess && sess.session && sess.session.access_token;
+    if (!token) throw new Error('oturum yok');
+
+    const r = await fetch(PORTFOLIO_IMAGE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ image: dataUrl }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || ('hata ' + r.status));
+    const holdings = Array.isArray(j.holdings) ? j.holdings : [];
+    if (!holdings.length) {
+      setPfImportStatus('Görselde hisse bulamadım 😕 Daha net bir portföy ekranı dene, ya da manuel ekle.', true);
+      return;
+    }
+    _pfImportHoldings = holdings;
+    renderPfImportList();
+  } catch (e) {
+    setPfImportStatus('Okuma başarısız: ' + e.message, true);
+  }
+}
+
+function setPfImportStatus(msg, isError) {
+  const el = document.getElementById('portfolioImportStatus');
+  if (!el) return;
+  el.style.display = 'block';
+  el.textContent = msg;
+  el.classList.toggle('error', !!isError);
+}
+
+function openPortfolioImport() {
+  _pfImportHoldings = [];
+  document.getElementById('portfolioImportList').innerHTML = '';
+  document.getElementById('portfolioImportActions').style.display = 'none';
+  document.getElementById('portfolioImportModal').classList.add('active');
+}
+
+function closePortfolioImport() {
+  document.getElementById('portfolioImportModal').classList.remove('active');
+  _pfImportHoldings = [];
+}
+
+// AI sonuçlarını düzenlenebilir satırlar olarak göster (vision hata yapabilir → kullanıcı düzeltsin)
+function renderPfImportList() {
+  setPfImportStatus(`${_pfImportHoldings.length} varlık buldum. Kontrol et, düzelt, ekle 👇`);
+  const list = document.getElementById('portfolioImportList');
+  const marketOpts = [['bist','🇹🇷'],['abd','🇺🇸'],['fx','💱'],['crypto','₿']];
+  list.innerHTML = `
+    <div class="pf-import-head"><span>Sembol</span><span>Adet</span><span>Maliyet</span><span>Piyasa</span><span></span></div>
+  ` + _pfImportHoldings.map((h, i) => `
+    <div class="pf-import-row">
+      <input class="pf-imp-sym" value="${escapeHtml(h.symbol || '')}" oninput="updatePfImport(${i},'symbol',this.value)" autocapitalize="characters">
+      <input class="pf-imp-qty" type="number" inputmode="decimal" placeholder="adet" value="${h.qty != null ? h.qty : ''}" oninput="updatePfImport(${i},'qty',this.value)">
+      <input class="pf-imp-cost" type="number" inputmode="decimal" placeholder="maliyet" value="${h.cost != null ? h.cost : ''}" oninput="updatePfImport(${i},'cost',this.value)">
+      <select class="pf-imp-mkt" onchange="updatePfImport(${i},'market',this.value)">
+        ${marketOpts.map(([v,e]) => `<option value="${v}" ${h.market===v?'selected':''}>${e}</option>`).join('')}
+      </select>
+      <button class="pf-imp-del" onclick="removePfImport(${i})" title="Çıkar">✕</button>
+    </div>
+  `).join('');
+  document.getElementById('portfolioImportActions').style.display = 'flex';
+}
+
+function updatePfImport(i, field, val) {
+  if (!_pfImportHoldings[i]) return;
+  if (field === 'symbol') _pfImportHoldings[i].symbol = val.toUpperCase().replace(/[^A-Z0-9.=-]/g, '');
+  else if (field === 'market') _pfImportHoldings[i].market = val;
+  else { // qty / cost
+    const n = parseFloat(String(val).replace(',', '.'));
+    _pfImportHoldings[i][field] = isFinite(n) && n > 0 ? n : null;
+  }
+}
+
+function removePfImport(i) {
+  _pfImportHoldings.splice(i, 1);
+  if (!_pfImportHoldings.length) { setPfImportStatus('Liste boş. İptal et ya da yeni görsel dene.', true); document.getElementById('portfolioImportActions').style.display='none'; document.getElementById('portfolioImportList').innerHTML=''; return; }
+  renderPfImportList();
+}
+
+// Onaylanan varlıkları watchlist'e ekle/güncelle
+function confirmPortfolioImport() {
+  data.watchlist = data.watchlist || [];
+  let added = 0, updated = 0;
+  for (const h of _pfImportHoldings) {
+    const sym = (h.symbol || '').trim().toUpperCase();
+    if (!sym) continue;
+    const market = h.market || 'bist';
+    const existing = data.watchlist.find(w => w.symbol === sym);
+    if (existing) {
+      if (h.qty != null) existing.qty = h.qty;
+      if (h.cost != null) existing.cost = h.cost;
+      // market/ySymbol eksikse tamamla (eski kayıt olabilir)
+      if (!existing.ySymbol) { existing.ySymbol = toYahooSymbol(sym, market); existing.market = market; }
+      updated++;
+    } else {
+      data.watchlist.unshift({
+        symbol: sym, ySymbol: toYahooSymbol(sym, market), market,
+        name: sym, price: null, prevClose: null, changePct: null, currency: 'TRY',
+        alarmAbove: null, alarmBelow: null, lastAlertedAbove: false, lastAlertedBelow: false,
+        qty: h.qty != null ? h.qty : null, cost: h.cost != null ? h.cost : null,
+        fetchedAt: null, error: null,
+      });
+      added++;
+    }
+  }
+  save();
+  renderStocks();
+  refreshStocks(); // fiyatları hemen çek
+  closePortfolioImport();
+  showToast(`💼 ${added} eklendi${updated ? `, ${updated} güncellendi` : ''}`, 'success', 3500);
 }
 
 function addTask() {

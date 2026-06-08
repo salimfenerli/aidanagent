@@ -1980,6 +1980,106 @@ async function handleStocksApi(request, env) {
   }
 }
 
+// ============================================================
+// Portföy görseli → AI (Cloudflare Workers AI vision modeli)
+// Kullanıcı aracı kurum uygulamasının portföy ekranının fotoğrafını atar,
+// vision modeli sembol + adet + ortalama maliyet + piyasayı okur, JSON döner.
+// ============================================================
+const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
+
+// base64 string → byte array (vision modeli image: number[] bekler)
+function base64ToBytes(b64) {
+  const clean = String(b64 || '').replace(/^data:image\/\w+;base64,/, '');
+  const bin = atob(clean);
+  const bytes = new Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+// Vision modelin metin cevabından JSON dizisini ayıkla (markdown/çer-çöp toleranslı)
+function extractHoldingsJson(text) {
+  if (!text) return [];
+  let s = String(text).trim();
+  // ```json ... ``` bloklarını temizle
+  s = s.replace(/```json/gi, '').replace(/```/g, '').trim();
+  // İlk [ ... ] dizisini yakala
+  const start = s.indexOf('[');
+  const end = s.lastIndexOf(']');
+  if (start === -1 || end === -1 || end <= start) return [];
+  let arr;
+  try { arr = JSON.parse(s.slice(start, end + 1)); } catch { return []; }
+  if (!Array.isArray(arr)) return [];
+  const validMarkets = ['bist', 'abd', 'fx', 'crypto'];
+  const out = [];
+  for (const h of arr) {
+    if (!h || typeof h !== 'object') continue;
+    const symbol = String(h.symbol || h.sembol || '').trim().toUpperCase().replace(/[^A-Z0-9.=-]/g, '');
+    if (!symbol) continue;
+    const qty = h.qty != null ? Number(h.qty) : (h.adet != null ? Number(h.adet) : null);
+    const cost = h.cost != null ? Number(h.cost) : (h.maliyet != null ? Number(h.maliyet) : null);
+    let market = String(h.market || '').toLowerCase().trim();
+    if (!validMarkets.includes(market)) market = 'bist';
+    out.push({
+      symbol,
+      qty: (qty != null && isFinite(qty) && qty > 0) ? qty : null,
+      cost: (cost != null && isFinite(cost) && cost > 0) ? cost : null,
+      market,
+    });
+  }
+  return out.slice(0, 40);
+}
+
+async function handlePortfolioImageApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const image = body.image;
+  if (!image) return jsonCors({ error: 'image yok' }, 400, cors);
+  // Kaba boyut sınırı (~6MB base64) — vision modeli ve istek limiti için
+  if (String(image).length > 8_000_000) return jsonCors({ error: 'görsel çok büyük' }, 413, cors);
+
+  // Auth — hesap sahibi
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (env.AIDAN_EMAIL && user.email && user.email.toLowerCase() !== env.AIDAN_EMAIL.toLowerCase()) {
+    return jsonCors({ error: 'forbidden' }, 403, cors);
+  }
+
+  let bytes;
+  try { bytes = base64ToBytes(image); } catch { return jsonCors({ error: 'görsel okunamadı' }, 400, cors); }
+  if (!bytes.length) return jsonCors({ error: 'boş görsel' }, 400, cors);
+
+  const prompt = [
+    'Bu bir borsa/yatırım uygulamasının portföy ekran görüntüsü.',
+    'Görseldeki HER hisse/varlık satırı için şunları çıkar:',
+    '- symbol: hisse/varlık kodu (örn THYAO, AAPL, BTC). Büyük harf.',
+    '- qty: elindeki adet/lot sayısı (sayı). Yoksa null.',
+    '- cost: ortalama alış maliyeti / birim fiyat (sayı, nokta ondalıkla). Yoksa null.',
+    '- market: "bist" (Türk hissesi), "abd" (ABD hissesi), "fx" (döviz), "crypto" (kripto). Emin değilsen "bist".',
+    'SADECE geçerli bir JSON dizisi döndür, başka açıklama yazma. Örnek:',
+    '[{"symbol":"THYAO","qty":100,"cost":280.5,"market":"bist"},{"symbol":"GARAN","qty":50,"cost":95.2,"market":"bist"}]',
+    'Hiç varlık göremezsen [] döndür.',
+  ].join('\n');
+
+  try {
+    const r = await env.AI.run(VISION_MODEL, { image: bytes, prompt, max_tokens: 1536 });
+    const raw = (r && (r.response || r.description || r.text)) || '';
+    const holdings = extractHoldingsJson(raw);
+    return jsonCors({ holdings, raw: holdings.length ? undefined : String(raw).slice(0, 300) }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: 'AI görseli okuyamadı: ' + e.message }, 500, cors);
+  }
+}
+
 // Borsa alarm cron — watchlist fiyatlarını kontrol et, eşik geçildiyse push
 async function runStockCheck(env) {
   const { data, token, userId } = await fetchAidan(env);
@@ -2104,6 +2204,11 @@ export default {
     // Borsa fiyatları (POST {symbols} → Yahoo proxy)
     if (url.pathname === '/stocks') {
       return handleStocksApi(request, env);
+    }
+
+    // Portföy görseli → AI vision (POST {image} → sembol/adet/maliyet JSON)
+    if (url.pathname === '/portfolio-image') {
+      return handlePortfolioImageApi(request, env);
     }
 
     // Static serve (PWA) — '/' → asistan.html, ve diğer asset'ler

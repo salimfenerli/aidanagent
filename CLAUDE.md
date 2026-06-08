@@ -40,7 +40,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - **Bildirim:** Telegram bot (eski ntfy.sh deprecate edildi, kota sorunu)
 - **PWA:** Manifest + Service Worker (network-first stratejisi) + **icon.png** (yeni bulut mascot)
 - **Tasarım dili:** **Stitch-inspired dark mode** (May 28-29, 2026) — indigo `#6463ff`, koyu `#0a0b0f`, soft amber `#ffc640` yıldız. Inter font.
-- **Cache versiyonu:** `aidan-v7-19` (sw.js içinde, her büyük değişikte artırılır)
+- **Cache versiyonu:** `aidan-v7-20` (sw.js içinde, her büyük değişikte artırılır)
 - **AI:** Cloudflare Workers AI — **Llama 3.3 70B** (intent + tool use) + **Whisper** (sesli → metin). Bedava.
 - **MCP Server (PC):** Python, Claude Desktop bağlanır, doğrudan Supabase'e operasyon yapar
 - **Cloudflare Worker:** Cron brifing + Telegram webhook handler (artık static serve etmiyor, sadece backend)
@@ -441,6 +441,17 @@ Telegram emekliliği sonrası tek seansta çok iş yapıldı (v7-13 → v7-16):
 - **Worker:** `/stocks` endpoint'i yeni `{entries:[{display,yahoo}]}` formatını kabul ediyor (PWA artık Yahoo sembolünü kendi hesaplayıp yolluyor); eski `{symbols:[...]}` formatı geriye dönük uyum için duruyor (`bistSymbol` ile çevrilir, hep BIST varsayar). `fetchStockQuotes` hem yeni hem eski formatı işler. `runStockCheck` cron'u her hisse için `w.ySymbol || bistSymbol(w.symbol)` kullanır.
 - **Veri modeli:** `watchlist[i].ySymbol` (Yahoo Finance API sembolü), `watchlist[i].market` (`'bist'|'abd'|'fx'|'crypto'`)
 - **Cache:** v7-18 → v7-19
+
+### Haziran 8, 2026 (📷 Görselden portföy — AI vision)
+- Salim istedi: aracı kurum uygulamasının **portföy ekran görüntüsünü** atınca AI okuyup hisseleri otomatik eklesin.
+- **Worker:** `POST /portfolio-image` (`handlePortfolioImageApi`) — base64 görseli **Cloudflare Workers AI vision modeline** (`@cf/meta/llama-3.2-11b-vision-instruct`, bedava) verir. Prompt: her satır için `symbol/qty/cost/market` JSON iste. Auth (verifyUser + AIDAN_EMAIL), CORS. `base64ToBytes` (image: number[] formatı), `extractHoldingsJson` (markdown/çer-çöp toleranslı parse, sayı+market doğrulama, max 40 satır). Görsel ~6MB sınırı.
+- **PWA:** Borsa sekmesinde hisse eklemenin altında **"📷 Ekran görüntüsünden portföy ekle"** butonu (dashed accent). `<input type=file accept=image/* capture>` → `resizeImageToDataUrl` canvas ile max 1280px jpeg'e küçültür (yükleme küçük) → Worker'a yollar.
+  - **Onay modalı** (`portfolioImportModal`): AI'nın bulduğu varlıklar **düzenlenebilir satırlar** (sembol/adet/maliyet input + piyasa select + sil). Vision hata yapabilir → kullanıcı düzeltip onaylar. `confirmPortfolioImport` watchlist'e ekler/günceller (varsa qty+cost update, yoksa yeni + `toYahooSymbol`), sonra `refreshStocks`.
+  - `_pfImportHoldings` geçici liste, `updatePfImport`/`removePfImport` ile düzenlenir.
+- **CSP:** Değişiklik gerekmedi — `img-src` zaten `data: blob:` (canvas), `connect-src` Worker'ı içeriyor.
+- **Veri modeli:** Yeni alan yok — mevcut `watchlist[i].qty/cost/symbol/ySymbol/market` kullanılıyor.
+- **Cache:** v7-19 → v7-20
+- ⚠️ **Test bekliyor:** Vision modelin Türkçe aracı kurum ekranlarında OCR doğruluğu bilinmiyor (ilk deneme). Onay modalı yanlışlara karşı güvenlik ağı. Salim gerçek ss ile deneyecek.
 - ⏳ Sıradaki: auto-archive · çoklu kategori · multi-user (Yol A) · ölü field temizliği · Faz 4 Telegram kod silme.
 
 ## Mevcut Durum
