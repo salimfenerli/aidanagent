@@ -40,7 +40,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - **Bildirim:** Telegram bot (eski ntfy.sh deprecate edildi, kota sorunu)
 - **PWA:** Manifest + Service Worker (network-first stratejisi) + **icon.png** (yeni bulut mascot)
 - **Tasarım dili:** **Stitch-inspired dark mode** (May 28-29, 2026) — indigo `#6463ff`, koyu `#0a0b0f`, soft amber `#ffc640` yıldız. Inter font.
-- **Cache versiyonu:** `aidan-v7-6` (sw.js içinde, her büyük değişikte artırılır)
+- **Cache versiyonu:** `aidan-v7-19` (sw.js içinde, her büyük değişikte artırılır)
 - **AI:** Cloudflare Workers AI — **Llama 3.3 70B** (intent + tool use) + **Whisper** (sesli → metin). Bedava.
 - **MCP Server (PC):** Python, Claude Desktop bağlanır, doğrudan Supabase'e operasyon yapar
 - **Cloudflare Worker:** Cron brifing + Telegram webhook handler (artık static serve etmiyor, sadece backend)
@@ -421,7 +421,27 @@ Telegram emekliliği sonrası tek seansta çok iş yapıldı (v7-13 → v7-16):
   - Mobilde 4 tab tek satıra sığdırıldı (`.tab` padding/font/icon küçült, flex:1, nowrap).
 - **Veri modeli:** `data.watchlist[] = [{symbol,name,price,prevClose,changePct,currency,alarmAbove,alarmBelow,lastAlertedAbove,lastAlertedBelow,fetchedAt,error}]`
 - **Cache:** v7-16 → v7-17
-- ⏳ Sıradaki: ABD/döviz/kripto watchlist'e ekle (bistSymbol zaten suffix'li sembolü atlıyor, kolay) · auto-archive · çoklu kategori · multi-user · ölü field temizliği · Faz 4 Telegram kod silme.
+
+### Haziran 6, 2026 gece (📈 Borsa portföyü — adet + maliyet + kâr/zarar)
+- Watchlist artık portföy: her hisseye `qty` (adet) + `cost` (ortalama maliyet) eklenebilir (opsiyonel, "Pozisyon" butonu)
+- Kart içi pozisyon satırı + üst "💼 Portföy değeri" özet kartı (toplam değer, kâr/zarar TL+%, maliyet, pozisyon sayısı)
+- Bug fix: edit sırasında duplike `function addTask() {` oluşmuş, script'i kırıyordu — node yoktu, py+regex ile bulunup temizlendi
+- **Veri:** `watchlist[i].qty`, `watchlist[i].cost`
+- **Cache:** v7-17 → v7-18
+
+### Haziran 8, 2026 (📈 Borsa — ABD / Döviz / Kripto desteği)
+- Roadmap'teki sıradaki adım uygulandı: watchlist artık sadece BIST değil, **4 piyasa**:
+  - 🇹🇷 **BIST** → `.IS` suffix (THYAO → THYAO.IS)
+  - 🇺🇸 **ABD** → suffix yok (AAPL, TSLA doğrudan Yahoo sembolü)
+  - 💱 **Döviz** → `=X` suffix (USDTRY → USDTRY=X)
+  - ₿ **Kripto** → `-USD` suffix (BTC → BTC-USD)
+- **PWA:** Borsa sekmesinde hisse eklemenin üstüne 4 "market chip" (🇹🇷🇺🇸💱₿) — seçilen piyasaya göre placeholder örnekleri değişir (`MARKET_PLACEHOLDERS`). `toYahooSymbol(sym, market)` kullanıcı girdisini doğru Yahoo sembolüne çevirir, watchlist kaydına `ySymbol` + `market` alanları eklenir. Kart üstünde küçük market rozeti (BIST hariç).
+  - `legacyYSymbol(w)` — eski kayıtlarda (`ySymbol` yok) geriye dönük .IS varsayımıyla fallback üretir.
+- **Çoklu para birimi portföy özeti:** `renderPortfolioSummary` artık para birimine göre gruplar — tek para varsa eski büyük kart görünümü, birden fazla varsa (TRY+USD gibi) her biri ayrı satır (`pf-cur-row`). Kur karışıklığı/yanıltma önlendi.
+- **Worker:** `/stocks` endpoint'i yeni `{entries:[{display,yahoo}]}` formatını kabul ediyor (PWA artık Yahoo sembolünü kendi hesaplayıp yolluyor); eski `{symbols:[...]}` formatı geriye dönük uyum için duruyor (`bistSymbol` ile çevrilir, hep BIST varsayar). `fetchStockQuotes` hem yeni hem eski formatı işler. `runStockCheck` cron'u her hisse için `w.ySymbol || bistSymbol(w.symbol)` kullanır.
+- **Veri modeli:** `watchlist[i].ySymbol` (Yahoo Finance API sembolü), `watchlist[i].market` (`'bist'|'abd'|'fx'|'crypto'`)
+- **Cache:** v7-18 → v7-19
+- ⏳ Sıradaki: auto-archive · çoklu kategori · multi-user (Yol A) · ölü field temizliği · Faz 4 Telegram kod silme.
 
 ## Mevcut Durum
 
@@ -533,7 +553,7 @@ py aidan-pages-deploy.py
 - ⏳ Salim kullanacak, kullanım sonrası ne eksik anlayacağız
 
 ### Sonra (sıradaki feature)
-- 📈 **Borsa modülü** — BIST + ABD watchlist, fiyat alarmı (Salim istemişti, henüz yapılmadı)
+- ✅ **Borsa modülü** — BIST + ABD + Döviz + Kripto watchlist, fiyat alarmı, portföy (Haz 6-8'de tamamlandı)
 - 🎯 **Akıllı MIT öneren** — sabah AI bugünün 3'ünü öner (geçmiş + saat)
 - 📊 **Haftalık review** — pazar 21:00 AI "bu hafta nasıl geçtin"
 - 🔄 **Seri otomatik dengeleme** — atlanan gün varsa yeniden böl
@@ -636,7 +656,7 @@ curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo
    - 🥈 **Bildirim geçmişi** — Worker push gönderirken Supabase'e log, PWA'da "📬 Son 7 gün" listesi. "Sabah brifingi geldi mi gelmedi mi" merakı kalmasın.
    - 🥉 **Sesli akşam günlüğü** — Gün sonu konuş, Whisper text'e, AI özetle. ADHD decompression ritüeli.
    - **Multi-user (Yol A: davetli arkadaşlar)** — Worker tek `AIDAN_EMAIL`'e bakıyor → tüm aidan_data satırlarını dolaş, davet kodu, email onayı. Background push zaten multi-user uyumlu.
-   - **Borsa modülü** — BIST + ABD watchlist (Salim "sona, daha detaylı" demişti)
+   - ✅ **Borsa modülü TAMAMLANDI** (Haz 6-8) — BIST+ABD+Döviz+Kripto watchlist, alarm, portföy (adet+maliyet+kâr/zarar). Sıradaki: auto-archive · çoklu kategori · ölü field temizliği.
    - **Faz 4 (Telegram kod temizliği)** — Multi-user oturduktan sonra `sendTg`/`transcribeVoice`/`aiInterpret`/Telegram tool'ları silinir. Hangisinin sadece Telegram'a özel olduğunu bilmek için: `if (!TELEGRAM_RETIRED)` altında olanlar.
 4. ⚠️ **Netlify / drag-drop deploy ASLA önerme** — `git push` → GitHub Actions otomatik deploy var
 5. ⚠️ **ntfy.sh'tan asla bahsetme**, Telegram bot kullanılıyor
@@ -644,5 +664,5 @@ curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo
 7. ✅ **Token durumu temiz (Haz 2)** — May 29 leaked + geçici deploy token'ları silindi, GitHub Actions tek temiz token'la (GitHub Secrets `CF_API_TOKEN`) çalışıyor. Yeni token ifşa olursa yine sildirip doğrula (`/user/tokens/verify`).
 8. ✅ **Worker deploy GitHub Actions'ta** — `.github/workflows/deploy.yml` Pages + Worker'ı birden deploy eder (`aidan-worker/worker.js` veya `aidan-worker/deploy.py` değişince tetiklenir). Token GitHub Secrets'ta, `git push` yeter. Manuel `py aidan-worker/deploy.py` sadece acil/yedek (Windows'ta `PYTHONIOENCODING=utf-8` şart). **CLAUDE.md eski versiyonunda "Worker DEĞİL" yazıyordu, AI taşıma sonrası güncellendi.**
 9. ⚠️ **Background push (Haz 3 itibarıyla çalışıyor):** Apple lock ekranına ulaşması için 3 şart birden gerekli: (a) Worker `Urgency: high` (b) SW push handler her halükarda `showNotification` çağırmalı (iOS aksi halde izni iptal eder) (c) subscription fresh olmalı (eski SW'lerde oluşturulmuş subscription'lar bozuk). Sorun çıkarsa: Salim Ayarlar'dan "🔄 Push'u sıfırla" → manuel cron tetikle (`?type=noon&secret=<WEBHOOK_SECRET>`). subscription Supabase'de `data.settings.pushSubs[]`'ta.
-10. ⚠️ **Tasarım dili Stitch-inspired** — renkler `#6463ff` indigo, `#0a0b0f` koyu, `#ffc640` amber. Eski mor `#7c6ff7` ve emoji 🧠 logo YOK. Brand-logo-icon = mor bulut karakter PNG. Cache artık **v7-8**.
+10. ⚠️ **Tasarım dili Stitch-inspired** — renkler `#6463ff` indigo, `#0a0b0f` koyu, `#ffc640` amber. Eski mor `#7c6ff7` ve emoji 🧠 logo YOK. Brand-logo-icon = mor bulut karakter PNG. Cache artık **v7-19**.
 11. ⚠️ **Logo değiştirmek istenirse** `logo-concepts/logo-{1,2,3}-{flat,refined,3d}.png`'den biri `icon.png` üzerine kopyalanır, `make_icons.py` ile maskable yenilenir, push edilir.

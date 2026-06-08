@@ -459,6 +459,14 @@
   .journal-empty { font-size: 0.82em; color: var(--text-faint); text-align: center; padding: 8px 0; }
 
   /* Borsa */
+  .market-chips { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .market-chip {
+    background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+    padding: 5px 13px; border-radius: 20px; font-size: 0.82em; cursor: pointer;
+    box-shadow: none; transition: background 0.15s, color 0.15s, border-color 0.15s; white-space: nowrap;
+  }
+  .market-chip:hover { background: var(--surface-hover); color: var(--text); }
+  .market-chip.active { background: rgba(99,102,241,0.12); border-color: var(--accent); color: var(--accent); font-weight: 600; }
   .stocks-add { display: flex; gap: 8px; margin-bottom: 12px; }
   .stocks-add input { flex: 1; min-width: 0; padding: 11px 13px; font-size: 0.95em; text-transform: uppercase; }
   .stocks-add input::placeholder { text-transform: none; }
@@ -522,6 +530,18 @@
   .pf-pl.flat { color: var(--text-muted); }
   .pf-sub { font-size: 0.78em; color: var(--text-faint); margin-top: 8px; display: flex; gap: 14px; flex-wrap: wrap; }
   .pf-sub b { color: var(--text-muted); font-weight: 600; }
+  /* Çok para birimi portföy */
+  .pf-multi { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+  .pf-cur-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pf-cur-label { font-size: 0.7em; color: var(--accent); font-weight: 700; text-transform: uppercase; padding: 2px 7px; background: rgba(99,102,241,0.12); border-radius: 4px; min-width: 32px; text-align: center; }
+  .pf-cur-val { font-size: 1.05em; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+  .pf-cur-pl { font-size: 0.82em; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .pf-cur-pl.up { color: #34c759; }
+  .pf-cur-pl.down { color: #ef4444; }
+  .pf-cur-pl.flat { color: var(--text-muted); }
+  .pf-cur-count { font-size: 0.74em; color: var(--text-faint); margin-left: auto; }
+  /* Market rozeti (hisse kartında) */
+  .stock-market-badge { font-size: 0.75em; vertical-align: middle; margin-left: 4px; opacity: 0.8; }
 
   /* Kart içi pozisyon (holding) */
   .stock-position {
@@ -2254,8 +2274,14 @@
   <div id="stocks" class="panel">
     <h2>📈 Borsa</h2>
     <div class="portfolio-summary" id="portfolioSummary" style="display:none;"></div>
+    <div class="market-chips" id="marketChips">
+      <button class="market-chip active" data-market="bist" onclick="selectMarket('bist')">🇹🇷 BIST</button>
+      <button class="market-chip" data-market="abd" onclick="selectMarket('abd')">🇺🇸 ABD</button>
+      <button class="market-chip" data-market="fx" onclick="selectMarket('fx')">💱 Döviz</button>
+      <button class="market-chip" data-market="crypto" onclick="selectMarket('crypto')">₿ Kripto</button>
+    </div>
     <div class="stocks-add">
-      <input type="text" id="stockSymInput" placeholder="Hisse kodu (örn THYAO, GARAN, ASELS)" maxlength="12" onkeydown="if(event.key==='Enter')addStock()" autocapitalize="characters">
+      <input type="text" id="stockSymInput" placeholder="THYAO, GARAN, ASELS, TUPRS" maxlength="15" onkeydown="if(event.key==='Enter')addStock()" autocapitalize="characters">
       <button onclick="addStock()" id="stockAddBtn">➕ Ekle</button>
     </div>
     <div class="stocks-toolbar">
@@ -2263,7 +2289,7 @@
       <button class="stocks-refresh" onclick="refreshStocks()" id="stocksRefreshBtn" title="Fiyatları güncelle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg> Yenile</button>
     </div>
     <div class="stocks-list" id="stocksList"></div>
-    <div class="stocks-hint" id="stocksHint">BIST hisseleri · fiyatlar Yahoo Finance'tan · alarm kurarsan eşik geçilince bildirim gelir (hafta içi 10–18 arası kontrol).</div>
+    <div class="stocks-hint" id="stocksHint">BIST · ABD · Döviz · Kripto — fiyatlar Yahoo Finance'tan · alarm kurarsan eşik geçilince push bildirimi gelir.</div>
   </div>
 
   <!-- AYARLAR -->
@@ -3238,21 +3264,65 @@ function journalVoice() {
 }
 
 // ============ BORSA ============
-// data.watchlist = [{ symbol, name, price, prevClose, changePct, currency, alarmAbove, alarmBelow, lastAlertedAbove, lastAlertedBelow, fetchedAt, error }]
+// data.watchlist = [{ symbol, ySymbol, market, name, price, prevClose, changePct, currency,
+//                     alarmAbove, alarmBelow, lastAlertedAbove, lastAlertedBelow, qty, cost, fetchedAt, error }]
 const STOCKS_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/stocks';
+
+let selectedMarket = 'bist';
+const MARKET_PLACEHOLDERS = {
+  bist:   'THYAO, GARAN, ASELS, TUPRS',
+  abd:    'AAPL, TSLA, NVDA, MSFT',
+  fx:     'USDTRY, EURUSD, GBPTRY',
+  crypto: 'BTC, ETH, BNB, SOL',
+};
+
+function selectMarket(m) {
+  selectedMarket = m;
+  document.querySelectorAll('.market-chip').forEach(el => el.classList.toggle('active', el.dataset.market === m));
+  const inp = document.getElementById('stockSymInput');
+  if (inp) inp.placeholder = MARKET_PLACEHOLDERS[m] || '';
+}
+
+// Kullanıcı girişini Yahoo Finance sembolüne çevirir
+function toYahooSymbol(sym, market) {
+  const s = sym.trim().toUpperCase();
+  switch (market) {
+    case 'bist':
+      return (s.includes('.') || s.includes('=') || s.includes('-')) ? s : s + '.IS';
+    case 'abd':
+      return s; // AAPL, TSLA — Yahoo'da suffix yok
+    case 'fx':
+      return s.endsWith('=X') ? s : s + '=X'; // USDTRY → USDTRY=X
+    case 'crypto':
+      return s.includes('-') ? s : s + '-USD'; // BTC → BTC-USD
+    default:
+      return s;
+  }
+}
+
+// Eski watchlist ögeleri (ySymbol alanı yoksa) için geriye dönük fallback
+function legacyYSymbol(w) {
+  if (w.ySymbol) return w.ySymbol;
+  const s = (w.symbol || '').trim().toUpperCase();
+  if (s.includes('.') || s.includes('=') || s.includes('-')) return s;
+  return s + '.IS'; // eski BIST girişleri .IS'siz kaydedilmişti
+}
 
 function addStock() {
   const inp = document.getElementById('stockSymInput');
-  const sym = (inp.value || '').trim().toUpperCase().replace(/[^A-Z0-9.=-]/g, '');
-  if (!sym) return;
+  const raw = (inp.value || '').trim().toUpperCase().replace(/[^A-Z0-9.=-]/g, '');
+  if (!raw) return;
+  const market = selectedMarket || 'bist';
+  const ySymbol = toYahooSymbol(raw, market);
   data.watchlist = data.watchlist || [];
-  if (data.watchlist.some(w => w.symbol === sym)) {
-    showToast(`${sym} zaten listede`, 'info', 2000);
+  if (data.watchlist.some(w => w.symbol === raw)) {
+    showToast(`${raw} zaten listede`, 'info', 2000);
     inp.value = '';
     return;
   }
   data.watchlist.unshift({
-    symbol: sym, name: sym, price: null, prevClose: null, changePct: null, currency: 'TRY',
+    symbol: raw, ySymbol, market,
+    name: raw, price: null, prevClose: null, changePct: null, currency: 'TRY',
     alarmAbove: null, alarmBelow: null, lastAlertedAbove: false, lastAlertedBelow: false,
     qty: null, cost: null,
     fetchedAt: null, error: null
@@ -3314,15 +3384,17 @@ async function refreshStocks() {
     const { data: sess } = await window._supa.auth.getSession();
     const token = sess && sess.session && sess.session.access_token;
     if (!token) throw new Error('oturum yok');
+    // Her hisse için display (kullanıcı görmesi) + yahoo (API) sembol çifti gönder
+    const entries = wl.map(w => ({ display: w.symbol, yahoo: legacyYSymbol(w) }));
     const r = await fetch(STOCKS_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ symbols: wl.map(w => w.symbol) }),
+      body: JSON.stringify({ entries }),
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || ('hata ' + r.status));
     const bySym = {};
-    (j.quotes || []).forEach(q => { bySym[q.symbol] = q; });
+    (j.quotes || []).forEach(q => { bySym[q.symbol] = q; }); // q.symbol = display sembolü
     wl.forEach(w => {
       const q = bySym[w.symbol];
       if (!q) return;
@@ -3354,6 +3426,12 @@ function stocksUpdatedLabel() {
   if (min < 60) return `${min} dk önce güncellendi`;
   const d = new Date(latest);
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} güncellendi`;
+}
+
+// BIST dışı piyasalar için küçük bayrak/sembol rozeti (BIST için gösterilmez, varsayılan zaten o)
+function marketBadge(market) {
+  const map = { abd: '🇺🇸', fx: '💱', crypto: '₿' };
+  return map[market] ? `<span class="stock-market-badge">${map[market]}</span>` : '';
 }
 
 function renderStocks() {
@@ -3403,7 +3481,7 @@ function renderStocks() {
       <div class="stock-card ${cardDir}">
         <div class="stock-card-top">
           <div>
-            <div class="stock-sym">${escapeHtml(w.symbol)}</div>
+            <div class="stock-sym">${escapeHtml(w.symbol)}${marketBadge(w.market)}</div>
             <div class="stock-name">${escapeHtml(w.name || '')}</div>
           </div>
           <div class="stock-price-wrap">
@@ -3458,30 +3536,66 @@ async function setPosition(sym) {
 }
 
 // Toplam portföy özeti — sadece pozisyonu olan + fiyatı gelmiş hisseler
+// ABD/döviz/kripto eklendiğinden beri portföy birden çok para biriminde olabilir → para birimine göre grupla
 function renderPortfolioSummary() {
   const el = document.getElementById('portfolioSummary');
   if (!el) return;
   const holdings = (data.watchlist || []).filter(w => w.qty != null && w.qty > 0 && w.cost != null);
   if (holdings.length === 0) { el.style.display = 'none'; return; }
-  let totalCost = 0, totalValue = 0, pricedCount = 0;
+
+  const byCur = {};
   for (const w of holdings) {
-    totalCost += w.qty * w.cost;
-    if (w.price != null) { totalValue += w.qty * w.price; pricedCount++; }
-    else { totalValue += w.qty * w.cost; } // fiyat yoksa maliyetle say (nötr)
+    const cur = w.currency || 'TRY';
+    if (!byCur[cur]) byCur[cur] = { cost: 0, value: 0, count: 0, pricedCount: 0 };
+    const g = byCur[cur];
+    g.cost += w.qty * w.cost;
+    g.count++;
+    if (w.price != null) { g.value += w.qty * w.price; g.pricedCount++; }
+    else { g.value += w.qty * w.cost; } // fiyat yoksa maliyetle say (nötr)
   }
-  const pl = totalValue - totalCost;
-  const plPct = totalCost > 0 ? (pl / totalCost) * 100 : 0;
-  const pdir = pl > 0 ? 'up' : (pl < 0 ? 'down' : 'flat');
-  const psign = pl > 0 ? '+' : '';
+  const currencies = Object.keys(byCur);
   el.style.display = 'block';
+
+  if (currencies.length === 1) {
+    // Tek para birimi — eski büyük kart görünümü
+    const cur = currencies[0];
+    const g = byCur[cur];
+    const pl = g.value - g.cost;
+    const plPct = g.cost > 0 ? (pl / g.cost) * 100 : 0;
+    const pdir = pl > 0 ? 'up' : (pl < 0 ? 'down' : 'flat');
+    const psign = pl > 0 ? '+' : '';
+    const curLabel = cur === 'TRY' ? 'TL' : cur;
+    el.innerHTML = `
+      <div class="pf-label">💼 Portföy değeri</div>
+      <div class="pf-value">${formatStockPrice(g.value)} <span style="font-size:0.5em;color:var(--text-faint);font-weight:600;">${escapeHtml(curLabel)}</span></div>
+      <div class="pf-pl ${pdir}">${psign}${formatStockPrice(pl)} ${escapeHtml(curLabel)} · ${psign}${plPct.toFixed(2)}%</div>
+      <div class="pf-sub">
+        <span>Maliyet: <b>${formatStockPrice(g.cost)} ${escapeHtml(curLabel)}</b></span>
+        <span><b>${g.count}</b> pozisyon${g.pricedCount < g.count ? ` · ${g.count - g.pricedCount} fiyat bekliyor` : ''}</span>
+      </div>
+    `;
+    return;
+  }
+
+  // Birden çok para birimi — her biri ayrı satır (toplam karıştırılmaz, kur farkı yanıltır)
+  const rows = currencies.map(cur => {
+    const g = byCur[cur];
+    const pl = g.value - g.cost;
+    const plPct = g.cost > 0 ? (pl / g.cost) * 100 : 0;
+    const pdir = pl > 0 ? 'up' : (pl < 0 ? 'down' : 'flat');
+    const psign = pl > 0 ? '+' : '';
+    const curLabel = cur === 'TRY' ? 'TL' : cur;
+    return `
+      <div class="pf-cur-row">
+        <span class="pf-cur-label">${escapeHtml(curLabel)}</span>
+        <span class="pf-cur-val">${formatStockPrice(g.value)}</span>
+        <span class="pf-cur-pl ${pdir}">${psign}${formatStockPrice(pl)} · ${psign}${plPct.toFixed(2)}%</span>
+        <span class="pf-cur-count">${g.count} pozisyon</span>
+      </div>`;
+  }).join('');
   el.innerHTML = `
-    <div class="pf-label">💼 Portföy değeri</div>
-    <div class="pf-value">${formatStockPrice(totalValue)} <span style="font-size:0.5em;color:var(--text-faint);font-weight:600;">TL</span></div>
-    <div class="pf-pl ${pdir}">${psign}${formatStockPrice(pl)} TL · ${psign}${plPct.toFixed(2)}%</div>
-    <div class="pf-sub">
-      <span>Maliyet: <b>${formatStockPrice(totalCost)} TL</b></span>
-      <span><b>${holdings.length}</b> pozisyon${pricedCount < holdings.length ? ` · ${holdings.length - pricedCount} fiyat bekliyor` : ''}</span>
-    </div>
+    <div class="pf-label">💼 Portföy · ${holdings.length} pozisyon (${currencies.length} para birimi)</div>
+    <div class="pf-multi">${rows}</div>
   `;
 }
 

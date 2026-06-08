@@ -1888,43 +1888,52 @@ async function handleJournalApi(request, env) {
 // Borsa — Yahoo Finance bedava API proxy (CORS yüzünden tarayıcı direkt çekemez)
 // ============================================================
 // BIST sembolü .IS ile biter (THYAO -> THYAO.IS). Kullanıcı sembolü yalın girer.
+// NOT (Haz 8): ABD/Döviz/Kripto eklendi — artık PWA her hisse için kendi ySymbol'ünü
+// hesaplayıp gönderiyor (toYahooSymbol). Bu fonksiyon sadece (a) eski watchlist
+// kayıtları (ySymbol alanı yok, hepsi BIST varsayıldı) ve (b) eski {symbols:[...]}
+// API formatı için geriye dönük uyum amaçlı kalıyor.
 function bistSymbol(sym) {
   const s = String(sym || '').trim().toUpperCase();
   if (!s) return null;
-  // Zaten suffix varsa dokunma (USDTRY=X, AAPL, BTC-USD gibi ileride)
+  // Zaten suffix varsa dokunma (USDTRY=X, AAPL.O, BTC-USD gibi)
   if (s.includes('.') || s.includes('=') || s.includes('-')) return s;
   return s + '.IS';
 }
 
-async function fetchStockQuotes(symbols) {
+// entries: [{ display, yahoo }] — display = kullanıcıya gösterilen sembol (THYAO, AAPL, BTC),
+// yahoo = Yahoo Finance API'sine gidecek tam sembol (THYAO.IS, AAPL, BTC-USD, USDTRY=X).
+// Geriye dönük uyum: düz string de kabul edilir (eski watchlist'ler için bistSymbol ile çevrilir).
+async function fetchStockQuotes(entries) {
   const out = [];
+  const normalized = entries.map(e =>
+    (typeof e === 'string') ? { display: String(e).toUpperCase(), yahoo: bistSymbol(e) } : e
+  );
   // Yahoo'yu sembol başına çek (chart endpoint tek sembol alır, paralel)
-  const jobs = symbols.map(async (raw) => {
-    const ySym = bistSymbol(raw);
-    if (!ySym) return null;
+  const jobs = normalized.map(async ({ display, yahoo }) => {
+    if (!yahoo) return null;
     try {
       const r = await fetch(
-        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySym)}?interval=1d&range=1d`,
+        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahoo)}?interval=1d&range=1d`,
         { headers: { 'User-Agent': 'Mozilla/5.0' }, cf: { cacheTtl: 60, cacheEverything: true } }
       );
-      if (!r.ok) return { symbol: String(raw).toUpperCase(), error: `http ${r.status}` };
+      if (!r.ok) return { symbol: display, error: `http ${r.status}` };
       const j = await r.json();
       const meta = j && j.chart && j.chart.result && j.chart.result[0] && j.chart.result[0].meta;
-      if (!meta || meta.regularMarketPrice == null) return { symbol: String(raw).toUpperCase(), error: 'veri yok' };
+      if (!meta || meta.regularMarketPrice == null) return { symbol: display, error: 'veri yok' };
       const price = meta.regularMarketPrice;
       const prev = meta.chartPreviousClose != null ? meta.chartPreviousClose : meta.previousClose;
       const changePct = (prev && prev > 0) ? ((price - prev) / prev) * 100 : null;
       return {
-        symbol: String(raw).toUpperCase(),
-        ySymbol: ySym,
-        name: meta.longName || meta.shortName || String(raw).toUpperCase(),
+        symbol: display,
+        ySymbol: yahoo,
+        name: meta.longName || meta.shortName || display,
         price,
         prevClose: prev != null ? prev : null,
         changePct: changePct != null ? Math.round(changePct * 100) / 100 : null,
         currency: meta.currency || 'TRY',
       };
     } catch (e) {
-      return { symbol: String(raw).toUpperCase(), error: e.message };
+      return { symbol: display, error: e.message };
     }
   });
   const results = await Promise.all(jobs);
@@ -1944,16 +1953,27 @@ async function handleStocksApi(request, env) {
 
   let body;
   try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
-  let symbols = Array.isArray(body.symbols) ? body.symbols : [];
-  symbols = symbols.map(s => String(s).trim()).filter(Boolean).slice(0, 30); // max 30
-  if (!symbols.length) return jsonCors({ quotes: [] }, 200, cors);
+
+  // Yeni format: {entries:[{display,yahoo}]} — PWA artık BIST/ABD/Döviz/Kripto sembolünü kendi çevirip yolluyor.
+  // Eski format: {symbols:[...]} — geriye dönük uyum, Worker bistSymbol ile çevirir (sadece BIST varsayar).
+  let entries = [];
+  if (Array.isArray(body.entries)) {
+    entries = body.entries
+      .filter(e => e && e.display && e.yahoo)
+      .map(e => ({ display: String(e.display).trim().toUpperCase(), yahoo: String(e.yahoo).trim().toUpperCase() }))
+      .slice(0, 30);
+  } else if (Array.isArray(body.symbols)) {
+    entries = body.symbols.map(s => String(s).trim()).filter(Boolean).slice(0, 30)
+      .map(s => ({ display: s.toUpperCase(), yahoo: bistSymbol(s) }));
+  }
+  if (!entries.length) return jsonCors({ quotes: [] }, 200, cors);
 
   const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
   const user = await verifyUser(env, userToken);
   if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
 
   try {
-    const quotes = await fetchStockQuotes(symbols);
+    const quotes = await fetchStockQuotes(entries);
     return jsonCors({ quotes, at: Date.now() }, 200, cors);
   } catch (e) {
     return jsonCors({ error: e.message }, 500, cors);
@@ -1965,7 +1985,8 @@ async function runStockCheck(env) {
   const { data, token, userId } = await fetchAidan(env);
   const wl = (data.watchlist) || [];
   if (!wl.length) return { type: 'stocks', checked: 0 };
-  const quotes = await fetchStockQuotes(wl.map(w => w.symbol));
+  // Yeni eklenenler kendi ySymbol'ünü taşır (BIST/ABD/Döviz/Kripto); eski kayıtlar bistSymbol ile çevrilir
+  const quotes = await fetchStockQuotes(wl.map(w => ({ display: (w.symbol || '').toUpperCase(), yahoo: w.ySymbol || bistSymbol(w.symbol) })));
   const bySym = {};
   for (const q of quotes) bySym[q.symbol] = q;
 
