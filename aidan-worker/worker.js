@@ -1996,6 +1996,21 @@ function base64ToBytes(b64) {
   return bytes;
 }
 
+// Sayı parse — hem number hem Türk formatlı string ("1.250,75" / "280,50") güvenli çevrilir
+function parseNum(v) {
+  if (v == null) return null;
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  let s = String(v).trim().replace(/[^\d.,-]/g, '');
+  if (!s) return null;
+  if (s.includes(',')) {
+    // Virgül var → ondalık virgül (Türk format). Noktalar binlik ayracı → sil.
+    s = s.replace(/\./g, '').replace(',', '.');
+  }
+  // Virgül yoksa nokta olduğu gibi kalır (ondalık nokta varsayımı)
+  const n = Number(s);
+  return isFinite(n) ? n : null;
+}
+
 // Vision modelin metin cevabından JSON dizisini ayıkla (markdown/çer-çöp toleranslı)
 function extractHoldingsJson(text) {
   if (!text) return [];
@@ -2015,8 +2030,8 @@ function extractHoldingsJson(text) {
     if (!h || typeof h !== 'object') continue;
     const symbol = String(h.symbol || h.sembol || '').trim().toUpperCase().replace(/[^A-Z0-9.=-]/g, '');
     if (!symbol) continue;
-    const qty = h.qty != null ? Number(h.qty) : (h.adet != null ? Number(h.adet) : null);
-    const cost = h.cost != null ? Number(h.cost) : (h.maliyet != null ? Number(h.maliyet) : null);
+    const qty = parseNum(h.qty != null ? h.qty : h.adet);
+    const cost = parseNum(h.cost != null ? h.cost : h.maliyet);
     let market = String(h.market || '').toLowerCase().trim();
     if (!validMarkets.includes(market)) market = 'bist';
     out.push({
@@ -2060,12 +2075,18 @@ async function handlePortfolioImageApi(request, env) {
 
   const prompt = [
     'Bu bir borsa/yatırım uygulamasının portföy ekran görüntüsü.',
-    'Görseldeki HER hisse/varlık satırı için şunları çıkar:',
+    'Görseldeki TÜM satırları, baştan sona, HİÇBİRİNİ ATLAMADAN oku. Her hisse/varlık satırı için:',
     '- symbol: hisse/varlık kodu (örn THYAO, AAPL, BTC). Büyük harf.',
-    '- qty: elindeki adet/lot sayısı (sayı). Yoksa null.',
-    '- cost: ortalama alış maliyeti / birim fiyat (sayı, nokta ondalıkla). Yoksa null.',
+    '- qty: elindeki ADET/LOT sayısı (sayı). "Adet", "Lot", "Miktar" sütunu. Yoksa null.',
+    '- cost: lot başı ORTALAMA ALIŞ MALİYETİ (birim fiyat). "Maliyet" veya "Ort. Maliyet" sütunu.',
+    '  ÖNEMLİ: cost güncel/anlık fiyat DEĞİL, toplam tutar da DEĞİL — birim alış maliyeti. Yoksa null.',
     '- market: "bist" (Türk hissesi), "abd" (ABD hissesi), "fx" (döviz), "crypto" (kripto). Emin değilsen "bist".',
-    'SADECE geçerli bir JSON dizisi döndür, başka açıklama yazma. Örnek:',
+    '',
+    'SAYI FORMATI (Türkçe): nokta = binlik ayracı, virgül = ondalık.',
+    '  Örnek: "1.250,75" → 1250.75 yaz.  "280,50" → 280.5 yaz.  "29.700" → 29700 yaz.',
+    '  Çıktıda ondalık için NOKTA kullan, binlik ayracı KOYMA.',
+    '',
+    'SADECE geçerli bir JSON dizisi döndür, başka hiçbir açıklama/metin yazma. Örnek:',
     '[{"symbol":"THYAO","qty":100,"cost":280.5,"market":"bist"},{"symbol":"GARAN","qty":50,"cost":95.2,"market":"bist"}]',
     'Hiç varlık göremezsen [] döndür.',
   ].join('\n');
@@ -2074,7 +2095,7 @@ async function handlePortfolioImageApi(request, env) {
   let debug = '';
   let lastErr = '';
   try {
-    const r = await visionRun(env, { image: bytes, prompt, max_tokens: 1536 });
+    const r = await visionRun(env, { image: bytes, prompt, max_tokens: 1024 });
     // r.response bazen string, bazen obje/dizi olabilir — düzgün string'e çevir
     const rr = r && (r.response != null ? r.response : (r.description != null ? r.description : r.text));
     lastRaw = (typeof rr === 'string') ? rr : JSON.stringify(rr);
