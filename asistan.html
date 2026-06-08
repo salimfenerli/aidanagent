@@ -3700,7 +3700,11 @@ async function handlePortfolioPhoto(event) {
     if (!r.ok) throw new Error(j.error || ('hata ' + r.status));
     const holdings = Array.isArray(j.holdings) ? j.holdings : [];
     if (!holdings.length) {
-      setPfImportStatus('Görselde hisse bulamadım 😕 Daha net bir portföy ekranı dene, ya da manuel ekle.', true);
+      // Debug görünürlüğü: AI ne döndürdü / hata neydi
+      let dbg = '';
+      if (j.aiError) dbg = `\n\n(AI hatası: ${j.aiError})`;
+      else if (j.raw) dbg = `\n\n(AI cevabı: ${String(j.raw).slice(0, 200)})`;
+      setPfImportStatus('Görselde hisse bulamadım 😕 Daha net bir portföy ekranı dene, ya da manuel ekle.' + dbg, true);
       return;
     }
     _pfImportHoldings = holdings;
