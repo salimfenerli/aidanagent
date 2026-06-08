@@ -478,6 +478,16 @@ Telegram emekliliği sonrası tek seansta çok iş yapıldı (v7-13 → v7-16):
 - **`visibilitychange`:** Sayfa tekrar görünür olunca (kilit açılınca) borsa sekmesindeyse hemen bir tazele.
 - ⚠️ Yahoo ücretsiz BIST verisi **~15 dk gecikmeli** olabilir — "canlı otomatik güncelleme" ama tam "anlık/tick" değil.
 - **Cache:** v7-23 → v7-24
+
+### Haziran 8, 2026 (📈 Borsa — portföy değer geçmişi + sparkline)
+- Salim seçti ("bunu zaten ben de istiyodum"): portföy değer geçmişi.
+- **Veri modeli:** `data.portfolioHistory[] = [{date:'YYYY-MM-DD', byCur:{TRY:{value,cost}}}]` (son 180 gün, para birimi başına). Yeni alan.
+- **Snapshot kaydı (upsert by date, iki yerden):**
+  - PWA `recordPortfolioSnapshot()` — `refreshStocks` sonrası bugünün değerini yazar (kullanıcı gün içi açınca).
+  - Worker `runPortfolioSummary` — akşam kapanışta yazar (otoritatif kapanış değeri). İkisi de aynı güne upsert.
+- **PWA gösterim:** Portföy özeti altında `renderPortfolioHistory` — baskın para birimi (en yüksek değerli) için **SVG sparkline** (`sparkline()`, son≥ilk yeşil/kırmızı) + **Dün · Hafta · Ay** yüzde değişim chip'leri (N gün önceki en yakın snapshot'a göre). En az 2 günlük geçmiş gerekir.
+- **Akşam push'a eklendi:** `runPortfolioSummary` mesajına "Hafta +Y% · Ay +Z%" satırı (geçmiş varsa, `histFor` ile).
+- **Cache:** v7-24 → v7-25
 - ⏳ Sıradaki: auto-archive · çoklu kategori · multi-user (Yol A) · ölü field temizliği · Faz 4 Telegram kod silme.
 
 ## Mevcut Durum

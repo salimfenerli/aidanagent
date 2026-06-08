@@ -2216,6 +2216,22 @@ async function runPortfolioSummary(env) {
 
   const currencies = Object.keys(byCur);
   if (!currencies.length) return { type: 'portfolio', holdings: holdings.length, sent: 0 };
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  data.portfolioHistory = data.portfolioHistory || [];
+  // Geçmişten N gün önceki değere göre değişim % (bugünü hariç tut)
+  const histFor = (cur, daysAgo) => {
+    const t = new Date(); t.setDate(t.getDate() - daysAgo);
+    const ts = t.toISOString().slice(0, 10);
+    const arr = data.portfolioHistory.filter(s => s.byCur && s.byCur[cur] && s.date !== todayStr);
+    let past = null;
+    for (let i = arr.length - 1; i >= 0; i--) { if (arr[i].date <= ts) { past = arr[i]; break; } }
+    if (!past) return null;
+    const pv = past.byCur[cur].value;
+    if (!(pv > 0)) return null;
+    return (byCur[cur].value - pv) / pv * 100;
+  };
+
   const lines = [];
   for (const cur of currencies) {
     const g = byCur[cur];
@@ -2230,10 +2246,26 @@ async function runPortfolioSummary(env) {
     lines.push(`Değer: ${formatPrice(g.value)} ${lbl}`);
     lines.push(`Bugün: ${ds}${formatPrice(g.daily)} ${lbl} (${ds}${dailyPct.toFixed(1)}%)`);
     lines.push(`Toplam: ${ts}${formatPrice(totalPL)} ${lbl} (${ts}${totalPct.toFixed(1)}%)`);
+    // Geçmiş varsa hafta/ay değişimi
+    const wk = histFor(cur, 7), mo = histFor(cur, 30);
+    const trend = [];
+    if (wk != null) trend.push(`Hafta ${wk >= 0 ? '+' : ''}${wk.toFixed(1)}%`);
+    if (mo != null) trend.push(`Ay ${mo >= 0 ? '+' : ''}${mo.toFixed(1)}%`);
+    if (trend.length) lines.push(trend.join(' · '));
   }
   const payload = { title: '💼 Portföy özeti', message: lines.join('\n') };
   await sendPushToAll(env, data, payload, { token, userId });
   logPush(data, 'portfolio', payload, ((data.settings && data.settings.pushSubs) || []).length);
+
+  // Bugünün snapshot'ını geçmişe yaz (upsert) — kapanış değeri, otoritatif
+  const snapByCur = {};
+  for (const cur of currencies) snapByCur[cur] = { value: byCur[cur].value, cost: byCur[cur].cost };
+  const existIdx = data.portfolioHistory.findIndex(s => s.date === todayStr);
+  if (existIdx >= 0) data.portfolioHistory[existIdx].byCur = snapByCur;
+  else data.portfolioHistory.push({ date: todayStr, byCur: snapByCur });
+  data.portfolioHistory.sort((a, b) => a.date < b.date ? -1 : 1);
+  if (data.portfolioHistory.length > 180) data.portfolioHistory = data.portfolioHistory.slice(-180);
+
   try { await saveAidan(env, data, { token, userId }); } catch (e) { console.error('portfolio save fail', e.message); }
   return { type: 'portfolio', holdings: holdings.length, sent: 1 };
 }

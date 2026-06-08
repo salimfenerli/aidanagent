@@ -554,6 +554,18 @@
   .pf-pl.flat { color: var(--text-muted); }
   .pf-sub { font-size: 0.78em; color: var(--text-faint); margin-top: 8px; display: flex; gap: 14px; flex-wrap: wrap; }
   .pf-sub b { color: var(--text-muted); font-weight: 600; }
+  /* Portföy değer geçmişi (sparkline + dün/hafta/ay) */
+  .portfolio-history { background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); padding: 12px 14px; margin-bottom: 14px; }
+  .pf-hist-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.72em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 8px; }
+  .pf-hist-cur { color: var(--text-faint); font-weight: 500; }
+  .pf-spark { width: 100%; height: 46px; display: block; }
+  .pf-hist-stats { display: flex; gap: 16px; margin-top: 8px; }
+  .pf-hist-chip { font-size: 0.8em; color: var(--text-faint); display: flex; gap: 5px; align-items: baseline; }
+  .pf-hist-chip i { font-style: normal; }
+  .pf-hist-chip b { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .pf-hist-chip b.up { color: #34c759; }
+  .pf-hist-chip b.down { color: #ef4444; }
+  .pf-hist-chip b.flat { color: var(--text-muted); }
   /* Çok para birimi portföy */
   .pf-multi { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
   .pf-cur-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -2298,6 +2310,7 @@
   <div id="stocks" class="panel">
     <h2>📈 Borsa</h2>
     <div class="portfolio-summary" id="portfolioSummary" style="display:none;"></div>
+    <div class="portfolio-history" id="portfolioHistory" style="display:none;"></div>
     <div class="market-chips" id="marketChips">
       <button class="market-chip active" data-market="bist" onclick="selectMarket('bist')">🇹🇷 BIST</button>
       <button class="market-chip" data-market="abd" onclick="selectMarket('abd')">🇺🇸 ABD</button>
@@ -2498,6 +2511,7 @@ data.dumps = data.dumps || [];
 data.pushLog = data.pushLog || [];
 data.journal = data.journal || [];
 data.watchlist = data.watchlist || [];
+data.portfolioHistory = data.portfolioHistory || [];  // [{date:'YYYY-MM-DD', byCur:{TRY:{value,cost}}}]
 data.routines = data.routines || [];
 data.pomoToday = data.pomoToday || { date: today(), count: 0 };
 data.settings = data.settings || {};
@@ -3475,6 +3489,7 @@ async function refreshStocks() {
       w.currency = q.currency || w.currency;
       w.fetchedAt = j.at || Date.now();
     });
+    recordPortfolioSnapshot(); // güncel fiyatlarla bugünün portföy değerini kaydet
     save();
     renderStocks();
   } catch (e) {
@@ -3482,6 +3497,30 @@ async function refreshStocks() {
   } finally {
     if (btn) btn.classList.remove('spinning');
   }
+}
+
+// Bugünün portföy değerini geçmişe kaydet (para birimi başına value+cost). Upsert by date.
+function recordPortfolioSnapshot() {
+  const holdings = (data.watchlist || []).filter(w => w.qty != null && w.qty > 0 && w.cost != null);
+  if (!holdings.length) return;
+  const byCur = {};
+  let anyPrice = false;
+  for (const w of holdings) {
+    const cur = w.currency || 'TRY';
+    if (!byCur[cur]) byCur[cur] = { value: 0, cost: 0 };
+    byCur[cur].cost += w.qty * w.cost;
+    if (w.price != null) { byCur[cur].value += w.qty * w.price; anyPrice = true; }
+    else byCur[cur].value += w.qty * w.cost; // fiyat yoksa maliyetle (nötr)
+  }
+  if (!anyPrice) return; // hiç fiyat yoksa anlamsız snapshot alma
+  const d = today();
+  data.portfolioHistory = data.portfolioHistory || [];
+  const existing = data.portfolioHistory.find(s => s.date === d);
+  if (existing) existing.byCur = byCur;
+  else data.portfolioHistory.push({ date: d, byCur });
+  data.portfolioHistory.sort((a, b) => a.date < b.date ? -1 : 1);
+  if (data.portfolioHistory.length > 180) data.portfolioHistory = data.portfolioHistory.slice(-180);
+  // not: save() çağıran taraf yapar
 }
 
 function stocksUpdatedLabel() {
@@ -3509,6 +3548,7 @@ function renderStocks() {
   const wl = data.watchlist || [];
   if (upd) upd.textContent = stocksUpdatedLabel();
   renderPortfolioSummary();
+  renderPortfolioHistory();
   if (wl.length === 0) {
     list.innerHTML = '<div class="stocks-empty">Henüz hisse yok.<br>Yukarıdan BIST kodu ekle (örn THYAO).<br>Fiyatını gör, pozisyon gir, alarm kur 🔔</div>';
     return;
@@ -3665,6 +3705,68 @@ function renderPortfolioSummary() {
     <div class="pf-label">💼 Portföy · ${holdings.length} pozisyon (${currencies.length} para birimi)</div>
     <div class="pf-multi">${rows}</div>
   `;
+}
+
+// Portföy değer geçmişi — sparkline + dün/hafta/ay yüzde değişim (baskın para birimi)
+function renderPortfolioHistory() {
+  const el = document.getElementById('portfolioHistory');
+  if (!el) return;
+  const hist = (data.portfolioHistory || []).slice().sort((a, b) => a.date < b.date ? -1 : 1);
+  const holdings = (data.watchlist || []).filter(w => w.qty != null && w.qty > 0 && w.cost != null);
+  if (hist.length < 2 || !holdings.length) { el.style.display = 'none'; return; }
+
+  // Baskın para birimi = en güncel snapshot'ta en yüksek değerli olan (genelde TRY)
+  const last = hist[hist.length - 1];
+  let cur = null, maxV = -1;
+  for (const c in (last.byCur || {})) { if (last.byCur[c].value > maxV) { maxV = last.byCur[c].value; cur = c; } }
+  if (!cur) { el.style.display = 'none'; return; }
+
+  const series = hist.filter(s => s.byCur && s.byCur[cur]).map(s => ({ date: s.date, value: s.byCur[cur].value }));
+  if (series.length < 2) { el.style.display = 'none'; return; }
+  const lbl = cur === 'TRY' ? 'TL' : cur;
+  const latest = series[series.length - 1].value;
+
+  // N gün önceki tarihe en yakın (<=) snapshot'a göre değişim %
+  const changeFrom = (daysAgo) => {
+    const t = new Date(); t.setDate(t.getDate() - daysAgo);
+    const ts = t.toISOString().slice(0, 10);
+    let past = null;
+    for (let i = series.length - 1; i >= 0; i--) { if (series[i].date <= ts) { past = series[i]; break; } }
+    if (!past || past.value <= 0) return null;
+    return (latest - past.value) / past.value * 100;
+  };
+  const prev = series[series.length - 2];
+  const dayChg = (prev && prev.value > 0) ? (latest - prev.value) / prev.value * 100 : null;
+  const weekChg = changeFrom(7);
+  const monthChg = changeFrom(30);
+
+  const chip = (label, pct) => {
+    if (pct == null) return `<span class="pf-hist-chip"><i>${label}</i> <b class="flat">—</b></span>`;
+    const d = pct > 0 ? 'up' : (pct < 0 ? 'down' : 'flat'); const s = pct > 0 ? '+' : '';
+    return `<span class="pf-hist-chip"><i>${label}</i> <b class="${d}">${s}${pct.toFixed(1)}%</b></span>`;
+  };
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div class="pf-hist-head"><span>📈 Portföy geçmişi</span><span class="pf-hist-cur">${escapeHtml(lbl)} · ${series.length} gün</span></div>
+    ${sparkline(series.map(s => s.value))}
+    <div class="pf-hist-stats">${chip('Dün', dayChg)}${chip('Hafta', weekChg)}${chip('Ay', monthChg)}</div>
+  `;
+}
+
+// Basit SVG sparkline — değer dizisinden tek çizgi (son ≥ ilk → yeşil, değilse kırmızı)
+function sparkline(values) {
+  if (!values || values.length < 2) return '';
+  const w = 300, h = 46, pad = 4;
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = (max - min) || 1;
+  const pts = values.map((v, i) => {
+    const x = pad + (i / (values.length - 1)) * (w - 2 * pad);
+    const y = pad + (1 - (v - min) / range) * (h - 2 * pad);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const up = values[values.length - 1] >= values[0];
+  const color = up ? '#34c759' : '#ef4444';
+  return `<svg class="pf-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
 
 // ====== Görselden portföy (AI vision) ======
