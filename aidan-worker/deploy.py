@@ -73,6 +73,7 @@ CRON_LIST = [
     {"cron": "0 18 * * *"},  # 21:00 TR akşam özet
     {"cron": "0 18 * * SUN"},  # Pazar 21:00 TR — haftalık review (AI yorumlu)
     {"cron": "*/30 7-15 * * 1-5"},  # BIST saatleri (10-18 TR, hafta içi) — borsa alarm
+    {"cron": "30 15 * * 1-5"},  # 18:30 TR hafta içi — akşam portföy özeti (BIST kapanışı sonrası)
 ]
 
 

@@ -484,18 +484,17 @@
   .pf-import-status { font-size: 0.9em; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5; }
   .pf-import-status.error { color: var(--warning); }
   .pf-import-list { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; }
-  .pf-import-row { display: flex; gap: 6px; align-items: center; background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: 10px; padding: 8px 10px; }
-  .pf-import-row input { padding: 7px 8px; font-size: 0.85em; border-radius: 7px; min-width: 0; }
-  .pf-import-row .pf-imp-sym { flex: 1.2; text-transform: uppercase; font-weight: 600; }
-  .pf-import-row .pf-imp-qty, .pf-import-row .pf-imp-cost { flex: 1; }
-  .pf-import-row select.pf-imp-mkt { flex: 0.9; padding: 7px 4px; font-size: 0.78em; border-radius: 7px; background: var(--bg); color: var(--text); border: 1px solid var(--border); }
-  .pf-import-row .pf-imp-del { background: transparent; border: none; box-shadow: none; color: var(--text-faint); cursor: pointer; padding: 4px 6px; font-size: 1em; flex-shrink: 0; }
-  .pf-import-row .pf-imp-del:hover { color: var(--danger); }
-  .pf-import-head { display: flex; gap: 6px; font-size: 0.68em; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em; padding: 0 10px; margin-bottom: 2px; }
-  .pf-import-head span:nth-child(1) { flex: 1.2; }
-  .pf-import-head span:nth-child(2), .pf-import-head span:nth-child(3) { flex: 1; }
-  .pf-import-head span:nth-child(4) { flex: 0.9; }
-  .pf-import-head span:nth-child(5) { width: 26px; }
+  .pf-import-row { display: flex; flex-direction: column; gap: 7px; background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: 10px; padding: 9px 11px; }
+  .pf-import-row input { padding: 7px 8px; font-size: 0.88em; border-radius: 7px; min-width: 0; width: 100%; box-sizing: border-box; }
+  /* Üst satır: sembol + piyasa + sil */
+  .pf-imp-top { display: flex; gap: 6px; align-items: center; }
+  .pf-imp-top .pf-imp-sym { flex: 1; text-transform: uppercase; font-weight: 700; letter-spacing: 0.02em; }
+  .pf-imp-top select.pf-imp-mkt { flex-shrink: 0; padding: 7px 4px; font-size: 0.85em; border-radius: 7px; background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+  .pf-imp-top .pf-imp-del { background: transparent; border: none; box-shadow: none; color: var(--text-faint); cursor: pointer; padding: 4px 6px; font-size: 1.05em; flex-shrink: 0; }
+  .pf-imp-top .pf-imp-del:hover { color: var(--danger); }
+  /* Alt satır: adet | alım | son fiyat — her biri mini etiketli */
+  .pf-imp-bot { display: flex; gap: 6px; }
+  .pf-imp-bot label { flex: 1; display: flex; flex-direction: column; gap: 3px; font-size: 0.64em; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.03em; }
   .stocks-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
   .stocks-updated { font-size: 0.78em; color: var(--text-faint); }
   .stocks-refresh {
@@ -3739,17 +3738,20 @@ function renderPfImportList() {
   setPfImportStatus(`${_pfImportHoldings.length} varlık buldum. Kontrol et, düzelt, ekle 👇`);
   const list = document.getElementById('portfolioImportList');
   const marketOpts = [['bist','🇹🇷'],['abd','🇺🇸'],['fx','💱'],['crypto','₿']];
-  list.innerHTML = `
-    <div class="pf-import-head"><span>Sembol</span><span>Adet</span><span>Maliyet</span><span>Piyasa</span><span></span></div>
-  ` + _pfImportHoldings.map((h, i) => `
+  list.innerHTML = _pfImportHoldings.map((h, i) => `
     <div class="pf-import-row">
-      <input class="pf-imp-sym" value="${escapeHtml(h.symbol || '')}" oninput="updatePfImport(${i},'symbol',this.value)" autocapitalize="characters">
-      <input class="pf-imp-qty" type="number" inputmode="decimal" placeholder="adet" value="${h.qty != null ? h.qty : ''}" oninput="updatePfImport(${i},'qty',this.value)">
-      <input class="pf-imp-cost" type="number" inputmode="decimal" placeholder="maliyet" value="${h.cost != null ? h.cost : ''}" oninput="updatePfImport(${i},'cost',this.value)">
-      <select class="pf-imp-mkt" onchange="updatePfImport(${i},'market',this.value)">
-        ${marketOpts.map(([v,e]) => `<option value="${v}" ${h.market===v?'selected':''}>${e}</option>`).join('')}
-      </select>
-      <button class="pf-imp-del" onclick="removePfImport(${i})" title="Çıkar">✕</button>
+      <div class="pf-imp-top">
+        <input class="pf-imp-sym" value="${escapeHtml(h.symbol || '')}" oninput="updatePfImport(${i},'symbol',this.value)" autocapitalize="characters" placeholder="KOD">
+        <select class="pf-imp-mkt" onchange="updatePfImport(${i},'market',this.value)">
+          ${marketOpts.map(([v,e]) => `<option value="${v}" ${h.market===v?'selected':''}>${e}</option>`).join('')}
+        </select>
+        <button class="pf-imp-del" onclick="removePfImport(${i})" title="Çıkar">✕</button>
+      </div>
+      <div class="pf-imp-bot">
+        <label>Adet<input class="pf-imp-qty" type="number" inputmode="decimal" placeholder="—" value="${h.qty != null ? h.qty : ''}" oninput="updatePfImport(${i},'qty',this.value)"></label>
+        <label>Alım fiyatı<input class="pf-imp-cost" type="number" inputmode="decimal" placeholder="—" value="${h.cost != null ? h.cost : ''}" oninput="updatePfImport(${i},'cost',this.value)"></label>
+        <label>Son fiyat<input class="pf-imp-price" type="number" inputmode="decimal" placeholder="—" value="${h.price != null ? h.price : ''}" oninput="updatePfImport(${i},'price',this.value)"></label>
+      </div>
     </div>
   `).join('');
   document.getElementById('portfolioImportActions').style.display = 'flex';
@@ -3759,7 +3761,7 @@ function updatePfImport(i, field, val) {
   if (!_pfImportHoldings[i]) return;
   if (field === 'symbol') _pfImportHoldings[i].symbol = val.toUpperCase().replace(/[^A-Z0-9.=-]/g, '');
   else if (field === 'market') _pfImportHoldings[i].market = val;
-  else { // qty / cost
+  else { // qty / cost / price
     const n = parseFloat(String(val).replace(',', '.'));
     _pfImportHoldings[i][field] = isFinite(n) && n > 0 ? n : null;
   }
@@ -3789,7 +3791,9 @@ function confirmPortfolioImport() {
     } else {
       data.watchlist.unshift({
         symbol: sym, ySymbol: toYahooSymbol(sym, market), market,
-        name: sym, price: null, prevClose: null, changePct: null, currency: 'TRY',
+        name: sym,
+        // AI son fiyatı okuduysa geçici göster (Yahoo yenileyene kadar kâr/zarar hemen çıksın)
+        price: h.price != null ? h.price : null, prevClose: null, changePct: null, currency: 'TRY',
         alarmAbove: null, alarmBelow: null, lastAlertedAbove: false, lastAlertedBelow: false,
         qty: h.qty != null ? h.qty : null, cost: h.cost != null ? h.cost : null,
         fetchedAt: null, error: null,

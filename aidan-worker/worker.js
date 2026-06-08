@@ -2042,12 +2042,14 @@ function extractHoldingsJson(text) {
     if (!symbol) continue;
     const qty = parseNum(h.qty != null ? h.qty : h.adet);
     const cost = parseNum(h.cost != null ? h.cost : h.maliyet);
+    const price = parseNum(h.price != null ? h.price : (h.son != null ? h.son : h.guncel));
     let market = String(h.market || '').toLowerCase().trim();
     if (!validMarkets.includes(market)) market = 'bist';
     out.push({
       symbol,
       qty: (qty != null && isFinite(qty) && qty > 0) ? qty : null,
       cost: (cost != null && isFinite(cost) && cost > 0) ? cost : null,
+      price: (price != null && isFinite(price) && price > 0) ? price : null,
       market,
     });
   }
@@ -2090,6 +2092,7 @@ async function handlePortfolioImageApi(request, env) {
     '- qty: elindeki ADET/LOT sayısı. "Adet", "Lot", "Miktar" sütunu. Yoksa null.',
     '- cost: lot başı ORTALAMA ALIŞ MALİYETİ (birim fiyat). "Maliyet" veya "Ort. Maliyet" sütunu.',
     '  ÖNEMLİ: cost güncel/anlık fiyat DEĞİL, toplam tutar da DEĞİL — birim alış maliyeti. Yoksa null.',
+    '- price: GÜNCEL/SON birim fiyat. "Son", "Güncel", "Anlık" fiyat sütunu (maliyetten farklı). Yoksa null.',
     '- market: "bist" (Türk hissesi), "abd" (ABD hissesi), "fx" (döviz), "crypto" (kripto). Emin değilsen "bist".',
     '',
     'SAYILARI GÖRSELDEKİ HALİYLE, STRING olarak yaz — değiştirme, yuvarlamadan.',
@@ -2097,7 +2100,7 @@ async function handlePortfolioImageApi(request, env) {
     '  Sayıyı number\'a çevirme, binlik/ondalık ayracını OLDUĞU GİBİ bırak. Çözümünü ben yapacağım.',
     '',
     'SADECE geçerli bir JSON dizisi döndür, başka hiçbir açıklama/metin yazma. Örnek:',
-    '[{"symbol":"THYAO","qty":"100","cost":"1.280,50","market":"bist"},{"symbol":"GARAN","qty":"50","cost":"95,20","market":"bist"}]',
+    '[{"symbol":"THYAO","qty":"100","cost":"1.280,50","price":"1.297,00","market":"bist"},{"symbol":"GARAN","qty":"50","cost":"95,20","price":"102,40","market":"bist"}]',
     'Hiç varlık göremezsen [] döndür.',
   ].join('\n');
 
@@ -2179,6 +2182,60 @@ async function runStockCheck(env) {
   }
   if (dirty) { try { await saveAidan(env, data, { token, userId }); } catch (e) { console.error('stock save fail', e.message); } }
   return { type: 'stocks', checked: wl.length, alerts: alerts.length };
+}
+
+// Akşam portföy özeti cron — BIST kapanışı sonrası (18:30 TR hafta içi).
+// Pozisyonu olan hisselerin güncel değerini, günlük ve toplam kâr/zararını hesaplar, tek push gönderir.
+async function runPortfolioSummary(env) {
+  const { data, token, userId } = await fetchAidan(env);
+  const wl = (data.watchlist) || [];
+  const holdings = wl.filter(w => w.qty != null && w.qty > 0 && w.cost != null);
+  if (!holdings.length) return { type: 'portfolio', holdings: 0 };
+
+  const quotes = await fetchStockQuotes(holdings.map(w => ({ display: (w.symbol || '').toUpperCase(), yahoo: w.ySymbol || bistSymbol(w.symbol) })));
+  const bySym = {};
+  for (const q of quotes) bySym[q.symbol] = q;
+
+  // Para birimine göre grupla (TRY/USD karışmasın — kur farkı yanıltır)
+  const byCur = {};
+  for (const w of holdings) {
+    const q = bySym[(w.symbol || '').toUpperCase()];
+    const price = (q && q.price != null) ? q.price : null;
+    const prev = (q && q.prevClose != null) ? q.prevClose : null;
+    const cur = (q && q.currency) ? q.currency : (w.currency || 'TRY');
+    if (!byCur[cur]) byCur[cur] = { value: 0, cost: 0, daily: 0 };
+    const g = byCur[cur];
+    g.cost += w.qty * w.cost;
+    if (price != null) {
+      g.value += w.qty * price;
+      if (prev != null) g.daily += w.qty * (price - prev); // bugünkü değişim tutarı
+    } else {
+      g.value += w.qty * w.cost; // fiyat gelmediyse maliyetle say (nötr)
+    }
+  }
+
+  const currencies = Object.keys(byCur);
+  if (!currencies.length) return { type: 'portfolio', holdings: holdings.length, sent: 0 };
+  const lines = [];
+  for (const cur of currencies) {
+    const g = byCur[cur];
+    const lbl = cur === 'TRY' ? 'TL' : cur;
+    const totalPL = g.value - g.cost;
+    const totalPct = g.cost > 0 ? (totalPL / g.cost) * 100 : 0;
+    const prevValue = g.value - g.daily;
+    const dailyPct = prevValue > 0 ? (g.daily / prevValue) * 100 : 0;
+    const ts = totalPL >= 0 ? '+' : '';
+    const ds = g.daily >= 0 ? '+' : '';
+    if (currencies.length > 1) lines.push(`— ${lbl} —`);
+    lines.push(`Değer: ${formatPrice(g.value)} ${lbl}`);
+    lines.push(`Bugün: ${ds}${formatPrice(g.daily)} ${lbl} (${ds}${dailyPct.toFixed(1)}%)`);
+    lines.push(`Toplam: ${ts}${formatPrice(totalPL)} ${lbl} (${ts}${totalPct.toFixed(1)}%)`);
+  }
+  const payload = { title: '💼 Portföy özeti', message: lines.join('\n') };
+  await sendPushToAll(env, data, payload, { token, userId });
+  logPush(data, 'portfolio', payload, ((data.settings && data.settings.pushSubs) || []).length);
+  try { await saveAidan(env, data, { token, userId }); } catch (e) { console.error('portfolio save fail', e.message); }
+  return { type: 'portfolio', holdings: holdings.length, sent: 1 };
 }
 
 function formatPrice(n) {
@@ -2286,6 +2343,8 @@ export default {
         try {
           const result = cronType === 'stocks'
             ? await runStockCheck(env)
+            : cronType === 'portfolio'
+            ? await runPortfolioSummary(env)
             : await runCronJob(env, cronType);
           return new Response(JSON.stringify(result, null, 2), {
             headers: { 'Content-Type': 'application/json' },
@@ -2308,6 +2367,11 @@ export default {
     // Borsa alarm cron — BIST saatlerinde fiyat kontrol (push)
     if (event.cron === '*/30 7-15 * * 1-5') {
       ctx.waitUntil(runStockCheck(env));
+      return;
+    }
+    // Akşam portföy özeti — BIST kapanışı sonrası (18:30 TR hafta içi)
+    if (event.cron === '30 15 * * 1-5') {
+      ctx.waitUntil(runPortfolioSummary(env));
       return;
     }
     let type;
