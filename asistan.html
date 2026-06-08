@@ -2616,11 +2616,11 @@ function startStockAutoRefresh() {
 function stopStockAutoRefresh() {
   if (_stockAutoTimer) { clearInterval(_stockAutoTimer); _stockAutoTimer = null; }
 }
-// Sayfa tekrar görünür olunca (kilidi açınca) borsa sekmesindeyse hemen bir tazele
+// Sayfa tekrar görünür olunca (kilidi açınca): borsayı tazele + pomodoro'yu gerçek zamana eşitle
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && document.getElementById('stocks').classList.contains('active')) {
-    if ((data.watchlist || []).length) refreshStocks();
-  }
+  if (document.hidden) return;
+  if (document.getElementById('stocks').classList.contains('active') && (data.watchlist || []).length) refreshStocks();
+  if (running) tickTimer(); // arka planda interval durmuş olabilir → kalan süreyi anında düzelt
 });
 
 // ============ ZAMAN TAHMİN DOĞRULUĞU (ADHD self-awareness) ============
@@ -5206,6 +5206,7 @@ function checkRepeatingTasks() {
 // ============ POMODORO ============
 let timerSec = 25*60, workMin = 25, breakMin = 5, isBreak = false, timerInt = null, running = false;
 let totalSec = 25*60;
+let timerEndTime = null; // ms cinsinden bitiş anı — timestamp bazlı, telefon kilitliyken bile doğru
 
 function updateTimerDisplay() {
   const m = Math.floor(timerSec/60), s = timerSec%60;
@@ -5232,53 +5233,63 @@ function startTimer() {
   if (running) return;
   running = true;
   if (!isBreak && !focusStartTime) focusStartTime = Date.now();
+  // Kalan süreyle bitiş anını kur — telefon kilitlense bile gerçek zaman akar
+  timerEndTime = Date.now() + timerSec * 1000;
   updateTimerDisplay();
-  timerInt = setInterval(() => {
-    timerSec--;
-    if (timerSec <= 0) {
-      clearInterval(timerInt);
-      running = false;
-      if (!isBreak) {
-        data.pomoToday.count++;
-        // Aktif görev varsa, pomodoro süresini actualMin'e ekle
-        if (currentFocusTaskId) {
-          const ft = data.tasks.find(x => x.id === currentFocusTaskId);
-          if (ft) {
-            ft.actualMin = (ft.actualMin || 0) + workMin;
-            focusStartTime = Date.now(); // sayacı sıfırla
-          }
+  timerInt = setInterval(tickTimer, 250); // 250ms: telefon açılınca anında yakalar
+}
+
+// Her tick'te kalan süreyi GERÇEK zamandan hesapla (sayaç azaltma değil) — arka planda da doğru
+function tickTimer() {
+  if (!running) return;
+  timerSec = Math.max(0, Math.round((timerEndTime - Date.now()) / 1000));
+  if (timerSec <= 0) {
+    clearInterval(timerInt);
+    running = false;
+    timerSec = 0;
+    if (!isBreak) {
+      data.pomoToday.count++;
+      // Aktif görev varsa, pomodoro süresini actualMin'e ekle
+      if (currentFocusTaskId) {
+        const ft = data.tasks.find(x => x.id === currentFocusTaskId);
+        if (ft) {
+          ft.actualMin = (ft.actualMin || 0) + workMin;
+          focusStartTime = Date.now(); // sayacı sıfırla
         }
-        save();
-        document.getElementById('pomoCount').textContent = data.pomoToday.count;
-        notify('🎧 Seans bitti!', 'Harika iş! Şimdi ' + breakMin + ' dk mola.');
-        isBreak = true;
-        timerSec = breakMin * 60;
-        totalSec = breakMin * 60;
-        updateActiveTaskBanner();
-        renderTasks();
-      } else {
-        notify('☕ Mola bitti!', 'Hadi devam, ' + workMin + ' dk daha.');
-        isBreak = false;
-        timerSec = workMin * 60;
-        totalSec = workMin * 60;
-        focusStartTime = Date.now();
       }
-      playBeep();
-      updateTimerDisplay();
+      save();
+      document.getElementById('pomoCount').textContent = data.pomoToday.count;
+      notify('🎧 Seans bitti!', 'Harika iş! Şimdi ' + breakMin + ' dk mola.');
+      isBreak = true;
+      timerSec = breakMin * 60;
+      totalSec = breakMin * 60;
+      updateActiveTaskBanner();
+      renderTasks();
+    } else {
+      notify('☕ Mola bitti!', 'Hadi devam, ' + workMin + ' dk daha.');
+      isBreak = false;
+      timerSec = workMin * 60;
+      totalSec = workMin * 60;
+      focusStartTime = Date.now();
     }
-    updateTimerDisplay();
-  }, 1000);
+    playBeep();
+  }
+  updateTimerDisplay();
 }
 
 function pauseTimer() {
+  // Duraklatırken kalan süreyi gerçek zamandan kesinleştir
+  if (running && timerEndTime) timerSec = Math.max(0, Math.round((timerEndTime - Date.now()) / 1000));
   clearInterval(timerInt);
   running = false;
+  timerEndTime = null;
   updateTimerDisplay();
 }
 
 function resetTimer() {
   clearInterval(timerInt);
   running = false;
+  timerEndTime = null;
   isBreak = false;
   timerSec = workMin * 60;
   totalSec = workMin * 60;

@@ -495,7 +495,13 @@ Telegram emekliliği sonrası tek seansta çok iş yapıldı (v7-13 → v7-16):
 - **💪 Erteleme farkındalığı:** `applyPostpone` her ertelemede `task.postponeCount++`. 3+ ertelenmiş (ve `!nudgeDismissed`) görevde kartta nazik **nudge çubuğu**: "🔄 N kez ertelendi · dokun, kolaylaştıralım 💜". Tıklayınca `postponeNudge` menüsü: ✂️ küçük adımlara böl (`addSubtask`) / ⚡ 2dk dene (`startTaskNow true`) / 👍 böyle kalsın (`nudgeDismissed=true`, bir daha gösterme). Utançsız dil — ADHP prokrastinasyon döngüsü.
 - **Veri modeli yeni alanlar:** `task.postponeCount`, `task.nudgeDismissed`.
 - **Cache:** v7-25 → v7-26
-- ⏳ Sıradaki: çoklu kategori · multi-user (Yol A) · sabah AI MIT önerisi · esnek tekrar günleri · ölü field temizliği · Faz 4 Telegram kod silme.
+
+### Haziran 9, 2026 (🎧 Pomodoro timestamp fix — telefon kilitliyken doğru sayar)
+- Salim sordu: "sayacı başlatıp telefonu kapatsam devam ediyor mu?" → **Hayır, etmiyordu (bug).** `setInterval(timerSec--, 1000)` iOS'ta arka planda durur/yavaşlar.
+- **Çözüm — timestamp bazlı:** `timerEndTime = Date.now() + timerSec*1000` (başlangıçta). `tickTimer` her 250ms'de `timerSec = round((timerEndTime - now)/1000)` ile **gerçek zamandan** hesaplar (sayaç azaltma değil). Telefon kilitliyken zaman akar, açılınca doğru kalan süre. `pauseTimer` kalan süreyi kesinleştirir, `visibilitychange` açılınca `tickTimer()` ile anında eşitler.
+- ⚠️ Sınır: PWA tamamen bellekten atılırsa (swipe-kapatma) timer sıfırlanır — kilit/arka plan sorun değil. Seans arka planda biterse bildirim açılışta gelir (PWA arka plan JS yok).
+- **Cache:** v7-26 → v7-27
+- ⏳ Salim'in seçtiği sıradaki özellikler: 🎯 sabah AI MIT önerisi · ⏱️ odağı göreve bağla (kısmen var: `currentFocusTaskId`→`actualMin`) · 🥧 portföy dağılımı · 📊 kişisel içgörü.
 
 ## Mevcut Durum
 
