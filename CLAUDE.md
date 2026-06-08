@@ -465,6 +465,12 @@ Telegram emekliliği sonrası tek seansta çok iş yapıldı (v7-13 → v7-16):
   - (b) Maliyet/güncel/tutar **sütun karışması** → prompt "cost = lot başı ortalama maliyet, güncel fiyat/tutar DEĞİL".
   - (c) 🔑 **Türk sayı formatı (en sinsi):** `"2.145,00"` → model `2.145` number döndürüp binlik noktayı ondalık sanıyordu (2145 yerine 2.145). **Çözüm:** prompt artık sayıları **görseldeki haliyle STRING** istiyor (`"2.145,00"`), `parseNum()` güvenli çözer (virgül=ondalık+nokta=binlik; virgülsüzde "tüm gruplar 3 hane → binlik" sezgisi). 10 test durumu + endpoint testi (TUPRS 2.145,00 dahil 5 hisse) tam doğru.
 - **Cache:** v7-21 → v7-22 (frontend: resize+status). Sonraki Worker-only düzeltmeler cache'i etkilemez.
+
+### Haziran 8, 2026 (📷 Onay arayüzü 'son fiyat' sütunu + 💼 akşam portföy özeti push)
+- Salim: (1) görsel onay arayüzüne alım/son fiyat/adet sütunları, (2) akşam özeti.
+- **Son fiyat sütunu:** AI prompt'a `price` (güncel/son fiyat) okuma eklendi (maliyetten ayrı sütun), `extractHoldingsJson` parse eder (`parseNum` + `h.son`/`h.guncel` fallback). Onay modalı **2 kademeli karta** çevrildi: üst satır = sembol + piyasa select + sil; alt satır = **Adet | Alım fiyatı | Son fiyat** (mini etiketli `<label>`, mobilde sığar). `confirmPortfolioImport` yeni hisseye `price`'ı geçici yazar (Yahoo yenileyene kadar kâr/zarar hemen görünür). Test: THYAO alım 1280.5 / son 1297 ✓.
+- **💼 Akşam portföy özeti push** (yeni cron `30 15 * * 1-5` = 18:30 TR hafta içi, BIST kapanışı sonrası): `runPortfolioSummary` — pozisyonlu hisselerin güncel değer + **günlük** (price−prevClose) + **toplam** (price−cost) kâr/zararını para birimine göre gruplu hesaplar, tek push: "Değer / Bugün / Toplam". `sendPushToAll` + `logPush` (📬 geçmişe de düşer). Manuel test: `?type=portfolio&secret=<WEBHOOK_SECRET>`. scheduled() routing + deploy.py + wrangler.toml güncellendi.
+- **Cache:** v7-22 → v7-23
 - ⏳ Sıradaki: auto-archive · çoklu kategori · multi-user (Yol A) · ölü field temizliği · Faz 4 Telegram kod silme.
 
 ## Mevcut Durum
