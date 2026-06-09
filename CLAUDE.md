@@ -40,7 +40,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - **Bildirim:** Telegram bot (eski ntfy.sh deprecate edildi, kota sorunu)
 - **PWA:** Manifest + Service Worker (network-first stratejisi) + **icon.png** (yeni bulut mascot)
 - **Tasarım dili:** **Stitch-inspired dark mode** (May 28-29, 2026) — indigo `#6463ff`, koyu `#0a0b0f`, soft amber `#ffc640` yıldız. Inter font.
-- **Cache versiyonu:** `aidan-v7-27` (sw.js içinde, her büyük değişikte artırılır)
+- **Cache versiyonu:** `aidan-v7-28` (sw.js içinde, her büyük değişikte artırılır)
 - **AI:** Cloudflare Workers AI — **Llama 3.3 70B** (intent + tool use) + **Whisper** (sesli → metin). Bedava.
 - **MCP Server (PC):** Python, Claude Desktop bağlanır, doğrudan Supabase'e operasyon yapar
 - **Cloudflare Worker:** Cron brifing + Telegram webhook handler (artık static serve etmiyor, sadece backend)
@@ -52,7 +52,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - `asistan.html` — ana uygulama. Pages'te `/index.html` olarak servis ediliyor (auto-strip redirect loop'u önlemek için)
 - `404.html` — Aidan stilinde dark mode error sayfası, `_redirects` 404 hedefi
 - `manifest.webmanifest` — PWA manifest (start_url + scope = `/`)
-- `sw.js` — service worker (network-first, otomatik update mesajı, cache `aidan-v7-27`, push + notificationclick handler)
+- `sw.js` — service worker (network-first, otomatik update mesajı, cache `aidan-v7-28`, push + notificationclick handler)
 - `icon.png` — **ana PWA ikonu** (1024x1024, mor bulut mascot, Recraft AI üretimi May 29)
 - `icon-maskable.png` — maskable PWA ikonu (%80 safe area, dark navy `#0a0b0f` padding)
 - `icon.svg`, `icon-maskable.svg` — legacy fallback SVG ikonları (manifest'te de var)
@@ -533,6 +533,17 @@ Telegram emekliliği sonrası tek seansta çok iş yapıldı (v7-13 → v7-16):
 - ⚠️ Sınır: PWA tamamen bellekten atılırsa (swipe-kapatma) timer sıfırlanır — kilit/arka plan sorun değil. Seans arka planda biterse bildirim açılışta gelir (PWA arka plan JS yok).
 - **Cache:** v7-26 → v7-27
 - ⏳ Salim'in seçtiği sıradaki özellikler: 🎯 sabah AI MIT önerisi · ⏱️ odağı göreve bağla (kısmen var: `currentFocusTaskId`→`actualMin`) · 🥧 portföy dağılımı · 📊 kişisel içgörü.
+
+### Haziran 9, 2026 (📊 Haftalık karne — istediğinde açılan zengin özet)
+- Salim seçti (📊 kişisel içgörü maddesi). NOT: haftada 1 açılışta çıkan ufak `weeklyInsight` kartı zaten vardı; bu onun **istediğinde açılan, zengin** versiyonu — ikisi paralel duruyor, biri diğerini bozmaz.
+- **PWA:** action-row'a (🎯 Şu an ne yapayım · 📋 Şablonlar yanına) **"📊 Karne"** ghost butonu → `karneModal`.
+  - `karneStats(weeksAgo)` — `weeksAgo` 0=bu hafta / 1=geçen / 2=önceki. `done`, `byCat`, gün gün `byDayArr` (Pzt-Paz), `mitDone`, `focusMin` (görevlerin `actualMin` toplamı — ⚠️ `data.pomoHistory` artık YAZILMIYOR, deprecated, ondan hesaplama!).
+  - `renderKarne()` — Bu hafta / Geçen hafta sekmeleri, **gösterilen haftadan bir önceki** haftayla kıyas (↑/↓ chip), gün gün bar grafik (bugün amber `--secondary` vurgulu), ⭐MIT · 🎧odak dk · 🏆 top kategori pill'leri, kategori dağılımı yatay barlar, nazik kapanış cümlesi, alt farkındalık (anlık gecikmiş + 3+ ertelenmiş). Boş hafta için nazik durum.
+  - **Tarih helper'ları:** `daysOfWeekIso(mondayIso)` + `prevDayIso(iso)` — ikisi de `'T12:00:00'` öğlen demirli (toISOString UTC kaymasını önler).
+  - 🐛 **Düzeltilen mantık:** ilk versiyonda hafta sonu `getMondayIso(1)` ile alınıyordu — bu "geçen pazar"ı DEĞİL, *dünün haftasının pazartesisini* verir (bu pazartesiyi geçen haftaya katar). Doğrusu: `prevDayIso(getMondayIso((weeksAgo-1)*7))`. ⚠️ Mevcut `weeklyInsight` kartında da aynı latent bug var (`lastSun = getMondayIso(1)`) ama dokunulmadı — sadece Pzt-Çar göründüğü için pratikte az etkili.
+- **Veri modeli:** Yeni alan YOK — `tasks` (doneDate/category/mitDate/actualMin/postponeCount/due) üzerinden hesaplanır.
+- **Doğrulama:** Preview'da bu/geçen/önceki hafta seed verisiyle iki sekme + boş durum + mobil (375px) test edildi, kıyas sayıları doğrulandı, konsol hatası yok.
+- **Cache:** v7-27 → v7-28
 
 ## Mevcut Durum
 
