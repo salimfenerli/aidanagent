@@ -40,7 +40,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - **Bildirim:** Telegram bot (eski ntfy.sh deprecate edildi, kota sorunu)
 - **PWA:** Manifest + Service Worker (network-first stratejisi) + **icon.png** (yeni bulut mascot)
 - **Tasarım dili:** **Stitch-inspired dark mode** (May 28-29, 2026) — indigo `#6463ff`, koyu `#0a0b0f`, soft amber `#ffc640` yıldız. Inter font.
-- **Cache versiyonu:** `aidan-v7-20` (sw.js içinde, her büyük değişikte artırılır)
+- **Cache versiyonu:** `aidan-v7-27` (sw.js içinde, her büyük değişikte artırılır)
 - **AI:** Cloudflare Workers AI — **Llama 3.3 70B** (intent + tool use) + **Whisper** (sesli → metin). Bedava.
 - **MCP Server (PC):** Python, Claude Desktop bağlanır, doğrudan Supabase'e operasyon yapar
 - **Cloudflare Worker:** Cron brifing + Telegram webhook handler (artık static serve etmiyor, sadece backend)
@@ -52,7 +52,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - `asistan.html` — ana uygulama. Pages'te `/index.html` olarak servis ediliyor (auto-strip redirect loop'u önlemek için)
 - `404.html` — Aidan stilinde dark mode error sayfası, `_redirects` 404 hedefi
 - `manifest.webmanifest` — PWA manifest (start_url + scope = `/`)
-- `sw.js` — service worker (network-first, otomatik update mesajı, cache `aidan-v7-6`, push + notificationclick handler)
+- `sw.js` — service worker (network-first, otomatik update mesajı, cache `aidan-v7-27`, push + notificationclick handler)
 - `icon.png` — **ana PWA ikonu** (1024x1024, mor bulut mascot, Recraft AI üretimi May 29)
 - `icon-maskable.png` — maskable PWA ikonu (%80 safe area, dark navy `#0a0b0f` padding)
 - `icon.svg`, `icon-maskable.svg` — legacy fallback SVG ikonları (manifest'te de var)
@@ -112,12 +112,24 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - **🔍 Arama** — yazdıkça filtreli
 - **🏷️ Filtre chip'leri** — Hepsi / Bugün / Acil / Ödev / Özel Ders / Ev / Kişisel / Bitenler
 - **📦 Yarın/Sonra** — katlanır panel
-- **🎯 "Şu an ne yapayım?"** — akıllı tek görev öneri (MIT → acil → bugün → kısa → rastgele)
+- **🎯 "Şu an ne yapayım?"** — akıllı tek görev öneri (MIT → acil → bugün → kısa → rastgele), energy-aware (🔋/⚡/🚀)
+- **🗄️ Otomatik arşiv** — 7+ gün önce bitenler ana görünümden gizlenir, "Bitenler"de katlanır 📦 Arşiv bölümünde (Haz 9)
+- **💪 Erteleme farkındalığı** — 3+ ertelenen görevde nazik nudge çubuğu → böl / 2dk dene / kalsın (Haz 9)
+- **📝 Görev notu** — `task.notes`, kartta gri italik (editTask 2. adım)
+- **👆 Swipe** — sağa=tamamla, sola=sil (ikisi undo'lu), mobilde
+- **↩️ Undo** — sil/bitir 5sn "geri al" toast'lu
 
 ### Quick Capture (üst bar)
 - Üst barda tek input — aklına geleni 2 sn'de yaz, sonra düşün
 - **/ tuşu** ile odaklan, **Enter** ile ekle
 - Kategori/öncelik atmaya gerek yok — sonra düzenle
+- **🎯 Akıllı + butonu** (`parseQuickInput`) — "yarın 14:00 dişçi" → lokal regex ile tarih/saat/kategori/öncelik/süre parse ($0, anında)
+- **🎙️ Sesli giriş** — Web Speech API `tr-TR`, söyle → input'a yazar (Telegram şart değil)
+- **🧠 AI butonu** (`quickCaptureAI`) — metni Worker `/ai`'ye yollar, Llama yorumlar + görev ekler, realtime sync
+
+### 🧠 Zihin boşalt (brain dump)
+- Görevler tabında katlanır panel. `data.dumps[]` — dök, ✓göreve çevir (parser'dan), ✗sil
+- Telegram emekliliğinde kaybedilen son özellik PWA'ya geri geldi (Haz 4)
 
 ### Ödev Serisi
 - "Tarih kitabı 50-100 sayfa, salıya bitsin" → otomatik 7 görev böler
@@ -134,6 +146,17 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - Status: HAZIR / Çalışma / Mola / Durakta
 - "dakika / odak / mola" alt etiket
 - Bugün seans sayacı
+- **⏱️ Timestamp bazlı** (Haz 9) — `timerEndTime` + `tickTimer`, telefon kilitliyken doğru sayar (eski setInterval bug'ı düzeltildi)
+- **Odağı göreve bağla** — `currentFocusTaskId` seçiliyse biten pomodoro `actualMin`'e eklenir
+
+### 📈 Borsa (4. sekme)
+- **4 piyasa watchlist:** 🇹🇷 BIST (.IS) · 🇺🇸 ABD · 💱 Döviz (=X) · ₿ Kripto (-USD) — market chip + `toYahooSymbol`
+- **Fiyat:** Yahoo Finance bedava (Worker `/stocks` proxy), kart sol border + %değişim, gün içi **60sn otomatik** güncelleme (sekme açıkken)
+- **Portföy:** adet (`qty`) + ortalama maliyet (`cost`) → kâr/zarar (kart + üst özet), çoklu para birimi gruplu
+- **🔔 Alarm:** üst/alt fiyat eşiği → cron push (hafta içi BIST saatleri)
+- **📷 Görselden portföy:** aracı kurum ekran görüntüsü → AI vision (`/portfolio-image`, Llama 3.2 Vision) → adet/maliyet/son fiyat oku → düzenlenebilir onay modalı → ekle
+- **💼 Akşam özeti push** (18:30 hafta içi) — değer + günlük/toplam kâr/zarar + hafta/ay
+- **📈 Değer geçmişi** — `data.portfolioHistory[]`, sparkline + dün/hafta/ay yüzde
 
 ### Üst Bar
 - Şu an saati / Sıradaki hatırlatma (görev reminderTime'larından) / Kesintisiz çalışma süresi
@@ -168,8 +191,9 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - Suggest modal (Şu an ne yapayım?)
 - Service Worker yeni sürüm aktif olunca **otomatik reload toast** ("🔄 Aidan güncellendi, yeniden yükleniyor...")
 
-### Sekmeler: 5 → 3
-Görevler · 🎧 Odak · ⚙️ Ayarlar (Brain Dump + Rutinler kaldırıldı)
+### Sekmeler: 4
+Görevler · 🎧 Odak · 📈 Borsa · ⚙️ Ayarlar
+(Brain dump UI Görevler tabında katlanır panel olarak geri döndü; Rutinler kaldırıldı)
 
 ## MCP Server (Claude Desktop için)
 
@@ -213,10 +237,17 @@ URL: `aidan-pusher.fenerlisalim04.workers.dev`
 | `0 6 * * *` | 09:00 | ⏰ Deadline uyarısı |
 | `0 9 * * *` | 12:00 | ☀️ Öğle check-in |
 | `0 18 * * *` | 21:00 | 🌙 Akşam özet |
+| `0 18 * * SUN` | Pazar 21:00 | 💜 Haftalık review |
+| `*/30 7-15 * * 1-5` | Hafta içi 10-18 | 📈 Borsa alarm kontrol |
+| `30 15 * * 1-5` | Hafta içi 18:30 | 💼 Akşam portföy özeti |
 
 ### Endpoint'ler
-- `GET /?type=morning|noon|evening|deadline&secret=<WEBHOOK_SECRET>` — manuel brifing test. **Secret zorunlu** (spam koruması). Eksik/yanlış secret → 404.
-- `POST /webhook` — Telegram'dan gelen update (X-Telegram-Bot-Api-Secret-Token header ile auth)
+- `GET /?type=morning|noon|evening|deadline|weekly|stocks|portfolio&secret=<WEBHOOK_SECRET>` — manuel cron test. **Secret zorunlu** (spam koruması). Eksik/yanlış secret → 404.
+- `POST /webhook` — Telegram'dan gelen update (X-Telegram-Bot-Api-Secret-Token header ile auth). **Telegram emekli** (`TELEGRAM_RETIRED=true`): sahibe bilgi mesajı, AI işleme yok.
+- `POST /ai` — PWA quick capture AI (Supabase token auth, CORS). Telegram'la aynı pipeline.
+- `POST /journal` — sesli akşam günlüğü, AI sıcak yansıma (tool yok).
+- `POST /stocks` — Yahoo fiyat proxy (`{entries:[{display,yahoo}]}` veya eski `{symbols}`).
+- `POST /portfolio-image` — portföy görseli → Llama 3.2 Vision → sembol/adet/maliyet/son fiyat JSON. `visionRun` (5016 lisans `agree` retry), `parseNum` (Türk sayı formatı).
 
 ### Telegram Bot Webhook
 - Bot: `t.me/salim_aidan_bot`
@@ -512,8 +543,9 @@ Telegram emekliliği sonrası tek seansta çok iş yapıldı (v7-13 → v7-16):
 - MCP server Claude Desktop'a bağlı
 - **GitHub Actions otomatik deploy** — her `git push` Cloudflare Pages'e gider (`.github/workflows/deploy.yml`)
 - Manuel deploy alternatifi: `py aidan-pages-deploy.py` → 5 sn canlı
-- Cloudflare Worker 4 cron schedule
-- Telegram bot iki yönlü (yazılı + 🎤 sesli)
+- Cloudflare Worker 7 cron schedule (brifing/deadline/öğle/akşam/haftalık/borsa-alarm/portföy-özeti)
+- **Telegram EMEKLİ** (`TELEGRAM_RETIRED=true`) — AI + sesli + bildirim hepsi PWA'da. Bot kodu duruyor (rollback için), webhook sahibe bilgi mesajı döner.
+- **📈 Borsa modülü** — 4 piyasa watchlist + alarm + portföy + görselden AI ekleme + akşam özeti + canlı güncelleme + değer geçmişi
 - Llama 3.3 70B intent + tool use
 - Whisper sesli → metin
 - Ödev serisi + yeniden dengele
@@ -647,11 +679,15 @@ py aidan-pages-deploy.py
   mitDate: null,              // 'YYYY-MM-DD' (sadece bugün ise MIT)
   streakCount: 0,
   lastStreakDate: null,       // 'YYYY-MM-DD'
-  // Seri alanları (NEW):
+  // Seri alanları:
   seriesId: null,             // string, aynı serideki görevler aynı id
   seriesName: null,           // 'Tarih kitabı'
   seriesIndex: null,          // 1, 2, 3...
-  seriesTotal: null           // toplam parça sayısı
+  seriesTotal: null,          // toplam parça sayısı
+  // Yeni alanlar:
+  notes: null,                // (Haz 4) serbest not, kartta italik
+  postponeCount: 0,           // (Haz 9) kaç kez ertelendi — 3+ nudge tetikler
+  nudgeDismissed: false       // (Haz 9) erteleme nudge'ı kapatıldı mı
 }
 ```
 
@@ -665,14 +701,19 @@ py aidan-pages-deploy.py
   checkins: [...],            // DEPRECATED ama silmedik (geriye uyumluluk)
   pomoToday: {date, count},
   pomoHistory: {'YYYY-MM-DD': count},
-  templates: [{id, name, emoji, builtin, tasks:[{text,category?,estimateMin?}]}],  // NEW (Haz 2) — kullanıcı şablonları
-  lastWeeklyView: 'YYYY-Www', // NEW (Haz 2) — haftalık insight kartı son gösterim (ISO hafta)
+  templates: [{id, name, emoji, builtin, tasks:[{text,category?,estimateMin?}]}],  // (Haz 2) kullanıcı şablonları
+  lastWeeklyView: 'YYYY-Www', // (Haz 2) haftalık insight kartı son gösterim (ISO hafta)
+  journal: [{date, text, reflection}],  // (Haz 4) sesli akşam günlüğü, son 60 gün
+  pushLog: [{type, title, body, at, subs}],  // (Haz 4) bildirim geçmişi, son 7 gün/max 60
+  watchlist: [{symbol, ySymbol, market, name, price, prevClose, changePct, currency,
+               alarmAbove, alarmBelow, lastAlertedAbove, lastAlertedBelow, qty, cost, fetchedAt, error}],  // (Haz 6-8) borsa
+  portfolioHistory: [{date:'YYYY-MM-DD', byCur:{TRY:{value,cost}}}],  // (Haz 8) portföy değer geçmişi, son 180 gün
   settings: {
     ntfyTopic,                // DEPRECATED
     hyperfocusEnabled, hyperfocusMin,
     supaUrl, supaKey,         // Aidan'ın kendi Supabase config'i
-    muteUntil,                // NEW (Haz 2) — bildirim sustur (epoch ms)
-    pushSubs: [{endpoint, keys:{p256dh,auth}, ua, added}]  // NEW (Haz 2) — background push cihaz kayıtları
+    muteUntil,                // (Haz 2) bildirim sustur (epoch ms)
+    pushSubs: [{endpoint, keys:{p256dh,auth}, ua, added}]  // (Haz 2) background push cihaz kayıtları
   }
 }
 ```
@@ -724,5 +765,5 @@ curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo
 7. ✅ **Token durumu temiz (Haz 2)** — May 29 leaked + geçici deploy token'ları silindi, GitHub Actions tek temiz token'la (GitHub Secrets `CF_API_TOKEN`) çalışıyor. Yeni token ifşa olursa yine sildirip doğrula (`/user/tokens/verify`).
 8. ✅ **Worker deploy GitHub Actions'ta** — `.github/workflows/deploy.yml` Pages + Worker'ı birden deploy eder (`aidan-worker/worker.js` veya `aidan-worker/deploy.py` değişince tetiklenir). Token GitHub Secrets'ta, `git push` yeter. Manuel `py aidan-worker/deploy.py` sadece acil/yedek (Windows'ta `PYTHONIOENCODING=utf-8` şart). **CLAUDE.md eski versiyonunda "Worker DEĞİL" yazıyordu, AI taşıma sonrası güncellendi.**
 9. ⚠️ **Background push (Haz 3 itibarıyla çalışıyor):** Apple lock ekranına ulaşması için 3 şart birden gerekli: (a) Worker `Urgency: high` (b) SW push handler her halükarda `showNotification` çağırmalı (iOS aksi halde izni iptal eder) (c) subscription fresh olmalı (eski SW'lerde oluşturulmuş subscription'lar bozuk). Sorun çıkarsa: Salim Ayarlar'dan "🔄 Push'u sıfırla" → manuel cron tetikle (`?type=noon&secret=<WEBHOOK_SECRET>`). subscription Supabase'de `data.settings.pushSubs[]`'ta.
-10. ⚠️ **Tasarım dili Stitch-inspired** — renkler `#6463ff` indigo, `#0a0b0f` koyu, `#ffc640` amber. Eski mor `#7c6ff7` ve emoji 🧠 logo YOK. Brand-logo-icon = mor bulut karakter PNG. Cache artık **v7-19**.
+10. ⚠️ **Tasarım dili Stitch-inspired** — renkler `#6463ff` indigo, `#0a0b0f` koyu, `#ffc640` amber. Eski mor `#7c6ff7` ve emoji 🧠 logo YOK. Brand-logo-icon = mor bulut karakter PNG. Cache artık **v7-27**.
 11. ⚠️ **Logo değiştirmek istenirse** `logo-concepts/logo-{1,2,3}-{flat,refined,3d}.png`'den biri `icon.png` üzerine kopyalanır, `make_icons.py` ile maskable yenilenir, push edilir.
