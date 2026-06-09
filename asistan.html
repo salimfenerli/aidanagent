@@ -571,6 +571,17 @@
   .pf-hist-chip b.up { color: #34c759; }
   .pf-hist-chip b.down { color: #ef4444; }
   .pf-hist-chip b.flat { color: var(--text-muted); }
+  /* Portföy dağılımı (donut) */
+  .portfolio-pie { background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); padding: 12px 14px; margin-bottom: 14px; }
+  .pf-pie-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.72em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 10px; }
+  .pf-pie-cur { color: var(--text-faint); font-weight: 500; }
+  .pf-pie-wrap { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .pf-donut { flex-shrink: 0; }
+  .pf-pie-legend { flex: 1; min-width: 130px; display: flex; flex-direction: column; gap: 6px; }
+  .pf-pie-leg-item { display: flex; align-items: center; gap: 8px; font-size: 0.85em; }
+  .pf-pie-dot { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+  .pf-pie-leg-sym { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pf-pie-leg-pct { color: var(--text-muted); font-variant-numeric: tabular-nums; font-weight: 600; }
   /* Çok para birimi portföy */
   .pf-multi { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
   .pf-cur-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -2415,6 +2426,7 @@
   <div id="stocks" class="panel">
     <h2>📈 Borsa</h2>
     <div class="portfolio-summary" id="portfolioSummary" style="display:none;"></div>
+    <div class="portfolio-pie" id="portfolioPie" style="display:none;"></div>
     <div class="portfolio-history" id="portfolioHistory" style="display:none;"></div>
     <div class="market-chips" id="marketChips">
       <button class="market-chip active" data-market="bist" onclick="selectMarket('bist')">🇹🇷 BIST</button>
@@ -3745,6 +3757,7 @@ function renderStocks() {
   const wl = data.watchlist || [];
   updateStocksMeta();
   renderPortfolioSummary();
+  renderPortfolioPie();
   renderPortfolioHistory();
   if (wl.length === 0) {
     list.innerHTML = '<div class="stocks-empty">Henüz hisse yok.<br>Yukarıdan BIST kodu ekle (örn THYAO).<br>Fiyatını gör, pozisyon gir, alarm kur 🔔</div>';
@@ -3901,6 +3914,66 @@ function renderPortfolioSummary() {
   el.innerHTML = `
     <div class="pf-label">💼 Portföy · ${holdings.length} pozisyon (${currencies.length} para birimi)</div>
     <div class="pf-multi">${rows}</div>
+  `;
+}
+
+// SVG donut chart — stroke-dasharray tekniği (segments: [{val,color}])
+function donutChart(segments, size) {
+  size = size || 140;
+  const r = size / 2 - 11;
+  const cx = size / 2, cy = size / 2;
+  const C = 2 * Math.PI * r;
+  const total = segments.reduce((s, x) => s + x.val, 0) || 1;
+  let offset = 0;
+  const arcs = segments.map(seg => {
+    const len = (seg.val / total) * C;
+    const c = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${seg.color}" stroke-width="13" stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    offset += len;
+    return c;
+  }).join('');
+  return `<svg class="pf-donut" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">${arcs}</svg>`;
+}
+
+// Portföy dağılımı — baskın para biriminde hisse bazlı % donut (kur karıştırmaz)
+function renderPortfolioPie() {
+  const el = document.getElementById('portfolioPie');
+  if (!el) return;
+  const holdings = (data.watchlist || []).filter(w => w.qty != null && w.qty > 0 && w.cost != null);
+  if (holdings.length < 2) { el.style.display = 'none'; return; } // tek pozisyonda pasta anlamsız
+  // Para birimine göre grupla, baskın olanı (en yüksek değer) seç
+  const byCur = {};
+  for (const w of holdings) {
+    const cur = w.currency || 'TRY';
+    const val = (w.price != null ? w.price : w.cost) * w.qty;
+    (byCur[cur] = byCur[cur] || []).push({ sym: w.symbol, val });
+  }
+  let cur = null, maxV = -1;
+  for (const c in byCur) { const sum = byCur[c].reduce((s, x) => s + x.val, 0); if (sum > maxV) { maxV = sum; cur = c; } }
+  let items = byCur[cur].filter(x => x.val > 0).sort((a, b) => b.val - a.val);
+  if (items.length < 2) { el.style.display = 'none'; return; }
+  const total = items.reduce((s, x) => s + x.val, 0);
+  // 8'den fazlaysa ilk 7 + "Diğer"
+  if (items.length > 8) {
+    const rest = items.slice(7).reduce((s, x) => s + x.val, 0);
+    items = items.slice(0, 7).concat([{ sym: 'Diğer', val: rest }]);
+  }
+  const PIE_COLORS = ['#6463ff', '#36d058', '#ffc640', '#ff8a5c', '#42c6ff', '#c77dff', '#ff6b9d', '#9b8eff'];
+  const segs = items.map((x, i) => ({ sym: x.sym, val: x.val, color: PIE_COLORS[i % PIE_COLORS.length], pct: x.val / total * 100 }));
+  const lbl = cur === 'TRY' ? 'TL' : cur;
+  const legend = segs.map(s => `
+    <div class="pf-pie-leg-item">
+      <span class="pf-pie-dot" style="background:${s.color}"></span>
+      <span class="pf-pie-leg-sym">${escapeHtml(s.sym)}</span>
+      <span class="pf-pie-leg-pct">${s.pct.toFixed(1)}%</span>
+    </div>`).join('');
+  const others = Object.keys(byCur).length > 1 ? ` <span class="pf-pie-cur">(+${Object.keys(byCur).length - 1} diğer para birimi)</span>` : '';
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div class="pf-pie-head"><span>📊 Dağılım${others}</span><span class="pf-pie-cur">${escapeHtml(lbl)}</span></div>
+    <div class="pf-pie-wrap">
+      ${donutChart(segs, 140)}
+      <div class="pf-pie-legend">${legend}</div>
+    </div>
   `;
 }
 
