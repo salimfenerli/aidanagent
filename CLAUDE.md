@@ -40,7 +40,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - **Bildirim:** Telegram bot (eski ntfy.sh deprecate edildi, kota sorunu)
 - **PWA:** Manifest + Service Worker (network-first stratejisi) + **icon.png** (yeni bulut mascot)
 - **Tasarım dili:** **Stitch-inspired dark mode** (May 28-29, 2026) — indigo `#6463ff`, koyu `#0a0b0f`, soft amber `#ffc640` yıldız. Inter font.
-- **Cache versiyonu:** `aidan-v7-29` (sw.js içinde, her büyük değişikte artırılır)
+- **Cache versiyonu:** `aidan-v7-30` (sw.js içinde, her büyük değişikte artırılır)
 - **AI:** Cloudflare Workers AI — **Llama 3.3 70B** (intent + tool use) + **Whisper** (sesli → metin). Bedava.
 - **MCP Server (PC):** Python, Claude Desktop bağlanır, doğrudan Supabase'e operasyon yapar
 - **Cloudflare Worker:** Cron brifing + Telegram webhook handler (artık static serve etmiyor, sadece backend)
@@ -52,7 +52,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - `asistan.html` — ana uygulama. Pages'te `/index.html` olarak servis ediliyor (auto-strip redirect loop'u önlemek için)
 - `404.html` — Aidan stilinde dark mode error sayfası, `_redirects` 404 hedefi
 - `manifest.webmanifest` — PWA manifest (start_url + scope = `/`)
-- `sw.js` — service worker (network-first, otomatik update mesajı, cache `aidan-v7-29`, push + notificationclick handler)
+- `sw.js` — service worker (network-first, otomatik update mesajı, cache `aidan-v7-30`, push + notificationclick handler)
 - `icon.png` — **ana PWA ikonu** (1024x1024, mor bulut mascot, Recraft AI üretimi May 29)
 - `icon-maskable.png` — maskable PWA ikonu (%80 safe area, dark navy `#0a0b0f` padding)
 - `icon.svg`, `icon-maskable.svg` — legacy fallback SVG ikonları (manifest'te de var)
@@ -246,6 +246,7 @@ URL: `aidan-pusher.fenerlisalim04.workers.dev`
 - `POST /webhook` — Telegram'dan gelen update (X-Telegram-Bot-Api-Secret-Token header ile auth). **Telegram emekli** (`TELEGRAM_RETIRED=true`): sahibe bilgi mesajı, AI işleme yok.
 - `POST /ai` — PWA quick capture AI (Supabase token auth, CORS). Telegram'la aynı pipeline.
 - `POST /journal` — sesli akşam günlüğü, AI sıcak yansıma (tool yok).
+- `POST /split` — AI görev bölücü: `{text}` → Llama 3.3 70B → 3-6 kısa eylem adımı `{steps:[...]}`. Auth + CORS, tool yok. `extractStepsJson` (markdown/numaralı/tireli toleranslı).
 - `POST /stocks` — Yahoo fiyat proxy (`{entries:[{display,yahoo}]}` veya eski `{symbols}`).
 - `POST /portfolio-image` — portföy görseli → Llama 3.2 Vision → sembol/adet/maliyet/son fiyat JSON. `visionRun` (5016 lisans `agree` retry), `parseNum` (Türk sayı formatı).
 
@@ -562,6 +563,14 @@ Salim "önerdiklerinin yıldızlı olanlarını hepsini yap" dedi → tek seanst
 - **Doğrulama:** PWA 3 özellik preview'da test edildi (piyasa saati 5 senaryo, "Şu an" kartı normal+acil, picker sıralama+bağla+preset-koruma+rozet, mobil 375px, konsol temiz). Worker saf fonksiyonları (trToday/trDate/scoreTaskForMit/suggestMitFromTasks/autoSetMorningMit) tarayıcı motorunda test edildi (MIT-yok→3 otomatik seçim+mitDate, MIT-var→dokunma). Worker'ın sabah MIT'i canlıda ancak 08:00 cron'da ya da `?type=morning&secret=<WEBHOOK_SECRET>` ile teyit edilebilir (secret elde yok).
 - **Cache:** v7-28 → v7-29
 - ⏳ Kalan yıldızsız öneriler: ilaç/sabit hatırlatıcı · AI görev bölücü · geri sayım kartı · portföy pasta grafiği · tek hisse mini grafik · aylık karne · en verimli saat analizi · multi-user · takvim entegrasyonu.
+
+### Haziran 9, 2026 (🪄 AI görev bölücü — büyük görevi küçük adımlara böl)
+Salim seçti. "logolar corny olmasın" dedi → 🤖/emoji YOK, sade Lucide "sparkles" SVG (stroke, currentColor) — uygulamanın AI dili. ADHD task initiation: büyük/belirsiz görev → tek tıkla minik adımlar, ilk adım çok küçük (başlama eşiği düşer).
+- **Worker:** `POST /split` (`handleSplitApi`) — `{text}` → `env.AI.run(AI_MODEL)` (Llama 3.3 70B, tool YOK), system prompt "3-6 adım, eylem fiiliyle başla, ilk adım çok küçük, SADECE JSON dizi, TÜRKÇE". `extractStepsJson(raw)` — `r.response` string değilse JSON.stringify; ```json bloğu ayıkla; ilk `[...]` dizisini parse; olmazsa satır satır (numaralı/tireli marker strip) fallback; 2-80 karakter filtre, max 6. Auth (verifyUser + AIDAN_EMAIL), CORS (journal kalıbı). Route `/split` eklendi.
+- **PWA:** Görev kartı aksiyon satırına (✂️ alt adım butonunun yanına) **sparkles butonu** → `aiSplitTask(id)`. `SPLIT_ENDPOINT` → Supabase access-token ile `/split`, dönen adımları `t.subtasks`'a ekler (bitmiş görev varsa yeniden aktif), save + renderTasks. Hata/boş durumda nazik toast. Mevcut elle `splitTask()` (ekleme formu) + `addSubtask` aynen duruyor.
+- **Veri modeli:** Yeni alan YOK — mevcut `task.subtasks[{text,done}]` kullanılıyor.
+- **Doğrulama:** `extractStepsJson` 6 formatla tarayıcı motorunda test (JSON/markdown/önsözlü/numaralı/tireli/junk). **CANLI uçtan uca test** (CLAUDE.md Supabase-login tekniği, `aidan-mcp/.env` → access_token → urllib + UA Mozilla + Origin): "Tarih ödevi Fransız İhtilali 10 soru" → 6 temiz adım döndü ("Kitabı aç" / "İlk 3 soruyu çöz" / "Cevapları kontrol et"). Buton DOM'da, SVG sade, konsol temiz.
+- **Cache:** v7-29 → v7-30
 
 ## Mevcut Durum
 
