@@ -40,7 +40,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - **Bildirim:** Telegram bot (eski ntfy.sh deprecate edildi, kota sorunu)
 - **PWA:** Manifest + Service Worker (network-first stratejisi) + **icon.png** (yeni bulut mascot)
 - **Tasarım dili:** **Stitch-inspired dark mode** (May 28-29, 2026) — indigo `#6463ff`, koyu `#0a0b0f`, soft amber `#ffc640` yıldız. Inter font.
-- **Cache versiyonu:** `aidan-v7-28` (sw.js içinde, her büyük değişikte artırılır)
+- **Cache versiyonu:** `aidan-v7-29` (sw.js içinde, her büyük değişikte artırılır)
 - **AI:** Cloudflare Workers AI — **Llama 3.3 70B** (intent + tool use) + **Whisper** (sesli → metin). Bedava.
 - **MCP Server (PC):** Python, Claude Desktop bağlanır, doğrudan Supabase'e operasyon yapar
 - **Cloudflare Worker:** Cron brifing + Telegram webhook handler (artık static serve etmiyor, sadece backend)
@@ -52,7 +52,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - `asistan.html` — ana uygulama. Pages'te `/index.html` olarak servis ediliyor (auto-strip redirect loop'u önlemek için)
 - `404.html` — Aidan stilinde dark mode error sayfası, `_redirects` 404 hedefi
 - `manifest.webmanifest` — PWA manifest (start_url + scope = `/`)
-- `sw.js` — service worker (network-first, otomatik update mesajı, cache `aidan-v7-28`, push + notificationclick handler)
+- `sw.js` — service worker (network-first, otomatik update mesajı, cache `aidan-v7-29`, push + notificationclick handler)
 - `icon.png` — **ana PWA ikonu** (1024x1024, mor bulut mascot, Recraft AI üretimi May 29)
 - `icon-maskable.png` — maskable PWA ikonu (%80 safe area, dark navy `#0a0b0f` padding)
 - `icon.svg`, `icon-maskable.svg` — legacy fallback SVG ikonları (manifest'te de var)
@@ -544,6 +544,24 @@ Telegram emekliliği sonrası tek seansta çok iş yapıldı (v7-13 → v7-16):
 - **Veri modeli:** Yeni alan YOK — `tasks` (doneDate/category/mitDate/actualMin/postponeCount/due) üzerinden hesaplanır.
 - **Doğrulama:** Preview'da bu/geçen/önceki hafta seed verisiyle iki sekme + boş durum + mobil (375px) test edildi, kıyas sayıları doğrulandı, konsol hatası yok.
 - **Cache:** v7-27 → v7-28
+
+### Haziran 9, 2026 (4 yıldızlı özellik tek pakette — borsa rozet · zaman körlüğü · odak-görev · sabah MIT)
+Salim "önerdiklerinin yıldızlı olanlarını hepsini yap" dedi → tek seansta 4 özellik (3'ü PWA, 1'i Worker). MIT açılımı = **Most Important Task** (En Önemli Görev), uygulamada "Bugünün 3'ü".
+- **🟢 Borsa canlı/piyasa-açık rozeti** (Salim "borsa neden kendi kendine güncellenmiyor" dedi → asıl sorun: BIST 18:00'de kapanıyor + güncelleme sessizdi, donuk sanılıyordu):
+  - `isMarketOpen(market, now)` — BIST 10-18 · ABD 16:30-23 · döviz hafta içi · kripto 7/24 (cihaz saati TR varsayımı). `marketStatusBadge()` → 🟢açık / 🔴kapalı / 🟡kısmen (watchlist'teki piyasalara göre). `updateStocksMeta()` etiket+rozeti ağ çağrısı yapmadan tazeler.
+  - `startStockAutoRefresh` artık 20sn'de bir `updateStocksMeta` (canlı "az önce güncellendi") + 60sn'de bir (`_stockTick%3`) ağ tazeleme. `showTab` stocks açılışında 2dk yerine **15sn** eşikle koşulsuz tazele. HTML: toolbar'a `#marketStatus` span (`.stocks-meta` sol grup).
+- **⏰ Zaman körlüğü "Şu an" kartı** (üst barda zaten saat+countdown vardı ama küçük/donuk/10sn):
+  - Görevler panelinin EN ÜSTÜNE `#nowCard`: iri **saniyelik canlı saat** (`#nowClock` HH:MM:SS) + günün ritmi çubuğu (07:00–23:00 penceresi, "aktif güne ~Xsa kaldı") + yaklaşan hatırlatma geri sayımı (≤120dk göster, ≤15dk `.urgent` pulse).
+  - `tickNow()` her 1sn (saat + gün çubuğu + nowNext). `_nextReminder` modül değişkeni `updateTopbar` (10sn) tarafından set edilir, `tickNow` saniyelik geri sayımı ondan hesaplar. Topbar saati de artık saniyelik eşitleniyor. ⚠️ `let _nextReminder` `updateTopbar`'dan ÖNCE bildirilmeli (TDZ — `updateTopbar()` ilk çağrı ondan önce çalışıyor).
+- **⏱️ Odağı göreve tam bağla** (zaten `currentFocusTaskId`→`actualMin`, banner, "✓ Ndk sürdü" rozeti vardı; eksik = Odak sekmesinden görev seçememe):
+  - `#focusTask` artık tıklanabilir → `openFocusPick()` / `focusPickModal` — bitmemiş görevler MIT/acil/gecikmiş önce, tıkla-bağla (`bindFocusTask`). Bağlıyken "🎯 görev ✕" (✕ = `dropFocusTask`).
+  - 🔑 `resetTimer(keepFocus)` — preset değişince (`setTimer` → `resetTimer(true)`) bağ KORUNUR; sadece 🔄 Sıfırla butonu (`resetTimer()`) tam temizler. (Eskiden preset değiştirince bağ sessizce kopuyordu.)
+  - Süre rozeti zenginleşti: tahmin+gerçek varsa `✓ 45dk · tahmin 30 (+15dk)` (tahmin↔gerçek kıyas, ADHD self-awareness).
+- **🎯 Sabah AI MIT push** (Worker):
+  - `autoSetMorningMit(data)` — sabah cron'da MIT seçili DEĞİLSE `suggestMitFromTasks` ile en iyi 3'ü bulup `mitDate=today` yazar (data mutasyonu), seçilenleri döndürür. MIT zaten varsa `[]` (dokunmaz). `buildMorning(data, autoSetMit)` → "🎯 Bugünün 3'ünü senin için seçtim" mesajı (push'ta buton yok, açınca MIT hazır). `runCronJob` 'morning' → `buildMorning(data, autoSetMorningMit(data))`; veri zaten sonda kaydediliyor (pushLog) → mitDate kalıcı. PWA tarafı değişmedi (realtime pull MIT kutusunu gösterir).
+- **Doğrulama:** PWA 3 özellik preview'da test edildi (piyasa saati 5 senaryo, "Şu an" kartı normal+acil, picker sıralama+bağla+preset-koruma+rozet, mobil 375px, konsol temiz). Worker saf fonksiyonları (trToday/trDate/scoreTaskForMit/suggestMitFromTasks/autoSetMorningMit) tarayıcı motorunda test edildi (MIT-yok→3 otomatik seçim+mitDate, MIT-var→dokunma). Worker'ın sabah MIT'i canlıda ancak 08:00 cron'da ya da `?type=morning&secret=<WEBHOOK_SECRET>` ile teyit edilebilir (secret elde yok).
+- **Cache:** v7-28 → v7-29
+- ⏳ Kalan yıldızsız öneriler: ilaç/sabit hatırlatıcı · AI görev bölücü · geri sayım kartı · portföy pasta grafiği · tek hisse mini grafik · aylık karne · en verimli saat analizi · multi-user · takvim entegrasyonu.
 
 ## Mevcut Durum
 
