@@ -3005,6 +3005,39 @@ async function quickCaptureAI() {
   }
 }
 
+// AI görev bölücü — var olan görevi küçük adımlara böler (Worker /split → alt görev)
+const SPLIT_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/split';
+async function aiSplitTask(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  if (!window._supa || !window._user) {
+    showToast('AI için bulut girişi gerekli — Ayarlar → giriş yap', 'warning', 4000);
+    return;
+  }
+  showToast('🪄 Adımlara bölünüyor…', 'info', 2500);
+  try {
+    const { data: sess } = await window._supa.auth.getSession();
+    const token = sess && sess.session && sess.session.access_token;
+    if (!token) throw new Error('oturum bulunamadı, tekrar giriş yap');
+    const r = await fetch(SPLIT_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ text: t.text }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || ('sunucu hatası ' + r.status));
+    const steps = (j.steps || []).map(s => (s || '').trim()).filter(Boolean);
+    if (!steps.length) { showToast('AI adım üretemedi — elle ekleyebilirsin', 'warning', 4000); return; }
+    t.subtasks = t.subtasks || [];
+    steps.forEach(s => t.subtasks.push({ text: s, done: false }));
+    if (t.done) { t.done = false; t.doneDate = null; } // adım eklenince görev yeniden aktif
+    save(); renderTasks();
+    showToast(`✨ ${steps.length} adıma bölündü`, 'success', 3000);
+  } catch (e) {
+    showToast('Bölünemedi: ' + e.message, 'error', 4000);
+  }
+}
+
 // Akıllı quick-capture parser — AI'ya gitmeden tarih/saat/kategori/öncelik/süreyi tespit eder.
 // "yarın 14:00 dişçi" -> { text:'dişçi', due:yarın, reminderTime:14:00, category:'kisisel' }
 function parseQuickInput(raw) {
@@ -4896,6 +4929,7 @@ function renderTaskItem(t) {
         ${t.done || !t.estimateMin || t.estimateMin <= 5 ? '' : `<button class="small secondary" onclick="startTaskNow(${t.id}, true)" title="Sadece 2 dakika dene — başlamanın altın kuralı" aria-label="2 dakika dene"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>2dk</button>`}
         ${t.done ? '' : `<button class="small secondary" onclick="postponeTask(${t.id})" title="Ertele — başka güne kaydır" aria-label="Ertele"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>`}
         ${t.done ? '' : `<button class="small secondary" onclick="addSubtask(${t.id})" title="Alt adım ekle" aria-label="Alt adım ekle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg></button>`}
+        ${t.done ? '' : `<button class="small secondary" onclick="aiSplitTask(${t.id})" title="AI ile küçük adımlara böl" aria-label="AI ile böl"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg></button>`}
         <button class="small secondary" onclick="editTask(${t.id})" title="Düzenle" aria-label="Düzenle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
         <button class="small danger" onclick="deleteTask(${t.id})" title="Sil" aria-label="Sil"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
       </div>

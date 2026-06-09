@@ -1910,6 +1910,65 @@ async function handleJournalApi(request, env) {
   }
 }
 
+// AI cevabından adım dizisini çıkar (markdown/çer-çöp toleranslı)
+function extractStepsJson(raw) {
+  if (!raw) return [];
+  let s = String(raw).trim().replace(/```(?:json)?/gi, '').trim();
+  let arr = null;
+  const m = s.match(/\[[\s\S]*\]/);
+  if (m) { try { arr = JSON.parse(m[0]); } catch {} }
+  if (!Array.isArray(arr)) {
+    // JSON parse edilemezse satır satır "1. ..." / "- ..." ayıkla
+    arr = s.split('\n').map(l => l.replace(/^\s*[-*\d.)\]]+\s*/, '').trim()).filter(Boolean);
+  }
+  return arr
+    .map(x => (typeof x === 'string' ? x : (x && x.text) || ''))
+    .map(x => x.trim().replace(/^["'\-\s]+|["'\s]+$/g, ''))
+    .filter(x => x.length >= 2 && x.length <= 80)
+    .slice(0, 6);
+}
+
+// Görevi küçük adımlara böl (ADHD task initiation) — Llama, tool YOK, JSON dizi döner
+async function handleSplitApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const text = (body.text || '').trim();
+  if (!text) return jsonCors({ error: 'empty' }, 400, cors);
+  if (text.length > 500) return jsonCors({ error: 'too long' }, 400, cors);
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (env.AIDAN_EMAIL && user.email && user.email.toLowerCase() !== env.AIDAN_EMAIL.toLowerCase()) {
+    return jsonCors({ error: 'forbidden' }, 403, cors);
+  }
+
+  try {
+    const r = await env.AI.run(AI_MODEL, {
+      messages: [
+        { role: 'system', content: "Sen Aidan'sın, Salim'in ADHD asistanı. Verilen görevi, başlaması KOLAY küçük adımlara böl. Kurallar: 3-6 adım. Her adım KISA (en fazla 6-7 kelime), somut ve EYLEM fiiliyle başlasın (Aç, Yaz, Oku, Çöz, Ara, Topla...). İlk adım çok küçük olsun (başlama eşiğini düşür, ADHD için kritik). TÜRKÇE. SADECE bir JSON string dizisi döndür, başka HİÇBİR açıklama yazma. Örnek çıktı: [\"Kitabı aç, konuyu bul\",\"Konuyu bir kez oku\",\"İlk 5 soruyu çöz\",\"Kalan soruları çöz\",\"Cevapları kontrol et\"]" },
+        { role: 'user', content: `Görev: ${text}\n\nBunu küçük adımlara böl. Sadece JSON dizisi döndür.` },
+      ],
+      max_tokens: 400,
+    });
+    const raw = typeof r.response === 'string' ? r.response : JSON.stringify(r.response || '');
+    const steps = extractStepsJson(raw);
+    if (!steps.length) return jsonCors({ error: 'no-steps' }, 200, cors);
+    return jsonCors({ steps }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
 // ============================================================
 // Borsa — Yahoo Finance bedava API proxy (CORS yüzünden tarayıcı direkt çekemez)
 // ============================================================
@@ -2374,6 +2433,11 @@ export default {
     // Akşam günlüğü (POST gün özeti → AI sıcak yansıma, tool YOK)
     if (url.pathname === '/journal') {
       return handleJournalApi(request, env);
+    }
+
+    // AI görev bölücü (POST {text} → AI küçük adımlar dizisi, tool YOK)
+    if (url.pathname === '/split') {
+      return handleSplitApi(request, env);
     }
 
     // Borsa fiyatları (POST {symbols} → Yahoo proxy)
