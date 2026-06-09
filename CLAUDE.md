@@ -40,7 +40,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - **Bildirim:** Telegram bot (eski ntfy.sh deprecate edildi, kota sorunu)
 - **PWA:** Manifest + Service Worker (network-first stratejisi) + **icon.png** (yeni bulut mascot)
 - **Tasarım dili:** **Stitch-inspired dark mode** (May 28-29, 2026) — indigo `#6463ff`, koyu `#0a0b0f`, soft amber `#ffc640` yıldız. Inter font.
-- **Cache versiyonu:** `aidan-v7-30` (sw.js içinde, her büyük değişikte artırılır)
+- **Cache versiyonu:** `aidan-v7-31` (sw.js içinde, her büyük değişikte artırılır)
 - **AI:** Cloudflare Workers AI — **Llama 3.3 70B** (intent + tool use) + **Whisper** (sesli → metin). Bedava.
 - **MCP Server (PC):** Python, Claude Desktop bağlanır, doğrudan Supabase'e operasyon yapar
 - **Cloudflare Worker:** Cron brifing + Telegram webhook handler (artık static serve etmiyor, sadece backend)
@@ -52,7 +52,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - `asistan.html` — ana uygulama. Pages'te `/index.html` olarak servis ediliyor (auto-strip redirect loop'u önlemek için)
 - `404.html` — Aidan stilinde dark mode error sayfası, `_redirects` 404 hedefi
 - `manifest.webmanifest` — PWA manifest (start_url + scope = `/`)
-- `sw.js` — service worker (network-first, otomatik update mesajı, cache `aidan-v7-30`, push + notificationclick handler)
+- `sw.js` — service worker (network-first, otomatik update mesajı, cache `aidan-v7-31`, push + notificationclick handler)
 - `icon.png` — **ana PWA ikonu** (1024x1024, mor bulut mascot, Recraft AI üretimi May 29)
 - `icon-maskable.png` — maskable PWA ikonu (%80 safe area, dark navy `#0a0b0f` padding)
 - `icon.svg`, `icon-maskable.svg` — legacy fallback SVG ikonları (manifest'te de var)
@@ -571,6 +571,14 @@ Salim seçti. "logolar corny olmasın" dedi → 🤖/emoji YOK, sade Lucide "spa
 - **Veri modeli:** Yeni alan YOK — mevcut `task.subtasks[{text,done}]` kullanılıyor.
 - **Doğrulama:** `extractStepsJson` 6 formatla tarayıcı motorunda test (JSON/markdown/önsözlü/numaralı/tireli/junk). **CANLI uçtan uca test** (CLAUDE.md Supabase-login tekniği, `aidan-mcp/.env` → access_token → urllib + UA Mozilla + Origin): "Tarih ödevi Fransız İhtilali 10 soru" → 6 temiz adım döndü ("Kitabı aç" / "İlk 3 soruyu çöz" / "Cevapları kontrol et"). Buton DOM'da, SVG sade, konsol temiz.
 - **Cache:** v7-29 → v7-30
+
+### Haziran 9, 2026 (🥧 Portföy donut dağılım grafiği)
+Salim seçti. "logolar corny olmasın" devamı → food-pie 🥧 emoji YOK, başlık `📊 Dağılım`, grafik SVG donut.
+- **PWA:** `donutChart(segments, size)` — saf SVG, `stroke-dasharray`/`stroke-dashoffset` tekniği (harici lib YOK), `rotate(-90)` ile tepeden başlar. `renderPortfolioPie()` — `portfolioSummary` ile `portfolioHistory` arasına `#portfolioPie`. Mantık: holdings (qty>0+cost), para birimine grupla, **baskın para birimi** (en yüksek değer, geçmiş grafikle tutarlı) için hisse bazlı % donut + legend (renk noktası + sembol + %). **Kur karıştırmaz** — diğer para birimleri "(+N diğer para birimi)" notuyla dışlanır. 8+ pozisyon → ilk 7 + "Diğer". `PIE_COLORS` tema paleti (indigo/yeşil/amber/turuncu/mavi/mor/pembe). <2 pozisyonda gizlenir (pasta anlamsız). `renderStocks` çağrı sırası: summary → pie → history.
+- **Veri modeli:** Yeni alan YOK — `watchlist[i].qty/cost/price/currency/symbol` kullanılır.
+- **Doğrulama:** Preview'da 4 hisseli (3 TRY + 1 USD) seed → THYAO 57.6% · GARAN 36.5% · ASELS 6.0% (matematik doğrulandı), BTC ayrı para birimi diye dışlandı, donut + legend + mobil (375px) temiz, konsol hatasız.
+- **Cache:** v7-30 → v7-31
+- 💬 **AI portföy yorumu** — Salim sordu. Cevap: betimleyici yorum YAPILABİLİR (dağılım/konsantrasyon/günlük performans gözlemi), ama **yatırım tavsiyesi (al/sat) YASAK** (lisanslı danışman değiliz). Henüz yapılmadı, Salim'e sınır açıklandı + betimleyici versiyon önerildi.
 
 ## Mevcut Durum
 
