@@ -1002,6 +1002,46 @@
     to { transform: translateY(0); opacity: 1; }
   }
 
+  /* Haftalık karne modalı */
+  .krn-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+  .krn-tab {
+    flex: 1; padding: 8px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: transparent;
+    color: var(--text-muted); font-size: 0.85em; font-weight: 600; cursor: pointer;
+    box-shadow: none;
+  }
+  .krn-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .krn-hero { text-align: center; margin: 4px 0 16px; }
+  .krn-big { font-size: 2.7em; font-weight: 800; line-height: 1; color: var(--accent); }
+  .krn-big-lbl { font-size: 0.85em; color: var(--text-muted); margin-top: 6px; line-height: 1.5; }
+  .krn-cmp { font-weight: 700; }
+  .krn-cmp.up { color: var(--success); }
+  .krn-cmp.down { color: var(--danger); }
+  .krn-cmp.flat { color: var(--text-muted); }
+  .krn-cmp-note { color: var(--text-muted); font-weight: 400; font-size: 0.92em; }
+  .krn-chart {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 5px; height: 92px; margin: 4px 0 18px; padding: 0 2px;
+  }
+  .krn-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; }
+  .krn-bar-val { font-size: 0.7em; color: var(--text-muted); height: 14px; }
+  .krn-bar { width: 70%; max-width: 26px; background: var(--accent); opacity: 0.5; border-radius: 4px 4px 0 0; transition: height 0.35s ease; min-height: 3px; }
+  .krn-bar.today { opacity: 1; background: var(--secondary); }
+  .krn-bar-day { font-size: 0.7em; color: var(--text-muted); margin-top: 5px; }
+  .krn-bar-day.today { color: var(--secondary); font-weight: 700; }
+  .krn-statline { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 14px; }
+  .krn-pill { background: var(--surface-high); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 4px 11px; font-size: 0.8em; color: var(--text); }
+  .krn-section-lbl { font-size: 0.74em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin: 8px 0 9px; }
+  .krn-cat-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .krn-cat-lbl { font-size: 0.82em; width: 96px; flex-shrink: 0; color: var(--text); }
+  .krn-cat-track { flex: 1; height: 8px; background: var(--border-soft); border-radius: 5px; overflow: hidden; }
+  .krn-cat-fill { display: block; height: 100%; background: var(--accent); border-radius: 5px; }
+  .krn-cat-num { font-size: 0.8em; color: var(--text-muted); width: 18px; text-align: right; }
+  .krn-note { background: var(--accent-soft); border: 1px solid var(--accent-glow); border-radius: var(--radius-sm); padding: 11px 13px; font-size: 0.85em; color: var(--text); margin-top: 14px; line-height: 1.55; }
+  .krn-note b { color: var(--accent-light); }
+  .krn-footer { display: flex; gap: 14px; justify-content: center; margin-top: 12px; font-size: 0.8em; color: var(--text-muted); }
+  .krn-empty { text-align: center; color: var(--text-muted); font-size: 0.88em; padding: 18px 4px; line-height: 1.5; }
+
   /* Bugünün 3'ü */
   .mit-box {
     background: var(--bg-elev);
@@ -2236,6 +2276,7 @@
     <div class="action-row">
       <button class="suggest-btn" onclick="suggestTask()">🎯 Şu an ne yapayım?</button>
       <button class="suggest-btn ghost" onclick="openTemplateModal()" title="Hazır görev paketleri">📋 Şablonlar</button>
+      <button class="suggest-btn ghost" onclick="openKarneModal()" title="Haftalık özet ve istatistik">📊 Karne</button>
     </div>
     <details class="braindump-section" id="braindumpSection">
       <summary>🧠 Zihin boşalt <span class="braindump-badge" id="braindumpBadge"></span></summary>
@@ -2513,6 +2554,15 @@
       <button class="secondary" onclick="closePortfolioImport()">İptal</button>
     </div>
     <button class="modal-close" onclick="closePortfolioImport()">Kapat</button>
+  </div>
+</div>
+
+<!-- Haftalık karne modalı -->
+<div class="modal-overlay" id="karneModal" onclick="if(event.target.id==='karneModal')closeKarneModal()">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-title">📊 Haftalık karne</div>
+    <div id="karneBody"></div>
+    <button class="modal-close" onclick="closeKarneModal()">Kapat</button>
   </div>
 </div>
 
@@ -4962,6 +5012,154 @@ function closeWeeklyInsight() {
   if (el) el.style.display = 'none';
   data.lastWeeklyView = getISOWeekStr(new Date());
   save();
+}
+
+// ============ HAFTALIK KARNE (istediğinde aç — 📊 Karne butonu) ============
+let _karneWeek = 'this'; // 'this' | 'last'
+const KARNE_CAT = { odev: '📚 Ödev', ders: '📖 Özel Ders', ev: '🏠 Ev', kisisel: '💜 Kişisel', kategorisiz: '• Diğer' };
+const KARNE_DAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+const KARNE_DAYS_FULL = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+
+// Pazartesi ISO'sundan o haftanın 7 gün dizisini üretir (öğlen demirli → UTC kayması yok)
+function daysOfWeekIso(mondayIso) {
+  const out = [];
+  const base = new Date(mondayIso + 'T12:00:00');
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+// iso tarihinden 1 gün öncesi (öğlen demirli → UTC kayması yok)
+function prevDayIso(iso) {
+  const d = new Date(iso + 'T12:00:00');
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+// weeksAgo: 0 = bu hafta, 1 = geçen hafta, 2 = önceki hafta...
+function karneStats(weeksAgo) {
+  const start = getMondayIso(weeksAgo * 7);
+  // Haftanın sonu: bu hafta → bugün; geçmiş hafta → bir sonraki pazartesiden önceki gün (o haftanın pazarı)
+  const end = weeksAgo === 0 ? today() : prevDayIso(getMondayIso((weeksAgo - 1) * 7));
+  const tasks = data.tasks || [];
+  const done = tasks.filter(t => t.doneDate && t.doneDate >= start && t.doneDate <= end);
+  const byCat = {};
+  done.forEach(t => { const c = t.category || 'kategorisiz'; byCat[c] = (byCat[c] || 0) + 1; });
+  const dayIsos = daysOfWeekIso(start);
+  const byDayArr = dayIsos.map(iso => done.filter(t => t.doneDate === iso).length);
+  const mitDone = done.filter(t => t.mitDate && t.mitDate >= start && t.mitDate <= end).length;
+  let focusMin = 0;
+  done.forEach(t => { if (t.actualMin) focusMin += t.actualMin; });
+  return { start, end, done: done.length, byCat, dayIsos, byDayArr, mitDone, focusMin };
+}
+
+function openKarneModal() {
+  _karneWeek = 'this';
+  renderKarne();
+  document.getElementById('karneModal').classList.add('active');
+}
+function closeKarneModal() {
+  document.getElementById('karneModal').classList.remove('active');
+}
+function setKarneWeek(w) { _karneWeek = w; renderKarne(); }
+
+function renderKarne() {
+  const el = document.getElementById('karneBody');
+  if (!el) return;
+  const which = _karneWeek;
+  const weeksAgo = which === 'last' ? 1 : 0;
+  const s = karneStats(weeksAgo);
+  const other = karneStats(weeksAgo + 1); // gösterilen haftadan bir önceki hafta
+
+  const tabs = `
+    <div class="krn-tabs">
+      <button class="krn-tab ${which === 'this' ? 'active' : ''}" onclick="setKarneWeek('this')">Bu hafta</button>
+      <button class="krn-tab ${which === 'last' ? 'active' : ''}" onclick="setKarneWeek('last')">Geçen hafta</button>
+    </div>`;
+
+  // Hiç biten yoksa: nazik boş durum
+  if (s.done === 0) {
+    const msg = which === 'this'
+      ? 'Hafta yeni başladı — ilk görevi bitirince burası dolmaya başlar. 💜'
+      : 'Geçen hafta kayıt yok. Sorun değil, önemli olan bugün. 💜';
+    el.innerHTML = tabs + `<div class="krn-empty">${msg}</div>`;
+    return;
+  }
+
+  // Karşılaştırma
+  let cmp = '';
+  const diff = s.done - other.done;
+  if (other.done > 0 || s.done > 0) {
+    if (diff > 0) cmp = `<span class="krn-cmp up">↑ ${diff} fazla</span>`;
+    else if (diff < 0) cmp = `<span class="krn-cmp down">↓ ${-diff} az</span>`;
+    else cmp = `<span class="krn-cmp flat">= aynı</span>`;
+  }
+  const cmpNote = which === 'this' ? 'geçen haftaya göre' : 'önceki haftaya göre';
+
+  // Gün gün bar grafik
+  const maxDay = Math.max(1, ...s.byDayArr);
+  const todayIso = today();
+  const bars = s.byDayArr.map((c, i) => {
+    const h = c ? Math.max(8, Math.round((c / maxDay) * 100)) : 3;
+    const isToday = which === 'this' && s.dayIsos[i] === todayIso;
+    return `<div class="krn-bar-col">
+      <div class="krn-bar-val">${c || ''}</div>
+      <div class="krn-bar ${isToday ? 'today' : ''}" style="height:${h}%;"></div>
+      <div class="krn-bar-day ${isToday ? 'today' : ''}">${KARNE_DAYS[i]}</div>
+    </div>`;
+  }).join('');
+
+  // En verimli gün (2+ biten)
+  const maxVal = Math.max(...s.byDayArr);
+  const maxIdx = s.byDayArr.indexOf(maxVal);
+  const topDay = maxVal >= 2 ? KARNE_DAYS_FULL[maxIdx] : '';
+
+  // Kategori dağılımı
+  const catEntries = Object.entries(s.byCat).sort((a, b) => b[1] - a[1]);
+  const maxCat = Math.max(1, ...catEntries.map(e => e[1]));
+  const catRows = catEntries.map(([k, v]) => `
+    <div class="krn-cat-row">
+      <span class="krn-cat-lbl">${KARNE_CAT[k] || k}</span>
+      <span class="krn-cat-track"><span class="krn-cat-fill" style="width:${Math.round(v / maxCat * 100)}%;"></span></span>
+      <span class="krn-cat-num">${v}</span>
+    </div>`).join('');
+
+  // Nazik kapanış cümlesi
+  let note;
+  if (topDay) note = `En verimli günün <b>${topDay}</b> oldu. Zor işleri o güne saklamak işe yarıyor olabilir.`;
+  else if (s.mitDone >= 3) note = `<b>${s.mitDone}</b> MIT bitirmişsin — net odak, güzel ritim. 💜`;
+  else if (diff > 0) note = `Önceki haftadan <b>${diff}</b> görev fazla. Yükseliştesin 🚀`;
+  else note = 'Her biten görev bir kazanç. Kendine iyi davran. 💜';
+
+  // Alt farkındalık (anlık durum)
+  const overdue = (data.tasks || []).filter(t => !t.done && t.due && t.due < todayIso).length;
+  const stuck = (data.tasks || []).filter(t => !t.done && (t.postponeCount || 0) >= 3).length;
+  let footer = '';
+  if (overdue || stuck) {
+    footer = `<div class="krn-footer">
+      ${overdue ? `<span>⚠️ ${overdue} gecikmiş bekliyor</span>` : ''}
+      ${stuck ? `<span>🔄 ${stuck} çok ertelenmiş</span>` : ''}
+    </div>`;
+  }
+
+  el.innerHTML = tabs + `
+    <div class="krn-hero">
+      <div class="krn-big">${s.done}</div>
+      <div class="krn-big-lbl">görev bitti${cmp ? `<br>${cmp} <span class="krn-cmp-note">${cmpNote}</span>` : ''}</div>
+    </div>
+    <div class="krn-chart">${bars}</div>
+    <div class="krn-statline">
+      ${s.mitDone ? `<span class="krn-pill">⭐ ${s.mitDone} MIT</span>` : ''}
+      ${s.focusMin ? `<span class="krn-pill">🎧 ~${Math.round(s.focusMin)} dk odak</span>` : ''}
+      ${catEntries[0] ? `<span class="krn-pill">🏆 ${KARNE_CAT[catEntries[0][0]] || catEntries[0][0]}</span>` : ''}
+    </div>
+    ${catRows ? `<div class="krn-section-lbl">Kategori dağılımı</div><div class="krn-cats">${catRows}</div>` : ''}
+    <div class="krn-note">${note}</div>
+    ${footer}
+  `;
 }
 
 function renderEveningSummary() {
