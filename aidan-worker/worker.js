@@ -263,7 +263,19 @@ function suggestMitFromTasks(data) {
   return out;
 }
 
-function buildMorning(data) {
+// Sabah: MIT seçili değilse akıllı 3'ü otomatik MIT yap (data mutasyonu — runCronJob kaydeder).
+// Kullanıcı zaten seçtiyse dokunma. Otomatik seçilenleri döndürür (boş = dokunulmadı).
+function autoSetMorningMit(data) {
+  const today = trToday();
+  const tasks = data.tasks || [];
+  const hasMit = tasks.some(t => t.mitDate === today && !t.done);
+  if (hasMit) return [];
+  const suggestions = suggestMitFromTasks(data);
+  suggestions.forEach(t => { t.mitDate = today; });
+  return suggestions;
+}
+
+function buildMorning(data, autoSetMit) {
   const today = trToday();
   const tasks = data.tasks || [];
   const mit = tasks.filter(t => t.mitDate === today && !t.done);
@@ -274,7 +286,21 @@ function buildMorning(data) {
 
   const lines = [`🌅 Günaydın Salim`];
   let replyMarkup = null;
-  if (mit.length) {
+  if (autoSetMit && autoSetMit.length) {
+    // Aidan bugünün 3'ünü otomatik seçti (push'ta buton yok — açınca hazır)
+    lines.push('', `🎯 Bugünün 3'ünü senin için seçtim:`);
+    autoSetMit.forEach((t, i) => {
+      const extras = [];
+      if (t.due === today) extras.push('bugün son');
+      else if (t.due === trDate(1)) extras.push('yarın son');
+      else if (t.due && t.due < today) extras.push('⚠️ gecikti');
+      if (t.priority === 'urgent') extras.push('🔴 acil');
+      if (t.estimateMin) extras.push(`${t.estimateMin}dk`);
+      const tail = extras.length ? ` (${extras.join(' · ')})` : '';
+      lines.push(`  ${i + 1}. ${t.text}${tail}`);
+    });
+    lines.push('', `💜 İstersen uygulamadan değiştir — yoksa sadece başla 🚀`);
+  } else if (mit.length) {
     lines.push('', `⭐ Bugünün 3'ü:`);
     mit.forEach(t => lines.push(`  • ${t.text}`));
   } else {
@@ -658,7 +684,7 @@ async function runCronJob(env, type) {
   const { data, token, userId } = await fetchAidan(env);
   let payload = null;
   switch (type) {
-    case 'morning':  payload = buildMorning(data); break;
+    case 'morning':  payload = buildMorning(data, autoSetMorningMit(data)); break;
     case 'noon':     payload = buildNoon(data); break;
     case 'evening':  payload = buildEvening(data); break;
     case 'deadline': payload = buildDeadlineAlerts(data); break;

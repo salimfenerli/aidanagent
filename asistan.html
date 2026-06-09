@@ -496,7 +496,12 @@
   .pf-imp-bot { display: flex; gap: 6px; }
   .pf-imp-bot label { flex: 1; display: flex; flex-direction: column; gap: 3px; font-size: 0.64em; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.03em; }
   .stocks-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .stocks-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .stocks-updated { font-size: 0.78em; color: var(--text-faint); }
+  .mkt-status { font-size: 0.72em; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; }
+  .mkt-status.open { color: var(--success); background: var(--success-soft); }
+  .mkt-status.closed { color: var(--text-muted); background: var(--border-soft); }
+  .mkt-status.partial { color: var(--secondary); background: var(--secondary-soft); }
   .stocks-refresh {
     background: transparent; border: 1px solid var(--border); color: var(--text-muted);
     padding: 6px 12px; border-radius: 8px; font-size: 0.82em; cursor: pointer; box-shadow: none;
@@ -795,6 +800,25 @@
     box-shadow: var(--shadow-sm);
   }
   .focus-task.empty { color: var(--text-muted); font-style: italic; }
+  .focus-task { cursor: pointer; transition: border-color 0.15s; }
+  .focus-task:hover { border-color: var(--accent); }
+  .focus-unbind {
+    background: var(--surface-hover); color: var(--text-muted); border: none; border-radius: 50%;
+    width: 20px; height: 20px; font-size: 0.78em; line-height: 1; padding: 0; margin-left: 7px;
+    cursor: pointer; box-shadow: none; vertical-align: middle;
+  }
+  .focuspick-list { max-height: 52vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+  .focuspick-item {
+    display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+    background: var(--surface-mid); border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+    padding: 10px 12px; cursor: pointer; color: var(--text); font-size: 0.9em; box-shadow: none;
+  }
+  .focuspick-item:hover { background: var(--surface-hover); border-color: var(--accent); }
+  .focuspick-item.current { border-color: var(--accent); background: var(--accent-soft); }
+  .fp-cat { flex-shrink: 0; }
+  .fp-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fp-est { flex-shrink: 0; font-size: 0.78em; color: var(--text-faint); }
+  .focuspick-empty { text-align: center; color: var(--text-muted); padding: 20px; font-size: 0.9em; line-height: 1.5; }
   .session-count {
     color: var(--text-muted);
     margin-top: 18px;
@@ -1041,6 +1065,27 @@
   .krn-note b { color: var(--accent-light); }
   .krn-footer { display: flex; gap: 14px; justify-content: center; margin-top: 12px; font-size: 0.8em; color: var(--text-muted); }
   .krn-empty { text-align: center; color: var(--text-muted); font-size: 0.88em; padding: 18px 4px; line-height: 1.5; }
+
+  /* Zaman körlüğü "Şu an" kartı */
+  .now-card {
+    background: var(--bg-elev); border: 1px solid var(--border-soft);
+    border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px;
+    box-shadow: var(--shadow-sm);
+  }
+  .now-clock {
+    font-size: 2.3em; font-weight: 800; letter-spacing: -0.02em;
+    color: var(--text); font-variant-numeric: tabular-nums; text-align: center; line-height: 1;
+  }
+  .now-clock .now-sec { font-size: 0.48em; font-weight: 600; color: var(--text-faint); }
+  .now-day-label { font-size: 0.74em; color: var(--text-muted); text-align: center; margin: 9px 0 5px; }
+  .now-day-bar { height: 6px; background: var(--border-soft); border-radius: 4px; overflow: hidden; }
+  .now-day-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-light)); border-radius: 4px; transition: width 1s linear; }
+  .now-next {
+    margin-top: 11px; text-align: center; font-size: 0.85em; color: var(--secondary);
+    font-weight: 600; background: var(--secondary-soft); border-radius: var(--radius-sm); padding: 7px 10px;
+  }
+  .now-next.urgent { color: var(--danger); background: var(--danger-soft); animation: now-pulse 1.4s ease-in-out infinite; }
+  @keyframes now-pulse { 0%,100%{opacity:1;} 50%{opacity:0.62;} }
 
   /* Bugünün 3'ü */
   .mit-box {
@@ -2232,6 +2277,12 @@
 
   <!-- GÖREVLER -->
   <div id="tasks" class="panel active">
+    <div class="now-card" id="nowCard">
+      <div class="now-clock" id="nowClock">--:--</div>
+      <div class="now-day-label" id="nowDayLabel">günün ritmi</div>
+      <div class="now-day-bar"><span class="now-day-fill" id="nowDayFill" style="width:0%"></span></div>
+      <div class="now-next" id="nowNext" style="display:none;"></div>
+    </div>
     <h2>📋 Bugün ne yapacağız?</h2>
     <div class="stats">
       <div class="stat"><div class="stat-num" id="statTotal">0</div><div class="stat-label">Toplam</div></div>
@@ -2340,7 +2391,7 @@
     <h2>🎧 Odak Modu</h2>
     <div class="pomodoro">
       <div class="timer-status" id="timerStatus">Hazır</div>
-      <div class="focus-task empty" id="focusTask">Bir görev seç ya da serbest çalış</div>
+      <div class="focus-task empty" id="focusTask" onclick="openFocusPick()" title="Odaklanacağın görevi seç">👆 Bir görev seç ya da serbest çalış</div>
       <div class="timer-ring" id="timerRing">
         <div class="timer-inner">
           <div class="timer" id="timer">25:00</div>
@@ -2381,7 +2432,10 @@
     </button>
     <input type="file" id="portfolioPhotoInput" accept="image/*" style="display:none;" onchange="handlePortfolioPhoto(event)">
     <div class="stocks-toolbar">
-      <span class="stocks-updated" id="stocksUpdated">—</span>
+      <div class="stocks-meta">
+        <span class="mkt-status" id="marketStatus"></span>
+        <span class="stocks-updated" id="stocksUpdated">—</span>
+      </div>
       <button class="stocks-refresh" onclick="refreshStocks()" id="stocksRefreshBtn" title="Fiyatları güncelle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg> Yenile</button>
     </div>
     <div class="stocks-list" id="stocksList"></div>
@@ -2566,6 +2620,16 @@
   </div>
 </div>
 
+<!-- Odak görev seçici modalı -->
+<div class="modal-overlay" id="focusPickModal" onclick="if(event.target.id==='focusPickModal')closeFocusPick()">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-title">🎯 Odaklanacağın görev</div>
+    <div class="modal-task" style="font-size:0.88em; font-weight:400; color:var(--text-muted); margin-bottom:10px;">Seç → pomodoro bitince geçen süre o göreve yazılır (tahmin↔gerçek).</div>
+    <div class="focuspick-list" id="focusPickList"></div>
+    <button class="modal-close" onclick="closeFocusPick()">Kapat</button>
+  </div>
+</div>
+
 <script>
 // ============ VERİ ============
 let data = JSON.parse(localStorage.getItem('aidan') || '{}');
@@ -2643,25 +2707,28 @@ function showTab(name, btn) {
   if (name !== 'stocks') stopStockAutoRefresh();
   if (name === 'stocks') {
     renderStocks();
-    // Fiyatlar 2 dk'dan eskiyse otomatik tazele
+    // Sekme açılınca taze fiyat çek (son 15 sn'de çekildiyse atla — çift istek olmasın)
     const wl = data.watchlist || [];
     const latest = Math.max(0, ...wl.map(w => w.fetchedAt || 0));
-    if (wl.length && (Date.now() - latest > 120000)) refreshStocks();
+    if (wl.length && (Date.now() - latest > 15000)) refreshStocks();
     startStockAutoRefresh(); // sekme açıkken gün içi canlı güncelle
   }
 }
 
 // Borsa sekmesi açıkken gün içi otomatik fiyat güncelleme (60 sn).
 // Sayfa gizliyse (telefon kilitli / başka uygulama) atlar — pil + kota dostu.
-let _stockAutoTimer = null;
+let _stockAutoTimer = null, _stockTick = 0;
 function startStockAutoRefresh() {
   stopStockAutoRefresh();
+  _stockTick = 0;
+  updateStocksMeta();                                  // anında rozet/etiket
   _stockAutoTimer = setInterval(() => {
     if (document.hidden) return;                       // sayfa görünmüyorsa boşa çekme
     if (!document.getElementById('stocks').classList.contains('active')) { stopStockAutoRefresh(); return; }
-    if (!(data.watchlist || []).length) return;        // hisse yoksa gereksiz
-    refreshStocks();                                   // sessiz tazele (başarıda toast yok)
-  }, 60000);
+    updateStocksMeta();                                // her 20sn etiket+rozet canlı (ağ yok)
+    _stockTick++;
+    if (_stockTick % 3 === 0 && (data.watchlist || []).length) refreshStocks(); // 60sn'de bir ağ
+  }, 20000);
 }
 function stopStockAutoRefresh() {
   if (_stockAutoTimer) { clearInterval(_stockAutoTimer); _stockAutoTimer = null; }
@@ -3606,12 +3673,44 @@ function marketBadge(market) {
   return map[market] ? `<span class="stock-market-badge">${map[market]}</span>` : '';
 }
 
+// Piyasa açık mı? (cihaz saati TR varsayımı — uygulama geneliyle tutarlı)
+// BIST 10-18 hafta içi · ABD 16:30-23:00 hafta içi · Döviz hafta içi · Kripto 7/24
+function isMarketOpen(market, now) {
+  now = now || new Date();
+  const day = now.getDay();            // 0=Pazar .. 6=Cumartesi
+  const wd = day >= 1 && day <= 5;     // hafta içi
+  const hm = now.getHours() * 60 + now.getMinutes();
+  if (market === 'crypto') return true;
+  if (market === 'fx') return wd;
+  if (market === 'abd') return wd && hm >= 16 * 60 + 30 && hm < 23 * 60;
+  return wd && hm >= 10 * 60 && hm < 18 * 60; // bist (varsayılan)
+}
+
+// Watchlist'teki piyasalara göre açık/kapalı/kısmen rozeti
+function marketStatusBadge() {
+  const wl = data.watchlist || [];
+  if (!wl.length) return '';
+  const markets = [...new Set(wl.map(w => w.market || 'bist'))];
+  const openCount = markets.filter(m => isMarketOpen(m)).length;
+  if (openCount === markets.length) return `<span class="mkt-status open">🟢 Piyasa açık</span>`;
+  if (openCount === 0) return `<span class="mkt-status closed">🔴 Piyasa kapalı</span>`;
+  return `<span class="mkt-status partial">🟡 Kısmen açık</span>`;
+}
+
+// Etiket + rozet metnini ağ çağrısı yapmadan tazele (canlı his)
+function updateStocksMeta() {
+  const upd = document.getElementById('stocksUpdated');
+  if (upd) upd.textContent = stocksUpdatedLabel();
+  const ms = document.getElementById('marketStatus');
+  if (ms) ms.innerHTML = marketStatusBadge();
+}
+
 function renderStocks() {
   const list = document.getElementById('stocksList');
   const upd = document.getElementById('stocksUpdated');
   if (!list) return;
   const wl = data.watchlist || [];
-  if (upd) upd.textContent = stocksUpdatedLabel();
+  updateStocksMeta();
   renderPortfolioSummary();
   renderPortfolioHistory();
   if (wl.length === 0) {
@@ -4335,6 +4434,55 @@ function startTaskNow(id, quickTry) {
 let currentFocusTaskId = null;
 let focusStartTime = null;
 
+// ============ ODAK GÖREV SEÇİCİ (Odak sekmesinden görev bağla) ============
+function openFocusPick() {
+  renderFocusPick();
+  document.getElementById('focusPickModal').classList.add('active');
+}
+function closeFocusPick() {
+  document.getElementById('focusPickModal').classList.remove('active');
+}
+function renderFocusPick() {
+  const el = document.getElementById('focusPickList');
+  if (!el) return;
+  const td = today();
+  const active = (data.tasks || []).filter(t => !t.done);
+  // MIT / acil / gecikmiş / hatırlatmalı önce
+  const score = t => (t.mitDate === td ? 1000 : 0) + (t.priority === 'urgent' ? 100 : 0) +
+    ((t.due && t.due <= td) ? 50 : 0) + (t.reminderTime ? 10 : 0);
+  active.sort((a, b) => score(b) - score(a));
+  if (!active.length) {
+    el.innerHTML = '<div class="focuspick-empty">Bitmemiş görev yok 🎉<br>Serbest çalışmak için kapat, ▶️ Başla\'ya bas.</div>';
+    return;
+  }
+  const catE = { odev: '📚', ders: '📖', ev: '🏠', kisisel: '💜' };
+  el.innerHTML = active.slice(0, 30).map(t => {
+    const mit = t.mitDate === td ? '⭐ ' : '';
+    const meta = t.actualMin ? `<span class="fp-est">bugüne dek ${t.actualMin}dk</span>`
+      : (t.estimateMin ? `<span class="fp-est">~${t.estimateMin}dk</span>` : '');
+    return `<button class="focuspick-item ${currentFocusTaskId === t.id ? 'current' : ''}" onclick="bindFocusTask(${t.id})">
+      <span class="fp-cat">${catE[t.category] || '•'}</span>
+      <span class="fp-text">${mit}${escapeHtml(t.text)}</span>
+      ${meta}
+    </button>`;
+  }).join('');
+}
+function bindFocusTask(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  currentFocusTaskId = id;
+  // focusStartTime'a dokunma — ▶️ Başla'ya basınca startTimer başlatır
+  const focusEl = document.getElementById('focusTask');
+  if (focusEl) {
+    focusEl.innerHTML = '🎯 ' + escapeHtml(t.text) +
+      ' <button class="focus-unbind" onclick="event.stopPropagation(); dropFocusTask()" title="Bağı kaldır">✕</button>';
+    focusEl.classList.remove('empty');
+  }
+  updateActiveTaskBanner();
+  closeFocusPick();
+  showToast('🎯 Odak görevin hazır — ▶️ Başla', 'success', 2500);
+}
+
 // ============ FİLTRE ============
 let _taskFilter = localStorage.getItem('aidan_filter') || 'all';
 
@@ -4716,7 +4864,14 @@ function renderTaskItem(t) {
           ${t.category ? `<span class="badge">${({odev:'📚 Ödev',ders:'📖 Özel Ders',ev:'🏠 Ev',kisisel:'💜 Kişisel'})[t.category] || t.category}</span>` : ''}
           ${due ? `<span class="badge ${due.cls}">${due.text}</span>` : ''}
           ${t.estimateMin ? `<span class="badge">⏱️ ${t.estimateMin}dk</span>` : ''}
-          ${t.actualMin ? `<span class="badge">✓ ${t.actualMin}dk sürdü</span>` : ''}
+          ${t.actualMin ? (() => {
+            if (t.estimateMin) {
+              const d = t.actualMin - t.estimateMin;
+              const dt = d === 0 ? 'tam isabet' : (d > 0 ? `+${d}dk` : `${d}dk`);
+              return `<span class="badge" title="Gerçek odak süresi vs tahminin">✓ ${t.actualMin}dk · tahmin ${t.estimateMin} (${dt})</span>`;
+            }
+            return `<span class="badge">✓ ${t.actualMin}dk sürdü</span>`;
+          })() : ''}
           ${t.repeat ? `<span class="badge">${({daily:'🔁 Günlük',weekly:'📅 Haftalık',weekdays:'📚 Hafta içi',weekends:'🛋️ Hafta sonu'})[t.repeat] || t.repeat}</span>` : ''}
           ${t.reminderTime ? `<span class="badge" style="background:rgba(99,102,241,0.15);color:var(--accent);border-color:rgba(99,102,241,0.3);">🔔 ${t.reminderTime}</span>` : ''}
           ${showAge ? `<span class="badge" style="background:rgba(210,153,34,0.12);color:var(--warning);border-color:rgba(210,153,34,0.3);" title="Bu görev ${age} gündür duruyor — bitirebilir misin yoksa silmeli mi?">🕰️ ${age}g</span>` : ''}
@@ -5484,27 +5639,31 @@ function pauseTimer() {
   updateTimerDisplay();
 }
 
-function resetTimer() {
+function resetTimer(keepFocus) {
   clearInterval(timerInt);
   running = false;
   timerEndTime = null;
   isBreak = false;
   timerSec = workMin * 60;
   totalSec = workMin * 60;
-  focusStartTime = null;
-  currentFocusTaskId = null;
-  const focusEl = document.getElementById('focusTask');
-  if (focusEl) {
-    focusEl.textContent = 'Bir görev seç ya da serbest çalış';
-    focusEl.classList.add('empty');
+  if (!keepFocus) {
+    focusStartTime = null;
+    currentFocusTaskId = null;
+    const focusEl = document.getElementById('focusTask');
+    if (focusEl) {
+      focusEl.innerHTML = '👆 Bir görev seç ya da serbest çalış';
+      focusEl.classList.add('empty');
+    }
+    updateActiveTaskBanner();
   }
   updateTimerDisplay();
   document.title = 'Aidan - ADHD Asistanım';
 }
 
+// Preset değişince bağlı görev kopmasın (sadece 🔄 Sıfırla tam temizler)
 function setTimer(w, b) {
   workMin = w; breakMin = b;
-  resetTimer();
+  resetTimer(true);
 }
 
 function playBeep() {
@@ -5667,6 +5826,7 @@ function updateAppSubtitle() {
   sub.textContent = parts.join(' · ');
 }
 
+let _nextReminder = null; // "Şu an" kartı + topbar paylaşır (tickNow saniyelik okur)
 function updateTopbar() {
   updateAppSubtitle();
   const now = new Date();
@@ -5685,6 +5845,7 @@ function updateTopbar() {
     const diff = rMin - nowMin;
     if (diff < nextDiff) { nextDiff = diff; nextR = t; }
   });
+  _nextReminder = nextR; // "Şu an" kartı saniyelik geri sayım için kullanır
   if (nextR) {
     const txt = nextDiff < 60 ? nextDiff + ' dk' : Math.floor(nextDiff/60) + 'sa ' + (nextDiff%60) + 'dk';
     document.getElementById('tbNext').textContent = (nextR.text || '').slice(0, 18) + ' · ' + txt;
@@ -5707,6 +5868,59 @@ function updateTopbar() {
 }
 setInterval(updateTopbar, 10000);
 updateTopbar();
+
+// ============ ZAMAN KÖRLÜĞÜ "ŞU AN" KARTI (saniyelik canlı) ============
+function tickNow() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  const tb = document.getElementById('tbClock');
+  if (tb) tb.textContent = hh + ':' + mm;
+  const nc = document.getElementById('nowClock');
+  if (nc) nc.innerHTML = hh + ':' + mm + '<span class="now-sec">:' + ss + '</span>';
+
+  // Günün ritmi: 07:00–23:00 aktif gün penceresi, ne kadarı geçti / kaldı
+  const startMin = 7 * 60, endMin = 23 * 60;
+  let pct = (nowMin - startMin) / (endMin - startMin);
+  pct = Math.max(0, Math.min(1, pct));
+  const fill = document.getElementById('nowDayFill');
+  if (fill) fill.style.width = Math.round(pct * 100) + '%';
+  const dl = document.getElementById('nowDayLabel');
+  if (dl) {
+    if (nowMin < startMin) dl.textContent = 'güne hazırlan ☀️';
+    else if (nowMin >= endMin) dl.textContent = 'gün bitti, dinlenmeyi hak ettin 💜';
+    else {
+      const left = endMin - nowMin;
+      const ltxt = left < 60 ? left + ' dk' : Math.floor(left / 60) + 'sa ' + (left % 60) + 'dk';
+      dl.textContent = '🌙 aktif güne ~' + ltxt + ' kaldı';
+    }
+  }
+
+  // Yaklaşan hatırlatma (2 saat içinde) — saniyelik geri sayım, 15 dk altı acil
+  const nn = document.getElementById('nowNext');
+  if (nn) {
+    let show = false;
+    if (_nextReminder && _nextReminder.reminderTime) {
+      const [h, m] = _nextReminder.reminderTime.split(':').map(Number);
+      if (!isNaN(h) && !isNaN(m)) {
+        const diff = (h * 60 + m) - nowMin;
+        if (diff >= 0 && diff <= 120) {
+          const txt = diff < 60 ? diff + ' dk' : Math.floor(diff / 60) + 'sa ' + (diff % 60) + 'dk';
+          nn.innerHTML = '⏰ ' + txt + ' sonra: ' + escapeHtml((_nextReminder.text || '').slice(0, 24)) +
+            ' <span style="opacity:.7">(' + _nextReminder.reminderTime + ')</span>';
+          nn.classList.toggle('urgent', diff <= 15);
+          show = true;
+        }
+      }
+    }
+    nn.style.display = show ? '' : 'none';
+  }
+}
+setInterval(tickNow, 1000);
+tickNow();
 
 // ============ SYNC STATUS DOT ============
 function updateSyncDot() {
@@ -6619,7 +6833,7 @@ function dropFocusTask() {
   focusStartTime = null;
   const focusEl = document.getElementById('focusTask');
   if (focusEl) {
-    focusEl.textContent = 'Bir görev seç ya da serbest çalış';
+    focusEl.innerHTML = '👆 Bir görev seç ya da serbest çalış';
     focusEl.classList.add('empty');
   }
   updateActiveTaskBanner();
