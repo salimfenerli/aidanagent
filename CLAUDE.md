@@ -40,7 +40,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - **Bildirim:** Telegram bot (eski ntfy.sh deprecate edildi, kota sorunu)
 - **PWA:** Manifest + Service Worker (network-first stratejisi) + **icon.png** (yeni bulut mascot)
 - **Tasarım dili:** **Stitch-inspired dark mode** (May 28-29, 2026) — indigo `#6463ff`, koyu `#0a0b0f`, soft amber `#ffc640` yıldız. Inter font.
-- **Cache versiyonu:** `aidan-v7-32` (sw.js içinde, her büyük değişikte artırılır)
+- **Cache versiyonu:** `aidan-v7-33` (sw.js içinde, her büyük değişikte artırılır)
 - **AI:** Cloudflare Workers AI — **Llama 3.3 70B** (intent + tool use) + **Whisper** (sesli → metin). Bedava.
 - **MCP Server (PC):** Python, Claude Desktop bağlanır, doğrudan Supabase'e operasyon yapar
 - **Cloudflare Worker:** Cron brifing + Telegram webhook handler (artık static serve etmiyor, sadece backend)
@@ -166,6 +166,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 
 ### Ayarlar
 - Bildirimler artık Telegram'dan (UI sadece bilgi notu)
+- **⏰ Sabit hatırlatıcılar** (Haz 10) — ilaç/su/ders gibi her gün aynı saatte push. İsim + saat + her gün/hafta içi, aç-kapa toggle + sil. `data.reminders[]`, Worker 15 dk cron'u kontrol eder.
 - Supabase auth (email + şifre)
 - Yedekleme (JSON export/import) + sıfırla
 
@@ -240,9 +241,10 @@ URL: `aidan-pusher.fenerlisalim04.workers.dev`
 | `0 18 * * SUN` | Pazar 21:00 | 💜 Haftalık review |
 | `*/30 7-15 * * 1-5` | Hafta içi 10-18 | 📈 Borsa alarm kontrol |
 | `30 15 * * 1-5` | Hafta içi 18:30 | 💼 Akşam portföy özeti |
+| `*/15 * * * *` | Sürekli (15 dk) | ⏰ Sabit hatırlatıcı kontrolü (`data.reminders`) |
 
 ### Endpoint'ler
-- `GET /?type=morning|noon|evening|deadline|weekly|stocks|portfolio&secret=<WEBHOOK_SECRET>` — manuel cron test. **Secret zorunlu** (spam koruması). Eksik/yanlış secret → 404.
+- `GET /?type=morning|noon|evening|deadline|weekly|stocks|portfolio|reminders&secret=<WEBHOOK_SECRET>` — manuel cron test. **Secret zorunlu** (spam koruması). Eksik/yanlış secret → 404.
 - `POST /webhook` — Telegram'dan gelen update (X-Telegram-Bot-Api-Secret-Token header ile auth). **Telegram emekli** (`TELEGRAM_RETIRED=true`): sahibe bilgi mesajı, AI işleme yok.
 - `POST /ai` — PWA quick capture AI (Supabase token auth, CORS). Telegram'la aynı pipeline.
 - `POST /journal` — sesli akşam günlüğü, AI sıcak yansıma (tool yok).
@@ -589,6 +591,17 @@ Salim onayladı ("ai yorumlasa iyi olur evet"). Tasarım ilkesi: **sayıları PW
 - **Doğrulama:** `buildPortfolioFacts` preview'da 4 hisseli seed ile test (yüzdeler donut'la tutarlı). **CANLI uçtan uca test** (Supabase login tekniği): 3 hisseli facts → AI dağılım+konsantrasyon+günlük hareketi betimledi, "yumurtalar tek sepette (THYAO %57,6)" farkındalığı verdi, **al/sat tavsiyesi YOK** — sınırlar tutuyor. ⚠️ Python test scriptinde `/tmp/...` yolu Windows'ta `open()` ile çalışmaz (bash mapler, Python maplemez) — proje köküne yazıp silmek gerek.
 - **Cache:** v7-31 → v7-32
 
+### Haziran 10, 2026 (⏰ Sabit hatırlatıcılar — ilaç/su/ders push)
+Salim seçti (kalan öneri listesinden 💊 ilaç/sabit hatırlatıcı). Görevlerden tamamen ayrı, sade bir liste — görev listesi şişmez, her gün tekrar eden "İlacını al" görev kartı olarak durmaz.
+- **Veri modeli:** `data.reminders[] = [{id, label, time:'HH:MM', days:'daily'|'weekdays', enabled, lastFired:'YYYY-MM-DD'}]` — yeni alan.
+- **PWA:** Ayarlar'da "⏰ Sabit hatırlatıcılar" bölümü (📱 Bildirimler'in altında): liste (toggle aç/kapa + ✕ sil, saate göre sıralı, kapalılar soluk) + ekleme formu (isim + `<input type=time>` + her gün/hafta içi select). `renderFixedReminders/addFixedReminder/toggleFixedReminder/deleteFixedReminder`, showTab settings hook'u. `.fixedrem-*` CSS.
+- **Worker:** `runFixedReminders(env)` — **yeni 8. cron `*/15 * * * *`** her 15 dk: saati gelen (diff 0-30 dk penceresi) + bugün atılmamış (`lastFired`) + gün filtresi uyan hatırlatıcıya `sendPushToAll` + `logPush('reminder')` (📬 geçmişe düşer), `lastFired=bugün` yazıp kaydeder. Manuel test: `?type=reminders&secret=...`.
+  - **Gece yarısı taşması çözüldü:** son cron turu 23:45 → 23:46-23:59 hatırlatıcıları normalde hiç atılmazdı. 00:00/00:15 turunda `nowMin<=30 && diff<0` ise `diff+=1440`, `fireDay=dün` (lastFired düne yazılır, hafta içi kontrolü de düne göre) — pencere gün dönümünü aşar.
+  - deploy.py `CRON_LIST` + wrangler.toml'a cron eklendi. scheduled() routing'i borsa kalıbıyla aynı (`if event.cron === ... return`).
+- **Doğrulama:** due-mantığı 12 senaryoyla tarayıcı motorunda test (tam saat / +15dk / bugün atılmış / +31dk eski / erken / pazar-hafta içi / kapalı / gece yarısı yakalama / dün atılmışsa atla / 00:10'da sabah 9 patlamaz / cmt gecesi hafta içi filtresi). PWA formu preview'da test: ekle/toggle/sil/boş durum + mobil 375px ✅, konsol temiz.
+- ⚠️ **15 dk hassasiyet** — 09:00 hatırlatıcısı 09:00-09:15 arasında gelir (cron çeyrek saatlerde). UI'da "~15 dk hassasiyet" notu var.
+- **Cache:** v7-32 → v7-33
+
 ## Mevcut Durum
 
 ### ✅ Çalışıyor
@@ -598,7 +611,7 @@ Salim onayladı ("ai yorumlasa iyi olur evet"). Tasarım ilkesi: **sayıları PW
 - MCP server Claude Desktop'a bağlı
 - **GitHub Actions otomatik deploy** — her `git push` Cloudflare Pages'e gider (`.github/workflows/deploy.yml`)
 - Manuel deploy alternatifi: `py aidan-pages-deploy.py` → 5 sn canlı
-- Cloudflare Worker 7 cron schedule (brifing/deadline/öğle/akşam/haftalık/borsa-alarm/portföy-özeti)
+- Cloudflare Worker 8 cron schedule (brifing/deadline/öğle/akşam/haftalık/borsa-alarm/portföy-özeti/sabit-hatırlatıcı)
 - **Telegram EMEKLİ** (`TELEGRAM_RETIRED=true`) — AI + sesli + bildirim hepsi PWA'da. Bot kodu duruyor (rollback için), webhook sahibe bilgi mesajı döner.
 - **📈 Borsa modülü** — 4 piyasa watchlist + alarm + portföy + görselden AI ekleme + akşam özeti + canlı güncelleme + değer geçmişi
 - Llama 3.3 70B intent + tool use
@@ -763,6 +776,7 @@ py aidan-pages-deploy.py
   watchlist: [{symbol, ySymbol, market, name, price, prevClose, changePct, currency,
                alarmAbove, alarmBelow, lastAlertedAbove, lastAlertedBelow, qty, cost, fetchedAt, error}],  // (Haz 6-8) borsa
   portfolioHistory: [{date:'YYYY-MM-DD', byCur:{TRY:{value,cost}}}],  // (Haz 8) portföy değer geçmişi, son 180 gün
+  reminders: [{id, label, time:'HH:MM', days:'daily'|'weekdays', enabled, lastFired:'YYYY-MM-DD'}],  // (Haz 10) sabit hatırlatıcılar — Worker 15dk cron push'lar
   settings: {
     ntfyTopic,                // DEPRECATED
     hyperfocusEnabled, hyperfocusMin,
@@ -820,5 +834,5 @@ curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo
 7. ✅ **Token durumu temiz (Haz 2)** — May 29 leaked + geçici deploy token'ları silindi, GitHub Actions tek temiz token'la (GitHub Secrets `CF_API_TOKEN`) çalışıyor. Yeni token ifşa olursa yine sildirip doğrula (`/user/tokens/verify`).
 8. ✅ **Worker deploy GitHub Actions'ta** — `.github/workflows/deploy.yml` Pages + Worker'ı birden deploy eder (`aidan-worker/worker.js` veya `aidan-worker/deploy.py` değişince tetiklenir). Token GitHub Secrets'ta, `git push` yeter. Manuel `py aidan-worker/deploy.py` sadece acil/yedek (Windows'ta `PYTHONIOENCODING=utf-8` şart). **CLAUDE.md eski versiyonunda "Worker DEĞİL" yazıyordu, AI taşıma sonrası güncellendi.**
 9. ⚠️ **Background push (Haz 3 itibarıyla çalışıyor):** Apple lock ekranına ulaşması için 3 şart birden gerekli: (a) Worker `Urgency: high` (b) SW push handler her halükarda `showNotification` çağırmalı (iOS aksi halde izni iptal eder) (c) subscription fresh olmalı (eski SW'lerde oluşturulmuş subscription'lar bozuk). Sorun çıkarsa: Salim Ayarlar'dan "🔄 Push'u sıfırla" → manuel cron tetikle (`?type=noon&secret=<WEBHOOK_SECRET>`). subscription Supabase'de `data.settings.pushSubs[]`'ta.
-10. ⚠️ **Tasarım dili Stitch-inspired** — renkler `#6463ff` indigo, `#0a0b0f` koyu, `#ffc640` amber. Eski mor `#7c6ff7` ve emoji 🧠 logo YOK. Brand-logo-icon = mor bulut karakter PNG. Cache artık **v7-27**.
+10. ⚠️ **Tasarım dili Stitch-inspired** — renkler `#6463ff` indigo, `#0a0b0f` koyu, `#ffc640` amber. Eski mor `#7c6ff7` ve emoji 🧠 logo YOK. Brand-logo-icon = mor bulut karakter PNG. Cache artık **v7-33**.
 11. ⚠️ **Logo değiştirmek istenirse** `logo-concepts/logo-{1,2,3}-{flat,refined,3d}.png`'den biri `icon.png` üzerine kopyalanır, `make_icons.py` ile maskable yenilenir, push edilir.
