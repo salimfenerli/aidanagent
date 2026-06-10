@@ -2402,6 +2402,49 @@ function formatPrice(n) {
   return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// 💊 Sabit hatırlatıcılar (ilaç, su, ders...) — 15 dakikalık cron her çağrıda kontrol eder.
+// data.reminders[] = [{id, label, time:'HH:MM', days:'daily'|'weekdays', enabled, lastFired:'YYYY-MM-DD'}]
+// Saati gelen (ve bugün henüz atılmamış) hatırlatıcıya push atar; 30 dk'dan eski olanlar atlanır
+// (gün ortasında geçmiş saate kurulan hatırlatıcı hemen patlamasın diye).
+async function runFixedReminders(env) {
+  const { data, token, userId } = await fetchAidan(env);
+  const rems = (data.reminders || []).filter(r => r && r.enabled !== false && r.time);
+  if (!rems.length) return { type: 'reminders', checked: 0, sent: 0 };
+
+  const tr = new Date(Date.now() + TR_OFFSET_MS);
+  const todayStr = trToday();
+  const nowMin = tr.getUTCHours() * 60 + tr.getUTCMinutes();
+  const isWeekday = tr.getUTCDay() >= 1 && tr.getUTCDay() <= 5;
+
+  const due = [];
+  for (const r of rems) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(r.time);
+    if (!m) continue;
+    let diff = nowMin - ((+m[1]) * 60 + (+m[2]));
+    // Gece yarısı taşması: 23:46-23:59 hatırlatıcıları son cron 23:45'i kaçırır —
+    // 00:00/00:15 turunda "dünün hatırlatıcısı" olarak yakala (lastFired da düne yazılır).
+    let fireDay = todayStr, fireWeekday = isWeekday;
+    if (diff < 0 && nowMin <= 30) {
+      diff += 1440;
+      fireDay = trDate(-1);
+      const yd = new Date(Date.now() + TR_OFFSET_MS - 86400000).getUTCDay();
+      fireWeekday = yd >= 1 && yd <= 5;
+    }
+    if (r.lastFired === fireDay) continue;
+    if (r.days === 'weekdays' && !fireWeekday) continue;
+    if (diff >= 0 && diff <= 30) { due.push(r); r.lastFired = fireDay; }
+  }
+  if (!due.length) return { type: 'reminders', checked: rems.length, sent: 0 };
+
+  for (const r of due) {
+    const payload = { title: `⏰ ${r.label || 'Hatırlatma'}`, message: `Saat ${r.time} — günün sabiti, hadi 💜` };
+    await sendPushToAll(env, data, payload, { token, userId });
+    logPush(data, 'reminder', payload, ((data.settings && data.settings.pushSubs) || []).length);
+  }
+  try { await saveAidan(env, data, { token, userId }); } catch (e) { console.error('reminder save fail', e.message); }
+  return { type: 'reminders', checked: rems.length, sent: due.length };
+}
+
 // ============================================================
 // Static file serving (PWA host)
 // ============================================================
@@ -2514,6 +2557,8 @@ export default {
             ? await runStockCheck(env)
             : cronType === 'portfolio'
             ? await runPortfolioSummary(env)
+            : cronType === 'reminders'
+            ? await runFixedReminders(env)
             : await runCronJob(env, cronType);
           return new Response(JSON.stringify(result, null, 2), {
             headers: { 'Content-Type': 'application/json' },
@@ -2541,6 +2586,11 @@ export default {
     // Akşam portföy özeti — BIST kapanışı sonrası (18:30 TR hafta içi)
     if (event.cron === '30 15 * * 1-5') {
       ctx.waitUntil(runPortfolioSummary(env));
+      return;
+    }
+    // 💊 Sabit hatırlatıcılar — 15 dk'da bir saat kontrolü
+    if (event.cron === '*/15 * * * *') {
+      ctx.waitUntil(runFixedReminders(env));
       return;
     }
     let type;

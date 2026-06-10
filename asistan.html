@@ -384,6 +384,26 @@
   .pushlog-item-body { color: var(--text-muted); margin-top: 2px; }
   .pushlog-empty { font-size: 0.82em; color: var(--text-faint); text-align: center; padding: 10px 0; }
 
+  /* Sabit hatırlatıcılar (ilaç/su/ders) */
+  .fixedrem-item {
+    display: flex; align-items: center; gap: 9px; padding: 8px 10px;
+    background: var(--surface); border-radius: 7px; margin-bottom: 6px; font-size: 0.88em;
+  }
+  .fixedrem-item.off { opacity: 0.45; }
+  .fixedrem-item input[type="checkbox"] { accent-color: var(--accent); flex-shrink: 0; }
+  .fixedrem-time { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
+  .fixedrem-label { flex: 1; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fixedrem-days { font-size: 0.78em; color: var(--text-faint); white-space: nowrap; }
+  .fixedrem-del {
+    background: transparent; border: none; box-shadow: none; color: var(--text-faint);
+    cursor: pointer; font-size: 1em; padding: 2px 6px; flex-shrink: 0;
+  }
+  .fixedrem-del:hover { color: var(--danger); background: transparent; }
+  .fixedrem-add { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+  .fixedrem-add input[type="text"] { flex: 1; min-width: 140px; }
+  .fixedrem-add input[type="time"], .fixedrem-add select { width: auto; }
+  .fixedrem-empty { font-size: 0.84em; color: var(--text-faint); padding: 6px 0; }
+
   /* Akşam günlüğü */
   .evening-journal-btn {
     margin-top: 12px;
@@ -2479,6 +2499,21 @@
     </div>
 
     <div class="settings-row">
+      <label>⏰ Sabit hatırlatıcılar</label>
+      <div id="fixedRemindersList"></div>
+      <div class="fixedrem-add">
+        <input type="text" id="fixedRemLabel" placeholder="örn. İlacını al" maxlength="60">
+        <input type="time" id="fixedRemTime">
+        <select id="fixedRemDays">
+          <option value="daily">Her gün</option>
+          <option value="weekdays">Hafta içi</option>
+        </select>
+        <button class="small" onclick="addFixedReminder()">＋ Ekle</button>
+      </div>
+      <div class="settings-help">Her gün aynı saatte push bildirimi — telefon kilitliyken bile. İlaç, su, ders gibi sabitler için. (~15 dk hassasiyet)</div>
+    </div>
+
+    <div class="settings-row">
       <label>🔕 Bildirim sustur (odak modu)</label>
       <div id="muteState"></div>
     </div>
@@ -2665,6 +2700,7 @@ data.tasks = data.tasks || [];
 data.dumps = data.dumps || [];
 data.pushLog = data.pushLog || [];
 data.journal = data.journal || [];
+data.reminders = data.reminders || [];  // sabit hatırlatıcılar (ilaç/su/ders) — Worker 15dk cron push'lar
 data.watchlist = data.watchlist || [];
 data.portfolioHistory = data.portfolioHistory || [];  // [{date:'YYYY-MM-DD', byCur:{TRY:{value,cost}}}]
 data.routines = data.routines || [];
@@ -2730,6 +2766,7 @@ function showTab(name, btn) {
     updateEstimateStats();
     renderNotifSettings();
     renderMuteState();
+    renderFixedReminders();
   }
   // Borsa sekmesinden çıkınca canlı güncellemeyi durdur (batarya/kota)
   if (name !== 'stocks') stopStockAutoRefresh();
@@ -6368,6 +6405,58 @@ function renderPushLog() {
       ${e.body ? `<div class="pushlog-item-body">${escapeHtml(e.body)}</div>` : ''}
     </div>
   `).join('');
+}
+
+// ============ SABİT HATIRLATICILAR (ilaç/su/ders) ============
+// Liste data.reminders[]'da durur, Supabase'e sync olur; saati gelince Worker (15dk cron) push atar.
+function renderFixedReminders() {
+  const el = document.getElementById('fixedRemindersList');
+  if (!el) return;
+  const rems = data.reminders || [];
+  if (!rems.length) {
+    el.innerHTML = '<div class="fixedrem-empty">Henüz sabit hatırlatıcın yok — aşağıdan ekle.</div>';
+    return;
+  }
+  const sorted = [...rems].sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  el.innerHTML = sorted.map(r => `
+    <div class="fixedrem-item ${r.enabled === false ? 'off' : ''}">
+      <input type="checkbox" ${r.enabled !== false ? 'checked' : ''} onchange="toggleFixedReminder(${r.id})" aria-label="Aç/kapa">
+      <span class="fixedrem-time">${escapeHtml(r.time || '–')}</span>
+      <span class="fixedrem-label">${escapeHtml(r.label || '')}</span>
+      <span class="fixedrem-days">${r.days === 'weekdays' ? 'Hafta içi' : 'Her gün'}</span>
+      <button class="fixedrem-del" onclick="deleteFixedReminder(${r.id})" aria-label="Sil">✕</button>
+    </div>
+  `).join('');
+}
+
+function addFixedReminder() {
+  const label = document.getElementById('fixedRemLabel').value.trim();
+  const time = document.getElementById('fixedRemTime').value;
+  const days = document.getElementById('fixedRemDays').value;
+  if (!label) { showToast('Bir isim yaz — örn. "İlacını al" 💊', 'warning', 3000); return; }
+  if (!time) { showToast('Saat seç ⏰', 'warning', 3000); return; }
+  data.reminders = data.reminders || [];
+  data.reminders.push({ id: Date.now(), label, time, days, enabled: true, lastFired: null });
+  document.getElementById('fixedRemLabel').value = '';
+  document.getElementById('fixedRemTime').value = '';
+  save();
+  renderFixedReminders();
+  showToast(`⏰ ${time} — "${label}" kuruldu`, 'success', 3000);
+}
+
+function toggleFixedReminder(id) {
+  const r = (data.reminders || []).find(x => x.id === id);
+  if (!r) return;
+  r.enabled = (r.enabled === false);
+  save();
+  renderFixedReminders();
+}
+
+function deleteFixedReminder(id) {
+  data.reminders = (data.reminders || []).filter(x => x.id !== id);
+  save();
+  renderFixedReminders();
+  showToast('Hatırlatıcı silindi', 'info', 2500);
 }
 
 function testNotif() {
