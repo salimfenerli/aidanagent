@@ -40,7 +40,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - **Bildirim:** Telegram bot (eski ntfy.sh deprecate edildi, kota sorunu)
 - **PWA:** Manifest + Service Worker (network-first stratejisi) + **icon.png** (yeni bulut mascot)
 - **Tasarım dili:** **Stitch-inspired dark mode** (May 28-29, 2026) — indigo `#6463ff`, koyu `#0a0b0f`, soft amber `#ffc640` yıldız. Inter font.
-- **Cache versiyonu:** `aidan-v7-31` (sw.js içinde, her büyük değişikte artırılır)
+- **Cache versiyonu:** `aidan-v7-32` (sw.js içinde, her büyük değişikte artırılır)
 - **AI:** Cloudflare Workers AI — **Llama 3.3 70B** (intent + tool use) + **Whisper** (sesli → metin). Bedava.
 - **MCP Server (PC):** Python, Claude Desktop bağlanır, doğrudan Supabase'e operasyon yapar
 - **Cloudflare Worker:** Cron brifing + Telegram webhook handler (artık static serve etmiyor, sadece backend)
@@ -52,7 +52,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - `asistan.html` — ana uygulama. Pages'te `/index.html` olarak servis ediliyor (auto-strip redirect loop'u önlemek için)
 - `404.html` — Aidan stilinde dark mode error sayfası, `_redirects` 404 hedefi
 - `manifest.webmanifest` — PWA manifest (start_url + scope = `/`)
-- `sw.js` — service worker (network-first, otomatik update mesajı, cache `aidan-v7-31`, push + notificationclick handler)
+- `sw.js` — service worker (network-first, otomatik update mesajı, cache `aidan-v7-32`, push + notificationclick handler)
 - `icon.png` — **ana PWA ikonu** (1024x1024, mor bulut mascot, Recraft AI üretimi May 29)
 - `icon-maskable.png` — maskable PWA ikonu (%80 safe area, dark navy `#0a0b0f` padding)
 - `icon.svg`, `icon-maskable.svg` — legacy fallback SVG ikonları (manifest'te de var)
@@ -247,6 +247,7 @@ URL: `aidan-pusher.fenerlisalim04.workers.dev`
 - `POST /ai` — PWA quick capture AI (Supabase token auth, CORS). Telegram'la aynı pipeline.
 - `POST /journal` — sesli akşam günlüğü, AI sıcak yansıma (tool yok).
 - `POST /split` — AI görev bölücü: `{text}` → Llama 3.3 70B → 3-6 kısa eylem adımı `{steps:[...]}`. Auth + CORS, tool yok. `extractStepsJson` (markdown/numaralı/tireli toleranslı).
+- `POST /portfolio-comment` — AI portföy yorumu: `{facts}` (PWA hesaplar, AI uydurmasın) → betimleyici özet `{comment}`. KATI prompt: al/sat/tut tavsiyesi + fiyat tahmini + iyi/kötü yatırım demek YASAK. Auth + CORS, tool yok.
 - `POST /stocks` — Yahoo fiyat proxy (`{entries:[{display,yahoo}]}` veya eski `{symbols}`).
 - `POST /portfolio-image` — portföy görseli → Llama 3.2 Vision → sembol/adet/maliyet/son fiyat JSON. `visionRun` (5016 lisans `agree` retry), `parseNum` (Türk sayı formatı).
 
@@ -578,7 +579,15 @@ Salim seçti. "logolar corny olmasın" devamı → food-pie 🥧 emoji YOK, baş
 - **Veri modeli:** Yeni alan YOK — `watchlist[i].qty/cost/price/currency/symbol` kullanılır.
 - **Doğrulama:** Preview'da 4 hisseli (3 TRY + 1 USD) seed → THYAO 57.6% · GARAN 36.5% · ASELS 6.0% (matematik doğrulandı), BTC ayrı para birimi diye dışlandı, donut + legend + mobil (375px) temiz, konsol hatasız.
 - **Cache:** v7-30 → v7-31
-- 💬 **AI portföy yorumu** — Salim sordu. Cevap: betimleyici yorum YAPILABİLİR (dağılım/konsantrasyon/günlük performans gözlemi), ama **yatırım tavsiyesi (al/sat) YASAK** (lisanslı danışman değiliz). Henüz yapılmadı, Salim'e sınır açıklandı + betimleyici versiyon önerildi.
+- 💬 **AI portföy yorumu** — Salim sordu. Cevap: betimleyici yorum YAPILABİLİR (dağılım/konsantrasyon/günlük performans gözlemi), ama **yatırım tavsiyesi (al/sat) YASAK** (lisanslı danışman değiliz). Sınır açıklandı, Salim "ai yorumlasa iyi olur evet" dedi → yapıldı (aşağıda).
+
+### Haziran 9-10, 2026 (💬 AI portföy yorumu — betimleyici, tavsiye DEĞİL)
+Salim onayladı ("ai yorumlasa iyi olur evet"). Tasarım ilkesi: **sayıları PWA hesaplar** (`buildPortfolioFacts` — AI sayı uyduramaz), **AI sadece betimler**.
+- **Worker:** `POST /portfolio-comment` (`handlePortfolioCommentApi`) — `{facts}` → Llama 3.3 70B (tool YOK, journal kalıbı: auth verifyUser + AIDAN_EMAIL, CORS). System prompt KATI: al/sat/tut tavsiyesi YASAK, fiyat tahmini/gelecek yorumu YASAK, "iyi/kötü yatırım" YASAK, hisse övme/kötüleme YASAK, sayı uydurma YASAK. Konsantrasyonu nötr farkındalık olarak söyleyebilir ("yumurtaların çoğu tek sepette") ama ne yapılacağını SÖYLEMEZ. max_tokens 400, İngilizce şablon fallback'i var.
+- **PWA:** `buildPortfolioFacts()` — holdings'i para birimine gruplar, her pozisyon için portföy %'si + günlük % + toplam kâr/zarar % satırları üretir (düz metin). **"Portföyü yorumla"** butonu (`#pfCommentBtn`, dashed border + sade sparkles SVG — corny emoji YOK) portföy geçmişinin altında, sadece pozisyon varsa görünür (`renderStocks` içinde toggle). `aiCommentPortfolio()` → `PF_COMMENT_ENDPOINT` → sonuç `pfCommentModal`'da, altında sabit not: *"Bu betimleyici bir özettir — yatırım tavsiyesi değildir."*
+- **Veri modeli:** Yeni alan YOK.
+- **Doğrulama:** `buildPortfolioFacts` preview'da 4 hisseli seed ile test (yüzdeler donut'la tutarlı). **CANLI uçtan uca test** (Supabase login tekniği): 3 hisseli facts → AI dağılım+konsantrasyon+günlük hareketi betimledi, "yumurtalar tek sepette (THYAO %57,6)" farkındalığı verdi, **al/sat tavsiyesi YOK** — sınırlar tutuyor. ⚠️ Python test scriptinde `/tmp/...` yolu Windows'ta `open()` ile çalışmaz (bash mapler, Python maplemez) — proje köküne yazıp silmek gerek.
+- **Cache:** v7-31 → v7-32
 
 ## Mevcut Durum
 
