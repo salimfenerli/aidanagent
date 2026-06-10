@@ -8,7 +8,7 @@
 - **Yaklaşım:** Adım adım, görsel, sade. Net "şuraya tıkla, şunu yaz" tarzı yönergeler.
 
 ## Proje
-Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare Worker + Telegram bot. **PWA olarak telefon ve bilgisayara kurulu.**
+Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare Worker (cron push + AI endpoint'leri). **PWA olarak telefon ve bilgisayara kurulu.** Telegram bot Haziran 10, 2026'da kod tabanından tamamen kaldırıldı.
 
 ## Mimari (Mevcut Durum)
 
@@ -23,27 +23,27 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
                       │ Cloudflare  │         │ Claude     │
                       │   Worker    │         │ Desktop +  │
                       │ + Workers AI│         │ MCP Server │
-                      │ + Whisper   │         │ (Python)   │
-                      └──────┬──────┘         └────────────┘
+                      │ (Llama)     │         │ (Python)   │
+                      └─────────────┘         └────────────┘
                              │
                       ┌──────▼──────┐
-                      │  Telegram   │
-                      │  bot (sesli │
-                      │  + yazılı)  │
+                      │  Web Push   │
+                      │  (lock      │
+                      │   ekranı)   │
                       └─────────────┘
 ```
 
-- **Frontend:** `asistan.html` (~2700 satır, tek dosya HTML + CSS + JS)
+- **Frontend:** `asistan.html` (~6700 satır, tek dosya HTML + CSS + JS)
 - **Hosting:** **Cloudflare Pages** (`aidanapp.pages.dev`) — Mayıs 27, 2026'da Netlify'dan geçildi (Netlify free tier kotası tükendi)
 - **Deploy:** `py aidan-pages-deploy.py` ile Direct Upload API → 5 sn'de canlı
 - **Bulut:** Supabase (`fluhzvzulrnfyqogrgfi.supabase.co`)
-- **Bildirim:** Telegram bot (eski ntfy.sh deprecate edildi, kota sorunu)
+- **Bildirim:** Web Push (VAPID, iOS lock ekranı). Telegram + ntfy emekli.
 - **PWA:** Manifest + Service Worker (network-first stratejisi) + **icon.png** (yeni bulut mascot)
 - **Tasarım dili:** **Stitch-inspired dark mode** (May 28-29, 2026) — indigo `#6463ff`, koyu `#0a0b0f`, soft amber `#ffc640` yıldız. Inter font.
-- **Cache versiyonu:** `aidan-v7-33` (sw.js içinde, her büyük değişikte artırılır)
-- **AI:** Cloudflare Workers AI — **Llama 3.3 70B** (intent + tool use) + **Whisper** (sesli → metin). Bedava.
+- **Cache versiyonu:** `aidan-v7-34` (sw.js içinde, her büyük değişikte artırılır)
+- **AI:** Cloudflare Workers AI — **Llama 3.3 70B** (intent + tool use) + **Llama 3.2 Vision** (portföy görsel okuma). Bedava. Whisper artık kullanılmıyor (sesli giriş Web Speech API ile tarayıcıda).
 - **MCP Server (PC):** Python, Claude Desktop bağlanır, doğrudan Supabase'e operasyon yapar
-- **Cloudflare Worker:** Cron brifing + Telegram webhook handler (artık static serve etmiyor, sadece backend)
+- **Cloudflare Worker:** Cron push (brifing/borsa/portföy/hatırlatıcı) + PWA AI endpoint'leri (`/ai`, `/journal`, `/split`, `/portfolio-comment`, `/portfolio-image`, `/stocks`)
 - **Güvenlik:** Supabase RLS doğrulandı (anon=hiçbir şey, auth=sadece kendi user_id). Pages `_headers` ile CSP/HSTS/X-Frame/COOP/Permissions-Policy canlıda (8 header). Worker GET `?secret=` zorunlu (spam koruması). Sensitive paths (`/CLAUDE.md`, `/aidan-mcp/*`, `/.env*`) `_redirects` ile 404'e gidiyor.
 
 ## Dosyalar (`C:\Users\Salim\Desktop\claudedeneme\`)
@@ -591,6 +591,30 @@ Salim onayladı ("ai yorumlasa iyi olur evet"). Tasarım ilkesi: **sayıları PW
 - **Doğrulama:** `buildPortfolioFacts` preview'da 4 hisseli seed ile test (yüzdeler donut'la tutarlı). **CANLI uçtan uca test** (Supabase login tekniği): 3 hisseli facts → AI dağılım+konsantrasyon+günlük hareketi betimledi, "yumurtalar tek sepette (THYAO %57,6)" farkındalığı verdi, **al/sat tavsiyesi YOK** — sınırlar tutuyor. ⚠️ Python test scriptinde `/tmp/...` yolu Windows'ta `open()` ile çalışmaz (bash mapler, Python maplemez) — proje köküne yazıp silmek gerek.
 - **Cache:** v7-31 → v7-32
 
+### Haziran 10, 2026 (🧹 Telegram Faz 4 + ölü field temizliği)
+Salim "eski özellik kalıntılarını ve Telegram kodlarını temizle" dedi. Tek seansta:
+- **Worker (`worker.js`): -276 satır.** Telegram'a özel kod tamamen silindi:
+  - `sendTg`, `answerCallback`, `clearReplyMarkup`, `sendTyping` (yardımcılar)
+  - `transcribeVoice` (Whisper + Telegram `getFile` çağrısı)
+  - `handleCallback` (inline button — sabah brifingi MIT öneri butonları)
+  - `handleWebhook` (Telegram update handler, `/start`/`/help`, AI sohbet akışı)
+  - `/webhook` route + `TELEGRAM_RETIRED` bayrağı + üst yorumdaki Telegram env değişkenleri
+  - `runCronJob` içindeki `if (!TELEGRAM_RETIRED) await sendTg(...)` ve `channel: 'push-only'/'push+telegram'` koşulu (artık tek satır: `channel: 'push'`)
+  - `fetchAidan` default'undan `checkins`, `routines`, `pomoHistory` çıkarıldı
+  - 🔑 **KORUMA:** `aiInterpret` + `TOOL_HANDLERS` + `TOOL_SCHEMAS` + `buildSystemPrompt` AYNEN DURUYOR — `/ai` endpoint'i (PWA quick capture AI butonu) bunları kullanıyor. Llama 3.3 70B beyni hala canlı, sadece Telegram katmanı gitti.
+  - **Rollback:** `git revert <faz4-commit>` — eski kod aynen geri gelir.
+- **PWA (`asistan.html`):** Ölü field'lar temizlendi.
+  - `data.routines` 3 yerden silindi (init, Supabase pull, realtime sync) — UI'da hiç yoktu, sadece backward-compat artığı.
+  - Görev backward-compat'tan `t.streakCount`/`t.lastStreakDate` silindi (sadece set ediliyordu, hiç okunmuyordu — Streak feature May 26'da kalkmıştı, field kalıntısı).
+  - 4 yerdeki görev yaratma literal'lerinden `streakCount: 0, lastStreakDate: null,` silindi (`makeTask`, şablondan görev, addTask, addQuickTask).
+  - **Geriye uyumluluk:** Eski Supabase row'ında bu field'lar varsa **kayıyor** — yeni kod silmiyor, sadece eklemiyor. Yeni temiz row'da hiç oluşmuyor (preview'da test edildi: fresh data_keys = `[dumps, journal, lastWeeklyView, pomoToday, portfolioHistory, pushLog, reminders, settings, tasks, templates, watchlist]`).
+- **`deploy.py`:** Worker secret inherit listesinden `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` çıkarıldı. Bunlar Cloudflare dashboard'da hala duruyor (kimseyi bozmuyor); istersen Worker → Settings → Variables'tan elle silebilirsin.
+- **`wrangler.toml`:** Yorumlardaki Telegram referansları VAPID + WEBHOOK_SECRET ile değişti.
+- **CLAUDE.md:** Mimari diyagramından Telegram kutusu çıktı, veri modelinden `routines`/`checkins`/`pomoHistory`/`ntfyTopic`/`hyperfocus`/`streakCount`/`lastStreakDate` çıktı, "Bildirim" satırı "Web Push" olarak yenilendi.
+- ⚠️ **Telegram bot BotFather'da hâlâ duruyor** — sadece sussun diye. İstersen BotFather'a `/deletebot` yazarak silebilirsin; Cloudflare Worker artık `/webhook` route'una bakmıyor zaten (gelen update'leri Cloudflare 404 döner). Webhook URL Telegram'da kayıtlıysa "Webhook fail" notifikasyonları bot loglarında birikebilir — Telegram setWebhook ile boş URL koyarsan o da temizlenir.
+- **Doğrulama:** PWA preview'da boş başlangıç ✅ + legacy data ✅ (eski field'lar kayıyor, yeni hata yok) + console temiz. Worker syntax brace dengesi 0 ✅, paren -1 (string/comment içi normal). Gerçek deploy doğrulaması GitHub Actions tarafından yapılır.
+- **Cache:** v7-33 → v7-34
+
 ### Haziran 10, 2026 (⏰ Sabit hatırlatıcılar — ilaç/su/ders push)
 Salim seçti (kalan öneri listesinden 💊 ilaç/sabit hatırlatıcı). Görevlerden tamamen ayrı, sade bir liste — görev listesi şişmez, her gün tekrar eden "İlacını al" görev kartı olarak durmaz.
 - **Veri modeli:** `data.reminders[] = [{id, label, time:'HH:MM', days:'daily'|'weekdays', enabled, lastFired:'YYYY-MM-DD'}]` — yeni alan.
@@ -745,8 +769,6 @@ py aidan-pages-deploy.py
   reminderTime: null,         // 'HH:MM'
   lastReminded: null,         // 'YYYY-MM-DD'
   mitDate: null,              // 'YYYY-MM-DD' (sadece bugün ise MIT)
-  streakCount: 0,
-  lastStreakDate: null,       // 'YYYY-MM-DD'
   // Seri alanları:
   seriesId: null,             // string, aynı serideki görevler aynı id
   seriesName: null,           // 'Tarih kitabı'
@@ -765,10 +787,7 @@ py aidan-pages-deploy.py
 {
   tasks: [...],
   dumps: [{text, when}],
-  routines: [{id, time, name, lastFired}],
-  checkins: [...],            // DEPRECATED ama silmedik (geriye uyumluluk)
   pomoToday: {date, count},
-  pomoHistory: {'YYYY-MM-DD': count},
   templates: [{id, name, emoji, builtin, tasks:[{text,category?,estimateMin?}]}],  // (Haz 2) kullanıcı şablonları
   lastWeeklyView: 'YYYY-Www', // (Haz 2) haftalık insight kartı son gösterim (ISO hafta)
   journal: [{date, text, reflection}],  // (Haz 4) sesli akşam günlüğü, son 60 gün
@@ -778,8 +797,6 @@ py aidan-pages-deploy.py
   portfolioHistory: [{date:'YYYY-MM-DD', byCur:{TRY:{value,cost}}}],  // (Haz 8) portföy değer geçmişi, son 180 gün
   reminders: [{id, label, time:'HH:MM', days:'daily'|'weekdays', enabled, lastFired:'YYYY-MM-DD'}],  // (Haz 10) sabit hatırlatıcılar — Worker 15dk cron push'lar
   settings: {
-    ntfyTopic,                // DEPRECATED
-    hyperfocusEnabled, hyperfocusMin,
     supaUrl, supaKey,         // Aidan'ın kendi Supabase config'i
     muteUntil,                // (Haz 2) bildirim sustur (epoch ms)
     pushSubs: [{endpoint, keys:{p256dh,auth}, ua, added}]  // (Haz 2) background push cihaz kayıtları

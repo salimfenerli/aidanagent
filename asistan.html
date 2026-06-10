@@ -2703,7 +2703,6 @@ data.journal = data.journal || [];
 data.reminders = data.reminders || [];  // sabit hatırlatıcılar (ilaç/su/ders) — Worker 15dk cron push'lar
 data.watchlist = data.watchlist || [];
 data.portfolioHistory = data.portfolioHistory || [];  // [{date:'YYYY-MM-DD', byCur:{TRY:{value,cost}}}]
-data.routines = data.routines || [];
 data.pomoToday = data.pomoToday || { date: today(), count: 0 };
 data.settings = data.settings || {};
 if (data.lastWeeklyView === undefined) data.lastWeeklyView = null;
@@ -2720,8 +2719,6 @@ data.tasks.forEach(t => {
   if (t.category === undefined) t.category = null;
   if (t.doneDate === undefined) t.doneDate = null;
   if (t.mitDate === undefined) t.mitDate = null;
-  if (t.streakCount === undefined) t.streakCount = 0;
-  if (t.lastStreakDate === undefined) t.lastStreakDate = null;
   if (t.reminderTime === undefined) t.reminderTime = null;
   if (t.lastReminded === undefined) t.lastReminded = null;
   if (t.seriesId === undefined) t.seriesId = null;
@@ -2861,7 +2858,6 @@ function makeTask(opts = {}) {
     reminderTime: opts.reminderTime || null,
     lastReminded: null,
     mitDate: null,
-    streakCount: 0, lastStreakDate: null,
     seriesId: null, seriesName: null, seriesIndex: null, seriesTotal: null, notes: null
   };
 }
@@ -3345,8 +3341,6 @@ function quickCaptureSubmit() {
     reminderTime: p.reminderTime,
     lastReminded: null,
     mitDate: null,
-    streakCount: 0,
-    lastStreakDate: null,
     seriesId: null,
     seriesName: null,
     seriesIndex: null,
@@ -4336,8 +4330,6 @@ function addTask() {
     reminderTime: document.getElementById('taskReminder').value || null,
     lastReminded: null,
     mitDate: null,
-    streakCount: 0,
-    lastStreakDate: null,
     seriesId: null,
     seriesName: null,
     seriesIndex: null,
@@ -4378,8 +4370,6 @@ async function splitTask() {
     reminderTime: document.getElementById('taskReminder').value || null,
     lastReminded: null,
     mitDate: null,
-    streakCount: 0,
-    lastStreakDate: null,
     seriesId: null,
     seriesName: null,
     seriesIndex: null,
@@ -6687,8 +6677,7 @@ async function pullFromCloud() {
       // Eski alanları ekle
       data.tasks = data.tasks || [];
       data.dumps = data.dumps || [];
-      data.routines = data.routines || [];
-            data.settings = data.settings || {};
+      data.settings = data.settings || {};
       data.pomoToday = data.pomoToday || { date: today(), count: 0 };
       localStorage.setItem('aidan', JSON.stringify(data));
       // Yenilemeden re-render et (aktif sekmeyi koru)
@@ -6752,8 +6741,7 @@ function subscribeToCloud() {
       // Eski alanlar eksikse default ekle
       data.tasks = data.tasks || [];
       data.dumps = data.dumps || [];
-      data.routines = data.routines || [];
-            data.settings = data.settings || {};
+      data.settings = data.settings || {};
       data.pomoToday = data.pomoToday || { date: today(), count: 0 };
       localStorage.setItem('aidan', JSON.stringify(data));
       // Sekmeyi koruyarak yeniden render et

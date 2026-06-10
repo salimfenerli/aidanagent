@@ -91,8 +91,6 @@ def upload_script(worker_js: str):
             {"type": "inherit", "name": "SUPABASE_KEY"},
             {"type": "inherit", "name": "AIDAN_EMAIL"},
             {"type": "inherit", "name": "AIDAN_PASSWORD"},
-            {"type": "inherit", "name": "TELEGRAM_BOT_TOKEN"},
-            {"type": "inherit", "name": "TELEGRAM_CHAT_ID"},
             {"type": "inherit", "name": "WEBHOOK_SECRET"},
             {"type": "inherit", "name": "VAPID_PUBLIC_KEY"},
             {"type": "inherit", "name": "VAPID_PRIVATE_KEY"},

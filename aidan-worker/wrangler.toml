@@ -20,5 +20,7 @@ crons = [
 #   SUPABASE_URL        (Plaintext)
 #   SUPABASE_KEY        (Plaintext)
 #   AIDAN_EMAIL         (Plaintext)
-#   AIDAN_PASSWORD      (Secret olarak ekle — gizli kalır)
-#   NTFY_TOPIC          (Plaintext)
+#   AIDAN_PASSWORD      (Secret)
+#   WEBHOOK_SECRET      (Secret)  — manuel cron test auth
+#   VAPID_PUBLIC_KEY    (Plaintext)
+#   VAPID_PRIVATE_KEY   (Secret)  — web push imzalama

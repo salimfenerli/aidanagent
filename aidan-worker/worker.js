@@ -1,32 +1,26 @@
 /**
  * Aidan Cloudflare Worker
- * - Cron: günde 4 brifing (sabah/öğle/akşam/deadline) Telegram'a
- * - Webhook: Telegram'dan gelen mesajları AI ile yorumla, Aidan'a uygula
+ * - Cron: günlük brifingler + borsa alarmı + akşam portföy özeti + sabit hatırlatıcılar → web push
+ * - PWA AI/journal/split/portföy-yorum endpoint'leri (Llama 3.3 70B + Vision)
+ * - Yahoo Finance proxy + portföy görsel okuma (Llama 3.2 Vision)
  *
  * Environment variables (Cloudflare → Worker → Settings → Variables):
  *   SUPABASE_URL          — https://xxxxx.supabase.co
  *   SUPABASE_KEY          — anon/publishable key
  *   AIDAN_EMAIL           — kullanıcı email
  *   AIDAN_PASSWORD        — kullanıcı şifre (Secret)
- *   TELEGRAM_BOT_TOKEN    — BotFather token (Secret)
- *   TELEGRAM_CHAT_ID      — kullanıcının chat id'si
- *   WEBHOOK_SECRET        — webhook auth secret (Secret)
+ *   WEBHOOK_SECRET        — manuel cron test auth (Secret)
+ *   VAPID_PUBLIC_KEY      — VAPID P-256 public (web push)
+ *   VAPID_PRIVATE_KEY     — VAPID P-256 private (Secret)
  *
  * Bindings:
  *   AI                    — Workers AI
  *
- * Manuel test: https://<url>/?type=morning|noon|evening|deadline
+ * Manuel test: https://<url>/?type=morning|noon|evening|deadline|weekly|stocks|portfolio|reminders&secret=<WEBHOOK_SECRET>
  */
 
 const TR_OFFSET_MS = 3 * 60 * 60 * 1000;
 const AI_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-
-// === TELEGRAM EMEKLİLİĞİ ===
-// Haz 4 2026: Salim PWA-only kullanıma geçti (push ✅ + AI ✅ + sesli ✅).
-// true iken: webhook auto-reply, cron sendTg yorum satırı (push tek kanal).
-// false iken: eski davranış (webhook AI/Whisper işler, cron Telegram + push).
-// Rollback için bu tek satırı çevir, deploy et.
-const TELEGRAM_RETIRED = true;
 
 // ============================================================
 // Zaman yardımcıları (Türkiye saati)
@@ -69,7 +63,7 @@ async function fetchAidan(env) {
   if (!r.ok) throw new Error(`Fetch fail: ${r.status}`);
   const rows = await r.json();
   return {
-    data: rows[0]?.data || { tasks: [], checkins: [], dumps: [], routines: [], pomoToday: { date: trToday(), count: 0 }, pomoHistory: {}, settings: {} },
+    data: rows[0]?.data || { tasks: [], dumps: [], pomoToday: { date: trToday(), count: 0 }, settings: {} },
     userId, token,
   };
 }
@@ -88,59 +82,6 @@ async function saveAidan(env, data, sessionInfo) {
     body: JSON.stringify({ user_id: userId, data, updated_at: new Date().toISOString() }),
   });
   if (!r.ok) throw new Error(`Save fail: ${r.status} ${await r.text()}`);
-}
-
-// ============================================================
-// Telegram
-// ============================================================
-function escapeHtml(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-async function sendTg(env, { title, message, chatId, silent = false, replyToMessageId = null, replyMarkup = null }) {
-  const token = env.TELEGRAM_BOT_TOKEN;
-  const cid = chatId || env.TELEGRAM_CHAT_ID;
-  if (!token || !cid) throw new Error('Telegram config eksik');
-  const text = title ? `<b>${escapeHtml(title)}</b>\n\n${escapeHtml(message)}` : escapeHtml(message);
-  const body = {
-    chat_id: cid, text, parse_mode: 'HTML',
-    disable_notification: silent, disable_web_page_preview: true,
-  };
-  if (replyToMessageId) body.reply_to_message_id = replyToMessageId;
-  if (replyMarkup) body.reply_markup = replyMarkup;
-  const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) console.error('Telegram send fail:', r.status, await r.text());
-}
-
-async function answerCallback(env, callbackQueryId, text, showAlert = false) {
-  const token = env.TELEGRAM_BOT_TOKEN;
-  await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ callback_query_id: callbackQueryId, text: text || '', show_alert: showAlert }),
-  }).catch(() => {});
-}
-
-async function clearReplyMarkup(env, chatId, messageId) {
-  const token = env.TELEGRAM_BOT_TOKEN;
-  await fetch(`https://api.telegram.org/bot${token}/editMessageReplyMarkup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } }),
-  }).catch(() => {});
-}
-
-async function sendTyping(env, chatId) {
-  const token = env.TELEGRAM_BOT_TOKEN;
-  await fetch(`https://api.telegram.org/bot${token}/sendChatAction`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, action: 'typing' }),
-  }).catch(() => {});
 }
 
 // ============================================================
@@ -692,14 +633,12 @@ async function runCronJob(env, type) {
     default: throw new Error(`Bilinmeyen tip: ${type}`);
   }
   if (!payload) return { type, sent: false, reason: 'no-content' };
-  // Telegram emekli ise sadece push gönder, değilse iki kanaldan da
-  if (!TELEGRAM_RETIRED) await sendTg(env, payload);
   const subs = (data.settings && data.settings.pushSubs) || [];
   await sendPushToAll(env, data, payload, { token, userId });
   // Bildirim geçmişi — PWA "📬 Son 7 gün" listesinde gösterilir
   logPush(data, type, payload, subs.length);
   try { await saveAidan(env, data, { token, userId }); } catch (e) { console.error('pushLog save fail', e.message); }
-  return { type, sent: true, channel: TELEGRAM_RETIRED ? 'push-only' : 'push+telegram' };
+  return { type, sent: true, channel: 'push' };
 }
 
 // Bildirim kaydını data.pushLog'a ekle (son 7 gün + max 60 kayıt)
@@ -1496,294 +1435,7 @@ async function aiInterpret(env, data, userText) {
 }
 
 // ============================================================
-// Webhook handler
-// ============================================================
-async function transcribeVoice(env, fileId) {
-  const token = env.TELEGRAM_BOT_TOKEN;
-  // 1) file_path al
-  const info = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`).then(r => r.json());
-  if (!info.ok) throw new Error('getFile fail: ' + JSON.stringify(info));
-  const filePath = info.result.file_path;
-  // 2) Sesi indir
-  const audioResp = await fetch(`https://api.telegram.org/file/bot${token}/${filePath}`);
-  const audioBuffer = await audioResp.arrayBuffer();
-  // 3) Whisper'a ver
-  const audioArray = [...new Uint8Array(audioBuffer)];
-  const transcribe = await env.AI.run('@cf/openai/whisper', { audio: audioArray });
-  return (transcribe.text || '').trim();
-}
-
-// Inline button (callback_query) — sabah brifingi MIT öneri butonları
-async function handleCallback(cb, env) {
-  const chatId = cb.message?.chat?.id;
-  const userId = cb.from?.id;
-  const messageId = cb.message?.message_id;
-
-  // Sadece sahibine cevap
-  if (String(userId) !== String(env.TELEGRAM_CHAT_ID)) {
-    await answerCallback(env, cb.id, 'Yetkisiz', true);
-    return new Response('OK');
-  }
-
-  const data = cb.data || '';
-  let targetDate, rest, isTomorrow;
-  if (data.startsWith('mit_tmrw:')) {
-    targetDate = trDate(1);
-    rest = data.slice('mit_tmrw:'.length);
-    isTomorrow = true;
-  } else if (data.startsWith('mit:')) {
-    targetDate = trToday();
-    rest = data.slice(4);
-    isTomorrow = false;
-  } else {
-    await answerCallback(env, cb.id, '');
-    return new Response('OK');
-  }
-
-  // Parse: "<taskId>" veya "all:<id1,id2,id3>"
-  let taskIds = [];
-  if (rest.startsWith('all:')) {
-    taskIds = rest.slice(4).split(',').filter(Boolean);
-  } else if (rest) {
-    taskIds = [rest];
-  }
-  if (!taskIds.length) {
-    await answerCallback(env, cb.id, '❌ Geçersiz buton');
-    return new Response('OK');
-  }
-
-  // Aidan verisini al
-  let session, tasks;
-  try {
-    session = await fetchAidan(env);
-    tasks = session.data.tasks || [];
-  } catch (e) {
-    await answerCallback(env, cb.id, `❌ Veri okunamadı: ${e.message}`, true);
-    return new Response('OK');
-  }
-
-  const currentMitCount = tasks.filter(t => t.mitDate === targetDate && !t.done).length;
-  let slotsLeft = Math.max(0, 3 - currentMitCount);
-  const dayLabel = isTomorrow ? 'Yarının' : 'Bugünün';
-  if (slotsLeft === 0) {
-    await answerCallback(env, cb.id, `❌ ${dayLabel} 3'ü dolu.`, true);
-    return new Response('OK');
-  }
-
-  const added = [];
-  const alreadyMit = [];
-  const notFound = [];
-  for (const tid of taskIds) {
-    if (slotsLeft <= 0) break;
-    const t = tasks.find(x => String(x.id) === String(tid));
-    if (!t) { notFound.push(tid); continue; }
-    if (t.done) { notFound.push(tid); continue; }
-    if (t.mitDate === targetDate) { alreadyMit.push(t.text); continue; }
-    t.mitDate = targetDate;
-    added.push(t.text);
-    slotsLeft--;
-  }
-
-  if (added.length === 0) {
-    const msg = alreadyMit.length
-      ? `⭐ Zaten ${dayLabel.toLowerCase()} MIT'inde (${alreadyMit.length})`
-      : '❌ Görev bulunamadı';
-    await answerCallback(env, cb.id, msg);
-    return new Response('OK');
-  }
-
-  // Kaydet
-  try {
-    await saveAidan(env, session.data, session);
-  } catch (e) {
-    await answerCallback(env, cb.id, `❌ Kayıt hatası: ${e.message}`, true);
-    return new Response('OK');
-  }
-
-  // Popup feedback
-  const target = isTomorrow ? 'yarına' : "MIT'e";
-  const popup = added.length === 1
-    ? `⭐ ${target} eklendi`
-    : `⭐ ${added.length} görev ${target} eklendi`;
-  await answerCallback(env, cb.id, popup);
-
-  // Butonları kaldır + kısa onay mesajı
-  if (chatId && messageId) {
-    await clearReplyMarkup(env, chatId, messageId);
-  }
-  const confirmTitle = isTomorrow ? `✅ Yarına MIT eklendi:` : `✅ MIT'e eklendi:`;
-  const confirmLines = [confirmTitle];
-  added.forEach(name => confirmLines.push(`  ⭐ ${name}`));
-  if (alreadyMit.length) confirmLines.push(`(zaten ${dayLabel.toLowerCase()} MIT'inde: ${alreadyMit.length})`);
-  await sendTg(env, { chatId, message: confirmLines.join('\n'), silent: true });
-
-  return new Response('OK');
-}
-
-async function handleWebhook(request, env) {
-  // Auth
-  const provided = request.headers.get('X-Telegram-Bot-Api-Secret-Token');
-  if (provided !== env.WEBHOOK_SECRET) {
-    return new Response('Unauthorized', { status: 401 });
-  }
-
-  const update = await request.json();
-
-  // === TELEGRAM EMEKLİ (Faz 3, Haz 4 2026) ===
-  // Gelen her mesaja tek bir auto-reply: "Aidan artık PWA'da". AI/Whisper/tool processing YOK
-  // (token + quota tasarrufu). Sahibine bir kez bilgi mesajı gönder, sonra herkes için sessiz.
-  // Rollback: bu if-bloğunu kaldır → eski webhook akışı tekrar çalışır.
-  // Faz 4 = bu blok + altındaki tüm kodun silinmesi.
-  if (TELEGRAM_RETIRED) {
-    try {
-      const msg0 = update.message || update.edited_message;
-      const chatId = msg0 && msg0.chat && msg0.chat.id;
-      const senderId = msg0 && msg0.from && msg0.from.id;
-      // Sadece hesap sahibine bilgi mesajı, anti-flood için günlük 1 kez (in-memory KV yok, hep gönder)
-      if (chatId && String(senderId) === String(env.TELEGRAM_CHAT_ID)) {
-        await sendTg(env, {
-          chatId,
-          title: '🌙 Aidan emekli',
-          message: 'Aidan artık tarayıcıdan çalışıyor:\n\n📲 https://aidanapp.pages.dev\n\nGörev ekleme, sesli giriş, AI yorumlama, bildirim — hepsi orada. Telegram bot sessiz, mesajların işlenmiyor. PWA\'yı kullan 💜',
-        });
-      }
-    } catch (e) { console.error('emekli reply hatası', e.message); }
-    return new Response('OK');
-  }
-
-  // Inline button tıklaması
-  if (update.callback_query) {
-    return await handleCallback(update.callback_query, env);
-  }
-
-  const msg = update.message || update.edited_message;
-  if (!msg) return new Response('OK');
-
-  const chatId = msg.chat.id;
-  let text = '';
-  let wasVoice = false;
-
-  if (msg.voice || msg.audio) {
-    // Sesli mesaj
-    wasVoice = true;
-    await sendTyping(env, chatId);
-    try {
-      const fileId = (msg.voice || msg.audio).file_id;
-      text = await transcribeVoice(env, fileId);
-      if (!text) {
-        await sendTg(env, { chatId, message: '🎤 Sesi anlayamadım, tekrar dener misin?' });
-        return new Response('OK');
-      }
-      // Salim'e ne duyduğumuzu göster (yanlışsa fark etsin)
-      await sendTg(env, { chatId, message: `🎤 Duyduğum: "${text}"`, silent: true });
-    } catch (e) {
-      console.error('Voice error:', e);
-      await sendTg(env, { chatId, message: `🎤 Ses çevirme hatası: ${e.message}` });
-      return new Response('OK');
-    }
-  } else if (msg.text) {
-    text = msg.text.trim();
-  } else {
-    return new Response('OK'); // text yok, voice yok → ignore
-  }
-
-  // Sadece sahibine cevap ver
-  if (String(chatId) !== String(env.TELEGRAM_CHAT_ID)) {
-    await sendTg(env, { message: 'Bu bot kişisel kullanıma özel.', chatId });
-    return new Response('OK');
-  }
-
-  // /start ve /help
-  if (text === '/start') {
-    await sendTg(env, {
-      chatId,
-      title: '🧠 Aidan',
-      message: 'Selam Salim! Ben Aidan. Bana yaz veya 🎤 sesli mesaj at:\n\n• "yarın matematik ödevi"\n• "bugün ne yapayım"\n• "matematik bitti"\n• "akşam 19\'da ilaç hatırlat"\n\nGörevlerin Aidan PWA ile senkron, telefon/PC her yerden gör. /help yazarsan tüm komutları gör.'
-    });
-    return new Response('OK');
-  }
-  if (text === '/help') {
-    await sendTg(env, {
-      chatId,
-      title: 'Komutlar',
-      message: 'Doğal dille yaz veya 🎤 sesli mesaj at.\n\n📝 EKLEMEK:\n• "yarın matematik ödevi"\n• "akşam 8\'de ilaç hatırlat"\n• "her salı 17:00 fizik özel ders"\n\n📋 GÖRMEK:\n• "ne var bugün" · "acil olanlar"\n• "X ile ilgili görevler" (arama)\n• "seriler" / "kaç ödev var"\n\n✅ BİTİRMEK / SİLMEK:\n• "matematik bitti" · "X\'i sil"\n\n✏️ DÜZENLEMEK:\n• "matematik tahminini 30dk yap"\n• "fizik saatini 18:30\'a al"\n• "tarih ödevini acil yap"\n• "matematiğe \'soruları çöz\' ekle" (alt adım)\n\n📅 ERTELEMEK:\n• "X\'i yarına at" · "X\'i salıya kaydır"\n\n⭐ MIT (bugünün 3\'ü):\n• "X\'i MIT yap" · "X\'i MIT\'ten çıkar"\n\n📚 ÖDEV SERİSİ:\n• "tarih kitabı 50-100 sayfa salıya bitsin"\n• "fizik 5 konuyu haftaya yay"\n• "tarih serisini cumaya kaydır"\n\n🌅 ÖZET:\n• "bugün ne yapayım" · "durum" · "brifing"\n\n🧠 BRAIN DUMP:\n• "şunu unutma..." · "aklımda olsun..."'
-    });
-    return new Response('OK');
-  }
-
-  // Typing indicator
-  await sendTyping(env, chatId);
-
-  try {
-    const session = await fetchAidan(env);
-    const ctx = { data: session.data, dirty: false };
-
-    const ai = await aiInterpret(env, session.data, text);
-
-    // Tool çağrıları (Workers AI Llama format)
-    const toolCalls = ai.tool_calls || [];
-    const replies = [];
-
-    if (toolCalls.length > 0) {
-      for (const call of toolCalls) {
-        const name = call.name || (call.function && call.function.name);
-        let args = call.arguments || (call.function && call.function.arguments) || {};
-        if (typeof args === 'string') {
-          try { args = JSON.parse(args); } catch { args = {}; }
-        }
-        const handler = TOOL_HANDLERS[name];
-        if (!handler) {
-          replies.push(`⚠️ Bilinmeyen tool: ${name}`);
-          continue;
-        }
-        try {
-          const result = await handler(args, ctx);
-          replies.push(result.reply);
-        } catch (e) {
-          replies.push(`❌ ${name} hata: ${e.message}`);
-        }
-      }
-
-      if (ctx.dirty) {
-        await saveAidan(env, ctx.data, session);
-      }
-
-      const finalReply = replies.join('\n\n');
-      await sendTg(env, { chatId, message: finalReply });
-    } else {
-      // Düz sohbet cevabı
-      let reply = (ai.response || '').trim();
-      // İngilizce/şablon fallback'leri filtrele
-      const englishGarbage = [
-        /your input is not sufficient/i,
-        /please provide more details/i,
-        /^i'?m sorry/i,
-        /^i don'?t understand/i,
-        /^as an ai/i,
-        /^i cannot/i,
-      ];
-      const isEnglishJunk = englishGarbage.some(rx => rx.test(reply));
-      if (!reply || isEnglishJunk) {
-        const friendly = [
-          'Burdayım, ne yapıyoruz?',
-          'Selam Salim 👋',
-          'Naber? Yardım edebileceğim bir şey var mı?',
-          'Anlamadım, biraz daha açar mısın?',
-        ];
-        reply = friendly[Math.floor(Math.random() * friendly.length)];
-      }
-      await sendTg(env, { chatId, message: reply });
-    }
-  } catch (e) {
-    console.error('Webhook error:', e);
-    await sendTg(env, { chatId, message: `❌ Hata: ${e.message}` });
-  }
-
-  return new Response('OK');
-}
-
-// ============================================================
-// PWA AI endpoint — Telegram'daki AI beynini PWA'dan erişilebilir yapar
+// PWA AI endpoint — AI beyni (aiInterpret + TOOL_HANDLERS) HTTP arayüzü
 // ============================================================
 function jsonCors(obj, status, cors) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', ...cors } });
@@ -2504,11 +2156,6 @@ function serveStatic(path) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-
-    // Telegram webhook
-    if (url.pathname === '/webhook' && request.method === 'POST') {
-      return handleWebhook(request, env);
-    }
 
     // PWA AI endpoint (POST metin → AI → görev operasyonu, CORS'lu)
     if (url.pathname === '/ai') {
