@@ -582,6 +582,11 @@
   .pf-pie-dot { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
   .pf-pie-leg-sym { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pf-pie-leg-pct { color: var(--text-muted); font-variant-numeric: tabular-nums; font-weight: 600; }
+  /* AI portföy yorumu */
+  .pf-comment-btn { width: 100%; background: transparent; border: 1px dashed var(--border); color: var(--text-muted); padding: 9px; border-radius: var(--radius-sm); font-size: 0.85em; cursor: pointer; box-shadow: none; display: flex; align-items: center; justify-content: center; gap: 7px; margin-bottom: 14px; }
+  .pf-comment-btn:hover { border-color: var(--accent); color: var(--text); }
+  .pf-comment-body { font-size: 0.92em; line-height: 1.6; color: var(--text); white-space: pre-wrap; min-height: 40px; }
+  .pf-comment-note { font-size: 0.74em; color: var(--text-faint); margin-top: 12px; font-style: italic; }
   /* Çok para birimi portföy */
   .pf-multi { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
   .pf-cur-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -2428,6 +2433,7 @@
     <div class="portfolio-summary" id="portfolioSummary" style="display:none;"></div>
     <div class="portfolio-pie" id="portfolioPie" style="display:none;"></div>
     <div class="portfolio-history" id="portfolioHistory" style="display:none;"></div>
+    <button class="pf-comment-btn" id="pfCommentBtn" onclick="aiCommentPortfolio()" style="display:none;"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg> Portföyü yorumla</button>
     <div class="market-chips" id="marketChips">
       <button class="market-chip active" data-market="bist" onclick="selectMarket('bist')">🇹🇷 BIST</button>
       <button class="market-chip" data-market="abd" onclick="selectMarket('abd')">🇺🇸 ABD</button>
@@ -2629,6 +2635,16 @@
     <div class="modal-title">📊 Haftalık karne</div>
     <div id="karneBody"></div>
     <button class="modal-close" onclick="closeKarneModal()">Kapat</button>
+  </div>
+</div>
+
+<!-- AI portföy yorumu modalı -->
+<div class="modal-overlay" id="pfCommentModal" onclick="if(event.target.id==='pfCommentModal')closePfComment()">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-title">📊 Portföy yorumu</div>
+    <div id="pfCommentBody" class="pf-comment-body">…</div>
+    <div class="pf-comment-note">Bu betimleyici bir özettir — yatırım tavsiyesi değildir.</div>
+    <button class="modal-close" onclick="closePfComment()">Kapat</button>
   </div>
 </div>
 
@@ -3047,6 +3063,62 @@ async function aiSplitTask(id) {
     showToast(`✨ ${steps.length} adıma bölündü`, 'success', 3000);
   } catch (e) {
     showToast('Bölünemedi: ' + e.message, 'error', 4000);
+  }
+}
+
+// AI portföy yorumu — sayıları PWA hesaplar (uydurma yok), AI sadece betimler
+const PF_COMMENT_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/portfolio-comment';
+function buildPortfolioFacts() {
+  const holdings = (data.watchlist || []).filter(w => w.qty != null && w.qty > 0 && w.cost != null);
+  if (!holdings.length) return null;
+  const byCur = {};
+  for (const w of holdings) {
+    const cur = w.currency || 'TRY';
+    const px = (w.price != null ? w.price : w.cost);
+    const value = px * w.qty, cost = w.cost * w.qty;
+    (byCur[cur] = byCur[cur] || { items: [], value: 0, cost: 0 });
+    byCur[cur].items.push({ sym: w.symbol, value, dayPct: w.changePct, plPct: w.cost > 0 ? (px - w.cost) / w.cost * 100 : null });
+    byCur[cur].value += value; byCur[cur].cost += cost;
+  }
+  const lines = [`Portföy: ${holdings.length} pozisyon, ${Object.keys(byCur).length} para birimi.`];
+  for (const cur in byCur) {
+    const g = byCur[cur], lbl = cur === 'TRY' ? 'TL' : cur;
+    const plPct = g.cost > 0 ? (g.value - g.cost) / g.cost * 100 : 0;
+    lines.push(`${lbl} tarafı: toplam değer ${Math.round(g.value)} ${lbl}, kar/zarar ${plPct >= 0 ? '+' : ''}${plPct.toFixed(1)}%.`);
+    g.items.sort((a, b) => b.value - a.value).forEach(it => {
+      const pct = g.value > 0 ? it.value / g.value * 100 : 0;
+      const p = [`${lbl} portföyünün %${pct.toFixed(1)}'i`];
+      if (it.dayPct != null) p.push(`bugün ${it.dayPct >= 0 ? '+' : ''}${it.dayPct.toFixed(1)}%`);
+      if (it.plPct != null) p.push(`toplam ${it.plPct >= 0 ? '+' : ''}${it.plPct.toFixed(1)}%`);
+      lines.push(`  - ${it.sym}: ${p.join(', ')}`);
+    });
+  }
+  return lines.join('\n');
+}
+function openPfComment() {
+  document.getElementById('pfCommentBody').textContent = '💭 Aidan portföyüne bakıyor…';
+  document.getElementById('pfCommentModal').classList.add('active');
+}
+function closePfComment() { document.getElementById('pfCommentModal').classList.remove('active'); }
+async function aiCommentPortfolio() {
+  const facts = buildPortfolioFacts();
+  if (!facts) { showToast('Önce pozisyon ekle (adet + maliyet)', 'warning', 3500); return; }
+  if (!window._supa || !window._user) { showToast('AI için bulut girişi gerekli — Ayarlar → giriş yap', 'warning', 4000); return; }
+  openPfComment();
+  try {
+    const { data: sess } = await window._supa.auth.getSession();
+    const token = sess && sess.session && sess.session.access_token;
+    if (!token) throw new Error('oturum bulunamadı, tekrar giriş yap');
+    const r = await fetch(PF_COMMENT_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ facts }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || ('sunucu hatası ' + r.status));
+    document.getElementById('pfCommentBody').textContent = j.comment || 'Yorum üretilemedi.';
+  } catch (e) {
+    document.getElementById('pfCommentBody').textContent = 'Yorum alınamadı: ' + e.message;
   }
 }
 
@@ -3759,6 +3831,9 @@ function renderStocks() {
   renderPortfolioSummary();
   renderPortfolioPie();
   renderPortfolioHistory();
+  const _hasHoldings = (data.watchlist || []).some(w => w.qty != null && w.qty > 0 && w.cost != null);
+  const _cb = document.getElementById('pfCommentBtn');
+  if (_cb) _cb.style.display = _hasHoldings ? 'flex' : 'none';
   if (wl.length === 0) {
     list.innerHTML = '<div class="stocks-empty">Henüz hisse yok.<br>Yukarıdan BIST kodu ekle (örn THYAO).<br>Fiyatını gör, pozisyon gir, alarm kur 🔔</div>';
     return;

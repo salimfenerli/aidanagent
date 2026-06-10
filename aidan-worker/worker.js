@@ -1969,6 +1969,48 @@ async function handleSplitApi(request, env) {
   }
 }
 
+// AI portföy yorumu — BETİMLEYİCİ özet (yatırım tavsiyesi DEĞİL). Sayılar PWA'dan gelir (uydurma yok).
+async function handlePortfolioCommentApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const facts = (body.facts || '').trim();
+  if (!facts) return jsonCors({ error: 'empty' }, 400, cors);
+  if (facts.length > 3000) return jsonCors({ error: 'too long' }, 400, cors);
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (env.AIDAN_EMAIL && user.email && user.email.toLowerCase() !== env.AIDAN_EMAIL.toLowerCase()) {
+    return jsonCors({ error: 'forbidden' }, 403, cors);
+  }
+
+  try {
+    const r = await env.AI.run(AI_MODEL, {
+      messages: [
+        { role: 'system', content: "Sen Aidan'sın, Salim'in asistanı. Salim'in borsa portföyünün GERÇEK verileri sana veriliyor. Görevin: KISA (3-5 cümle), TÜRKÇE, sade ve BETİMLEYİCİ bir özet yaz — portföyün durumunu ayna gibi göster. Anlat: dağılım, en büyük pozisyon (konsantrasyon), bugünkü genel hareket, çeşitlilik. KESİN YASAKLAR: ASLA al/sat/tut tavsiyesi verme. ASLA fiyat tahmini ya da gelecek yorumu yapma. ASLA 'iyi/kötü/doğru/yanlış yatırım' deme. ASLA belirli bir hisseyi öv ya da kötüle. Sayıları SADECE verilenlerden al, KESİNLİKLE uydurma. Tek bir hisse portföyün büyük kısmıysa bunu nötr bir farkındalık olarak söyleyebilirsin ('yumurtaların çoğu tek sepette' gibi) ama NE YAPMASI gerektiğini SÖYLEME — karar Salim'in. Sonunda 'Yatırım tavsiyesi değildir' gibi bir şey eklemene gerek yok, sadece betimle. ASLA İngilizce yazma." },
+        { role: 'user', content: `Portföy gerçekleri:\n${facts}\n\nBana kısa, sıcak, betimleyici bir portföy özeti yaz.` },
+      ],
+      max_tokens: 400,
+    });
+    let comment = (r.response || '').trim();
+    if (!comment || /^i'?m sorry|^as an ai|your input/i.test(comment)) {
+      comment = 'Şu an yorum üretemedim ama portföyün özetini grafik ve kartlarda görebilirsin.';
+    }
+    return jsonCors({ comment }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
 // ============================================================
 // Borsa — Yahoo Finance bedava API proxy (CORS yüzünden tarayıcı direkt çekemez)
 // ============================================================
@@ -2438,6 +2480,11 @@ export default {
     // AI görev bölücü (POST {text} → AI küçük adımlar dizisi, tool YOK)
     if (url.pathname === '/split') {
       return handleSplitApi(request, env);
+    }
+
+    // AI portföy yorumu (POST {facts} → AI betimleyici özet, tavsiye YOK, tool YOK)
+    if (url.pathname === '/portfolio-comment') {
+      return handlePortfolioCommentApi(request, env);
     }
 
     // Borsa fiyatları (POST {symbols} → Yahoo proxy)
