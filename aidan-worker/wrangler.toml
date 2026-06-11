@@ -13,6 +13,7 @@ crons = [
   "*/30 7-15 * * 1-5",  # BIST saatleri (10-18 TR, hafta içi) — borsa alarm kontrol
   "30 15 * * 1-5",  # 18:30 TR hafta içi — akşam portföy özeti (BIST kapanışı sonrası)
   "*/15 * * * *",  # 15 dk'da bir — sabit hatırlatıcı kontrolü (ilaç/su/ders, data.reminders)
+  "0 0 * * 1",  # Pazartesi 03:00 TR (UTC 00:00) — haftalık veri yedeği (aidan_backups tablosu)
 ]
 
 # NOT: Environment değişkenlerini KOD'A YAZMA.

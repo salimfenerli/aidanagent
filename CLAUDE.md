@@ -40,7 +40,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - **Bildirim:** Web Push (VAPID, iOS lock ekranı). Telegram + ntfy emekli.
 - **PWA:** Manifest + Service Worker (network-first stratejisi) + **icon.png** (yeni bulut mascot)
 - **Tasarım dili:** **Stitch-inspired dark mode** (May 28-29, 2026) — indigo `#6463ff`, koyu `#0a0b0f`, soft amber `#ffc640` yıldız. Inter font.
-- **Cache versiyonu:** `aidan-v7-34` (sw.js içinde, her büyük değişikte artırılır)
+- **Cache versiyonu:** `aidan-v7-35` (sw.js içinde, her büyük değişikte artırılır)
 - **AI:** Cloudflare Workers AI — **Llama 3.3 70B** (intent + tool use) + **Llama 3.2 Vision** (portföy görsel okuma). Bedava. Whisper artık kullanılmıyor (sesli giriş Web Speech API ile tarayıcıda).
 - **MCP Server (PC):** Python, Claude Desktop bağlanır, doğrudan Supabase'e operasyon yapar
 - **Cloudflare Worker:** Cron push (brifing/borsa/portföy/hatırlatıcı) + PWA AI endpoint'leri (`/ai`, `/journal`, `/split`, `/portfolio-comment`, `/portfolio-image`, `/stocks`)
@@ -242,15 +242,17 @@ URL: `aidan-pusher.fenerlisalim04.workers.dev`
 | `*/30 7-15 * * 1-5` | Hafta içi 10-18 | 📈 Borsa alarm kontrol |
 | `30 15 * * 1-5` | Hafta içi 18:30 | 💼 Akşam portföy özeti |
 | `*/15 * * * *` | Sürekli (15 dk) | ⏰ Sabit hatırlatıcı kontrolü (`data.reminders`) |
+| `0 0 * * 1` | Pazartesi 03:00 | 💾 Haftalık veri yedeği (`aidan_backups` tablosu, son 12 saklanır) |
 
 ### Endpoint'ler
-- `GET /?type=morning|noon|evening|deadline|weekly|stocks|portfolio|reminders&secret=<WEBHOOK_SECRET>` — manuel cron test. **Secret zorunlu** (spam koruması). Eksik/yanlış secret → 404.
+- `GET /?type=morning|noon|evening|deadline|weekly|stocks|portfolio|reminders|backup&secret=<WEBHOOK_SECRET>` — manuel cron test. **Secret zorunlu** (spam koruması). Eksik/yanlış secret → 404.
 - `POST /webhook` — Telegram'dan gelen update (X-Telegram-Bot-Api-Secret-Token header ile auth). **Telegram emekli** (`TELEGRAM_RETIRED=true`): sahibe bilgi mesajı, AI işleme yok.
 - `POST /ai` — PWA quick capture AI (Supabase token auth, CORS). Telegram'la aynı pipeline.
 - `POST /journal` — sesli akşam günlüğü, AI sıcak yansıma (tool yok).
 - `POST /split` — AI görev bölücü: `{text}` → Llama 3.3 70B → 3-6 kısa eylem adımı `{steps:[...]}`. Auth + CORS, tool yok. `extractStepsJson` (markdown/numaralı/tireli toleranslı).
 - `POST /portfolio-comment` — AI portföy yorumu: `{facts}` (PWA hesaplar, AI uydurmasın) → betimleyici özet `{comment}`. KATI prompt: al/sat/tut tavsiyesi + fiyat tahmini + iyi/kötü yatırım demek YASAK. Auth + CORS, tool yok.
 - `POST /stocks` — Yahoo fiyat proxy (`{entries:[{display,yahoo}]}` veya eski `{symbols}`).
+- `POST /stock-history` — tek hisse geçmiş close serisi: `{ySymbol, range:'1mo'|'3mo'|'1y'}` → `{timestamps, closes, min, max, first, last, changePct, currency, name}`. Yahoo chart endpoint proxy'si, 5dk CF cache, auth + CORS, tool yok. PWA mini grafik modali kullanır.
 - `POST /portfolio-image` — portföy görseli → Llama 3.2 Vision → sembol/adet/maliyet/son fiyat JSON. `visionRun` (5016 lisans `agree` retry), `parseNum` (Türk sayı formatı).
 
 ### Telegram Bot Webhook
@@ -626,6 +628,36 @@ Salim seçti (kalan öneri listesinden 💊 ilaç/sabit hatırlatıcı). Görevl
 - ⚠️ **15 dk hassasiyet** — 09:00 hatırlatıcısı 09:00-09:15 arasında gelir (cron çeyrek saatlerde). UI'da "~15 dk hassasiyet" notu var.
 - **Cache:** v7-32 → v7-33
 
+### Haziran 11, 2026 (📉 Tek hisse mini grafik + 💾 veri yedeği otomasyonu)
+Salim pros/cons sonrası iki iş seçti: borsa kartına grafik + defansif veri yedeği.
+- **📉 Tek hisse mini grafik:**
+  - **Worker:** `POST /stock-history` (`handleStockHistoryApi`) — `{ySymbol, range:'1mo'|'3mo'|'1y'}` → Yahoo chart endpoint proxy. `STOCK_HISTORY_RANGES` map (1mo=daily, 3mo=daily, 1y=weekly). null close değerleri (kapalı gün/tatil) atlanır, paralel index korunur. Response: `{timestamps, closes, min, max, first, last, changePct, currency, name}`. Auth (verifyUser + AIDAN_EMAIL), CORS, 5dk CF cache (`cf:{cacheTtl:300,cacheEverything:true}`).
+  - **PWA:** Borsa kartı `.stock-card` artık `cursor:pointer` + `onclick="openStockChart(idx)"`. Action butonları (.stock-actions) `event.stopPropagation()` ile yutar — Pozisyon/Alarm/Sil etkisiz olmaz. Modal `#stockChartModal`: sembol + market badge + isim + son fiyat + günlük %, **range chip'leri** (1 ay / 3 ay / 1 yıl, aktif olan dolu mor), `#stockChartArea` SVG line chart, Min / range% / Max alt rozetleri.
+  - **`lineChart(values, isDown)` helper:** SVG path tabanlı, sparkline'ın "ağabey" versiyonu (420×140, padding 8/10). 2 path = (a) `linearGradient` ile soft alan dolgusu (top 0.28 opacity → bottom 0), (b) line stroke 2px. Yükselen=yeşil (#34c759), düşen=kırmızı (#ef4444). `defs/linearGradient` ID = 'lc-fill-u/d'.
+  - **Veri akışı:** `openStockChart` modalı sentakla → `loadStockHistory('1mo')` → Supabase access-token + `STOCK_HISTORY_ENDPOINT` → response varsa lineChart + stats; auth yok/hata varsa nazik mesaj.
+  - **Doğrulama:** Preview'da iki sahte hisse (THYAO + AAPL) seed, kart tıklama modalı açtı, modal başlık/isim/fiyat/% doğru, range butonları doğru, `lineChart` 20 günlük yükselen seri ile çizdi (2 path, yeşil), mobil 375px'te tam sığdı, konsol temiz. Gerçek `/stock-history` fetch'i canlı deploy sonrası test edilecek (preview'da Supabase login yok).
+- **💾 Veri yedeği otomasyonu:**
+  - **Supabase tablo** (Salim'in 1 kez SQL Editor'da çalıştırması gerek):
+    ```sql
+    create table aidan_backups (
+      id bigint primary key generated always as identity,
+      user_id uuid not null,
+      snapshot_at timestamptz not null default now(),
+      data jsonb not null
+    );
+    create index on aidan_backups (user_id, snapshot_at desc);
+    alter table aidan_backups enable row level security;
+    create policy "users see own backups" on aidan_backups for select using (auth.uid() = user_id);
+    create policy "users insert own backups" on aidan_backups for insert with check (auth.uid() = user_id);
+    create policy "users delete own backups" on aidan_backups for delete using (auth.uid() = user_id);
+    ```
+  - **Worker:** `runBackup(env)` — fetchAidan → `aidan_backups`'a INSERT (user_id + data jsonb). Sonra `select id order by snapshot_at desc` → ilk 12'den eskileri toplu DELETE (`id=in.(...)`). Tablo yoksa (`404` veya "not exist") sessiz log + `{ok:false, reason:'table-missing'}` döner, Salim SQL'i çalıştırmadan deploy etse de Worker susmaz.
+  - **Yeni cron (9. cron):** `0 0 * * 1` = **Pazartesi 03:00 TR** (UTC 00:00 — düşük trafik). Push YOK, sessiz çalışır. `scheduled()` routing + `?type=backup&secret=<WEBHOOK_SECRET>` manuel test. `deploy.py CRON_LIST` + `wrangler.toml` güncellendi.
+  - **Saklama:** Son 12 yedek (~3 ay). Salim Supabase dashboard `aidan_backups` tablosundan görür ve JSON'u indirebilir. PWA UI eklenmedi (otomasyon = arka planda yeter, ileride "📥 Yedek geçmişi" Ayarlar'a eklenebilir).
+- **🧹 deploy.py temizliği:** Faz 4'te kaçırılan iki TELEGRAM artığı (üst yorumda + `secret_names` listesinde `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`) silindi. Artık deploy sırasında env'de Telegram aranmıyor.
+- **🚨 Salim'in yapacağı tek şey:** Supabase Dashboard → SQL Editor → yukarıdaki blok yapıştır + RUN. Tablo + RLS politikaları kurulur. Tablo kurulmadan Worker zaten sessizce atlar — ilk pazartesi sabahından önce SQL çalıştırılırsa o haftadan itibaren yedek alır.
+- **Cache:** v7-34 → v7-35
+
 ## Mevcut Durum
 
 ### ✅ Çalışıyor
@@ -635,7 +667,7 @@ Salim seçti (kalan öneri listesinden 💊 ilaç/sabit hatırlatıcı). Görevl
 - MCP server Claude Desktop'a bağlı
 - **GitHub Actions otomatik deploy** — her `git push` Cloudflare Pages'e gider (`.github/workflows/deploy.yml`)
 - Manuel deploy alternatifi: `py aidan-pages-deploy.py` → 5 sn canlı
-- Cloudflare Worker 8 cron schedule (brifing/deadline/öğle/akşam/haftalık/borsa-alarm/portföy-özeti/sabit-hatırlatıcı)
+- Cloudflare Worker 9 cron schedule (brifing/deadline/öğle/akşam/haftalık/borsa-alarm/portföy-özeti/sabit-hatırlatıcı/veri-yedeği)
 - **Telegram EMEKLİ** (`TELEGRAM_RETIRED=true`) — AI + sesli + bildirim hepsi PWA'da. Bot kodu duruyor (rollback için), webhook sahibe bilgi mesajı döner.
 - **📈 Borsa modülü** — 4 piyasa watchlist + alarm + portföy + görselden AI ekleme + akşam özeti + canlı güncelleme + değer geçmişi
 - Llama 3.3 70B intent + tool use

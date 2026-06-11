@@ -534,9 +534,33 @@
     background: var(--bg-elev); border: 1px solid var(--border-soft);
     border-radius: var(--radius); padding: 13px 15px;
     border-left: 3px solid var(--border-soft);
+    cursor: pointer; transition: border-color 120ms, background 120ms;
   }
+  .stock-card:hover { border-color: rgba(99,102,241,0.45); }
   .stock-card.up { border-left-color: #34c759; }
   .stock-card.down { border-left-color: #ef4444; }
+  /* Tek hisse grafik modalı */
+  .stock-chart-modal .modal { max-width: 460px; }
+  .stock-chart-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px; }
+  .stock-chart-head .sym { font-size:1.2em; font-weight:700; letter-spacing:0.02em; color:var(--text); }
+  .stock-chart-head .name { font-size:0.78em; color:var(--text-faint); margin-top:2px; }
+  .stock-chart-head .last { text-align:right; }
+  .stock-chart-head .last .price { font-size:1.15em; font-weight:600; font-variant-numeric: tabular-nums; }
+  .stock-chart-head .last .pct { font-size:0.82em; font-weight:600; font-variant-numeric: tabular-nums; }
+  .stock-chart-head .last .pct.up { color:#34c759; }
+  .stock-chart-head .last .pct.down { color:#ef4444; }
+  .stock-chart-head .last .pct.flat { color:var(--text-muted); }
+  .stock-chart-ranges { display:flex; gap:6px; margin-bottom:8px; }
+  .stock-chart-ranges button {
+    flex:1; background: transparent; border:1px solid var(--border-soft); color: var(--text-muted);
+    padding: 5px 0; border-radius: 7px; font-size:0.82em; font-weight:600; cursor:pointer;
+  }
+  .stock-chart-ranges button.active { background: var(--accent); color:#fff; border-color: var(--accent); }
+  .stock-chart-area { background: var(--bg); border:1px solid var(--border-soft); border-radius: var(--radius); padding: 10px; min-height: 160px; display:flex; align-items:center; justify-content:center; }
+  .stock-chart-area svg { width:100%; height: 140px; display:block; }
+  .stock-chart-loading { color: var(--text-faint); font-size:0.85em; }
+  .stock-chart-stats { display:flex; justify-content:space-between; gap:10px; margin-top:10px; font-size:0.78em; color:var(--text-muted); font-variant-numeric: tabular-nums; }
+  .stock-chart-stats b { color: var(--text); font-weight:600; }
   .stock-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
   .stock-sym { font-weight: 700; font-size: 1.05em; color: var(--text); letter-spacing: 0.02em; }
   .stock-name { font-size: 0.76em; color: var(--text-faint); margin-top: 2px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2683,6 +2707,30 @@
   </div>
 </div>
 
+<!-- Tek hisse mini grafik modalı -->
+<div class="modal-overlay stock-chart-modal" id="stockChartModal" onclick="if(event.target.id==='stockChartModal')closeStockChart()">
+  <div class="modal">
+    <div class="stock-chart-head">
+      <div>
+        <div class="sym" id="stockChartSym">—</div>
+        <div class="name" id="stockChartName"></div>
+      </div>
+      <div class="last">
+        <div class="price" id="stockChartPrice">—</div>
+        <div class="pct flat" id="stockChartPct"></div>
+      </div>
+    </div>
+    <div class="stock-chart-ranges" id="stockChartRanges">
+      <button data-range="1mo" class="active" onclick="loadStockHistory('1mo')">1 ay</button>
+      <button data-range="3mo" onclick="loadStockHistory('3mo')">3 ay</button>
+      <button data-range="1y" onclick="loadStockHistory('1y')">1 yıl</button>
+    </div>
+    <div class="stock-chart-area" id="stockChartArea"><div class="stock-chart-loading">Yükleniyor…</div></div>
+    <div class="stock-chart-stats" id="stockChartStats" style="display:none;"></div>
+    <button class="modal-close" onclick="closeStockChart()">Kapat</button>
+  </div>
+</div>
+
 <!-- Odak görev seçici modalı -->
 <div class="modal-overlay" id="focusPickModal" onclick="if(event.target.id==='focusPickModal')closeFocusPick()">
   <div class="modal" style="max-width:460px;">
@@ -3629,6 +3677,9 @@ function journalVoice() {
 // data.watchlist = [{ symbol, ySymbol, market, name, price, prevClose, changePct, currency,
 //                     alarmAbove, alarmBelow, lastAlertedAbove, lastAlertedBelow, qty, cost, fetchedAt, error }]
 const STOCKS_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/stocks';
+const STOCK_HISTORY_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/stock-history';
+let _stockChartIdx = null;
+let _stockChartRange = '1mo';
 
 let selectedMarket = 'bist';
 const MARKET_PLACEHOLDERS = {
@@ -3869,7 +3920,7 @@ function renderStocks() {
     list.innerHTML = '<div class="stocks-empty">Henüz hisse yok.<br>Yukarıdan BIST kodu ekle (örn THYAO).<br>Fiyatını gör, pozisyon gir, alarm kur 🔔</div>';
     return;
   }
-  list.innerHTML = wl.map(w => {
+  list.innerHTML = wl.map((w, idx) => {
     const dir = w.changePct == null ? 'flat' : (w.changePct > 0 ? 'up' : (w.changePct < 0 ? 'down' : 'flat'));
     const cardDir = dir === 'flat' ? '' : dir;
     const sign = w.changePct == null ? '' : (w.changePct > 0 ? '+' : '');
@@ -3902,7 +3953,7 @@ function renderStocks() {
     }
 
     return `
-      <div class="stock-card ${cardDir}">
+      <div class="stock-card ${cardDir}" onclick="openStockChart(${idx})" title="Grafiği aç">
         <div class="stock-card-top">
           <div>
             <div class="stock-sym">${escapeHtml(w.symbol)}${marketBadge(w.market)}</div>
@@ -3917,7 +3968,7 @@ function renderStocks() {
         ${positionHtml}
         <div class="stock-card-bottom">
           ${alarmBadges.join('')}
-          <div class="stock-actions">
+          <div class="stock-actions" onclick="event.stopPropagation()">
             <button class="pos" onclick="setPosition('${w.symbol}')" title="Pozisyon (adet + maliyet)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>${w.qty != null && w.qty > 0 ? 'Pozisyon' : 'Pozisyon ekle'}</button>
             <button onclick="setStockAlarm('${w.symbol}')" title="Alarm kur"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>Alarm</button>
             <button class="del" onclick="removeStock('${w.symbol}')" title="Listeden çıkar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
@@ -4127,6 +4178,109 @@ function renderPortfolioHistory() {
     ${sparkline(series.map(s => s.value))}
     <div class="pf-hist-stats">${chip('Dün', dayChg)}${chip('Hafta', weekChg)}${chip('Ay', monthChg)}</div>
   `;
+}
+
+// Tek hisse mini grafik (modal) — Yahoo geçmiş veriden line chart
+function openStockChart(idx) {
+  const wl = data.watchlist || [];
+  const w = wl[idx];
+  if (!w) return;
+  _stockChartIdx = idx;
+  _stockChartRange = '1mo';
+  document.getElementById('stockChartSym').textContent = w.symbol + (w.market && w.market !== 'bist' ? ` · ${({abd:'🇺🇸',fx:'💱',crypto:'₿'})[w.market]||''}` : '');
+  document.getElementById('stockChartName').textContent = w.name || '';
+  document.getElementById('stockChartPrice').innerHTML = w.price != null
+    ? formatStockPrice(w.price) + ` <span style="font-size:0.72em;color:var(--text-faint);">${escapeHtml(w.currency||'')}</span>`
+    : '—';
+  const pctEl = document.getElementById('stockChartPct');
+  if (w.changePct != null) {
+    const d = w.changePct > 0 ? 'up' : (w.changePct < 0 ? 'down' : 'flat');
+    const s = w.changePct > 0 ? '+' : '';
+    pctEl.className = 'pct ' + d;
+    pctEl.textContent = `${s}${w.changePct.toFixed(2)}% bugün`;
+  } else { pctEl.className = 'pct flat'; pctEl.textContent = ''; }
+  // Aktif range butonu
+  document.querySelectorAll('#stockChartRanges button').forEach(b => {
+    b.classList.toggle('active', b.dataset.range === '1mo');
+  });
+  document.getElementById('stockChartArea').innerHTML = '<div class="stock-chart-loading">Yükleniyor…</div>';
+  document.getElementById('stockChartStats').style.display = 'none';
+  document.getElementById('stockChartModal').classList.add('active');
+  loadStockHistory('1mo');
+}
+
+function closeStockChart() {
+  document.getElementById('stockChartModal').classList.remove('active');
+  _stockChartIdx = null;
+}
+
+async function loadStockHistory(range) {
+  if (_stockChartIdx == null) return;
+  const w = (data.watchlist || [])[_stockChartIdx];
+  if (!w) return;
+  _stockChartRange = range;
+  document.querySelectorAll('#stockChartRanges button').forEach(b => {
+    b.classList.toggle('active', b.dataset.range === range);
+  });
+  const area = document.getElementById('stockChartArea');
+  const stats = document.getElementById('stockChartStats');
+  area.innerHTML = '<div class="stock-chart-loading">Yükleniyor…</div>';
+  stats.style.display = 'none';
+  try {
+    const ySymbol = w.ySymbol || legacyYSymbol(w);
+    const token = window._supa ? (await window._supa.auth.getSession()).data.session?.access_token : null;
+    if (!token) throw new Error('giriş yapılmamış');
+    const r = await fetch(STOCK_HISTORY_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ ySymbol, range }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.error || `http ${r.status}`);
+    }
+    const j = await r.json();
+    if (!j.closes || j.closes.length < 2) throw new Error('yetersiz veri');
+    area.innerHTML = lineChart(j.closes, j.changePct != null && j.changePct < 0);
+    const cur = j.currency || w.currency || '';
+    const dir = j.changePct == null ? 'flat' : (j.changePct > 0 ? 'up' : (j.changePct < 0 ? 'down' : 'flat'));
+    const ds = j.changePct == null ? '' : (j.changePct > 0 ? '+' : '');
+    const rangeLabel = { '1mo': '1 ay', '3mo': '3 ay', '1y': '1 yıl' }[range] || range;
+    stats.style.display = 'flex';
+    stats.innerHTML = `
+      <span>Min <b>${formatStockPrice(j.min)} ${escapeHtml(cur)}</b></span>
+      <span class="${dir}" style="color:${dir==='up'?'#34c759':dir==='down'?'#ef4444':'var(--text-muted)'};">${rangeLabel}: <b>${ds}${(j.changePct||0).toFixed(2)}%</b></span>
+      <span>Max <b>${formatStockPrice(j.max)} ${escapeHtml(cur)}</b></span>
+    `;
+  } catch (e) {
+    area.innerHTML = `<div class="stock-chart-loading">⚠️ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// Daha büyük SVG line chart — area fill + line. Mini grafiğin "ağabey" versiyonu.
+function lineChart(values, isDown) {
+  if (!values || values.length < 2) return '';
+  const w = 420, h = 140, padX = 8, padY = 10;
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = (max - min) || 1;
+  const pts = values.map((v, i) => {
+    const x = padX + (i / (values.length - 1)) * (w - 2 * padX);
+    const y = padY + (1 - (v - min) / range) * (h - 2 * padY);
+    return [x, y];
+  });
+  const line = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const area = line + ` L${pts[pts.length-1][0].toFixed(1)},${(h-padY).toFixed(1)} L${pts[0][0].toFixed(1)},${(h-padY).toFixed(1)} Z`;
+  const up = values[values.length - 1] >= values[0];
+  const color = up ? '#34c759' : '#ef4444';
+  const fillId = 'lc-fill-' + (up ? 'u' : 'd');
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+    <defs><linearGradient id="${fillId}" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="${color}" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+    </linearGradient></defs>
+    <path d="${area}" fill="url(#${fillId})" stroke="none"/>
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
 }
 
 // Basit SVG sparkline — değer dizisinden tek çizgi (son ≥ ilk → yeşil, değilse kırmızı)

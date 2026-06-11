@@ -1760,6 +1760,85 @@ async function handleStocksApi(request, env) {
 }
 
 // ============================================================
+// Tek hisse geçmiş veri — mini grafik için (1A / 3A / 1Y)
+// Yahoo chart endpoint'i tek sembol için close serisi döner. 5dk Cloudflare cache.
+// ============================================================
+const STOCK_HISTORY_RANGES = {
+  '1mo': { range: '1mo', interval: '1d' },
+  '3mo': { range: '3mo', interval: '1d' },
+  '1y':  { range: '1y',  interval: '1wk' },
+};
+
+async function handleStockHistoryApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+
+  const yahoo = String(body.ySymbol || '').trim().toUpperCase();
+  if (!yahoo || !/^[A-Z0-9.=-]{1,20}$/.test(yahoo)) {
+    return jsonCors({ error: 'bad symbol' }, 400, cors);
+  }
+  const rangeKey = STOCK_HISTORY_RANGES[body.range] ? body.range : '1mo';
+  const { range, interval } = STOCK_HISTORY_RANGES[rangeKey];
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+
+  try {
+    const r = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahoo)}?range=${range}&interval=${interval}`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' }, cf: { cacheTtl: 300, cacheEverything: true } }
+    );
+    if (!r.ok) return jsonCors({ error: `yahoo http ${r.status}` }, 502, cors);
+    const j = await r.json();
+    const res = j && j.chart && j.chart.result && j.chart.result[0];
+    if (!res) return jsonCors({ error: 'veri yok' }, 404, cors);
+
+    const ts = Array.isArray(res.timestamp) ? res.timestamp : [];
+    const closeArr = res.indicators && res.indicators.quote && res.indicators.quote[0] && res.indicators.quote[0].close;
+    const closes = Array.isArray(closeArr) ? closeArr : [];
+    const meta = res.meta || {};
+
+    // null close değerleri (kapalı gün/tatil) atla — paralel index
+    const points = [];
+    for (let i = 0; i < ts.length; i++) {
+      const c = closes[i];
+      if (c == null || !isFinite(c)) continue;
+      points.push({ t: ts[i], c: Math.round(c * 100) / 100 });
+    }
+    if (points.length < 2) return jsonCors({ error: 'yetersiz veri' }, 404, cors);
+
+    const values = points.map(p => p.c);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const first = values[0];
+    const last = values[values.length - 1];
+    const changePct = first > 0 ? Math.round(((last - first) / first) * 10000) / 100 : null;
+
+    return jsonCors({
+      ySymbol: yahoo,
+      range: rangeKey,
+      name: meta.longName || meta.shortName || yahoo,
+      currency: meta.currency || 'TRY',
+      timestamps: points.map(p => p.t),
+      closes: values,
+      min, max, first, last, changePct,
+    }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
+// ============================================================
 // Portföy görseli → AI (Cloudflare Workers AI vision modeli)
 // Kullanıcı aracı kurum uygulamasının portföy ekranının fotoğrafını atar,
 // vision modeli sembol + adet + ortalama maliyet + piyasayı okur, JSON döner.
@@ -2098,6 +2177,78 @@ async function runFixedReminders(env) {
 }
 
 // ============================================================
+// 💾 Veri yedeği — haftalık snapshot aidan_backups tablosuna
+// ============================================================
+// Salim'in Supabase'inde tek satırlı aidan_data row'u var. Bozulursa/silinirse
+// kurtarmak için haftada bir tüm data'nın JSON kopyasını aidan_backups'a yaz.
+// Son 12 yedek korunur (~3 ay), eskileri silinir. Sessiz çalışır — push YOK.
+//
+// Tablo (Salim'in 1 kez Supabase SQL Editor'da çalıştırması gerek):
+//   create table aidan_backups (
+//     id bigint primary key generated always as identity,
+//     user_id uuid not null,
+//     snapshot_at timestamptz not null default now(),
+//     data jsonb not null
+//   );
+//   create index on aidan_backups (user_id, snapshot_at desc);
+//   alter table aidan_backups enable row level security;
+//   create policy "users see own backups" on aidan_backups
+//     for select using (auth.uid() = user_id);
+//   create policy "users insert own backups" on aidan_backups
+//     for insert with check (auth.uid() = user_id);
+//   create policy "users delete own backups" on aidan_backups
+//     for delete using (auth.uid() = user_id);
+async function runBackup(env) {
+  const KEEP = 12;
+  const { data, token, userId } = await fetchAidan(env);
+  const dataKeys = Object.keys(data || {});
+  const tasksLen = Array.isArray(data.tasks) ? data.tasks.length : 0;
+
+  // INSERT yeni snapshot
+  const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/aidan_backups`, {
+    method: 'POST',
+    headers: {
+      'apikey': env.SUPABASE_KEY,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    },
+    body: JSON.stringify({ user_id: userId, data }),
+  });
+  if (!ins.ok) {
+    const msg = await ins.text();
+    // 42P01 = relation does not exist (tablo henüz yaratılmamış) — sessiz log + null dön
+    if (ins.status === 404 || msg.includes('aidan_backups') && msg.includes('not exist')) {
+      console.warn('aidan_backups tablosu yok — Salim henüz SQL\'i çalıştırmamış olabilir');
+      return { type: 'backup', ok: false, reason: 'table-missing', dataKeys: dataKeys.length, tasks: tasksLen };
+    }
+    throw new Error(`Backup insert fail: ${ins.status} ${msg}`);
+  }
+
+  // Eski yedekleri sil (son KEEP'ten eskileri)
+  let deleted = 0;
+  try {
+    const list = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/aidan_backups?user_id=eq.${userId}&select=id&order=snapshot_at.desc`,
+      { headers: { 'apikey': env.SUPABASE_KEY, 'Authorization': `Bearer ${token}` } }
+    );
+    if (list.ok) {
+      const rows = await list.json();
+      if (rows.length > KEEP) {
+        const toDelete = rows.slice(KEEP).map(r => r.id);
+        const del = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/aidan_backups?id=in.(${toDelete.join(',')})`,
+          { method: 'DELETE', headers: { 'apikey': env.SUPABASE_KEY, 'Authorization': `Bearer ${token}` } }
+        );
+        if (del.ok) deleted = toDelete.length;
+      }
+    }
+  } catch (e) { console.warn('backup cleanup hata', e.message); }
+
+  return { type: 'backup', ok: true, dataKeys: dataKeys.length, tasks: tasksLen, deleted };
+}
+
+// ============================================================
 // Static file serving (PWA host)
 // ============================================================
 // __STATIC_FILES__ deploy.py tarafından base64 dict ile değiştirilir.
@@ -2182,6 +2333,11 @@ export default {
       return handleStocksApi(request, env);
     }
 
+    // Tek hisse geçmiş veri — mini grafik (POST {ySymbol, range:'1mo'|'3mo'|'1y'})
+    if (url.pathname === '/stock-history') {
+      return handleStockHistoryApi(request, env);
+    }
+
     // Portföy görseli → AI vision (POST {image} → sembol/adet/maliyet JSON)
     if (url.pathname === '/portfolio-image') {
       return handlePortfolioImageApi(request, env);
@@ -2206,6 +2362,8 @@ export default {
             ? await runPortfolioSummary(env)
             : cronType === 'reminders'
             ? await runFixedReminders(env)
+            : cronType === 'backup'
+            ? await runBackup(env)
             : await runCronJob(env, cronType);
           return new Response(JSON.stringify(result, null, 2), {
             headers: { 'Content-Type': 'application/json' },
@@ -2238,6 +2396,11 @@ export default {
     // 💊 Sabit hatırlatıcılar — 15 dk'da bir saat kontrolü
     if (event.cron === '*/15 * * * *') {
       ctx.waitUntil(runFixedReminders(env));
+      return;
+    }
+    // 💾 Haftalık veri yedeği — Pazartesi 03:00 TR (UTC 00:00)
+    if (event.cron === '0 0 * * 1') {
+      ctx.waitUntil(runBackup(env));
       return;
     }
     let type;

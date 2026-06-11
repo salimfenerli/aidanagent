@@ -6,7 +6,7 @@ Wrangler'a gerek yok, sadece python + httpx.
   CF_API_TOKEN   — Cloudflare API token
   CF_ACCOUNT_ID  — Cloudflare account id
   SUPABASE_URL / SUPABASE_KEY / AIDAN_EMAIL / AIDAN_PASSWORD
-  TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID / WEBHOOK_SECRET
+  WEBHOOK_SECRET / VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY
 
 Bu script aynı zamanda PWA static dosyalarını da (asistan.html, sw.js,
 manifest, ikonlar) Worker'a embed eder — site Worker URL'inden serve edilir.
@@ -75,6 +75,7 @@ CRON_LIST = [
     {"cron": "*/30 7-15 * * 1-5"},  # BIST saatleri (10-18 TR, hafta içi) — borsa alarm
     {"cron": "30 15 * * 1-5"},  # 18:30 TR hafta içi — akşam portföy özeti (BIST kapanışı sonrası)
     {"cron": "*/15 * * * *"},  # 15 dk'da bir — sabit hatırlatıcı kontrolü (ilaç/su/ders, data.reminders)
+    {"cron": "0 0 * * 1"},  # Pazartesi 03:00 TR (UTC 00:00) — haftalık veri yedeği aidan_backups tablosuna
 ]
 
 
@@ -166,8 +167,7 @@ if __name__ == "__main__":
     # Secret'lar (varsa)
     secret_names = [
         "SUPABASE_URL", "SUPABASE_KEY", "AIDAN_EMAIL", "AIDAN_PASSWORD",
-        "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "WEBHOOK_SECRET",
-        "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY",
+        "WEBHOOK_SECRET", "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY",
     ]
     for k in secret_names:
         v = os.environ.get(k, "")
