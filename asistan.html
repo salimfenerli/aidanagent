@@ -2621,6 +2621,19 @@
     </div>
 
     <div class="settings-row">
+      <label>👥 Davet et</label>
+      <div id="inviteSection" style="display:none;">
+        <div style="display:flex; gap:6px; align-items:center; margin-bottom:8px;">
+          <input type="text" id="inviteNote" placeholder="kim için? (not, opsiyonel)" maxlength="60" style="flex:1; min-width: 120px;">
+          <button class="small" onclick="createInvite()">＋ Yeni kod üret</button>
+        </div>
+        <div id="inviteList"></div>
+        <div class="settings-help">Üretilen kod arkadaşına ver — <code>aidanapp.pages.dev</code>'e gidip "🆕 Yeni Hesap" der, kodu girer, kayıt olur. Her kod tek sefer kullanılır.</div>
+      </div>
+      <div id="inviteLocked" class="settings-help">Bu bölümün açılması için Supabase'e giriş yapmış olman gerek. Davet kodu üretmek yalnızca hesap sahibine açıktır.</div>
+    </div>
+
+    <div class="settings-row">
       <label>☁️ Otomatik yedekler (Supabase) — son 12</label>
       <details id="backupDetails">
         <summary style="cursor:pointer; color: var(--text-muted); font-size:0.88em; padding:4px 0;">📥 Yedek geçmişini göster</summary>
@@ -2871,6 +2884,7 @@ function showTab(name, btn) {
     renderMuteState();
     renderFixedReminders();
     renderCountdownManage();
+    loadInviteSection();
     // Yedek details açıldığında otomatik yükle (bir kez bağlanır)
     const bd = document.getElementById('backupDetails');
     if (bd && !bd._hooked) {
@@ -6986,36 +7000,155 @@ function renderAuthBox() {
   } else {
     el.innerHTML = `
       <div style="background:#2a2a3e;padding:12px;border-radius:8px;">
-        <b>📧 Email + Şifre ile giriş:</b><br>
+        <b>📧 Email + Şifre:</b><br>
         <input type="email" id="loginEmail" placeholder="email@adres.com" style="width:100%;max-width:300px;margin:6px 0;display:block;">
-        <input type="password" id="loginPassword" placeholder="şifre (en az 6 karakter)" style="width:100%;max-width:300px;margin:6px 0;display:block;">
-        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="small" onclick="signUpUser()">🆕 Hesap Oluştur</button>
-          <button class="small secondary" onclick="signInUser()">🔓 Giriş Yap</button>
+        <input type="password" id="loginPassword" placeholder="şifre (en az 8 karakter)" style="width:100%;max-width:300px;margin:6px 0;display:block;">
+        <div id="inviteRow" style="display:none;">
+          <input type="text" id="inviteCode" placeholder="Davet kodu (AIDAN-XXXX)" style="width:100%;max-width:300px;margin:6px 0;display:block;text-transform:uppercase;font-variant-numeric:tabular-nums;letter-spacing:0.04em;">
+          <div style="font-size:0.78em;color:#aaa;margin-top:2px;">Davet kodu olmayanın kaydı kabul edilmez.</div>
         </div>
-        <div style="font-size:0.85em;color:#888;margin-top:6px;">İlk kez: "Hesap Oluştur" bas.<br>Sonra her zaman: "Giriş Yap".<br>Aynı email ve şifreyi telefonda da kullanacaksın.</div>
+        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="small secondary" onclick="signInUser()">🔓 Giriş Yap</button>
+          <button class="small" onclick="toggleSignupForm()">🆕 Yeni Hesap</button>
+        </div>
+        <div id="signupRow" style="display:none;margin-top:6px;">
+          <button class="small" onclick="signUpUser()" style="width:100%;">✅ Kayıt Ol (davet koduyla)</button>
+        </div>
+        <div style="font-size:0.85em;color:#888;margin-top:6px;">İlk kez: Davet kodun varsa "Yeni Hesap" bas.<br>Hesabın varsa: "Giriş Yap".<br>Aynı email/şifre tüm cihazlarda.</div>
       </div>
     `;
   }
+}
+
+function toggleSignupForm() {
+  const row = document.getElementById('inviteRow');
+  const btnRow = document.getElementById('signupRow');
+  const opening = row.style.display === 'none';
+  row.style.display = opening ? 'block' : 'none';
+  btnRow.style.display = opening ? 'block' : 'none';
+  if (opening) document.getElementById('inviteCode').focus();
+}
+
+const SIGNUP_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/signup';
+const INVITE_CREATE_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/invite/create';
+const INVITE_LIST_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/invite/list';
+
+async function getSupaToken() {
+  if (!window._supa) return null;
+  const { data } = await window._supa.auth.getSession();
+  return data?.session?.access_token || null;
+}
+
+async function loadInviteSection() {
+  const sec = document.getElementById('inviteSection');
+  const locked = document.getElementById('inviteLocked');
+  if (!sec || !locked) return;
+  if (!window._user) { sec.style.display = 'none'; locked.style.display = 'block'; return; }
+  // Login varsa bölümü göster, listeyi yükle
+  sec.style.display = 'block';
+  locked.style.display = 'none';
+  await refreshInviteList();
+}
+
+async function refreshInviteList() {
+  const list = document.getElementById('inviteList');
+  if (!list) return;
+  const token = await getSupaToken();
+  if (!token) { list.innerHTML = '<div class="fixedrem-empty">Önce giriş yap.</div>'; return; }
+  list.innerHTML = '<div class="fixedrem-empty">Yükleniyor…</div>';
+  try {
+    const r = await fetch(INVITE_LIST_ENDPOINT, { headers: { 'Authorization': `Bearer ${token}` } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { list.innerHTML = `<div class="fixedrem-empty">⚠️ ${escapeHtml(j.error || 'liste başarısız')}</div>`; return; }
+    if (!j.tableExists) {
+      list.innerHTML = '<div class="fixedrem-empty">📋 <code>invite_codes</code> tablosu yok. Supabase SQL Editor\'da çalıştır (CLAUDE.md\'de SQL var).</div>';
+      return;
+    }
+    if (!j.codes || !j.codes.length) {
+      list.innerHTML = '<div class="fixedrem-empty">Henüz davet kodu üretmedin. Yukarıdaki butonla başla.</div>';
+      return;
+    }
+    list.innerHTML = j.codes.map(c => {
+      const used = !!c.used_by;
+      const created = new Date(c.created_at).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' });
+      const usedLine = used ? `<div class="countdown-row-meta">✓ kullanıldı · ${new Date(c.used_at).toLocaleDateString('tr-TR')}</div>` : '<div class="countdown-row-meta">🟢 kullanılmadı</div>';
+      const noteLine = c.note ? `<div class="countdown-row-meta">${escapeHtml(c.note)}</div>` : '';
+      return `
+        <div class="countdown-row" style="opacity:${used ? 0.6 : 1};">
+          <div class="countdown-row-info">
+            <div class="countdown-row-label" style="font-family: monospace; letter-spacing: 0.04em;">${escapeHtml(c.code)}</div>
+            ${noteLine}
+            <div class="countdown-row-meta">${created}</div>
+            ${usedLine}
+          </div>
+          ${!used ? `<button class="small secondary" onclick="copyInviteCode('${c.code}')" title="Kopyala">📋</button>` : ''}
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = `<div class="fixedrem-empty">⚠️ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function createInvite() {
+  const token = await getSupaToken();
+  if (!token) { showToast('Önce giriş yap', 'warning', 2500); return; }
+  const note = document.getElementById('inviteNote').value.trim();
+  try {
+    const r = await fetch(INVITE_CREATE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ note }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      showToast(j.error || `kod üretilemedi (${r.status})`, 'warning', 4000);
+      return;
+    }
+    document.getElementById('inviteNote').value = '';
+    showToast(`✅ ${j.code} — kopyalayıp arkadaşına yolla`, 'success', 4500);
+    await refreshInviteList();
+  } catch (e) { showToast('Hata: ' + e.message, 'warning', 3500); }
+}
+
+function copyInviteCode(code) {
+  navigator.clipboard.writeText(code).then(
+    () => showToast(`📋 ${code} kopyalandı`, 'success', 2000),
+    () => showToast('Kopyalama başarısız', 'warning', 2500)
+  );
 }
 
 async function signUpUser() {
   if (!window._supa) { showSupaStatus('⚠️ Önce Supabase\'e bağlan.', '#ffb86c'); return; }
   const email = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
+  const code = (document.getElementById('inviteCode')?.value || '').trim().toUpperCase();
   if (!email || !email.includes('@')) { showSupaStatus('⚠️ Geçerli email gir.', '#ffb86c'); return; }
-  if (password.length < 6) { showSupaStatus('⚠️ Şifre en az 6 karakter olmalı.', '#ffb86c'); return; }
+  if (password.length < 8) { showSupaStatus('⚠️ Şifre en az 8 karakter olmalı.', '#ffb86c'); return; }
+  if (!code) { showSupaStatus('⚠️ Davet kodu gerekli (AIDAN-XXXXXXXX).', '#ffb86c'); return; }
 
-  showSupaStatus('⏳ Hesap oluşturuluyor...', '#8be9fd');
-  const {data: signupData, error} = await window._supa.auth.signUp({email, password});
-  if (error) {
-    showSupaStatus('❌ Hata: ' + error.message + '\n\nZaten hesabın varsa "Giriş Yap" butonuna bas.', '#ff5555');
-    return;
-  }
-  if (signupData.session) {
-    showSupaStatus('✅ Hesap oluşturuldu ve giriş yapıldı!', '#50fa7b');
-  } else {
-    showSupaStatus('⚠️ Hesap oluşturuldu AMA email doğrulama gerekiyor.\n\nSupabase\'de şunu yap:\nAuthentication → Providers → Email → "Confirm email" KAPAT → Save\n\nSonra "Giriş Yap" bas.', '#ffb86c');
+  showSupaStatus('⏳ Davet kodu doğrulanıyor, hesap oluşturuluyor...', '#8be9fd');
+  try {
+    const r = await fetch(SIGNUP_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, code }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      showSupaStatus('❌ ' + (j.error || `signup ${r.status}`), '#ff5555');
+      return;
+    }
+    // Confirm-email kapalıysa session geldi — direkt login. Açıksa email doğrula mesajı.
+    if (j.session) {
+      showSupaStatus('✅ Hesap oluştu — giriş yapılıyor…', '#50fa7b');
+      const { error } = await window._supa.auth.signInWithPassword({ email, password });
+      if (error) showSupaStatus('⚠️ Kayıt OK ama otomatik giriş başarısız: ' + error.message, '#ffb86c');
+    } else {
+      showSupaStatus('✅ Hesap oluştu. Email doğrulaması gerekiyorsa kutuna bak. Yoksa "Giriş Yap" bas.', '#50fa7b');
+    }
+  } catch (e) {
+    showSupaStatus('❌ ' + e.message, '#ff5555');
   }
 }
 

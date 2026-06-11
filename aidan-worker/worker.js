@@ -85,6 +85,108 @@ async function saveAidan(env, data, sessionInfo) {
 }
 
 // ============================================================
+// 👥 Multi-user — service_role ile tüm user satırlarını oku/yaz
+// ============================================================
+// SUPABASE_SERVICE_KEY eklendiğinde cron'lar otomatik multi-user olur.
+// Yoksa fallback: AIDAN_EMAIL/PASSWORD ile tek user (eski Salim-only akış).
+// Service key RLS'i bypass eder — sadece backend cron'larda kullanılır, istemciye sızmaz.
+function hasServiceKey(env) {
+  return !!(env.SUPABASE_SERVICE_KEY && env.SUPABASE_SERVICE_KEY.length > 20);
+}
+
+async function fetchAllUsers(env) {
+  if (hasServiceKey(env)) {
+    const r = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/aidan_data?select=user_id,data,updated_at`,
+      {
+        headers: {
+          'apikey': env.SUPABASE_SERVICE_KEY,
+          'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+        },
+      }
+    );
+    if (!r.ok) throw new Error(`fetchAllUsers fail: ${r.status} ${await r.text()}`);
+    const rows = await r.json();
+    return rows.map(row => ({
+      userId: row.user_id,
+      data: row.data || { tasks: [], dumps: [], pomoToday: { date: trToday(), count: 0 }, settings: {} },
+      updatedAt: row.updated_at,
+    }));
+  }
+  // Fallback: tek user (Salim)
+  const single = await fetchAidan(env);
+  return [{ userId: single.userId, data: single.data, updatedAt: null, _legacyToken: single.token }];
+}
+
+async function saveUserData(env, userId, data) {
+  if (hasServiceKey(env)) {
+    const r = await fetch(`${env.SUPABASE_URL}/rest/v1/aidan_data?on_conflict=user_id`, {
+      method: 'POST',
+      headers: {
+        'apikey': env.SUPABASE_SERVICE_KEY,
+        'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify({ user_id: userId, data, updated_at: new Date().toISOString() }),
+    });
+    if (!r.ok) throw new Error(`saveUserData fail: ${r.status} ${await r.text()}`);
+    return;
+  }
+  // Fallback: AIDAN_EMAIL login ile tek user save
+  await saveAidan(env, data, null);
+}
+
+// service_role ile aidan_backups'a INSERT (RLS bypass) — sadece cron için
+async function insertBackup(env, userId, data) {
+  if (!hasServiceKey(env)) {
+    // Service key yoksa eski akış: AIDAN_EMAIL token'ı ile kendi satırı
+    const { token } = await login(env);
+    const r = await fetch(`${env.SUPABASE_URL}/rest/v1/aidan_backups`, {
+      method: 'POST',
+      headers: {
+        'apikey': env.SUPABASE_KEY,
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify({ user_id: userId, data }),
+    });
+    return r;
+  }
+  return await fetch(`${env.SUPABASE_URL}/rest/v1/aidan_backups`, {
+    method: 'POST',
+    headers: {
+      'apikey': env.SUPABASE_SERVICE_KEY,
+      'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    },
+    body: JSON.stringify({ user_id: userId, data }),
+  });
+}
+
+async function listAndPruneBackups(env, userId, keep = 12) {
+  const headers = hasServiceKey(env)
+    ? { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` }
+    : null;
+  if (!headers) return 0; // Service key yoksa cleanup için ayrı login lazım — caller halletsin
+  const list = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/aidan_backups?user_id=eq.${userId}&select=id&order=snapshot_at.desc`,
+    { headers }
+  );
+  if (!list.ok) return 0;
+  const rows = await list.json();
+  if (rows.length <= keep) return 0;
+  const toDelete = rows.slice(keep).map(r => r.id);
+  const del = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/aidan_backups?id=in.(${toDelete.join(',')})`,
+    { method: 'DELETE', headers }
+  );
+  return del.ok ? toDelete.length : 0;
+}
+
+// ============================================================
 // Cron mesaj üreticiler
 // ============================================================
 // Akıllı MIT skoru — geçmiş, deadline, öncelik, tahmin'e göre
@@ -617,28 +719,42 @@ async function sendPushToAll(env, data, payload, sessionInfo) {
   }
   if (dead.length) {
     data.settings.pushSubs = subs.filter(s => !dead.includes(s.endpoint));
-    try { await saveAidan(env, data, sessionInfo); } catch (e) { console.error('pushSub cleanup save fail', e.message); }
+    // Multi-user: sessionInfo.userId varsa o user'ı kaydet; yoksa eski tek-user saveAidan
+    try {
+      if (sessionInfo && sessionInfo.userId && hasServiceKey(env)) {
+        await saveUserData(env, sessionInfo.userId, data);
+      } else {
+        await saveAidan(env, data, sessionInfo);
+      }
+    } catch (e) { console.error('pushSub cleanup save fail', e.message); }
   }
 }
 
 async function runCronJob(env, type) {
-  const { data, token, userId } = await fetchAidan(env);
-  let payload = null;
-  switch (type) {
-    case 'morning':  payload = buildMorning(data, autoSetMorningMit(data)); break;
-    case 'noon':     payload = buildNoon(data); break;
-    case 'evening':  payload = buildEvening(data); break;
-    case 'deadline': payload = buildDeadlineAlerts(data); break;
-    case 'weekly':   payload = await buildWeekly(env, data); break;
-    default: throw new Error(`Bilinmeyen tip: ${type}`);
+  const users = await fetchAllUsers(env);
+  const results = [];
+  for (const u of users) {
+    try {
+      let payload = null;
+      switch (type) {
+        case 'morning':  payload = buildMorning(u.data, autoSetMorningMit(u.data)); break;
+        case 'noon':     payload = buildNoon(u.data); break;
+        case 'evening':  payload = buildEvening(u.data); break;
+        case 'deadline': payload = buildDeadlineAlerts(u.data); break;
+        case 'weekly':   payload = await buildWeekly(env, u.data); break;
+        default: throw new Error(`Bilinmeyen tip: ${type}`);
+      }
+      if (!payload) { results.push({ userId: u.userId, sent: false, reason: 'no-content' }); continue; }
+      const subs = (u.data.settings && u.data.settings.pushSubs) || [];
+      await sendPushToAll(env, u.data, payload, { userId: u.userId });
+      logPush(u.data, type, payload, subs.length);
+      try { await saveUserData(env, u.userId, u.data); } catch (e) { console.error(`save fail user=${u.userId}`, e.message); }
+      results.push({ userId: u.userId, sent: true, subs: subs.length });
+    } catch (e) {
+      results.push({ userId: u.userId, sent: false, error: e.message });
+    }
   }
-  if (!payload) return { type, sent: false, reason: 'no-content' };
-  const subs = (data.settings && data.settings.pushSubs) || [];
-  await sendPushToAll(env, data, payload, { token, userId });
-  // Bildirim geçmişi — PWA "📬 Son 7 gün" listesinde gösterilir
-  logPush(data, type, payload, subs.length);
-  try { await saveAidan(env, data, { token, userId }); } catch (e) { console.error('pushLog save fail', e.message); }
-  return { type, sent: true, channel: 'push' };
+  return { type, users: users.length, results, multiUser: hasServiceKey(env) };
 }
 
 // Bildirim kaydını data.pushLog'a ekle (son 7 gün + max 60 kayıt)
@@ -1453,6 +1569,15 @@ async function verifyUser(env, userToken) {
   } catch { return null; }
 }
 
+// Multi-user gate: service_role varsa herkes (auth olmuş) geçer; yoksa sadece AIDAN_EMAIL.
+// Salim multi-user'a geçince hasServiceKey(env) true olur → whitelist kalkar.
+function allowUser(env, user) {
+  if (!user || !user.email) return false;
+  if (hasServiceKey(env)) return true; // multi-user modu
+  if (!env.AIDAN_EMAIL) return true; // env yoksa engelleme
+  return user.email.toLowerCase() === env.AIDAN_EMAIL.toLowerCase();
+}
+
 async function handleAiApi(request, env) {
   const cors = {
     'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
@@ -1474,7 +1599,7 @@ async function handleAiApi(request, env) {
   const user = await verifyUser(env, userToken);
   if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
   // MVP: sadece hesap sahibi (multi-user'da bu kontrol kalkar, herkes kendi verisine yazar)
-  if (env.AIDAN_EMAIL && user.email && user.email.toLowerCase() !== env.AIDAN_EMAIL.toLowerCase()) {
+  if (!allowUser(env, user)) {
     return jsonCors({ error: 'forbidden' }, 403, cors);
   }
 
@@ -1535,7 +1660,7 @@ async function handleJournalApi(request, env) {
   const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
   const user = await verifyUser(env, userToken);
   if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
-  if (env.AIDAN_EMAIL && user.email && user.email.toLowerCase() !== env.AIDAN_EMAIL.toLowerCase()) {
+  if (!allowUser(env, user)) {
     return jsonCors({ error: 'forbidden' }, 403, cors);
   }
 
@@ -1600,7 +1725,7 @@ async function handleSplitApi(request, env) {
   const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
   const user = await verifyUser(env, userToken);
   if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
-  if (env.AIDAN_EMAIL && user.email && user.email.toLowerCase() !== env.AIDAN_EMAIL.toLowerCase()) {
+  if (!allowUser(env, user)) {
     return jsonCors({ error: 'forbidden' }, 403, cors);
   }
 
@@ -1641,7 +1766,7 @@ async function handlePortfolioCommentApi(request, env) {
   const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
   const user = await verifyUser(env, userToken);
   if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
-  if (env.AIDAN_EMAIL && user.email && user.email.toLowerCase() !== env.AIDAN_EMAIL.toLowerCase()) {
+  if (!allowUser(env, user)) {
     return jsonCors({ error: 'forbidden' }, 403, cors);
   }
 
@@ -1839,6 +1964,169 @@ async function handleStockHistoryApi(request, env) {
 }
 
 // ============================================================
+// 👥 Multi-user — /signup + /invite endpoint'leri (davet kodlu kapalı kayıt)
+// ============================================================
+// Akış: Salim /invite/create ile kod üretir → arkadaşa yollar →
+// arkadaş /signup'a email+şifre+kod yollar → kod doğruysa Supabase auth'a kayıt + kodu used işaretle.
+// Service key olmadan da /invite/create çalışır (kodu kendi user'ı adına yazar),
+// /signup'da service key yoksa kullanılır mevcut Supabase auth signup endpoint'i.
+
+function genInviteCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // O/0/I/1 confusion'u önle
+  let s = '';
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  for (let i = 0; i < 8; i++) s += alphabet[bytes[i] % alphabet.length];
+  return 'AIDAN-' + s;
+}
+
+async function handleInviteCreateApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  // İlk fazda sadece Salim (AIDAN_EMAIL) davet kodu üretebilir.
+  // İleride bu kontrolü kaldırıp "her kullanıcı 5 kod üretebilir" gibi limit koyulabilir.
+  if (env.AIDAN_EMAIL && user.email.toLowerCase() !== env.AIDAN_EMAIL.toLowerCase()) {
+    return jsonCors({ error: 'sadece hesap sahibi davet kodu üretebilir' }, 403, cors);
+  }
+
+  let body = {};
+  try { body = await request.json(); } catch {}
+  const note = (body.note || '').trim().slice(0, 80);
+
+  const code = genInviteCode();
+  // INSERT — RLS policy "users create own codes" sayesinde user'ın kendi token'ı ile yazılır
+  const r = await fetch(`${env.SUPABASE_URL}/rest/v1/invite_codes`, {
+    method: 'POST',
+    headers: {
+      'apikey': env.SUPABASE_KEY,
+      'Authorization': `Bearer ${userToken}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    },
+    body: JSON.stringify({ code, created_by: user.id, note: note || null }),
+  });
+  if (!r.ok) {
+    const msg = await r.text();
+    if (msg.includes('invite_codes') && msg.includes('not exist')) {
+      return jsonCors({ error: 'invite_codes tablosu yok — Supabase SQL Editor\'da oluştur' }, 503, cors);
+    }
+    return jsonCors({ error: `kod yazılamadı: ${r.status} ${msg.slice(0, 120)}` }, 500, cors);
+  }
+  return jsonCors({ code, note: note || null, created_at: new Date().toISOString() }, 200, cors);
+}
+
+async function handleInviteListApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'GET') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+
+  // RLS otomatik filtreler — sadece kullanıcının kendi kodları
+  const r = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/invite_codes?select=code,created_at,used_by,used_at,note&order=created_at.desc&limit=50`,
+    { headers: { 'apikey': env.SUPABASE_KEY, 'Authorization': `Bearer ${userToken}` } }
+  );
+  if (!r.ok) {
+    const msg = await r.text();
+    if (msg.includes('invite_codes') && msg.includes('not exist')) {
+      return jsonCors({ codes: [], tableExists: false }, 200, cors);
+    }
+    return jsonCors({ error: `liste başarısız: ${r.status}` }, 500, cors);
+  }
+  const codes = await r.json();
+  return jsonCors({ codes, tableExists: true }, 200, cors);
+}
+
+async function handleSignupApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const email = String(body.email || '').trim().toLowerCase();
+  const password = String(body.password || '');
+  const code = String(body.code || '').trim().toUpperCase();
+  if (!email || !password || !code) return jsonCors({ error: 'email/password/code zorunlu' }, 400, cors);
+  if (password.length < 8) return jsonCors({ error: 'şifre en az 8 karakter' }, 400, cors);
+  if (!hasServiceKey(env)) {
+    return jsonCors({ error: 'Davet kodu doğrulama için service_role key gerekli (henüz kurulmamış)' }, 503, cors);
+  }
+
+  // 1) Kodu doğrula — service key ile (RLS bypass) tüm satıra erişim
+  const codeRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/invite_codes?code=eq.${encodeURIComponent(code)}&select=code,used_by,created_by`,
+    { headers: { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` } }
+  );
+  if (!codeRes.ok) {
+    const msg = await codeRes.text();
+    return jsonCors({ error: `kod doğrulama başarısız: ${codeRes.status} ${msg.slice(0, 120)}` }, 500, cors);
+  }
+  const codeRows = await codeRes.json();
+  if (!codeRows.length) return jsonCors({ error: 'davet kodu geçersiz' }, 400, cors);
+  if (codeRows[0].used_by) return jsonCors({ error: 'bu davet kodu zaten kullanılmış' }, 400, cors);
+
+  // 2) Supabase auth.signUp
+  const su = await fetch(`${env.SUPABASE_URL}/auth/v1/signup`, {
+    method: 'POST',
+    headers: { 'apikey': env.SUPABASE_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const suBody = await su.json().catch(() => ({}));
+  if (!su.ok) {
+    const errMsg = (suBody && (suBody.msg || suBody.error_description || suBody.error)) || `signup ${su.status}`;
+    return jsonCors({ error: errMsg }, su.status, cors);
+  }
+  const newUserId = suBody.user?.id || suBody.id;
+  if (!newUserId) return jsonCors({ error: 'signup başarılı ama user.id alınamadı' }, 500, cors);
+
+  // 3) Kodu used işaretle (service key — RLS bypass)
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/invite_codes?code=eq.${encodeURIComponent(code)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'apikey': env.SUPABASE_SERVICE_KEY,
+        'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify({ used_by: newUserId, used_at: new Date().toISOString() }),
+    }
+  ).catch(e => console.error('used işaretleme hatası', e.message));
+
+  return jsonCors({
+    ok: true,
+    user: suBody.user || { id: newUserId, email },
+    session: suBody.session || null, // confirm-email kapalıysa session gelir, açıksa null
+    needsEmailConfirm: !suBody.session,
+  }, 200, cors);
+}
+
+// ============================================================
 // Portföy görseli → AI (Cloudflare Workers AI vision modeli)
 // Kullanıcı aracı kurum uygulamasının portföy ekranının fotoğrafını atar,
 // vision modeli sembol + adet + ortalama maliyet + piyasayı okur, JSON döner.
@@ -1935,7 +2223,7 @@ async function handlePortfolioImageApi(request, env) {
   const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
   const user = await verifyUser(env, userToken);
   if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
-  if (env.AIDAN_EMAIL && user.email && user.email.toLowerCase() !== env.AIDAN_EMAIL.toLowerCase()) {
+  if (!allowUser(env, user)) {
     return jsonCors({ error: 'forbidden' }, 403, cors);
   }
 
@@ -2001,12 +2289,25 @@ async function visionRun(env, input) {
   }
 }
 
-// Borsa alarm cron — watchlist fiyatlarını kontrol et, eşik geçildiyse push
+// Borsa alarm cron — watchlist fiyatlarını kontrol et, eşik geçildiyse push (her user için)
 async function runStockCheck(env) {
-  const { data, token, userId } = await fetchAidan(env);
+  const users = await fetchAllUsers(env);
+  const results = [];
+  for (const u of users) {
+    try {
+      const r = await runStockCheckForUser(env, u);
+      results.push({ userId: u.userId, ...r });
+    } catch (e) {
+      results.push({ userId: u.userId, error: e.message });
+    }
+  }
+  return { type: 'stocks', users: users.length, results, multiUser: hasServiceKey(env) };
+}
+
+async function runStockCheckForUser(env, u) {
+  const data = u.data;
   const wl = (data.watchlist) || [];
-  if (!wl.length) return { type: 'stocks', checked: 0 };
-  // Yeni eklenenler kendi ySymbol'ünü taşır (BIST/ABD/Döviz/Kripto); eski kayıtlar bistSymbol ile çevrilir
+  if (!wl.length) return { checked: 0 };
   const quotes = await fetchStockQuotes(wl.map(w => ({ display: (w.symbol || '').toUpperCase(), yahoo: w.ySymbol || bistSymbol(w.symbol) })));
   const bySym = {};
   for (const q of quotes) bySym[q.symbol] = q;
@@ -2016,14 +2317,12 @@ async function runStockCheck(env) {
   for (const w of wl) {
     const q = bySym[(w.symbol || '').toUpperCase()];
     if (!q || q.price == null) continue;
-    // ÜST eşik
     if (w.alarmAbove != null && q.price >= w.alarmAbove) {
       if (!w.lastAlertedAbove) {
         alerts.push(`📈 ${w.symbol} ${formatPrice(q.price)} ${q.currency} — ${formatPrice(w.alarmAbove)} üstünü geçti!`);
         w.lastAlertedAbove = true; dirty = true;
       }
-    } else if (w.lastAlertedAbove) { w.lastAlertedAbove = false; dirty = true; } // tekrar altına indi → reset
-    // ALT eşik
+    } else if (w.lastAlertedAbove) { w.lastAlertedAbove = false; dirty = true; }
     if (w.alarmBelow != null && q.price <= w.alarmBelow) {
       if (!w.lastAlertedBelow) {
         alerts.push(`📉 ${w.symbol} ${formatPrice(q.price)} ${q.currency} — ${formatPrice(w.alarmBelow)} altına düştü!`);
@@ -2031,24 +2330,36 @@ async function runStockCheck(env) {
       }
     } else if (w.lastAlertedBelow) { w.lastAlertedBelow = false; dirty = true; }
   }
-
   if (alerts.length) {
     const payload = { title: '🔔 Borsa alarmı', message: alerts.join('\n') };
-    await sendPushToAll(env, data, payload, { token, userId });
+    await sendPushToAll(env, data, payload, { userId: u.userId });
     logPush(data, 'stocks', payload, ((data.settings && data.settings.pushSubs) || []).length);
     dirty = true;
   }
-  if (dirty) { try { await saveAidan(env, data, { token, userId }); } catch (e) { console.error('stock save fail', e.message); } }
-  return { type: 'stocks', checked: wl.length, alerts: alerts.length };
+  if (dirty) { try { await saveUserData(env, u.userId, data); } catch (e) { console.error('stock save fail', e.message); } }
+  return { checked: wl.length, alerts: alerts.length };
 }
 
-// Akşam portföy özeti cron — BIST kapanışı sonrası (18:30 TR hafta içi).
-// Pozisyonu olan hisselerin güncel değerini, günlük ve toplam kâr/zararını hesaplar, tek push gönderir.
+// Akşam portföy özeti cron — BIST kapanışı sonrası (18:30 TR hafta içi). Multi-user.
 async function runPortfolioSummary(env) {
-  const { data, token, userId } = await fetchAidan(env);
+  const users = await fetchAllUsers(env);
+  const results = [];
+  for (const u of users) {
+    try {
+      const r = await runPortfolioSummaryForUser(env, u);
+      results.push({ userId: u.userId, ...r });
+    } catch (e) {
+      results.push({ userId: u.userId, error: e.message });
+    }
+  }
+  return { type: 'portfolio', users: users.length, results, multiUser: hasServiceKey(env) };
+}
+
+async function runPortfolioSummaryForUser(env, u) {
+  const data = u.data;
   const wl = (data.watchlist) || [];
   const holdings = wl.filter(w => w.qty != null && w.qty > 0 && w.cost != null);
-  if (!holdings.length) return { type: 'portfolio', holdings: 0 };
+  if (!holdings.length) return { holdings: 0 };
 
   const quotes = await fetchStockQuotes(holdings.map(w => ({ display: (w.symbol || '').toUpperCase(), yahoo: w.ySymbol || bistSymbol(w.symbol) })));
   const bySym = {};
@@ -2073,7 +2384,7 @@ async function runPortfolioSummary(env) {
   }
 
   const currencies = Object.keys(byCur);
-  if (!currencies.length) return { type: 'portfolio', holdings: holdings.length, sent: 0 };
+  if (!currencies.length) return { holdings: holdings.length, sent: 0 };
 
   const todayStr = new Date().toISOString().slice(0, 10);
   data.portfolioHistory = data.portfolioHistory || [];
@@ -2112,7 +2423,7 @@ async function runPortfolioSummary(env) {
     if (trend.length) lines.push(trend.join(' · '));
   }
   const payload = { title: '💼 Portföy özeti', message: lines.join('\n') };
-  await sendPushToAll(env, data, payload, { token, userId });
+  await sendPushToAll(env, data, payload, { userId: u.userId });
   logPush(data, 'portfolio', payload, ((data.settings && data.settings.pushSubs) || []).length);
 
   // Bugünün snapshot'ını geçmişe yaz (upsert) — kapanış değeri, otoritatif
@@ -2124,8 +2435,8 @@ async function runPortfolioSummary(env) {
   data.portfolioHistory.sort((a, b) => a.date < b.date ? -1 : 1);
   if (data.portfolioHistory.length > 180) data.portfolioHistory = data.portfolioHistory.slice(-180);
 
-  try { await saveAidan(env, data, { token, userId }); } catch (e) { console.error('portfolio save fail', e.message); }
-  return { type: 'portfolio', holdings: holdings.length, sent: 1 };
+  try { await saveUserData(env, u.userId, data); } catch (e) { console.error('portfolio save fail', e.message); }
+  return { holdings: holdings.length, sent: 1 };
 }
 
 function formatPrice(n) {
@@ -2138,9 +2449,23 @@ function formatPrice(n) {
 // Saati gelen (ve bugün henüz atılmamış) hatırlatıcıya push atar; 30 dk'dan eski olanlar atlanır
 // (gün ortasında geçmiş saate kurulan hatırlatıcı hemen patlamasın diye).
 async function runFixedReminders(env) {
-  const { data, token, userId } = await fetchAidan(env);
+  const users = await fetchAllUsers(env);
+  const results = [];
+  for (const u of users) {
+    try {
+      const r = await runFixedRemindersForUser(env, u);
+      results.push({ userId: u.userId, ...r });
+    } catch (e) {
+      results.push({ userId: u.userId, error: e.message });
+    }
+  }
+  return { type: 'reminders', users: users.length, results, multiUser: hasServiceKey(env) };
+}
+
+async function runFixedRemindersForUser(env, u) {
+  const data = u.data;
   const rems = (data.reminders || []).filter(r => r && r.enabled !== false && r.time);
-  if (!rems.length) return { type: 'reminders', checked: 0, sent: 0 };
+  if (!rems.length) return { checked: 0, sent: 0 };
 
   const tr = new Date(Date.now() + TR_OFFSET_MS);
   const todayStr = trToday();
@@ -2165,15 +2490,15 @@ async function runFixedReminders(env) {
     if (r.days === 'weekdays' && !fireWeekday) continue;
     if (diff >= 0 && diff <= 30) { due.push(r); r.lastFired = fireDay; }
   }
-  if (!due.length) return { type: 'reminders', checked: rems.length, sent: 0 };
+  if (!due.length) return { checked: rems.length, sent: 0 };
 
   for (const r of due) {
     const payload = { title: `⏰ ${r.label || 'Hatırlatma'}`, message: `Saat ${r.time} — günün sabiti, hadi 💜` };
-    await sendPushToAll(env, data, payload, { token, userId });
+    await sendPushToAll(env, data, payload, { userId: u.userId });
     logPush(data, 'reminder', payload, ((data.settings && data.settings.pushSubs) || []).length);
   }
-  try { await saveAidan(env, data, { token, userId }); } catch (e) { console.error('reminder save fail', e.message); }
-  return { type: 'reminders', checked: rems.length, sent: due.length };
+  try { await saveUserData(env, u.userId, data); } catch (e) { console.error('reminder save fail', e.message); }
+  return { checked: rems.length, sent: due.length };
 }
 
 // ============================================================
@@ -2200,52 +2525,29 @@ async function runFixedReminders(env) {
 //     for delete using (auth.uid() = user_id);
 async function runBackup(env) {
   const KEEP = 12;
-  const { data, token, userId } = await fetchAidan(env);
-  const dataKeys = Object.keys(data || {});
-  const tasksLen = Array.isArray(data.tasks) ? data.tasks.length : 0;
-
-  // INSERT yeni snapshot
-  const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/aidan_backups`, {
-    method: 'POST',
-    headers: {
-      'apikey': env.SUPABASE_KEY,
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal',
-    },
-    body: JSON.stringify({ user_id: userId, data }),
-  });
-  if (!ins.ok) {
-    const msg = await ins.text();
-    // 42P01 = relation does not exist (tablo henüz yaratılmamış) — sessiz log + null dön
-    if (ins.status === 404 || msg.includes('aidan_backups') && msg.includes('not exist')) {
-      console.warn('aidan_backups tablosu yok — Salim henüz SQL\'i çalıştırmamış olabilir');
-      return { type: 'backup', ok: false, reason: 'table-missing', dataKeys: dataKeys.length, tasks: tasksLen };
-    }
-    throw new Error(`Backup insert fail: ${ins.status} ${msg}`);
-  }
-
-  // Eski yedekleri sil (son KEEP'ten eskileri)
-  let deleted = 0;
-  try {
-    const list = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/aidan_backups?user_id=eq.${userId}&select=id&order=snapshot_at.desc`,
-      { headers: { 'apikey': env.SUPABASE_KEY, 'Authorization': `Bearer ${token}` } }
-    );
-    if (list.ok) {
-      const rows = await list.json();
-      if (rows.length > KEEP) {
-        const toDelete = rows.slice(KEEP).map(r => r.id);
-        const del = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/aidan_backups?id=in.(${toDelete.join(',')})`,
-          { method: 'DELETE', headers: { 'apikey': env.SUPABASE_KEY, 'Authorization': `Bearer ${token}` } }
-        );
-        if (del.ok) deleted = toDelete.length;
+  const users = await fetchAllUsers(env);
+  const results = [];
+  for (const u of users) {
+    try {
+      const dataKeys = Object.keys(u.data || {}).length;
+      const tasksLen = Array.isArray(u.data?.tasks) ? u.data.tasks.length : 0;
+      const ins = await insertBackup(env, u.userId, u.data);
+      if (!ins.ok) {
+        const msg = await ins.text().catch(() => '');
+        if (ins.status === 404 || (msg.includes('aidan_backups') && msg.includes('not exist'))) {
+          results.push({ userId: u.userId, ok: false, reason: 'table-missing' });
+          continue;
+        }
+        results.push({ userId: u.userId, ok: false, reason: `insert ${ins.status}`, msg: msg.slice(0, 80) });
+        continue;
       }
+      const deleted = await listAndPruneBackups(env, u.userId, KEEP);
+      results.push({ userId: u.userId, ok: true, dataKeys, tasks: tasksLen, deleted });
+    } catch (e) {
+      results.push({ userId: u.userId, ok: false, reason: e.message });
     }
-  } catch (e) { console.warn('backup cleanup hata', e.message); }
-
-  return { type: 'backup', ok: true, dataKeys: dataKeys.length, tasks: tasksLen, deleted };
+  }
+  return { type: 'backup', users: users.length, results, multiUser: hasServiceKey(env) };
 }
 
 // ============================================================
@@ -2341,6 +2643,17 @@ export default {
     // Portföy görseli → AI vision (POST {image} → sembol/adet/maliyet JSON)
     if (url.pathname === '/portfolio-image') {
       return handlePortfolioImageApi(request, env);
+    }
+
+    // 👥 Multi-user (davet kodlu)
+    if (url.pathname === '/signup') {
+      return handleSignupApi(request, env);
+    }
+    if (url.pathname === '/invite/create') {
+      return handleInviteCreateApi(request, env);
+    }
+    if (url.pathname === '/invite/list') {
+      return handleInviteListApi(request, env);
     }
 
     // Static serve (PWA) — '/' → asistan.html, ve diğer asset'ler

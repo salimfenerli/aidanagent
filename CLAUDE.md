@@ -40,7 +40,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - **Bildirim:** Web Push (VAPID, iOS lock ekranı). Telegram + ntfy emekli.
 - **PWA:** Manifest + Service Worker (network-first stratejisi) + **icon.png** (yeni bulut mascot)
 - **Tasarım dili:** **Stitch-inspired dark mode** (May 28-29, 2026) — indigo `#6463ff`, koyu `#0a0b0f`, soft amber `#ffc640` yıldız. Inter font.
-- **Cache versiyonu:** `aidan-v7-36` (sw.js içinde, her büyük değişikte artırılır)
+- **Cache versiyonu:** `aidan-v7-37` (sw.js içinde, her büyük değişikte artırılır)
 - **AI:** Cloudflare Workers AI — **Llama 3.3 70B** (intent + tool use) + **Llama 3.2 Vision** (portföy görsel okuma). Bedava. Whisper artık kullanılmıyor (sesli giriş Web Speech API ile tarayıcıda).
 - **MCP Server (PC):** Python, Claude Desktop bağlanır, doğrudan Supabase'e operasyon yapar
 - **Cloudflare Worker:** Cron push (brifing/borsa/portföy/hatırlatıcı) + PWA AI endpoint'leri (`/ai`, `/journal`, `/split`, `/portfolio-comment`, `/portfolio-image`, `/stocks`)
@@ -683,6 +683,28 @@ Pros/cons'tan kalan defansif paket. Salim "yapmaya başla" deyince üçü tek se
   - **Yedek henüz alınmadıysa** (tablo boş): "Henüz yedek yok, ilk Pazartesi 03:00'da otomatik" + manuel test ipucu.
 - **Veri modeli yeni alan:** `data.countdowns[]`.
 - **Cache:** v7-35 → v7-36
+
+### Haziran 11, 2026 — 3. seans (👥 Multi-user Faz 1 — davet kodlu)
+Pros/cons'tan en büyük yapısal eksikti: tek-user kilidi. Salim "davet kodlu kapalı" seçti — arkadaş çevresi modeli.
+- **Mimari karar:** Worker'da `SUPABASE_SERVICE_KEY` (service_role) yeni env. Eklendiği an tüm cron'lar multi-user; yoksa **fallback** olarak Salim tek-user akışı (mevcut davranış aynen). Salim hiç bozulmaz, hazır olunca service key eklenir ve aktive olur.
+- **`hasServiceKey(env)`** her yerde modu kontrol eder. **`allowUser(env, user)`** AI endpoint'lerinde 5 yerdeki AIDAN_EMAIL whitelist'i tek noktadan yönetir (service key varsa açık, yoksa Salim-only).
+- **`fetchAllUsers(env)`** — service key ile `aidan_data` tüm satırlar; yoksa fetchAidan tek user. **`saveUserData(env, userId, data)`** — service key ile direkt INSERT/UPDATE; yoksa saveAidan. **`insertBackup`** + **`listAndPruneBackups`** — `aidan_backups`'a multi-user yazma.
+- **5 cron tek pakette multi-user:** `runCronJob`, `runStockCheck`, `runPortfolioSummary`, `runFixedReminders`, `runBackup` hepsi `fetchAllUsers` döngüsü. Her user kendi içeride `runXForUser(env, u)` yardımcısıyla işlenir, tek user çökse diğerleri devam eder (try/catch).
+- **3 yeni endpoint** (Worker):
+  - `POST /signup` — `{email, password, code}`. service key gerekli. (1) `invite_codes` tablosundan kod doğrula (eksik/kullanılmış → 400), (2) Supabase `auth/v1/signup`, (3) kodu `used_by/used_at` ile işaretle. Email confirm-açık ise session=null + needsEmailConfirm:true.
+  - `POST /invite/create` — `{note?}`. Sadece `AIDAN_EMAIL` (ilk faz). `genInviteCode()` crypto.getRandomValues + 8 char alfabe (O/0/I/1 confusion'u önle) → `AIDAN-XXXXXXXX`. RLS policy `users create own codes` sayesinde kullanıcının kendi token'ı ile yazar.
+  - `GET /invite/list` — `Bearer token`. RLS otomatik filtreler → sadece kullanıcının ürettiği kodları döner. Tablo yoksa `tableExists:false` + boş array (UI nazik mesaj göster).
+- **PWA tarafı:**
+  - **Auth ekranı yenilendi:** "🔓 Giriş Yap" varsayılan, "🆕 Yeni Hesap" butonu → davet kodu input + "✅ Kayıt Ol (davet koduyla)" açılır. `signUpUser` artık Worker `/signup`'a yollar (eski direkt `_supa.auth.signUp` kaldırıldı). Şifre min 6 → 8 karakter (Supabase varsayılanı).
+  - **Ayarlar → "👥 Davet et"** bölümü: not input + "＋ Yeni kod üret". Liste: her kod (monospace) + tarih + kullanım durumu + "📋 Kopyala" (kullanılmamışsa). Kopyala `navigator.clipboard` ile. Login yoksa "Kilitli" nazik mesaj. Tablo yoksa "CLAUDE.md'de SQL var" yönlendirmesi.
+  - `getSupaToken()` helper — `_supa.auth.getSession()` ile fresh access_token. Tüm Worker çağrıları bunu kullanır.
+- **Salim'in yapacağı 2 hazırlık:**
+  1. **service_role key** → Cloudflare aidan-pusher Variables'a `SUPABASE_SERVICE_KEY` (Secret).
+  2. **Supabase SQL Editor** → `invite_codes` tablosu + 3 RLS policy (kendi kodlarını gör, kendi adına oluştur, kendi adına sil) — SQL CLAUDE.md'de.
+- **Faz 2 (sonraki):** Yeni user için onboarding (boş Aidan tutorial), Salim'in özel admin paneli (kim kayıtlı/aktif).
+- **Faz 3:** Belki diğer user'lar da kendi davet kodlarını üretebilsin (limit'le).
+- **Risk yok:** Service key + invite_codes tablosu olmadan Worker mevcut tek-user davranışını korur. PWA auth ekranındaki "Yeni Hesap" akışı service key gerektirir — yoksa 503 nazik mesaj.
+- **Cache:** v7-36 → v7-37
 
 ## Mevcut Durum
 
