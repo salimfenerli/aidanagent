@@ -1147,6 +1147,42 @@
   .now-next.urgent { color: var(--danger); background: var(--danger-soft); animation: now-pulse 1.4s ease-in-out infinite; }
   @keyframes now-pulse { 0%,100%{opacity:1;} 50%{opacity:0.62;} }
 
+  /* ⏳ Geri sayım kartı — sınav/teslim "X gün kaldı" */
+  #countdownList { display:flex; flex-direction:column; gap:8px; margin-bottom: 14px; }
+  .countdown-card {
+    background: var(--bg-elev); border: 1px solid var(--border-soft);
+    border-radius: var(--radius); padding: 12px 14px;
+    border-left: 3px solid var(--accent);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .countdown-card.warn { border-left-color: var(--warning); }
+  .countdown-card.urgent { border-left-color: var(--danger); animation: now-pulse 1.6s ease-in-out infinite; }
+  .countdown-card.past { border-left-color: var(--text-faint); opacity: 0.75; }
+  .countdown-days {
+    font-size: 1.9em; font-weight: 800; letter-spacing: -0.02em; line-height: 1;
+    color: var(--text); font-variant-numeric: tabular-nums; flex-shrink:0; min-width: 56px; text-align: center;
+  }
+  .countdown-card.warn .countdown-days { color: var(--warning); }
+  .countdown-card.urgent .countdown-days { color: var(--danger); }
+  .countdown-card.past .countdown-days { color: var(--text-faint); font-size: 1.3em; }
+  .countdown-days-suffix { font-size: 0.4em; font-weight: 600; color: var(--text-faint); display:block; margin-top: 2px; }
+  .countdown-info { flex:1; min-width: 0; }
+  .countdown-label-row { font-size: 0.95em; font-weight: 600; color: var(--text); display:flex; align-items:center; gap:6px; }
+  .countdown-date { font-size: 0.76em; color: var(--text-muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .countdown-empty { font-size: 0.85em; color: var(--text-faint); padding: 10px 12px; background: var(--bg-elev); border:1px dashed var(--border-soft); border-radius: var(--radius); }
+  .countdown-row {
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:9px 11px; background: var(--bg-elev); border:1px solid var(--border-soft); border-radius: var(--radius-sm);
+  }
+  .countdown-row-info { flex:1; min-width:0; }
+  .countdown-row-label { font-size:0.92em; font-weight:600; color:var(--text); }
+  .countdown-row-meta { font-size:0.76em; color:var(--text-muted); margin-top:2px; font-variant-numeric: tabular-nums; }
+  .countdown-row .del-btn { background: transparent; border:none; color: var(--text-faint); cursor:pointer; padding: 4px 6px; border-radius: 6px; }
+  .countdown-row .del-btn:hover { color: var(--danger); }
+  .countdown-add { display:flex; flex-wrap:wrap; gap:6px; margin-top: 8px; }
+  .countdown-add input[type=text] { flex:1 1 140px; min-width: 0; }
+  .countdown-add input[type=date] { flex: 0 1 150px; min-width: 0; }
+
   /* Bugünün 3'ü */
   .mit-box {
     background: var(--bg-elev);
@@ -2343,6 +2379,7 @@
       <div class="now-day-bar"><span class="now-day-fill" id="nowDayFill" style="width:0%"></span></div>
       <div class="now-next" id="nowNext" style="display:none;"></div>
     </div>
+    <div id="countdownList"></div>
     <h2>📋 Bugün ne yapacağız?</h2>
     <div class="stats">
       <div class="stat"><div class="stat-num" id="statTotal">0</div><div class="stat-label">Toplam</div></div>
@@ -2538,6 +2575,17 @@
     </div>
 
     <div class="settings-row">
+      <label>⏳ Geri sayımlar (sınav / teslim)</label>
+      <div id="countdownManageList"></div>
+      <div class="countdown-add">
+        <input type="text" id="countdownLabel" placeholder="örn. Tarih sınavı" maxlength="60">
+        <input type="date" id="countdownDate">
+        <button class="small" onclick="addCountdown()">＋ Ekle</button>
+      </div>
+      <div class="settings-help">Görevler sekmesinin tepesinde "X gün kaldı" iri kartı görünür. Zaman körlüğüne karşı.</div>
+    </div>
+
+    <div class="settings-row">
       <label>🔕 Bildirim sustur (odak modu)</label>
       <div id="muteState"></div>
     </div>
@@ -2570,6 +2618,16 @@
       <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importData(event)">
       <button class="small danger" onclick="resetAll()">⚠️ Her şeyi sıfırla</button>
       <div class="settings-help">Verilerin sadece bu bilgisayarda kayıtlı. Yedek almazsan tarayıcı temizliğinde kaybolur.</div>
+    </div>
+
+    <div class="settings-row">
+      <label>☁️ Otomatik yedekler (Supabase) — son 12</label>
+      <details id="backupDetails">
+        <summary style="cursor:pointer; color: var(--text-muted); font-size:0.88em; padding:4px 0;">📥 Yedek geçmişini göster</summary>
+        <div id="backupList" style="margin-top:8px;"></div>
+        <button class="small secondary" onclick="loadBackupList()" style="margin-top:6px;">🔄 Yenile</button>
+      </details>
+      <div class="settings-help">Worker her Pazartesi 03:00 TR <code>aidan_backups</code> tablosuna otomatik snapshot atar (son 12 saklanır, ~3 ay). Aşağıdan istediğin yedeği JSON olarak indirebilirsin.</div>
     </div>
   </div>
 </div>
@@ -2812,7 +2870,15 @@ function showTab(name, btn) {
     renderNotifSettings();
     renderMuteState();
     renderFixedReminders();
+    renderCountdownManage();
+    // Yedek details açıldığında otomatik yükle (bir kez bağlanır)
+    const bd = document.getElementById('backupDetails');
+    if (bd && !bd._hooked) {
+      bd._hooked = true;
+      bd.addEventListener('toggle', () => { if (bd.open) loadBackupList(); });
+    }
   }
+  if (name === 'tasks') renderCountdowns();
   // Borsa sekmesinden çıkınca canlı güncellemeyi durdur (batarya/kota)
   if (name !== 'stocks') stopStockAutoRefresh();
   if (name === 'stocks') {
@@ -5924,6 +5990,78 @@ let timerSec = 25*60, workMin = 25, breakMin = 5, isBreak = false, timerInt = nu
 let totalSec = 25*60;
 let timerEndTime = null; // ms cinsinden bitiş anı — timestamp bazlı, telefon kilitliyken bile doğru
 
+// === Pomodoro persistence ===
+// PWA bellekten atılırsa (swipe-kapatma) timer sıfırlanmasın — state'i localStorage'a yaz,
+// sayfa açılınca restore et. Seans uzakta bitmişse pomoCount + actualMin yine de işlenir.
+const TIMER_KEY = 'aidan_timer';
+function saveTimerState() {
+  try {
+    const s = {
+      running, isBreak, workMin, breakMin, totalSec, timerSec,
+      timerEndTime, currentFocusTaskId, focusStartTime,
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(TIMER_KEY, JSON.stringify(s));
+  } catch {}
+}
+function clearTimerState() {
+  try { localStorage.removeItem(TIMER_KEY); } catch {}
+}
+function restoreTimerState() {
+  let s;
+  try { s = JSON.parse(localStorage.getItem(TIMER_KEY) || 'null'); } catch { s = null; }
+  if (!s || typeof s !== 'object') return;
+  workMin = s.workMin || 25;
+  breakMin = s.breakMin || 5;
+  isBreak = !!s.isBreak;
+  totalSec = s.totalSec || (workMin * 60);
+  currentFocusTaskId = s.currentFocusTaskId || null;
+  focusStartTime = s.focusStartTime || null;
+
+  if (s.running && s.timerEndTime) {
+    const remainMs = s.timerEndTime - Date.now();
+    if (remainMs > 0) {
+      // Aktif seans hâlâ devam ediyor — interval'i yeniden başlat
+      timerEndTime = s.timerEndTime;
+      timerSec = Math.max(0, Math.round(remainMs / 1000));
+      running = true;
+      timerInt = setInterval(tickTimer, 250);
+      updateTimerDisplay();
+      updateActiveTaskBanner && updateActiveTaskBanner();
+      return;
+    }
+    // Seans uzakta bitti — counter + actualMin işle, "yokken bitti" notify
+    running = false;
+    timerEndTime = null;
+    if (!isBreak) {
+      data.pomoToday = data.pomoToday || { date: today(), count: 0 };
+      if (data.pomoToday.date !== today()) data.pomoToday = { date: today(), count: 0 };
+      data.pomoToday.count++;
+      if (currentFocusTaskId) {
+        const ft = (data.tasks || []).find(x => x.id === currentFocusTaskId);
+        if (ft) ft.actualMin = (ft.actualMin || 0) + workMin;
+      }
+      const cnt = document.getElementById('pomoCount');
+      if (cnt) cnt.textContent = data.pomoToday.count;
+      save();
+      setTimeout(() => notify('🎧 Seans yokken bitti', `${workMin}dk işlendi — pomoCount +1${currentFocusTaskId ? ' · süre göreve yazıldı' : ''}`), 800);
+    }
+    timerSec = workMin * 60;
+    totalSec = workMin * 60;
+    isBreak = false;
+    focusStartTime = null;
+    clearTimerState();
+    updateTimerDisplay();
+    return;
+  }
+  // Duraklı state — kalan süreyi göster, running:false
+  if (!s.running && s.timerSec != null && s.timerSec < totalSec) {
+    timerSec = s.timerSec;
+    running = false;
+    updateTimerDisplay();
+  }
+}
+
 function updateTimerDisplay() {
   const m = Math.floor(timerSec/60), s = timerSec%60;
   const txt = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
@@ -5953,6 +6091,7 @@ function startTimer() {
   timerEndTime = Date.now() + timerSec * 1000;
   updateTimerDisplay();
   timerInt = setInterval(tickTimer, 250); // 250ms: telefon açılınca anında yakalar
+  saveTimerState();
 }
 
 // Her tick'te kalan süreyi GERÇEK zamandan hesapla (sayaç azaltma değil) — arka planda da doğru
@@ -5989,6 +6128,7 @@ function tickTimer() {
       focusStartTime = Date.now();
     }
     playBeep();
+    clearTimerState();
   }
   updateTimerDisplay();
 }
@@ -6000,6 +6140,7 @@ function pauseTimer() {
   running = false;
   timerEndTime = null;
   updateTimerDisplay();
+  saveTimerState();
 }
 
 function resetTimer(keepFocus) {
@@ -6021,6 +6162,7 @@ function resetTimer(keepFocus) {
   }
   updateTimerDisplay();
   document.title = 'Aidan - ADHD Asistanım';
+  clearTimerState();
 }
 
 // Preset değişince bağlı görev kopmasın (sadece 🔄 Sıfırla tam temizler)
@@ -6133,6 +6275,70 @@ function exportData() {
   const a = document.createElement('a');
   a.href = url;
   a.download = `aidan-yedek-${today()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ============ OTOMATİK YEDEKLER (Supabase aidan_backups) ============
+// Worker haftada bir snapshot atar. PWA listele + JSON indir.
+let _backupCache = null; // id → data (indirme için, listeyle birlikte gelir)
+async function loadBackupList() {
+  const el = document.getElementById('backupList');
+  if (!el) return;
+  if (!window._supa || !window._user) {
+    el.innerHTML = '<div class="fixedrem-empty">Önce Supabase\'e giriş yap.</div>';
+    return;
+  }
+  el.innerHTML = '<div class="fixedrem-empty">Yükleniyor…</div>';
+  try {
+    const { data: rows, error } = await window._supa
+      .from('aidan_backups')
+      .select('id, snapshot_at, data')
+      .order('snapshot_at', { ascending: false })
+      .limit(12);
+    if (error) {
+      const msg = String(error.message || error);
+      // Tablo yok → Salim'e nazik talimat
+      if (/relation .* does not exist|aidan_backups/i.test(msg) && /not exist|404/i.test(msg) || error.code === '42P01') {
+        el.innerHTML = '<div class="fixedrem-empty">📋 Tablo henüz yok. Supabase → SQL Editor\'da <code>aidan_backups</code> SQL\'ini çalıştırdıktan sonra Pazartesi 03:00\'tan itibaren yedek alınır.</div>';
+        return;
+      }
+      throw error;
+    }
+    if (!rows || !rows.length) {
+      el.innerHTML = '<div class="fixedrem-empty">Henüz yedek yok. Worker ilk Pazartesi 03:00 TR\'de yazar (manuel test için <code>?type=backup&secret=...</code>).</div>';
+      return;
+    }
+    _backupCache = {};
+    rows.forEach(r => { _backupCache[r.id] = r.data; });
+    el.innerHTML = rows.map(r => {
+      const d = new Date(r.snapshot_at);
+      const dateStr = d.toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' });
+      const taskCount = Array.isArray(r.data?.tasks) ? r.data.tasks.length : 0;
+      const keyCount = Object.keys(r.data || {}).length;
+      return `
+        <div class="countdown-row">
+          <div class="countdown-row-info">
+            <div class="countdown-row-label">${escapeHtml(dateStr)}</div>
+            <div class="countdown-row-meta">${taskCount} görev · ${keyCount} alan</div>
+          </div>
+          <button class="small secondary" onclick="downloadBackup(${r.id}, '${d.toISOString().slice(0,10)}')" title="JSON indir">📥 İndir</button>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = `<div class="fixedrem-empty">⚠️ ${escapeHtml(String(e.message || e))}</div>`;
+  }
+}
+
+function downloadBackup(id, dateLabel) {
+  const data = _backupCache && _backupCache[id];
+  if (!data) { showToast('Yedek bulunamadı — listeyi yenile', 'warning', 3000); return; }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `aidan-backup-${dateLabel || 'snapshot'}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -6601,6 +6807,107 @@ function deleteFixedReminder(id) {
   save();
   renderFixedReminders();
   showToast('Hatırlatıcı silindi', 'info', 2500);
+}
+
+// ============ GERİ SAYIMLAR (sınav/teslim) ============
+// data.countdowns[] = [{id, label, date:'YYYY-MM-DD'}]. Görevler tabında üst kart,
+// Ayarlar'da yönet. Zaman körlüğüne karşı: iri "X gün kaldı" rakamı.
+function daysUntilCountdown(dateStr) {
+  if (!dateStr) return null;
+  // Hem target hem bugün lokal gece yarısı → tam 24h diff, DST'ye dayanıklı
+  const parts = String(dateStr).split('-').map(Number);
+  if (parts.length !== 3 || !parts.every(Number.isFinite)) return null;
+  const target = new Date(parts[0], parts[1] - 1, parts[2]).getTime();
+  const todayMid = new Date();
+  todayMid.setHours(0, 0, 0, 0);
+  return Math.round((target - todayMid.getTime()) / 86400000);
+}
+
+function formatTrDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T12:00:00');
+  const days = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+  const months = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+  return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]}`;
+}
+
+function renderCountdowns() {
+  const el = document.getElementById('countdownList');
+  if (!el) return;
+  const list = (data.countdowns || []).slice()
+    .map(c => ({ ...c, days: daysUntilCountdown(c.date) }))
+    .filter(c => c.days != null)
+    // Geçmişe ait olanları 7 gün boyunca göster (sınavı kaçırdıysan hâlâ "geçti" bilgisi versin)
+    .filter(c => c.days >= -7)
+    .sort((a, b) => a.days - b.days);
+  if (!list.length) { el.innerHTML = ''; el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  el.innerHTML = list.map(c => {
+    let cls = '';
+    if (c.days < 0) cls = 'past';
+    else if (c.days <= 3) cls = 'urgent';
+    else if (c.days <= 10) cls = 'warn';
+    const bigNum = c.days < 0 ? 'Geçti' : String(c.days);
+    const suffix = c.days < 0
+      ? `${Math.abs(c.days)} gün önce`
+      : (c.days === 0 ? 'BUGÜN' : (c.days === 1 ? 'gün kaldı' : 'gün kaldı'));
+    return `
+      <div class="countdown-card ${cls}">
+        <div class="countdown-days">${bigNum}<span class="countdown-days-suffix">${suffix}</span></div>
+        <div class="countdown-info">
+          <div class="countdown-label-row">⏳ ${escapeHtml(c.label || 'Tarih')}</div>
+          <div class="countdown-date">${formatTrDate(c.date)}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderCountdownManage() {
+  const el = document.getElementById('countdownManageList');
+  if (!el) return;
+  const list = (data.countdowns || []).slice()
+    .map(c => ({ ...c, days: daysUntilCountdown(c.date) }))
+    .sort((a, b) => (a.days ?? 999) - (b.days ?? 999));
+  if (!list.length) {
+    el.innerHTML = '<div class="fixedrem-empty">Henüz geri sayım yok — sınav/teslim tarihi ekle.</div>';
+    return;
+  }
+  el.innerHTML = list.map(c => {
+    const dayStr = c.days == null ? '—' : (c.days < 0 ? `${Math.abs(c.days)} gün önce` : (c.days === 0 ? 'bugün' : `${c.days} gün`));
+    return `
+      <div class="countdown-row">
+        <div class="countdown-row-info">
+          <div class="countdown-row-label">${escapeHtml(c.label || '')}</div>
+          <div class="countdown-row-meta">${formatTrDate(c.date)} · ${dayStr}</div>
+        </div>
+        <button class="del-btn" onclick="deleteCountdown(${c.id})" title="Sil">✕</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function addCountdown() {
+  const label = document.getElementById('countdownLabel').value.trim();
+  const date = document.getElementById('countdownDate').value;
+  if (!label) { showToast('Bir isim yaz — örn. "Tarih sınavı" 📚', 'warning', 3000); return; }
+  if (!date) { showToast('Tarih seç ⏳', 'warning', 3000); return; }
+  data.countdowns = data.countdowns || [];
+  data.countdowns.push({ id: Date.now(), label, date });
+  document.getElementById('countdownLabel').value = '';
+  document.getElementById('countdownDate').value = '';
+  save();
+  renderCountdowns();
+  renderCountdownManage();
+  showToast(`⏳ "${label}" eklendi`, 'success', 2500);
+}
+
+function deleteCountdown(id) {
+  data.countdowns = (data.countdowns || []).filter(x => x.id !== id);
+  save();
+  renderCountdowns();
+  renderCountdownManage();
+  showToast('Geri sayım silindi', 'info', 2500);
 }
 
 function testNotif() {
@@ -7315,6 +7622,8 @@ checkRepeatingTasks();
 renderTasks();
 document.getElementById('pomoCount').textContent = data.pomoToday.count;
 updateTimerDisplay();
+restoreTimerState();
+renderCountdowns();
 </script>
 </body>
 </html>

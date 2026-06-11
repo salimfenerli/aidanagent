@@ -40,7 +40,7 @@ Tek HTML dosyalı, browser-based ADHD asistanı + sunucu tarafında Cloudflare W
 - **Bildirim:** Web Push (VAPID, iOS lock ekranı). Telegram + ntfy emekli.
 - **PWA:** Manifest + Service Worker (network-first stratejisi) + **icon.png** (yeni bulut mascot)
 - **Tasarım dili:** **Stitch-inspired dark mode** (May 28-29, 2026) — indigo `#6463ff`, koyu `#0a0b0f`, soft amber `#ffc640` yıldız. Inter font.
-- **Cache versiyonu:** `aidan-v7-35` (sw.js içinde, her büyük değişikte artırılır)
+- **Cache versiyonu:** `aidan-v7-36` (sw.js içinde, her büyük değişikte artırılır)
 - **AI:** Cloudflare Workers AI — **Llama 3.3 70B** (intent + tool use) + **Llama 3.2 Vision** (portföy görsel okuma). Bedava. Whisper artık kullanılmıyor (sesli giriş Web Speech API ile tarayıcıda).
 - **MCP Server (PC):** Python, Claude Desktop bağlanır, doğrudan Supabase'e operasyon yapar
 - **Cloudflare Worker:** Cron push (brifing/borsa/portföy/hatırlatıcı) + PWA AI endpoint'leri (`/ai`, `/journal`, `/split`, `/portfolio-comment`, `/portfolio-image`, `/stocks`)
@@ -657,6 +657,32 @@ Salim pros/cons sonrası iki iş seçti: borsa kartına grafik + defansif veri y
 - **🧹 deploy.py temizliği:** Faz 4'te kaçırılan iki TELEGRAM artığı (üst yorumda + `secret_names` listesinde `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`) silindi. Artık deploy sırasında env'de Telegram aranmıyor.
 - **🚨 Salim'in yapacağı tek şey:** Supabase Dashboard → SQL Editor → yukarıdaki blok yapıştır + RUN. Tablo + RLS politikaları kurulur. Tablo kurulmadan Worker zaten sessizce atlar — ilk pazartesi sabahından önce SQL çalıştırılırsa o haftadan itibaren yedek alır.
 - **Cache:** v7-34 → v7-35
+
+### Haziran 11, 2026 — 2. seans (🍅 pomodoro persistence + ⏳ geri sayım + 📥 yedek UI)
+Pros/cons'tan kalan defansif paket. Salim "yapmaya başla" deyince üçü tek seansta yapıldı.
+- **🍅 Pomodoro persistence:**
+  - `aidan_timer` localStorage key — `{running, isBreak, workMin, breakMin, totalSec, timerSec, timerEndTime, currentFocusTaskId, focusStartTime, savedAt}`.
+  - `saveTimerState()` start/pause'da yazar, `clearTimerState()` reset/tick-bitiş'te siler.
+  - `restoreTimerState()` sayfa yüklenince çağrılır (`updateTimerDisplay()` sonrası). 3 senaryo:
+    - **Aktif seans:** `timerEndTime > now` → interval'i yeniden başlat, eski endTime korunur (kilit ekranındaki gerçek zaman akışı).
+    - **Uzakta bitmiş seans:** `running && timerEndTime <= now` → pomoCount +1, varsa `focusTaskId.actualMin += workMin`, "Seans yokken bitti" notify, state temizle. Mola moduna geçirmez (zaman çoktan geçti).
+    - **Duraklı:** `!running && timerSec < workMin*60` → timerSec restore, display update.
+  - Sınır: PWA tamamen swipe-kapatma + uzun süre kapalı kalırsa, açılışta seans "yokken bitti" mantığıyla işlenir — banner yerine notify mesajı. iOS arka plan JS hâlâ yok, bu tasarımla kapatıldı.
+  - **Doğrulama:** 3 senaryo browser motorunda test edildi (preview), konsol temiz.
+- **⏳ Geri sayım kartı:**
+  - **Veri:** `data.countdowns[] = [{id, label, date:'YYYY-MM-DD'}]`. Yeni alan.
+  - **PWA:** Görevler tabında `#nowCard`'ın hemen altında `#countdownList`. Sıralı: past → urgent (≤3 gün, kırmızı + pulse) → warn (≤10 gün, amber) → normal. Geçmiş tarihler 7 gün boyunca "X gün önce" olarak görünür (kaçırma farkındalığı). Boş listede kart hiç görünmez.
+  - **renderCountdowns** Görevler tabına girince çağrılır, sayfa yüklenince bir kez. **renderCountdownManage** Ayarlar tabında.
+  - **🐛 Düzeltilen subtle bug:** `daysUntilCountdown` ilk versiyonda `'T12:00:00'` ile target + gece yarısı bugün → 0.5 gün diff → Math.ceil = 1. "Bugün" 1 gün gösteriyordu. **Düzeltme:** hem target hem bugün lokal gece yarısı, `Math.round` ile diff (DST'ye dayanıklı: `new Date(y, m-1, d)`).
+  - **Ayarlar:** Sabit hatırlatıcıların altında "⏳ Geri sayımlar" satırı: liste + ekleme formu (label + date + Ekle). Tıklayarak sil.
+- **📥 PWA yedek UI:**
+  - **Ayarlar** → "💾 Yedekleme" altına "☁️ Otomatik yedekler" katlanır `<details>` bölümü. Açılınca `loadBackupList()` (bir kez bağlanan toggle event'i, idempotent `_hooked` flag ile).
+  - `loadBackupList()` → `_supa.from('aidan_backups').select('id, snapshot_at, data').order(...).limit(12)`. RLS sayesinde sadece kendi yedekleri gelir. `_backupCache` map'i ID → data tutar (indirme için).
+  - Her satır: tarih (`tr-TR` locale) + `N görev · K alan` meta + "📥 İndir" butonu. `downloadBackup(id, dateLabel)` Blob + URL ile JSON dosyası indirir (`aidan-backup-YYYY-MM-DD.json`).
+  - **Tablo yoksa:** error.code `42P01` veya mesaj match'i → "Tablo henüz yok, SQL'i çalıştır" nazik mesaj. Login yoksa "Önce Supabase'e giriş yap" mesajı.
+  - **Yedek henüz alınmadıysa** (tablo boş): "Henüz yedek yok, ilk Pazartesi 03:00'da otomatik" + manuel test ipucu.
+- **Veri modeli yeni alan:** `data.countdowns[]`.
+- **Cache:** v7-35 → v7-36
 
 ## Mevcut Durum
 
