@@ -1147,6 +1147,42 @@
   .now-next.urgent { color: var(--danger); background: var(--danger-soft); animation: now-pulse 1.4s ease-in-out infinite; }
   @keyframes now-pulse { 0%,100%{opacity:1;} 50%{opacity:0.62;} }
 
+  /* 🎓 Onboarding tur — yeni user için 5 adımlı modal */
+  .tour-overlay {
+    position: fixed; inset: 0; z-index: 9998;
+    background: rgba(10, 11, 15, 0.92); backdrop-filter: blur(10px);
+    display: none; align-items: center; justify-content: center;
+    padding: 24px 18px;
+    animation: tour-fade-in 220ms ease-out;
+  }
+  @keyframes tour-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  .tour-card {
+    background: var(--bg-elev); border: 1px solid var(--border-soft);
+    border-radius: 18px; padding: 26px 22px 18px;
+    max-width: 400px; width: 100%;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+    text-align: center;
+  }
+  .tour-progress { display: flex; gap: 4px; justify-content: center; margin-bottom: 18px; }
+  .tour-dot { width: 22px; height: 4px; border-radius: 2px; background: var(--border-soft); }
+  .tour-dot.active { background: var(--accent); }
+  .tour-dot.done { background: var(--accent-light); }
+  .tour-emoji { font-size: 2.6em; margin-bottom: 8px; line-height: 1; }
+  .tour-title { font-size: 1.4em; font-weight: 700; color: var(--text); margin: 0 0 10px; letter-spacing: -0.01em; }
+  .tour-body { font-size: 0.95em; color: var(--text-muted); line-height: 1.5; margin-bottom: 18px; min-height: 56px; }
+  .tour-body code { background: var(--bg); padding: 1px 6px; border-radius: 4px; font-size: 0.9em; color: var(--accent-light); }
+  .tour-actions { display: flex; gap: 8px; justify-content: space-between; align-items: center; }
+  .tour-skip { background: transparent; border: none; color: var(--text-faint); cursor: pointer; font-size: 0.82em; padding: 6px 8px; }
+  .tour-skip:hover { color: var(--text-muted); }
+  .tour-nav { display: flex; gap: 6px; }
+  .tour-btn {
+    padding: 9px 16px; border-radius: 10px; font-size: 0.9em; font-weight: 600;
+    border: 1px solid var(--border-soft); background: transparent; color: var(--text); cursor: pointer;
+  }
+  .tour-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tour-btn.primary:hover { background: var(--accent-light); }
+  .tour-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
   /* 🚪 Karşılama overlay — yeni user için tam ekran login/signup */
   .welcome-overlay {
     position: fixed; inset: 0; z-index: 9999;
@@ -6439,6 +6475,91 @@ async function welcomeSignup() {
   }
 }
 
+// 🎓 Onboarding tur — 5 adımlı, atlanabilir, kayıt sonrası ilk girişte gösterilir
+const TOUR_STEPS = [
+  {
+    emoji: '🧠💜',
+    title: 'Aidan\'a hoş geldin',
+    body: 'ADHD beyninle birlikte yürüyen bir asistan. Görev, odak, borsa, hatırlatma — hepsi tek yerde.<br><br>5 küçük ipucuyla seni hızlıca tanıştıracağım.',
+  },
+  {
+    emoji: '📝',
+    title: 'Quick Capture',
+    body: 'Üst bardaki kutu. Aklına geleni 2 saniyede yaz, <code>Enter</code> bas.<br><br><b>🧠 AI butonu</b> tarih/saat de tanır: <code>"yarın 14:00 dişçi"</code> → otomatik görev. <b>🎙️</b> ile sesli de yazabilirsin.',
+  },
+  {
+    emoji: '⭐',
+    title: 'Bugünün 3\'ü (MIT)',
+    body: 'Günde <b>en fazla 3 öncelik</b>. Daha fazlası beynini dağıtır.<br><br>Görev kartındaki ⭐ butonuna bas → üste sabit kutuya çıkar. Bittiğinde tıkla, konfeti patlar 🎉',
+  },
+  {
+    emoji: '🎧',
+    title: 'Odak (Pomodoro)',
+    body: '<b>Odak</b> sekmesi → 25 dk çalış, 5 dk mola. Telefonu kilitli bile olsa doğru sayar.<br><br>Bir görev seçersen geçen süre otomatik o göreve yazılır — sonra "tahmin vs gerçek" görürsün.',
+  },
+  {
+    emoji: '🔔',
+    title: 'Bildirim aç',
+    body: '<b>Ayarlar → 📲 Bu cihazda bildirim al</b> bas. Sabah brifing, akşam özet, hatırlatma — telefonun kilitli ekranına düşer.<br><br>Hazırsın 💜 Hadi ilk görevini ekle!',
+  },
+];
+
+let _tourStep = 0;
+function startOnboarding() {
+  _tourStep = 0;
+  renderTour();
+}
+
+function renderTour() {
+  let ov = document.getElementById('tourOverlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'tourOverlay';
+    ov.className = 'tour-overlay';
+    document.body.appendChild(ov);
+  }
+  const step = TOUR_STEPS[_tourStep];
+  const isLast = _tourStep === TOUR_STEPS.length - 1;
+  const isFirst = _tourStep === 0;
+  const dots = TOUR_STEPS.map((_, i) => {
+    const cls = i === _tourStep ? 'active' : (i < _tourStep ? 'done' : '');
+    return `<span class="tour-dot ${cls}"></span>`;
+  }).join('');
+  ov.innerHTML = `
+    <div class="tour-card">
+      <div class="tour-progress">${dots}</div>
+      <div class="tour-emoji">${step.emoji}</div>
+      <h2 class="tour-title">${step.title}</h2>
+      <div class="tour-body">${step.body}</div>
+      <div class="tour-actions">
+        <button class="tour-skip" onclick="finishOnboarding()">🚫 Atla</button>
+        <div class="tour-nav">
+          ${isFirst ? '' : '<button class="tour-btn" onclick="prevTourStep()">← Geri</button>'}
+          ${isLast
+            ? '<button class="tour-btn primary" onclick="finishOnboarding()">🚀 Başla</button>'
+            : '<button class="tour-btn primary" onclick="nextTourStep()">İleri →</button>'}
+        </div>
+      </div>
+    </div>
+  `;
+  ov.style.display = 'flex';
+}
+
+function nextTourStep() {
+  if (_tourStep < TOUR_STEPS.length - 1) { _tourStep++; renderTour(); }
+  else finishOnboarding();
+}
+function prevTourStep() {
+  if (_tourStep > 0) { _tourStep--; renderTour(); }
+}
+function finishOnboarding() {
+  const ov = document.getElementById('tourOverlay');
+  if (ov) ov.style.display = 'none';
+  data.settings.onboardingDone = true;
+  save();
+  showToast('💜 İyi günler! Bir şey takılırsa Ayarlar\'a bak.', 'success', 4000);
+}
+
 function exportData() {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -7407,6 +7528,10 @@ async function onLoginSuccess() {
   showSupaStatus('✅ Giriş başarılı: ' + window._user.email + '\n⏳ Veriler eşitleniyor...', '#50fa7b');
   await pullFromCloud();
   subscribeToCloud();
+  // Yeni user'a 5 adımlı tur — bir kez gösterilir
+  if (!data.settings.onboardingDone) {
+    setTimeout(() => startOnboarding(), 600);
+  }
 }
 
 async function pullFromCloud() {
