@@ -1971,6 +1971,25 @@ async function handleStockHistoryApi(request, env) {
 // Service key olmadan da /invite/create çalışır (kodu kendi user'ı adına yazar),
 // /signup'da service key yoksa kullanılır mevcut Supabase auth signup endpoint'i.
 
+// PWA için public config — Supabase URL + anon key.
+// Anon key zaten publishable (RLS koruyor), kod-içine gömmek yerine Worker'dan dönsün ki
+// frontend bundle'a düşmeden çekilsin. Auth YOK.
+async function handleConfigApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'GET') return new Response('Method Not Allowed', { status: 405, headers: cors });
+  return jsonCors({
+    supaUrl: env.SUPABASE_URL,
+    supaKey: env.SUPABASE_KEY,
+    vapidPublicKey: env.VAPID_PUBLIC_KEY || null,
+  }, 200, cors);
+}
+
 function genInviteCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // O/0/I/1 confusion'u önle
   let s = '';
@@ -2643,6 +2662,11 @@ export default {
     // Portföy görseli → AI vision (POST {image} → sembol/adet/maliyet JSON)
     if (url.pathname === '/portfolio-image') {
       return handlePortfolioImageApi(request, env);
+    }
+
+    // PWA bootstrap config (Supabase URL + anon key)
+    if (url.pathname === '/config') {
+      return handleConfigApi(request, env);
     }
 
     // 👥 Multi-user (davet kodlu)

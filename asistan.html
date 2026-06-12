@@ -1147,6 +1147,45 @@
   .now-next.urgent { color: var(--danger); background: var(--danger-soft); animation: now-pulse 1.4s ease-in-out infinite; }
   @keyframes now-pulse { 0%,100%{opacity:1;} 50%{opacity:0.62;} }
 
+  /* 🚪 Karşılama overlay — yeni user için tam ekran login/signup */
+  .welcome-overlay {
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(10, 11, 15, 0.96);
+    backdrop-filter: blur(12px);
+    display: none; align-items: center; justify-content: center;
+    padding: 24px 18px;
+    -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
+  }
+  .welcome-card {
+    background: var(--bg-elev); border: 1px solid var(--border-soft);
+    border-radius: 18px; padding: 28px 22px;
+    max-width: 380px; width: 100%;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+  }
+  .welcome-logo { font-size: 2.4em; text-align: center; margin-bottom: 4px; }
+  .welcome-title { font-size: 1.8em; font-weight: 800; text-align: center; margin: 0 0 4px; letter-spacing: -0.02em; color: var(--text); }
+  .welcome-sub { text-align: center; color: var(--text-muted); font-size: 0.86em; margin-bottom: 22px; }
+  .welcome-form input {
+    width: 100%; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border-soft); border-radius: 10px;
+    padding: 11px 13px; font-size: 0.95em; margin-bottom: 8px;
+    box-sizing: border-box; -webkit-appearance: none;
+  }
+  .welcome-form input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99,102,241,0.18); }
+  .welcome-hint { font-size: 0.76em; color: var(--text-faint); margin-bottom: 6px; }
+  .welcome-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .welcome-btn {
+    flex: 1; padding: 11px 12px; border-radius: 10px; font-size: 0.95em; font-weight: 600;
+    border: 1px solid var(--border-soft); background: transparent; color: var(--text); cursor: pointer;
+    transition: background 120ms, border-color 120ms;
+  }
+  .welcome-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .welcome-btn.primary:hover { background: var(--accent-light); }
+  .welcome-btn.ghost:hover { border-color: var(--accent); color: var(--accent); }
+  .welcome-btn.wide { width: 100%; flex: none; }
+  .welcome-status { margin-top: 10px; font-size: 0.85em; min-height: 1.2em; text-align: center; color: var(--text-muted); white-space: pre-line; }
+
   /* ⏳ Geri sayım kartı — sınav/teslim "X gün kaldı" */
   #countdownList { display:flex; flex-direction:column; gap:8px; margin-bottom: 14px; }
   .countdown-card {
@@ -6279,7 +6318,125 @@ function loadSettings() {
   if (data.settings.supaUrl && data.settings.supaKey) {
     initSupabase();
   } else {
+    // Settings'te credentials yok — Worker'dan public config'i çek, otomatik bağlan
+    autoConnectFromConfig();
+  }
+}
+
+// Yeni kullanıcılar için: Aidan'ın public Supabase credentials'ını Worker'dan çek + bağlan.
+// Anon key zaten publishable, RLS koruyor — kod-içine gömmek yerine Worker'dan ki tek noktadan yönetilsin.
+async function autoConnectFromConfig() {
+  try {
+    const r = await fetch(CONFIG_ENDPOINT);
+    if (!r.ok) { renderAuthBox(); renderWelcome(); return; }
+    const cfg = await r.json();
+    if (!cfg.supaUrl || !cfg.supaKey) { renderAuthBox(); renderWelcome(); return; }
+    data.settings.supaUrl = cfg.supaUrl;
+    data.settings.supaKey = cfg.supaKey;
+    localStorage.setItem('aidan', JSON.stringify(data));
+    // Settings ekranını da güncelle (gizliyse de field'lar dolsun)
+    const su = document.getElementById('supaUrl');
+    const sk = document.getElementById('supaKey');
+    if (su) su.value = cfg.supaUrl;
+    if (sk) sk.value = cfg.supaKey;
+    initSupabase();
+  } catch (e) {
+    console.warn('autoConnect fail', e.message);
     renderAuthBox();
+    renderWelcome();
+  }
+}
+
+// Login yoksa görevler ekranını gizleyen büyük karşılama overlay'i.
+// Login olunca gizlenir (onAuthStateChange tarafından kaldırılır).
+function renderWelcome() {
+  if (window._user) { hideWelcome(); return; }
+  let ov = document.getElementById('welcomeOverlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'welcomeOverlay';
+    ov.className = 'welcome-overlay';
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML = `
+    <div class="welcome-card">
+      <div class="welcome-logo">☁️</div>
+      <h1 class="welcome-title">Aidan</h1>
+      <div class="welcome-sub">ADHD beynine birlikte yürüyen asistan</div>
+      <div class="welcome-form">
+        <input type="email" id="wEmail" placeholder="email@adres.com" autocomplete="email">
+        <input type="password" id="wPassword" placeholder="şifre (en az 8 karakter)" autocomplete="current-password">
+        <div id="wInviteRow" style="display:none;">
+          <input type="text" id="wCode" placeholder="Davet kodu (AIDAN-XXXXXXXX)" style="text-transform:uppercase; letter-spacing:0.04em;">
+          <div class="welcome-hint">Davet kodu olmadan yeni hesap açılmaz.</div>
+        </div>
+        <div class="welcome-actions">
+          <button class="welcome-btn primary" onclick="welcomeLogin()">🔓 Giriş Yap</button>
+          <button class="welcome-btn ghost" onclick="welcomeToggleSignup()">🆕 Yeni Hesap</button>
+        </div>
+        <div id="wSignupRow" style="display:none; margin-top:8px;">
+          <button class="welcome-btn primary wide" onclick="welcomeSignup()">✅ Kayıt Ol (davet koduyla)</button>
+        </div>
+        <div id="wStatus" class="welcome-status"></div>
+      </div>
+    </div>
+  `;
+  ov.style.display = 'flex';
+}
+
+function hideWelcome() {
+  const ov = document.getElementById('welcomeOverlay');
+  if (ov) ov.style.display = 'none';
+}
+
+function welcomeToggleSignup() {
+  const row = document.getElementById('wInviteRow');
+  const btnRow = document.getElementById('wSignupRow');
+  const open = row.style.display === 'none';
+  row.style.display = open ? 'block' : 'none';
+  btnRow.style.display = open ? 'block' : 'none';
+  if (open) document.getElementById('wCode').focus();
+}
+
+function welcomeStatus(msg, color) {
+  const el = document.getElementById('wStatus');
+  if (el) { el.textContent = msg; el.style.color = color || 'var(--text-muted)'; }
+}
+
+async function welcomeLogin() {
+  if (!window._supa) { welcomeStatus('⚠️ Bağlantı kurulamadı, sayfayı yenile.', '#ff5555'); return; }
+  const email = document.getElementById('wEmail').value.trim();
+  const password = document.getElementById('wPassword').value;
+  if (!email || !password) { welcomeStatus('Email ve şifre gerekli.', '#ffb86c'); return; }
+  welcomeStatus('⏳ Giriş yapılıyor…', '#8be9fd');
+  const { error } = await window._supa.auth.signInWithPassword({ email, password });
+  if (error) welcomeStatus('❌ ' + error.message, '#ff5555');
+  else welcomeStatus('✅ Giriş başarılı', '#50fa7b');
+  // onAuthStateChange handler hideWelcome çağırır
+}
+
+async function welcomeSignup() {
+  if (!window._supa) { welcomeStatus('⚠️ Bağlantı kurulamadı.', '#ff5555'); return; }
+  const email = document.getElementById('wEmail').value.trim();
+  const password = document.getElementById('wPassword').value;
+  const code = (document.getElementById('wCode').value || '').trim().toUpperCase();
+  if (!email || !email.includes('@')) { welcomeStatus('Geçerli email gir.', '#ffb86c'); return; }
+  if (password.length < 8) { welcomeStatus('Şifre en az 8 karakter olmalı.', '#ffb86c'); return; }
+  if (!code) { welcomeStatus('Davet kodu gerekli (AIDAN-XXXXXXXX).', '#ffb86c'); return; }
+  welcomeStatus('⏳ Davet kodu doğrulanıyor…', '#8be9fd');
+  try {
+    const r = await fetch(SIGNUP_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, code }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { welcomeStatus('❌ ' + (j.error || `signup ${r.status}`), '#ff5555'); return; }
+    welcomeStatus('✅ Hesap oluştu, giriş yapılıyor…', '#50fa7b');
+    const { error } = await window._supa.auth.signInWithPassword({ email, password });
+    if (error) welcomeStatus('⚠️ Kayıt OK ama giriş başarısız: ' + error.message, '#ffb86c');
+  } catch (e) {
+    welcomeStatus('❌ ' + e.message, '#ff5555');
   }
 }
 
@@ -7029,6 +7186,7 @@ function toggleSignupForm() {
   if (opening) document.getElementById('inviteCode').focus();
 }
 
+const CONFIG_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/config';
 const SIGNUP_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/signup';
 const INVITE_CREATE_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/invite/create';
 const INVITE_LIST_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/invite/list';
@@ -7218,19 +7376,23 @@ function initSupabase() {
   window._supa.auth.onAuthStateChange((event, session) => {
     if (session && session.user) {
       window._user = session.user;
+      hideWelcome();
       onLoginSuccess();
     } else {
       window._user = null;
       renderAuthBox();
+      renderWelcome();
     }
   });
 
   window._supa.auth.getSession().then(({data: {session}}) => {
     if (session && session.user) {
       window._user = session.user;
+      hideWelcome();
       onLoginSuccess();
     } else {
       renderAuthBox();
+      renderWelcome();
     }
   });
 }
