@@ -72,7 +72,14 @@
     pointer-events: none;
     z-index: 0;
   }
-  .container { max-width: 860px; margin: 0 auto; position: relative; z-index: 1; }
+  .container { max-width: 1400px; margin: 0 auto; position: relative; z-index: 1; }
+  /* Masaüstünde sayfayı kapla — yan boşluklar makul kalsın */
+  @media (min-width: 768px) {
+    body { padding: 32px 32px 60px; }
+  }
+  @media (min-width: 1280px) {
+    body { padding: 36px 56px 60px; }
+  }
   h1 {
     text-align: center;
     font-size: 1.75em;
@@ -1875,7 +1882,14 @@
     -webkit-tap-highlight-color: transparent;
   }
   body::before { display: none; }
-  .container { max-width: 680px; }
+  .container { max-width: 1400px; }
+  /* Masaüstü: yan padding artar, kapalı sayfa hissi yerine ferah dağılım */
+  @media (min-width: 768px) {
+    body { padding: 28px 36px 80px; }
+  }
+  @media (min-width: 1280px) {
+    body { padding: 32px 64px 80px; }
+  }
 
   /* Brand row */
   .brand-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding-top: 4px; }
