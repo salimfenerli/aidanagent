@@ -427,6 +427,97 @@ function buildMorning(data, autoSetMit) {
   return { title: '🌅 Sabah brifingi', message: lines.join('\n'), replyMarkup };
 }
 
+// 🌅 Sabah AI brifingi — push bildirimini düz metin yerine kişisel AI yorumuyla yapar.
+// AI fail olursa eski buildMorning fallback'i ile kayıp olmaz.
+async function buildMorningAi(env, data, autoSetMit) {
+  const today = trToday();
+  const tasks = data.tasks || [];
+  const mit = tasks.filter(t => t.mitDate === today && !t.done);
+  const urgent = tasks.filter(t => t.priority === 'urgent' && !t.done);
+  const dueToday = tasks.filter(t => t.due === today && !t.done);
+  const dueTomorrow = tasks.filter(t => t.due === trDate(1) && !t.done);
+  const overdue = tasks.filter(t => t.due && t.due < today && !t.done);
+  const totalActive = tasks.filter(t => !t.done).length;
+  const oldStuck = tasks.filter(t => !t.done && !t.due && t.created && (Date.now() - new Date(t.created).getTime()) > 5 * 86400000).length;
+  const yesterday = trDate(-1);
+  const doneYesterday = tasks.filter(t => t.doneDate === yesterday).length;
+  const name = getUserDisplayName(data, '');
+
+  // MIT bağlamı
+  let mitList = [];
+  let mitContext = '';
+  if (autoSetMit && autoSetMit.length) {
+    mitList = autoSetMit;
+    mitContext = `🎯 Bugünün 3'ünü AI olarak otomatik seçtim (kullanıcı kendi seçmemiş)`;
+  } else if (mit.length) {
+    mitList = mit;
+    mitContext = `⭐ Kullanıcı bugünün MIT'ini zaten seçmiş`;
+  } else {
+    mitContext = `MIT seçilmemiş ve aktif görev yok / az`;
+  }
+  const mitLines = mitList.map((t, i) => {
+    const tags = [];
+    if (t.due === today) tags.push('bugün son');
+    else if (t.due === trDate(1)) tags.push('yarın son');
+    else if (t.due && t.due < today) tags.push('GECİKTİ');
+    if (t.priority === 'urgent') tags.push('acil');
+    if (t.estimateMin) tags.push(`${t.estimateMin}dk`);
+    return `${i + 1}. ${t.text}${tags.length ? ` (${tags.join(', ')})` : ''}`;
+  }).join('\n');
+
+  const sysPrompt = `Sen Aidan'sın — ${name}'in ADHD asistanı. Sabah brifingisini yazıyorsun (push bildirimi).
+
+GÖREVİN: 3-4 cümle TÜRKÇE kişisel sabah selamı + bugün için yön.
+
+YAPI:
+1. "🌅 Günaydın ${name}" ile başla
+2. Bugünün özetini somutla — sayısı kaç, kritik olan ne
+3. MIT varsa onu hatırlat / yoksa nazikçe "küçük başla" öner
+4. Yorgun/yoğun gün belirtisi varsa empati ("bugün dolu, küçük adım yeter")
+5. Sakin gün ise enerji ("hafif gün, momentum yakala")
+
+🚫 YASAK:
+- Liste/madde imi (push'ta dağılır, AKICI cümle yaz)
+- Görev başlığını tekrarlama (kullanıcı zaten uygulamada görür)
+- "Şunu yapmalısın" zorlayıcı emir
+- "1." "2." "3." numaralandırma
+- İngilizce
+- "I'm sorry", "As an AI" gibi şablon
+- 5'ten fazla cümle
+
+✅ TON: sabah çayı içen bir arkadaş. Sıcak, somut, kısa. Cümleler arasında satır atlama olabilir ama madde işareti yok.
+
+📝 ÖRNEK ÇIKTI:
+"🌅 Günaydın ${name} ☀️ Bugün 4 aktif görev var ama deadline yok — sakin bir gün. Üç tanesi 5+ gündür duruyor, küçük başla: bir tanesinin ilk adımını at, geri kalanı dökülür. Hafif bir gün, momentum yakala 💜"`;
+
+  const context = `📅 ${trDayName()}, ${today} (${trClock()})
+👤 Kullanıcı: ${name}
+📊 Aktif: ${totalActive} görev | Dün biten: ${doneYesterday}${overdue.length ? ` | ⚠️ Gecikmiş: ${overdue.length}` : ''}${urgent.length ? ` | 🔴 Acil: ${urgent.length}` : ''}${dueToday.length ? ` | 📅 Bugün son: ${dueToday.length}` : ''}${dueTomorrow.length ? ` | ⏳ Yarın son: ${dueTomorrow.length}` : ''}${oldStuck >= 3 ? ` | 🕰️ 5+ gün duran: ${oldStuck}` : ''}
+
+${mitContext}${mitLines ? ':\n' + mitLines : ''}
+
+Bunlardan yola çıkarak ${name}'e 3-4 cümlelik kişisel sabah brifingi yaz. Madde imi YOK, akıcı paragraf.`;
+
+  try {
+    const r = await env.AI.run(AI_MODEL, {
+      messages: [
+        { role: 'system', content: sysPrompt },
+        { role: 'user', content: context },
+      ],
+      max_tokens: 280,
+      temperature: 0.55,
+    });
+    const msg = (r.response || '').trim();
+    if (!msg || msg.length < 30 || /^i'?m sorry|^as an ai|your input/i.test(msg)) {
+      return buildMorning(data, autoSetMit); // fallback
+    }
+    return { title: '🌅 Sabah brifingi', message: msg };
+  } catch (e) {
+    console.error('buildMorningAi fail', e.message);
+    return buildMorning(data, autoSetMit); // fallback
+  }
+}
+
 function buildNoon(data) {
   const today = trToday();
   const tasks = data.tasks || [];
@@ -769,7 +860,7 @@ async function runCronJob(env, type) {
     try {
       let payload = null;
       switch (type) {
-        case 'morning':  payload = buildMorning(u.data, autoSetMorningMit(u.data)); break;
+        case 'morning':  payload = await buildMorningAi(env, u.data, autoSetMorningMit(u.data)); break;
         case 'noon':     payload = buildNoon(u.data); break;
         case 'evening':  payload = buildEvening(u.data); break;
         case 'deadline': payload = buildDeadlineAlerts(u.data); break;
