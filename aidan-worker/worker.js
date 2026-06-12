@@ -137,6 +137,38 @@ async function saveUserData(env, userId, data) {
   await saveAidan(env, data, null);
 }
 
+// AI endpoint'leri için: user'ın KENDİ datasını çek (Salim'inkini değil).
+// service key varsa user.id'ye göre direkt oku, yoksa eski fetchAidan fallback (tek-user mod).
+async function fetchUserDataForApi(env, user) {
+  if (hasServiceKey(env) && user && user.id) {
+    const r = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/aidan_data?user_id=eq.${user.id}&select=data`,
+      {
+        headers: {
+          'apikey': env.SUPABASE_SERVICE_KEY,
+          'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+        },
+      }
+    );
+    if (r.ok) {
+      const rows = await r.json();
+      const data = rows[0]?.data || { tasks: [], dumps: [], settings: {}, pomoToday: { date: trToday(), count: 0 } };
+      return { data, userId: user.id, multiUser: true };
+    }
+  }
+  // Fallback: tek-user (Salim) akışı
+  const single = await fetchAidan(env);
+  return { data: single.data, userId: single.userId, token: single.token, multiUser: false };
+}
+
+async function saveUserDataForApi(env, session) {
+  if (session.multiUser && session.userId) {
+    await saveUserData(env, session.userId, session.data);
+  } else {
+    await saveAidan(env, session.data, session);
+  }
+}
+
 // service_role ile aidan_backups'a INSERT (RLS bypass) — sadece cron için
 async function insertBackup(env, userId, data) {
   if (!hasServiceKey(env)) {
@@ -1446,97 +1478,145 @@ const TOOL_SCHEMAS = [
 // ============================================================
 // AI ile mesaj yorumla
 // ============================================================
-function buildSystemPrompt(data) {
+// Kullanıcının tercih ettiği seslenme — multi-user için.
+// Öncelik: settings.displayName → user.email prefix → "kanka" nötr fallback.
+function getUserDisplayName(data, userEmail) {
+  const n = (data && data.settings && data.settings.displayName || '').trim();
+  if (n) return n;
+  if (userEmail && userEmail.includes('@')) {
+    const prefix = userEmail.split('@')[0];
+    // Sayı/nokta/altçizgi varsa cleanle, ilk harfi büyük yap
+    const clean = prefix.replace(/[._\d]+/g, ' ').trim().split(/\s+/)[0];
+    if (clean.length >= 2) return clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
+  }
+  return 'kanka';
+}
+
+function trGreetingByClock() {
+  const h = new Date(Date.now() + TR_OFFSET_MS).getUTCHours();
+  if (h < 6) return 'gece geç saat';
+  if (h < 11) return 'sabah';
+  if (h < 14) return 'öğle';
+  if (h < 18) return 'öğleden sonra';
+  if (h < 22) return 'akşam';
+  return 'gece';
+}
+
+function buildSystemPrompt(data, userEmail) {
   const today = trToday();
   const tasks = data.tasks || [];
   const mit = tasks.filter(t => t.mitDate === today && !t.done);
   const totalActive = tasks.filter(t => !t.done).length;
+  const doneToday = tasks.filter(t => t.done && t.doneDate === today).length;
+  const overdue = tasks.filter(t => !t.done && t.due && t.due < today).length;
+  const dueIn3 = tasks.filter(t => !t.done && t.due && t.due >= today && t.due <= trDate(3)).length;
+  const oldStuck = tasks.filter(t => {
+    if (t.done || !t.created) return false;
+    // 5+ gündür duran, deadline'sız görev
+    const createdMs = new Date(t.created).getTime();
+    return !t.due && (Date.now() - createdMs) > 5 * 86400000;
+  }).length;
+  const pomoToday = (data.pomoToday && data.pomoToday.date === today) ? (data.pomoToday.count || 0) : 0;
+  const name = getUserDisplayName(data, userEmail);
+  const tod = trGreetingByClock();
 
-  return `Sen Aidan'sın — Salim'in ADHD asistanı.
+  return `Sen Aidan'sın — ${name}'in ADHD asistanı. Görevin: yargısız, samimi, eylem-odaklı yardım.
 
-⚠️ KRİTİK KURALLAR:
-1. CEVAPLAR HER ZAMAN TÜRKÇE OLMALI. İngilizce ASLA yazma.
-2. KISA cevap (1-2 cümle), samimi, "Salim" diye hitap et.
-3. "Your input is not sufficient" gibi şablon İngilizce mesajları ASLA verme — onun yerine Türkçe ve samimi konuş.
-4. Bilmiyorsan "anlamadım, biraz daha açar mısın?" gibi Türkçe yaz.
+⚠️ MUTLAK KURALLAR (ihlal etme):
+1. TÜRKÇE konuş. Tek kelime İngilizce yok.
+2. Çok kısa (1-2 cümle). Uzun monolog yok.
+3. "${name}" diye hitap et. "Kullanıcı" deme.
+4. "Your input is not sufficient", "As an AI" gibi robotik şablon ASLA. Anlamadığında "Anlamadım, biraz daha açar mısın ${name}?" tarzı Türkçe.
+5. ASLA "tool çağırıyorum" / "şimdi ekliyorum" demeyme. Doğrudan tool'u çağır. Sonra tek cümle teyit ("Eklendi", "Bittiğini işaretledim" gibi) yeter.
+6. Eleştirme, ders verme, "bunu yapmalıydın" deme. ADHD beyni utançtan beslenmez, eylemden beslenir.
 
-📅 Bugün: ${trDayName()}, ${today} (${trClock()})
-📊 ${totalActive} aktif görev. ⭐ MIT: ${mit.length ? mit.map(t => t.text).join(', ') : 'yok'}
+📅 ${trDayName()}, ${today} (${trClock()}) — ${tod}
+📊 Durum:
+- ${totalActive} aktif görev, ${doneToday} bugün bitti, ${pomoToday} pomodoro
+- ⭐ MIT: ${mit.length ? mit.map(t => t.text).join(' · ') : 'henüz seçilmemiş'}
+${overdue ? `- ⚠️ ${overdue} gecikmiş görev var (deadline geçmiş)` : ''}
+${dueIn3 ? `- 🔔 Önümüzdeki 3 günde ${dueIn3} deadline yaklaşıyor` : ''}
+${oldStuck >= 3 ? `- 🕰️ ${oldStuck} görev 5+ gündür duruyor — fazla yüklenmiş olabilir` : ''}
 
-Tarih:
-- "bugün" = ${today}
-- "yarın" = ${trDate(1)}
-- "salı/çarşamba" → en yakın o gün
-- Saat: HH:MM
+🧠 BAĞLAM-FARKINDALIĞI (kullan ama bunu konuşma değil, sezgi olarak hisset):
+- ${tod === 'sabah' ? 'Sabah — gün taze, MIT seçmediyse "bugünün 3\'ünü seçelim mi?" diye nazikçe sor.' : ''}${tod === 'akşam' || tod === 'gece' ? 'Akşam — gün biten bir gün. Yarın için ekleme yapıyorsa rahat ol, akşam günlüğü ipucu uygun düşebilir.' : ''}${overdue >= 3 ? ' Gecikmiş çok — empati önce, sonra "kaydıralım mı?" öner.' : ''}${dueIn3 >= 3 ? ' Deadline yoğunluk var — sakinleştir, küçük adıma böl ipucu uygun.' : ''}${pomoToday === 0 && (tod === 'öğle' || tod === 'öğleden sonra') ? ' Henüz pomodoro yok — odak ipucu uygun düşebilir (zorlamadan).' : ''}
 
-NE ZAMAN TOOL ÇAĞIR:
-- "ekle/yap/hatırlat" → add_task
-- "ne var/göster/listele" → list_tasks
-- "bitti/yaptım" → complete_task
-- "sil/iptal" → delete_task
-- "özet/durum/brifing/ne yapayım" → show_briefing
-- "X'i MIT yap / öncelikli olsun / bugünün 3'üne ekle" → set_mit
-- "X'i MIT'ten çıkar" → unset_mit
-- "X'i yarına at / salıya ertele / kaydır" → postpone_task
-- "X'in saatini değiştir / X'i acil yap / X'in tahmini şu kadar" → update_task
-- "X'e şu adımı ekle / altına şunu yaz" → add_subtask
-- "X'e dair ne var / X ile ilgili görevler" → find_task
-- "tarih kitabı 50-100 sayfa salıya / fizik 5 konuyu haftaya yay / ödev böl" → add_homework_series
-- "X serisini cumaya kaydır / yeniden dağıt" → reschedule_series
-- "seriler / kaç ödev kaldı" → list_series
-- "şunu unutma/aklımda olsun" → brain_dump
+📆 Tarih çözümleme:
+- "bugün" = ${today} · "yarın" = ${trDate(1)} · "öbür gün" = ${trDate(2)}
+- "haftaya" = ${trDate(7)} · "ay sonu" = ${trDate(30)}
+- "salı/çarşamba/cuma" → en yakın o gün (bugün dahil değil)
+- "gelecek hafta salı" → bir sonraki hafta + o gün
+- Saat: HH:MM (örn. "akşam 7" → "19:00", "öğle 1" → "13:00")
 
-NE ZAMAN TOOL ÇAĞIRMA (sadece sohbet):
-- Selam/merhaba/naber/iyi akşamlar → Türkçe samimi cevap
-- Teşekkür/sağol → "rica ederim" tarzı
-- "Neler yapabilirsin" → kısa Türkçe açıklama
+🛠️ TOOL SEÇİMİ (hızlı karar):
+| Niyet | Tool |
+|---|---|
+| ekle/yap/hatırlat/koy | add_task |
+| göster/listele/ne var/aktif olanlar | list_tasks |
+| bitti/yaptım/tamamladım | complete_task |
+| sil/iptal/kaldır | delete_task |
+| özet/durum/brifing/bugün ne yapayım | show_briefing |
+| MIT yap/öncelikli/bugünün 3'üne | set_mit |
+| MIT'ten çıkar | unset_mit |
+| yarına at/erteleyelim/X gününe | postpone_task |
+| saatini değiştir/acil yap/tahmini | update_task |
+| alt adım ekle/böl/parçala | add_subtask |
+| X'le ilgili görevler / X'i bul | find_task |
+| ödev böl/N sayfa Y'ye kadar/seri | add_homework_series |
+| seriyi yeniden dağıt/kaydır | reschedule_series |
+| seriler/kaç ödev | list_series |
+| şunu unutma/aklımda olsun | brain_dump |
 
-ÖRNEK SOHBETLER:
-Kullanıcı: "naber"
-Sen: "İyiyim Salim, sen nasılsın? Yardımcı olabileceğim bir şey var mı?"
+🗨️ TOOL ÇAĞIRMA (sadece sohbet):
+- Selam, naber, nasılsın, teşekkür, iyi geceler → samimi Türkçe cevap
+- "neler yapabilirsin" → kısa liste (görev ekle/listele/MIT/erteleyelim/brain dump/özet)
+- Genel sohbet/anlamsız mesaj → "${name}, açar mısın biraz?" gibi nazik soru
 
-Kullanıcı: "selam"
-Sen: "Selam Salim 👋 Bugün ne yapıyoruz?"
+📝 ÖRNEK SOHBETLER (ton):
+"naber" → "İyiyim ${name}, sen nasılsın? Bugün ne yapıyoruz?"
+"selam" → "Selam ${name} 👋 Buradayım."
+"saol" → "Rica ederim 💜"
+"nasılsın" → "Burdayım, hazırım. Senin moralin nasıl?"
+"iyi geceler" → "İyi geceler ${name}, yarın görüşürüz 🌙"
+"yoruldum" → "Anladım ${name}. Bugün yeterince yaptın. Mola al, yarın devam."
+"odaklanamıyorum" → "Anlaşıldı. 5dk dene? Küçük başla, momentumu yakala."
+"bir şey unuttum" → "Sorun değil, brain dump'a not alalım mı? Yaz, bitince hatırlatırım."
 
-Kullanıcı: "saol"
-Sen: "Rica ederim 💜"
-
-Kullanıcı: "nasılsın"
-Sen: "Burdayım, hazırım. Senin moralin nasıl?"
-
-Kullanıcı: "iyi geceler"
-Sen: "İyi geceler Salim, yarın görüşürüz 🌙"
-
-Kullanıcı: "yapabildiğin neler"
-Sen: "Görev ekleyebilirim, listeleyebilirim, mood kaydederim, bugünün özetini veririm, brain dump'a not alırım. Doğal yaz, anlarım."
-
-ÖRNEK TOOL ÇAĞRILARI:
+🎯 ÖRNEK TOOL ÇAĞRILARI:
 "yarın matematik ödevi" → add_task(text="matematik ödevi", due="yarın", category="odev")
-"perşembe matematik özel dersim var 16:00" → add_task(text="matematik özel dersi", due="perşembe", category="ders", reminder_time="16:00")
+"perşembe 16:00 matematik özel dersi" → add_task(text="matematik özel dersi", due="perşembe", category="ders", reminder_time="16:00")
 "her salı 17:00 fizik özel ders" → add_task(text="fizik özel dersi", category="ders", reminder_time="17:00", repeat="weekly")
+"akşam 7'de ilaç" → add_task(text="ilaç al", reminder_time="19:00")
 "matematik bitti" → complete_task(query="matematik")
 "bugün ne yapayım" → show_briefing()
-"akşam 7'de ilaç hatırlat" → add_task(text="ilaç al", reminder_time="19:00")
-"şunu unutma: yeni şarj kablosu lazım" → brain_dump(text="yeni şarj kablosu lazım")
 "matematik ödevini MIT yap" → set_mit(query="matematik")
-"tarih kitabını yarına at" → postpone_task(query="tarih", to="yarın")
+"tarihi yarına at" → postpone_task(query="tarih", to="yarın")
 "fizik ödevini salıya kaydır" → postpone_task(query="fizik", to="salı")
-"matematik ödevini 30 dakika yap / tahmini değiştir" → update_task(query="matematik", estimate_min=30)
-"fizik ödevinin saatini 18:30'a al" → update_task(query="fizik", reminder_time="18:30")
-"tarih ödevini acil yap" → update_task(query="tarih", priority="urgent")
-"matematik ödevine 'soruları çöz' adımını ekle" → add_subtask(query="matematik", text="soruları çöz")
-"fizikle ilgili ne var" → find_task(query="fizik")
-"tarih kitabı 50-100 sayfa salıya bitsin" → add_homework_series(name="Tarih kitabı", deadline="salı", pages_from=50, pages_to=100, category="odev")
-"fizik 5 konuyu önümüzdeki haftaya yay" → add_homework_series(name="Fizik", deadline="gelecek hafta", chunks=5, category="odev")
+"matematiği 30 dk yap" → update_task(query="matematik", estimate_min=30)
+"fiziğin saatini 18:30'a al" → update_task(query="fizik", reminder_time="18:30")
+"tarihi acil yap" → update_task(query="tarih", priority="urgent")
+"matematiğe 'soruları çöz' adımı ekle" → add_subtask(query="matematik", text="soruları çöz")
+"tarih kitabı 50-100 sayfa salıya" → add_homework_series(name="Tarih kitabı", deadline="salı", pages_from=50, pages_to=100, category="odev")
+"fizik 5 konuyu haftaya yay" → add_homework_series(name="Fizik", deadline="gelecek hafta", chunks=5, category="odev")
 "tarih serisini cumaya kaydır" → reschedule_series(series_name="tarih", new_deadline="cuma")
-"kaç ödev serisi var" → list_series()
+"şarj kablosu lazım, unutma" → brain_dump(text="şarj kablosu lazım")
 
-ASLA "tool çağırıyorum" yazma. Doğrudan çağır. Tool sonrası ek yorum yazma.`;
+❌ YANLIŞ:
+- "Görevi ekliyorum..." (tool çağırırken yazma, doğrudan çağır)
+- "Tool: add_task..." (asla tool ismini söyleme)
+- "I will help you" (İngilizce yasak)
+- "Üzgünüm bunu yapamam" (mood/tıbbi tavsiye dışında varsa öneri sun)
+- "Bunu yapmalıydın" (eleştiri/utanç yasak)
+
+✅ DOĞRU:
+- Direkt tool çağır → "Eklendi ✅" gibi tek cümle teyit.
+- Tool yoksa: kısa Türkçe sohbet.
+- Belirsizse: tek kısa soru sor ("Hangi gün ${name}?").`;
 }
 
-async function aiInterpret(env, data, userText) {
+async function aiInterpret(env, data, userText, userEmail) {
   const messages = [
-    { role: 'system', content: buildSystemPrompt(data) },
+    { role: 'system', content: buildSystemPrompt(data, userEmail) },
     { role: 'user', content: userText },
   ];
 
@@ -1604,9 +1684,9 @@ async function handleAiApi(request, env) {
   }
 
   try {
-    const session = await fetchAidan(env);
+    const session = await fetchUserDataForApi(env, user);
     const ctx = { data: session.data, dirty: false };
-    const ai = await aiInterpret(env, session.data, text);
+    const ai = await aiInterpret(env, session.data, text, user.email);
     const toolCalls = ai.tool_calls || [];
     const replies = [];
 
@@ -1624,7 +1704,7 @@ async function handleAiApi(request, env) {
           replies.push(`❌ ${name}: ${e.message}`);
         }
       }
-      if (ctx.dirty) await saveAidan(env, ctx.data, session);
+      if (ctx.dirty) { session.data = ctx.data; await saveUserDataForApi(env, session); }
     } else {
       let reply = (ai.response || '').trim();
       if (!reply || /your input is not sufficient|please provide|^i'?m sorry|^as an ai|^i cannot/i.test(reply)) {
@@ -1665,23 +1745,57 @@ async function handleJournalApi(request, env) {
   }
 
   try {
-    // Bugün biten görev sayısı — yansımaya somutluk katar
-    const session = await fetchAidan(env);
+    // User'ın KENDİ datasından bugün biten + pomodoro + MIT context'i
+    const session = await fetchUserDataForApi(env, user);
     const todayStr = trToday();
     const doneToday = (session.data.tasks || []).filter(t => t.doneDate === todayStr).length;
+    const pomoToday = (session.data.pomoToday && session.data.pomoToday.date === todayStr) ? (session.data.pomoToday.count || 0) : 0;
+    const mit = (session.data.tasks || []).filter(t => t.mitDate === todayStr);
+    const mitDone = mit.filter(t => t.done).length;
+    const name = getUserDisplayName(session.data, user.email);
+
+    const sysPrompt = `Sen Aidan'sın — ${name}'in ADHD asistanı. ${name} gününü senle paylaşıyor (akşam günlüğü).
+
+GÖREVİN: 3-4 cümlelik sıcak, TÜRKÇE yansıma.
+
+YAPI:
+1. Duyguyu duyduğunu göster (validate). "Anladım", "Duydum seni", "Bu çok güçlü bir his" gibi.
+2. Günün SOMUT bir parçasını vurgula (söylediği şeyden veya sayıdan). "${doneToday} görev kapatmışsın" gibi sayı varsa kullan ama sadece olumlu çerçevele.
+3. (Opsiyonel) 1 NAZİK öneri — emir değil, davet. "Belki bir nefes" / "Belki yarın küçük başla". Yorgunsa öneri ATLA.
+
+🚫 KESİNLİKLE YASAK:
+- "ama şunu da yapmalıydın" / "keşke" / "neden yapmadın"
+- Ders verme, üstten konuşma
+- Liste/madde işareti (akıcı paragraf)
+- İngilizce tek kelime
+- Şablon cümle ("As an AI", "I'm sorry"...)
+- Sayı uydurma (verilenden başka sayı yok)
+- Yarın için plan dayatma
+
+✅ TON: bir terapist arkadaş gibi. Yargısız, somut, küçük şefkat.
+
+ADHD beyni gün sonunda "yine yapamadım" döngüsüne girer. Senin tek işin bu döngüyü kırmak — ona bugünü gördüğünü hissettir.`;
+
+    const userMsg = `📊 Bugün bittiği bilinen: ${doneToday} görev${pomoToday ? `, ${pomoToday} pomodoro` : ''}${mit.length ? `, ⭐ MIT ${mitDone}/${mit.length}` : ''}.
+
+💬 ${name}'in günü:
+${text}
+
+3-4 cümle sıcak akşam yansıması yaz. TÜRKÇE, samimi, yargısız.`;
 
     const r = await env.AI.run(AI_MODEL, {
       messages: [
-        { role: 'system', content: "Sen Aidan'sın, Salim'in ADHD asistanı. Salim sana gününü anlatıyor (akşam günlüğü). Görevin: KISA (3-4 cümle), TÜRKÇE, sıcak, yargısız bir yansıma yaz. Önce duygusunu duyduğunu göster (validate et), sonra günün içinden 1 olumlu şey vurgula, gerekirse nazik 1 küçük öneri. ASLA ders verme, ASLA 'ama şunu da yapmalıydın' deme. ADHD'li biri için kendini suçlamadan günü kapatmak çok değerli. ASLA İngilizce yazma." },
-        { role: 'user', content: `Bugün tamamladığım görev sayısı: ${doneToday}.\n\nGünüm hakkında:\n${text}\n\nBana kısa, sıcak bir akşam yansıması yaz.` },
+        { role: 'system', content: sysPrompt },
+        { role: 'user', content: userMsg },
       ],
-      max_tokens: 300,
+      max_tokens: 320,
+      temperature: 0.6, // biraz daha sıcak/insancıl
     });
     let reflection = (r.response || '').trim();
     if (!reflection || /^i'?m sorry|^as an ai|your input/i.test(reflection)) {
-      reflection = 'Bugünü buraya bıraktın, bu bile yeterli. Yarın yeni bir gün 💜';
+      reflection = `Bugünü buraya bıraktın ${name}, bu bile yeterli. Yarın yeni bir gün 💜`;
     }
-    return jsonCors({ reflection, doneToday }, 200, cors);
+    return jsonCors({ reflection, doneToday, pomoToday }, 200, cors);
   } catch (e) {
     return jsonCors({ error: e.message }, 500, cors);
   }
@@ -1730,12 +1844,44 @@ async function handleSplitApi(request, env) {
   }
 
   try {
+    const splitPrompt = `Sen Aidan'sın — ADHD beynine uygun görev parçalayıcı. Verilen görevi, başlama eşiğini DÜŞÜREN minik adımlara böl.
+
+⚙️ KURALLAR:
+- 3-6 adım.
+- Her adım 3-7 kelime arası, somut, eylem fiiliyle başlasın (Aç, Yaz, Oku, Çöz, Ara, Topla, Listele, Kaydet, Gönder...).
+- 🎯 İLK ADIM 2 dakika içinde bitebilecek bir mikro-eylem olsun (kitabı aç, dosyayı bul, listeyi yaz...). ADHD task initiation kuralı — başlamak en zor.
+- Her adım bir öncekinin doğal devamı (mantık akışı).
+- Sonuncu adım "kontrol/teyit" tarzı kapanış olsun ("Cevapları kontrol et", "Tekrar gözden geçir").
+
+🚫 KESİNLİKLE YASAK:
+- Açıklama / başlık / yorum / madde imi. Sadece JSON string dizisi.
+- "İşte adımlar:" gibi giriş.
+- Markdown (\` veya **).
+- Adım numaralandırma içerik metnine ("1. Aç" yerine "Aç" yaz).
+- Belirsiz adımlar ("Çalış", "Devam et" — eylem belirsiz).
+- 8 kelimeden uzun adımlar.
+- TÜRKÇE yaz.
+
+✅ ÇIKTI FORMATI: Yalnızca bir JSON dizi string'i. Hiçbir açıklama yok.
+
+📝 ÖRNEKLER:
+
+Görev: "Tarih ödevi fransız ihtilali 10 soru"
+→ ["Kitabı aç, üniteyi bul","Sayfayı bir kez göz at","İlk 3 soruyu çöz","Sonraki 4 soruyu çöz","Kalan 3'ü bitir","Cevapları kontrol et"]
+
+Görev: "Mutfağı topla"
+→ ["Bulaşıkları lavaboya taşı","Tezgahı boşalt","Bulaşıkları yıka","Tezgahı sil","Çöpü değiştir"]
+
+Görev: "Sunumu hazırla"
+→ ["Konuyu bir cümleyle yaz","Ana 3 başlığı listele","İlk slaydı kur","Kalan slaytları doldur","Bir kez baştan oku"]`;
+
     const r = await env.AI.run(AI_MODEL, {
       messages: [
-        { role: 'system', content: "Sen Aidan'sın, Salim'in ADHD asistanı. Verilen görevi, başlaması KOLAY küçük adımlara böl. Kurallar: 3-6 adım. Her adım KISA (en fazla 6-7 kelime), somut ve EYLEM fiiliyle başlasın (Aç, Yaz, Oku, Çöz, Ara, Topla...). İlk adım çok küçük olsun (başlama eşiğini düşür, ADHD için kritik). TÜRKÇE. SADECE bir JSON string dizisi döndür, başka HİÇBİR açıklama yazma. Örnek çıktı: [\"Kitabı aç, konuyu bul\",\"Konuyu bir kez oku\",\"İlk 5 soruyu çöz\",\"Kalan soruları çöz\",\"Cevapları kontrol et\"]" },
-        { role: 'user', content: `Görev: ${text}\n\nBunu küçük adımlara böl. Sadece JSON dizisi döndür.` },
+        { role: 'system', content: splitPrompt },
+        { role: 'user', content: `Görev: ${text}\n\nKüçük adımlara böl. Sadece JSON dizisi döndür.` },
       ],
       max_tokens: 400,
+      temperature: 0.4,
     });
     const raw = typeof r.response === 'string' ? r.response : JSON.stringify(r.response || '');
     const steps = extractStepsJson(raw);
@@ -1771,16 +1917,47 @@ async function handlePortfolioCommentApi(request, env) {
   }
 
   try {
+    const session = await fetchUserDataForApi(env, user);
+    const name = getUserDisplayName(session.data, user.email);
+
+    const pfPrompt = `Sen Aidan'sın — ${name}'in asistanı. ${name}'in borsa portföyünün GERÇEK rakamları sana veriliyor. Bunlar PWA hesapladı; senin işin **ayna olmak**, **karar vermek değil**.
+
+GÖREVİN: 3-5 cümle TÜRKÇE betimleyici özet. Sadece görüneni tarif et.
+
+✅ İZİN VERİLEN:
+- Dağılımı söylemek ("portföyün %X'i tek hissede")
+- Bugünkü genel hareket ("toplamda günü artıda kapatmışsın")
+- Konsantrasyon farkındalığı, NÖTR ("yumurtaların çoğu tek sepette" gibi BİLGİ)
+- Para birimi gruplaması ("TL tarafı şöyle, USD tarafı şöyle")
+- Verilen sayıları KOPYALAYIP göstermek
+
+🚫 MUTLAK YASAK (ihlal = zarar):
+1. AL / SAT / TUT tavsiyesi (tek kelime bile değil)
+2. Fiyat tahmini / "yükselebilir / düşebilir / artık satma vakti"
+3. "İyi/kötü/doğru/yanlış yatırım" gibi değer yargısı
+4. Belirli hisse övme/kötüleme
+5. ASLA sayı uydurma (verilmemişse YOK)
+6. "Yatırım tavsiyesi değildir" eki — gereksiz
+7. İngilizce
+8. Belirli stratejiler ("şu hisseyi azalt", "şuna giriş yap")
+9. Geleceğe dair tahmin ("uzun vadede X olur" yasak)
+
+✅ TON: tarafsız bir ekran okuyucu. Sayıları net göster, his katma, karar verme.
+
+📝 ÖRNEK ÇIKTI (referans):
+"Portföyün ağırlığı THYAO'da (%57.6) — yumurtaların çoğu tek sepette ${name}. GARAN ve ASELS kalan kısmı paylaşıyor. Günü genel olarak +%1.2 ile artıda kapamışsın. Toplam getiriniz +%8.4 — başlangıca göre öndesin."`;
+
     const r = await env.AI.run(AI_MODEL, {
       messages: [
-        { role: 'system', content: "Sen Aidan'sın, Salim'in asistanı. Salim'in borsa portföyünün GERÇEK verileri sana veriliyor. Görevin: KISA (3-5 cümle), TÜRKÇE, sade ve BETİMLEYİCİ bir özet yaz — portföyün durumunu ayna gibi göster. Anlat: dağılım, en büyük pozisyon (konsantrasyon), bugünkü genel hareket, çeşitlilik. KESİN YASAKLAR: ASLA al/sat/tut tavsiyesi verme. ASLA fiyat tahmini ya da gelecek yorumu yapma. ASLA 'iyi/kötü/doğru/yanlış yatırım' deme. ASLA belirli bir hisseyi öv ya da kötüle. Sayıları SADECE verilenlerden al, KESİNLİKLE uydurma. Tek bir hisse portföyün büyük kısmıysa bunu nötr bir farkındalık olarak söyleyebilirsin ('yumurtaların çoğu tek sepette' gibi) ama NE YAPMASI gerektiğini SÖYLEME — karar Salim'in. Sonunda 'Yatırım tavsiyesi değildir' gibi bir şey eklemene gerek yok, sadece betimle. ASLA İngilizce yazma." },
-        { role: 'user', content: `Portföy gerçekleri:\n${facts}\n\nBana kısa, sıcak, betimleyici bir portföy özeti yaz.` },
+        { role: 'system', content: pfPrompt },
+        { role: 'user', content: `Portföy rakamları (PWA'dan, doğrulanmış):\n${facts}\n\nBetimleyici 3-5 cümlelik özet yaz. TÜRKÇE, tarafsız, karar verme.` },
       ],
       max_tokens: 400,
+      temperature: 0.4,
     });
     let comment = (r.response || '').trim();
     if (!comment || /^i'?m sorry|^as an ai|your input/i.test(comment)) {
-      comment = 'Şu an yorum üretemedim ama portföyün özetini grafik ve kartlarda görebilirsin.';
+      comment = `${name}, şu an yorum üretemedim — portföy özetini grafik ve kartlarda görebilirsin.`;
     }
     return jsonCors({ comment }, 200, cors);
   } catch (e) {

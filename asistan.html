@@ -2635,6 +2635,12 @@
     </div>
 
     <div class="settings-row">
+      <label>🧑 Aidan sana nasıl seslensin?</label>
+      <input type="text" id="displayName" placeholder="Örn: Salim, Ahmet…" maxlength="24" onchange="saveDisplayName()" style="max-width:240px;">
+      <div class="settings-help">Boş bırakırsan email'inden tahmin eder. AI senle bu isimle konuşur (AI butonu, akşam günlüğü, portföy yorumu).</div>
+    </div>
+
+    <div class="settings-row">
       <label>⏰ Sabit hatırlatıcılar</label>
       <div id="fixedRemindersList"></div>
       <div class="fixedrem-add">
@@ -6348,9 +6354,18 @@ function celebrateDone(taskId) {
 function saveSettings() {
   save();
 }
+function saveDisplayName() {
+  const v = (document.getElementById('displayName').value || '').trim().slice(0, 24);
+  data.settings.displayName = v;
+  save();
+  if (v) showToast(`✅ Bundan sonra Aidan sana "${v}" diye sesleniyor`, 'success', 3500);
+}
+
 function loadSettings() {
   document.getElementById('supaUrl').value = data.settings.supaUrl || '';
   document.getElementById('supaKey').value = data.settings.supaKey || '';
+  const dn = document.getElementById('displayName');
+  if (dn) dn.value = data.settings.displayName || '';
   if (data.settings.supaUrl && data.settings.supaKey) {
     initSupabase();
   } else {
