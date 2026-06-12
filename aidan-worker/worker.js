@@ -2239,6 +2239,133 @@ async function handleStockHistoryApi(request, env) {
 // Service key olmadan da /invite/create çalışır (kodu kendi user'ı adına yazar),
 // /signup'da service key yoksa kullanılır mevcut Supabase auth signup endpoint'i.
 
+// 🎯 AI "Sen ne yapayım?" — context'ten tek görev önerir (Llama).
+// PWA'dan görev özetleri + energy + saat + bugün biten/pomodoro yollanır.
+// Çıktı: {taskId, reason} — kısa Türkçe cümle.
+async function handleSuggestApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
+
+  const tasks = Array.isArray(body.tasks) ? body.tasks.slice(0, 40) : [];
+  if (!tasks.length) return jsonCors({ error: 'no-tasks' }, 400, cors);
+
+  const energy = ['low', 'mid', 'high'].includes(body.energy) ? body.energy : 'mid';
+  const hour = Number.isFinite(body.hour) ? body.hour : new Date().getHours();
+  const doneToday = Number.isFinite(body.doneToday) ? body.doneToday : 0;
+  const pomoToday = Number.isFinite(body.pomoToday) ? body.pomoToday : 0;
+
+  // User'ın datasından isim çek (PWA settings.displayName)
+  let name = 'kanka';
+  try {
+    const session = await fetchUserDataForApi(env, user);
+    name = getUserDisplayName(session.data, user.email);
+  } catch {}
+
+  const tod = hour < 11 ? 'sabah' : (hour < 14 ? 'öğle' : (hour < 18 ? 'öğleden sonra' : (hour < 22 ? 'akşam' : 'gece')));
+  const energyLabel = energy === 'low' ? '🔋 düşük' : energy === 'high' ? '🚀 yüksek' : '⚡ orta';
+
+  // Görev listesi — id + text + tags (deadline/priority/category/estimate/mit/yaş)
+  const taskLines = tasks.map(t => {
+    const tags = [];
+    if (t.mit) tags.push('⭐MIT');
+    if (t.priority === 'urgent') tags.push('🔴ACİL');
+    if (t.overdue) tags.push('🚨GECİKTİ');
+    else if (t.dueToday) tags.push('📅bugün-son');
+    else if (t.dueTomorrow) tags.push('⏳yarın-son');
+    if (t.estimateMin) tags.push(`${t.estimateMin}dk`);
+    if (t.category) tags.push(t.category);
+    if (t.ageDays >= 5) tags.push(`${t.ageDays}gün-bekliyor`);
+    return `[id:${t.id}] ${t.text}${tags.length ? ' (' + tags.join(' ') + ')' : ''}`;
+  }).join('\n');
+
+  const sysPrompt = `Sen Aidan'sın — ${name}'in ADHD asistanı. Sana görev listesi ve durum veriliyor. Görevin: TEK görev seç + kısa Türkçe sebep.
+
+⚡ ENERJİ AYARI (kritik):
+- 🔋 Düşük: KISA görev seç (≤20dk). Acil bile olsa uzun olanı seçme — başlatma eşiği kritik.
+- ⚡ Orta: Dengeli — MIT veya 30dk altı tercih et.
+- 🚀 Yüksek: ZOR/UZUN/ACİL'e gir. Momentum yakala.
+
+🕐 SAAT FARKINDALIK:
+- Sabah/öğle: zihinsel ağırlık OK
+- Öğleden sonra: enerji düşüşü — uzun olana dikkat
+- Akşam: bitirme/kapanış işleri
+- Gece: küçük/sakin (ya da hiçbiri)
+
+🎯 ÖNCELİK SIRASI (genelde):
+1. ⭐ MIT
+2. 🚨 GECİKTİ
+3. 🔴 ACİL
+4. 📅 bugün son tarih
+5. 5+ gün bekleyen (durağan)
+6. ⏳ yarın son tarih
+7. Diğer (energy uyumlu)
+
+🚫 YASAK:
+- Birden fazla görev seçme
+- "Hepsini yap" gibi genel öneri
+- Görev bulamadığını söyleme — listede ne varsa içinden seç
+- İngilizce
+- 25 kelimeden uzun sebep
+
+✅ ÇIKTI FORMATI (KESİN):
+SADECE şu JSON: \`{"taskId": <id>, "reason": "<kısa Türkçe sebep>"}\`
+HİÇBİR açıklama yok, sadece JSON. Markdown YOK (backtick YOK).
+
+📝 ÖRNEK ÇIKTILAR:
+{"taskId": 123, "reason": "MIT'inden bir tane, 25 dakikalık temiz iş — momentumu burdan yakala."}
+{"taskId": 456, "reason": "🔋 Düşük enerjide 10 dakikalık küçük kazanç — kolay başlangıç ${name}."}
+{"taskId": 789, "reason": "Bu 6 gündür duruyor, bugün küçük bir adım at — ilk 5 dakika yeter."}`;
+
+  const userMsg = `📅 ${tod}, saat ${hour}:00 · enerji: ${energyLabel}
+📊 Bugün ${doneToday} görev bitti${pomoToday ? `, ${pomoToday} pomodoro` : ''}
+👤 ${name}
+
+📋 Aktif görevler:
+${taskLines}
+
+Bunlardan TEK bir tanesini ${name}'e öner. SADECE JSON döndür.`;
+
+  try {
+    const r = await env.AI.run(AI_MODEL, {
+      messages: [
+        { role: 'system', content: sysPrompt },
+        { role: 'user', content: userMsg },
+      ],
+      max_tokens: 200,
+      temperature: 0.4,
+    });
+    const raw = typeof r.response === 'string' ? r.response : JSON.stringify(r.response || '');
+    // JSON extract — markdown veya açıklama olursa parça parça yakala
+    let parsed = null;
+    const cleaned = raw.replace(/```(?:json)?/gi, '').trim();
+    const m = cleaned.match(/\{[\s\S]*?"taskId"[\s\S]*?\}/);
+    if (m) { try { parsed = JSON.parse(m[0]); } catch {} }
+    if (!parsed || !parsed.taskId) return jsonCors({ error: 'no-suggestion', raw: cleaned.slice(0, 200) }, 200, cors);
+    const tid = Number(parsed.taskId);
+    if (!Number.isFinite(tid)) return jsonCors({ error: 'bad-id' }, 200, cors);
+    // ID listede yok mu kontrolü
+    if (!tasks.some(t => t.id === tid)) return jsonCors({ error: 'id-not-in-list', taskId: tid }, 200, cors);
+    const reason = String(parsed.reason || '').trim().slice(0, 200) || 'AI öneri';
+    return jsonCors({ taskId: tid, reason }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
 // PWA için public config — Supabase URL + anon key.
 // Anon key zaten publishable (RLS koruyor), kod-içine gömmek yerine Worker'dan dönsün ki
 // frontend bundle'a düşmeden çekilsin. Auth YOK.
@@ -2935,6 +3062,11 @@ export default {
     // PWA bootstrap config (Supabase URL + anon key)
     if (url.pathname === '/config') {
       return handleConfigApi(request, env);
+    }
+
+    // 🎯 AI "Sen ne yapayım?" — context'ten tek görev önerir
+    if (url.pathname === '/suggest') {
+      return handleSuggestApi(request, env);
     }
 
     // 👥 Multi-user (davet kodlu)

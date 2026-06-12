@@ -2836,6 +2836,7 @@
     <div class="modal-meta" id="suggestMeta"></div>
     <div class="modal-actions">
       <button onclick="acceptSuggestion(false)">▶️ Başla</button>
+      <button class="secondary" onclick="aiSuggestTask()" id="aiSuggestBtn" title="AI ile öner — energy + saat context'iyle">🧠 AI'a sor</button>
     </div>
     <button class="modal-close" onclick="closeSuggestModal()">Kapat</button>
   </div>
@@ -5348,6 +5349,95 @@ function acceptSuggestion(fiveMinMode) {
   startTaskNow(id, fiveMinMode);
 }
 
+// 🎯 AI "Sen ne yapayım?" — context'i AI'a yollar, kişisel öneri çeker.
+// Modal zaten açık olmalı (energy seçilmiş). AI fail olursa local seçim kalır.
+async function aiSuggestTask() {
+  const btn = document.getElementById('aiSuggestBtn');
+  if (!btn) return;
+  const energy = _currentEnergy || 'mid';
+  const todayStr = today();
+  const pending = (data.tasks || []).filter(t => !t.done).slice(0, 40);
+  if (!pending.length) { showToast('🎉 Aktif görev yok', 'info', 2500); return; }
+
+  // Görev özetleri (token tasarrufu için sade)
+  const taskSummaries = pending.map(t => {
+    const ageDays = t.created ? Math.floor((Date.now() - new Date(t.created).getTime()) / 86400000) : 0;
+    return {
+      id: t.id,
+      text: (t.text || '').slice(0, 80),
+      priority: t.priority || 'normal',
+      category: t.category || null,
+      estimateMin: t.estimateMin || null,
+      mit: t.mitDate === todayStr,
+      dueToday: t.due === todayStr,
+      dueTomorrow: t.due === todayDate(1),
+      overdue: t.due && t.due < todayStr,
+      ageDays,
+    };
+  });
+
+  const doneToday = (data.tasks || []).filter(t => t.done && t.doneDate === todayStr).length;
+  const pomoToday = (data.pomoToday && data.pomoToday.date === todayStr) ? (data.pomoToday.count || 0) : 0;
+  const hour = new Date().getHours();
+
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '🧠 düşünüyor…';
+
+  try {
+    const token = await getSupaToken();
+    if (!token) { showToast('Önce Supabase\'e giriş yap', 'warning', 3000); btn.disabled = false; btn.textContent = originalText; return; }
+
+    const r = await fetch(SUGGEST_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ energy, hour, doneToday, pomoToday, tasks: taskSummaries }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.taskId) {
+      showToast('AI öneri üretemedi — mevcut seçim kalıyor', 'warning', 3000);
+      btn.disabled = false; btn.textContent = originalText; return;
+    }
+
+    const selected = (data.tasks || []).find(t => t.id === j.taskId);
+    if (!selected) {
+      showToast('AI bulduğu görev yok — listeyi yenile', 'warning', 3000);
+      btn.disabled = false; btn.textContent = originalText; return;
+    }
+
+    // Modal'ı AI sonucuyla güncelle (modal zaten açık)
+    _suggestedTaskId = selected.id;
+    _recentSuggestions.push(selected.id);
+    if (_recentSuggestions.length > 5) _recentSuggestions.shift();
+
+    document.getElementById('suggestReason').textContent = '🧠 ' + (j.reason || 'AI önerisi');
+    document.getElementById('suggestTaskText').textContent = selected.text;
+
+    const meta = [];
+    if (selected.priority === 'urgent') meta.push('🔥 ACİL');
+    if (selected.category) {
+      const cat = { odev: '📚 Ödev', ders: '📖 Özel Ders', ev: '🏠 Ev', kisisel: '💜 Kişisel' };
+      if (cat[selected.category]) meta.push(cat[selected.category]);
+    }
+    if (selected.estimateMin) meta.push(`⏱️ ${selected.estimateMin} dk`);
+    if (selected.due === todayStr) meta.push('📅 Bugün son gün');
+    else if (selected.due && selected.due < todayStr) meta.push('🚨 Gecikti');
+    document.getElementById('suggestMeta').innerHTML = meta.map(m => `<span class="badge">${escapeHtml(m)}</span>`).join('');
+  } catch (e) {
+    showToast('Hata: ' + e.message, 'warning', 3500);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+// today() bugün, todayDate(+1) yarın için yardımcı
+function todayDate(offset) {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return d.toISOString().slice(0, 10);
+}
+
 function closeSuggestModal() {
   document.getElementById('suggestModal').classList.remove('active');
   _suggestedTaskId = null;
@@ -7366,6 +7456,7 @@ function toggleSignupForm() {
 }
 
 const CONFIG_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/config';
+const SUGGEST_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/suggest';
 const SIGNUP_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/signup';
 const INVITE_CREATE_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/invite/create';
 const INVITE_LIST_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/invite/list';
