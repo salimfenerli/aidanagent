@@ -1352,17 +1352,30 @@
   }
   .suggest-btn:hover { background: var(--accent-hover); box-shadow: 0 4px 18px var(--accent-glow); }
   .suggest-btn:active { transform: scale(0.99); }
-  .action-row { display: flex; gap: 8px; margin-bottom: 14px; }
-  .action-row .suggest-btn { margin-bottom: 0; flex: 1; }
+  .action-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .action-row > .suggest-btn { margin-bottom: 0; min-width: 0; }
+  /* Ana buton (ilk) her zaman tam genişlik (mobilde de desktop'ta da tutarlı) */
+  .action-row > .suggest-btn:first-child { grid-column: 1 / -1; }
   .suggest-btn.ghost {
     background: transparent;
     color: var(--text-muted);
     border: 1px solid var(--border);
     box-shadow: none;
-    flex: 0 0 auto;
-    padding: 13px 16px;
+    padding: 12px 10px;
+    font-size: 0.88em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .suggest-btn.ghost:hover { background: rgba(99,102,241,0.08); color: var(--accent); border-color: var(--accent); box-shadow: none; }
+  @media (max-width: 420px) {
+    .action-row > .suggest-btn.ghost { padding: 11px 8px; font-size: 0.82em; }
+  }
 
   /* Şablon modal */
   .tpl-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 4px; max-height: 50vh; overflow-y: auto; }
