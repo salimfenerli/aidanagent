@@ -792,6 +792,73 @@
   /* Market rozeti (hisse kartında) */
   .stock-market-badge { font-size: 0.75em; vertical-align: middle; margin-left: 4px; opacity: 0.8; }
 
+  /* ===== Global tam-ekran mod — her sekme borsa gibi (body.app-mode) ===== */
+  /* Üstteki marka/tarih/topbar ve alt sekme barı gizlenir; tek satırlık app-bar kalır */
+  body.app-mode .brand-row,
+  body.app-mode #dateHero,
+  body.app-mode #appSubtitle,
+  body.app-mode .topbar,
+  body.app-mode .tabs { display: none !important; }
+  body.app-mode:not(.stocks-mode) { padding-top: 0; }
+  /* Borsa kendi özel başlığını kullanır — global header'ı orada gizle */
+  body.app-mode:not(.stocks-mode) .app-header { display: flex; }
+  body.stocks-mode .app-header { display: none !important; }
+
+  .app-header {
+    display: none;
+    align-items: center; gap: 12px;
+    padding: 12px 16px 14px;
+    margin: 0 -20px 18px;                 /* body'nin 20px yatay padding'ini taşar = tam genişlik */
+    border-bottom: 1px solid var(--border-soft);
+    position: sticky; top: 0; z-index: 40;
+    background: rgba(9,11,15,0.96); backdrop-filter: blur(8px);
+  }
+  .app-menu-btn {
+    background: transparent; border: 1px solid var(--border-soft); border-radius: 9px;
+    width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text); cursor: pointer; box-shadow: none; padding: 0; flex-shrink: 0;
+  }
+  .app-menu-btn:hover { background: var(--surface-hover); border-color: var(--border); }
+  .app-menu-btn svg { width: 19px; height: 19px; }
+  .app-header-title {
+    font-size: 1.18em; font-weight: 700; color: var(--text);
+    display: flex; align-items: center; gap: 8px; white-space: nowrap;
+  }
+  .app-header-clock {
+    margin-left: auto; font-size: 1em; font-weight: 600; color: var(--text-muted);
+    font-variant-numeric: tabular-nums; letter-spacing: 0.04em;
+  }
+  /* Slide-in drawer — her sekmeden çağrılabilen global menü */
+  .app-menu-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 90;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  .app-menu-backdrop.open { opacity: 1; pointer-events: auto; }
+  .app-menu {
+    position: fixed; top: 0; left: 0; height: 100%; width: 232px; z-index: 95;
+    background: var(--bg-elev); border-right: 1px solid var(--border-soft);
+    padding: 18px 12px; box-sizing: border-box;
+    transform: translateX(-100%); transition: transform 0.22s ease;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .app-menu.open { transform: translateX(0); }
+  .app-menu-head {
+    display: flex; align-items: center; gap: 9px; padding: 4px 10px 14px;
+    font-weight: 700; font-size: 1.05em; color: var(--text);
+    border-bottom: 1px solid var(--border-soft); margin-bottom: 10px;
+  }
+  .app-menu-head img { width: 26px; height: 26px; border-radius: 7px; }
+  .app-menu button {
+    display: flex; align-items: center; gap: 11px; width: 100%;
+    background: transparent; border: none; box-shadow: none;
+    color: var(--text); padding: 12px; border-radius: 10px;
+    font-size: 0.95em; font-weight: 600; cursor: pointer; text-align: left;
+  }
+  .app-menu button:hover { background: var(--surface-hover); }
+  .app-menu button.active { background: var(--surface-hover); color: var(--accent); }
+  .app-menu button .icon { width: 18px; height: 18px; color: var(--text-muted); flex-shrink: 0; }
+  .app-menu button.active .icon { color: var(--accent); }
+
   /* Kart içi pozisyon (holding) */
   .stock-position {
     margin-top: 11px;
@@ -2601,6 +2668,22 @@
 </head>
 <body>
 <div class="container">
+  <!-- GLOBAL APP-BAR — her sekmede sol üstte hamburger + başlık + saat (borsa modu hariç) -->
+  <header class="app-header" id="appHeader">
+    <button type="button" class="app-menu-btn" onclick="toggleAppMenu()" aria-label="Menü" title="Menü">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+    </button>
+    <div class="app-header-title" id="appHeaderTitle">Görevler</div>
+    <div class="app-header-clock" id="appHeaderClock">--:--:--</div>
+  </header>
+  <div class="app-menu-backdrop" id="appMenuBackdrop" onclick="toggleAppMenu(false)"></div>
+  <nav class="app-menu" id="appMenu" aria-label="Sekme menüsü">
+    <div class="app-menu-head"><img src="icon.png" alt="">Aidan</div>
+    <button type="button" data-nav="tasks" onclick="navTo('tasks')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 17 5 19 9 15"/><polyline points="3 7 5 9 9 5"/><line x1="13" y1="6" x2="21" y2="6"/><line x1="13" y1="12" x2="21" y2="12"/><line x1="13" y1="18" x2="21" y2="18"/></svg>Görevler</button>
+    <button type="button" data-nav="focus" onclick="navTo('focus')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>Odak</button>
+    <button type="button" data-nav="stocks" onclick="navTo('stocks')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Borsa</button>
+    <button type="button" data-nav="settings" onclick="navTo('settings')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ayarlar</button>
+  </nav>
   <div class="brand-row">
     <div class="brand-logo">
       <img class="brand-logo-icon" src="icon.png" alt="Aidan" width="32" height="32">
@@ -3221,6 +3304,9 @@ function showTab(name, btn) {
   // Sekme değişiminde hamburger drawer'ı kapat (açık kalmasın)
   const _sm = document.getElementById('stocksMenu');
   if (_sm) { _sm.classList.remove('open'); document.getElementById('stocksMenuBackdrop').classList.remove('open'); }
+  // Global app-bar başlığı + drawer aktif vurgusu + global drawer'ı kapat
+  syncAppHeader(name);
+  toggleAppMenu(false);
   if (name === 'settings') {
     updateEstimateStats();
     renderNotifSettings();
@@ -3288,6 +3374,44 @@ function exitStocksTo(name) {
   toggleStocksMenu(false);
   showTab(name, document.querySelector(`[data-tab="${name}"]`));
 }
+
+// ===== Global app-bar (her sekme borsa gibi tam ekran) =====
+const APP_TAB_TITLES = { tasks: '📋 Görevler', focus: '🎧 Odak', stocks: '📈 Borsa', settings: '⚙️ Ayarlar' };
+// Global drawer'dan sekme seçimi
+function navTo(name) {
+  toggleAppMenu(false);
+  showTab(name, document.querySelector(`[data-tab="${name}"]`));
+}
+// Global hamburger drawer aç/kapa
+function toggleAppMenu(open) {
+  const m = document.getElementById('appMenu');
+  const bd = document.getElementById('appMenuBackdrop');
+  if (!m || !bd) return;
+  const want = open !== undefined ? open : !m.classList.contains('open');
+  m.classList.toggle('open', want);
+  bd.classList.toggle('open', want);
+}
+// Üst başlığı ve drawer'daki aktif sekmeyi güncelle
+function syncAppHeader(name) {
+  const t = document.getElementById('appHeaderTitle');
+  if (t) t.textContent = (APP_TAB_TITLES[name] || 'Aidan');
+  document.querySelectorAll('#appMenu button[data-nav]').forEach(b =>
+    b.classList.toggle('active', b.dataset.nav === name));
+}
+// App-bar saati — saniyelik canlı (borsa modunda kendi saati var, orada atla)
+function tickAppHeaderClock() {
+  const el = document.getElementById('appHeaderClock');
+  if (!el) return;
+  const n = new Date();
+  el.textContent = String(n.getHours()).padStart(2,'0') + ':' +
+                   String(n.getMinutes()).padStart(2,'0') + ':' +
+                   String(n.getSeconds()).padStart(2,'0');
+}
+// Tam-ekran modunu aç + ilk başlığı/sayacı kur
+document.body.classList.add('app-mode');
+syncAppHeader('tasks');
+tickAppHeaderClock();
+setInterval(() => { if (!document.hidden) tickAppHeaderClock(); }, 1000);
 
 // Borsa modu üst başlığı — saniyelik saat + bugünün adı + BIST/ABD durumu kompakt rozeti
 let _stocksHeaderTimer = null;
