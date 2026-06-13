@@ -539,8 +539,8 @@
   .stock-card:hover { border-color: rgba(99,102,241,0.45); }
   .stock-card.up { border-left-color: #34c759; }
   .stock-card.down { border-left-color: #ef4444; }
-  /* Tek hisse grafik modalı */
-  .stock-chart-modal .modal { max-width: 460px; }
+  /* Tek hisse grafik modalı — geniş + kaydırılabilir (15 gösterge ekrandan taşmasın) */
+  .stock-chart-modal .modal { max-width: 600px; max-height: 92vh; overflow-y: auto; padding: 18px 20px; }
   .stock-chart-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px; }
   .stock-chart-head .sym { font-size:1.2em; font-weight:700; letter-spacing:0.02em; color:var(--text); }
   .stock-chart-head .name { font-size:0.78em; color:var(--text-faint); margin-top:2px; }
@@ -565,8 +565,8 @@
   }
   .stock-chart-modes button.active { background: var(--accent); color:#fff; border-color: var(--accent); }
   .stock-chart-modes button.fib-on { background: var(--secondary-soft); color: var(--secondary); border-color: var(--secondary); }
-  .stock-chart-area { background: var(--bg); border:1px solid var(--border-soft); border-radius: var(--radius); padding: 10px; min-height: 160px; display:flex; align-items:center; justify-content:center; }
-  .stock-chart-area svg { width:100%; height: 140px; display:block; }
+  .stock-chart-area { background: var(--bg); border:1px solid var(--border-soft); border-radius: var(--radius); padding: 8px 10px; min-height: 130px; display:flex; align-items:center; justify-content:center; }
+  .stock-chart-area svg { width:100%; height: 118px; display:block; }
   .stock-chart-loading { color: var(--text-faint); font-size:0.85em; }
   .stock-chart-stats { display:flex; justify-content:space-between; gap:10px; margin-top:10px; font-size:0.78em; color:var(--text-muted); font-variant-numeric: tabular-nums; }
   .stock-chart-stats b { color: var(--text); font-weight:600; }
