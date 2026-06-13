@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Aidan Logo Konseptleri</title>
+<style>
+  :root {
+    --bg: #090b0f;
+    --surface: #14171f;
+    --border: #242936;
+    --text: #dde2ea;
+    --muted: #636e80;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Inter", "Segoe UI", sans-serif;
+    padding: 40px 20px 60px;
+    min-height: 100vh;
+  }
+  h1 { text-align: center; font-size: 1.5em; margin-bottom: 8px; letter-spacing: -0.02em; }
+  .sub { text-align: center; color: var(--muted); margin-bottom: 40px; font-size: 0.95em; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 20px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 28px 20px 22px;
+    text-align: center;
+  }
+  .logo-large {
+    width: 180px;
+    height: 180px;
+    margin: 0 auto 18px;
+    display: block;
+  }
+  .row-small {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    justify-content: center;
+    margin: 14px 0 10px;
+  }
+  .logo-small { width: 56px; height: 56px; border-radius: 14px; }
+  .logo-tiny { width: 32px; height: 32px; border-radius: 8px; }
+  .label {
+    font-size: 1.05em;
+    font-weight: 600;
+    margin-bottom: 4px;
+    letter-spacing: -0.01em;
+  }
+  .desc {
+    font-size: 0.85em;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .tag {
+    display: inline-block;
+    background: rgba(124,111,247,0.12);
+    color: #9b8eff;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.7em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 10px;
+  }
+  .sizes-label {
+    font-size: 0.7em;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+  <h1>Aidan — Logo Konseptleri</h1>
+  <p class="sub">Hangisi en uygun? Her birinin küçük boyutta nasıl göründüğünü de görebilirsin.</p>
+
+  <div class="grid">
+    <div class="card">
+      <span class="tag">1 · Monogram</span>
+      <img src="concept-1-monogram.svg" class="logo-large" alt="Monogram A">
+      <div class="label">A Monogram</div>
+      <div class="desc">Stilize "A" harfi + altta sarı odak noktası. Modern, hatırlanır, harf-tabanlı identity.</div>
+      <div class="sizes-label">Küçük boyutlarda</div>
+      <div class="row-small">
+        <img src="concept-1-monogram.svg" class="logo-small">
+        <img src="concept-1-monogram.svg" class="logo-tiny">
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="tag">2 · Focus Rings</span>
+      <img src="concept-2-focus.svg" class="logo-large" alt="Focus Rings">
+      <div class="label">Odak Halkaları</div>
+      <div class="desc">3 concentric daire + merkezde sarı nokta. "Bugünün 3'ü" + odak metaforu.</div>
+      <div class="sizes-label">Küçük boyutlarda</div>
+      <div class="row-small">
+        <img src="concept-2-focus.svg" class="logo-small">
+        <img src="concept-2-focus.svg" class="logo-tiny">
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="tag">3 · Check</span>
+      <img src="concept-3-check.svg" class="logo-large" alt="Check">
+      <div class="label">Onay Disk</div>
+      <div class="desc">Things 3 esinli: mor disk + check + sağ üstte sarı star. Klasik todo app dili.</div>
+      <div class="sizes-label">Küçük boyutlarda</div>
+      <div class="row-small">
+        <img src="concept-3-check.svg" class="logo-small">
+        <img src="concept-3-check.svg" class="logo-tiny">
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="tag">4 · Pulse</span>
+      <img src="concept-4-pulse.svg" class="logo-large" alt="Pulse">
+      <div class="label">Odak Ritmi</div>
+      <div class="desc">3 dikey bar (kısa-uzun-kısa) + alta sarı nokta. Focus rhythm, sound wave esinli.</div>
+      <div class="sizes-label">Küçük boyutlarda</div>
+      <div class="row-small">
+        <img src="concept-4-pulse.svg" class="logo-small">
+        <img src="concept-4-pulse.svg" class="logo-tiny">
+      </div>
+    </div>
+  </div>
+</body>
+</html>

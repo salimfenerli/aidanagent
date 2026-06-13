@@ -1,5 +1,9 @@
 # Aidan - ADHD Asistanı Projesi
 
+## ⚙️ Oturum Kuralı
+- Aksi söylenmedikçe tüm dokümantasyon/dosya düzenleme işlemleri bu dosya (`CLAUDE.md`) üzerinden yürütülür.
+- **Gerekmedikçe bu dosyayı güncelleme komutu verilmez** — sadece önemli mimari/özellik/karar değişikliklerinde güncellenir, küçük/geçici detaylar için değil.
+
 ## Kullanıcı
 - **İsim:** Salim
 - **Durum:** ADHD, **kod bilmiyor**

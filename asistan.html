@@ -550,6 +550,22 @@
   .stock-chart-head .last .pct.up { color:#34c759; }
   .stock-chart-head .last .pct.down { color:#ef4444; }
   .stock-chart-head .last .pct.flat { color:var(--text-muted); }
+  /* Grafik ↔ Haberler sekme çubuğu */
+  .stock-chart-views { display:flex; gap:6px; margin-bottom:10px; }
+  .stock-chart-views button {
+    flex:1; background: transparent; border:1px solid var(--border-soft); color: var(--text-muted);
+    padding: 6px 0; border-radius: 8px; font-size:0.84em; font-weight:600; cursor:pointer;
+  }
+  .stock-chart-views button.active { background: var(--accent); color:#fff; border-color: var(--accent); }
+  /* Haber listesi */
+  .stock-news-list { display:flex; flex-direction:column; gap:8px; margin-top:6px; }
+  .stock-news-item {
+    display:block; background: var(--bg); border:1px solid var(--border-soft); border-radius: 10px;
+    padding: 9px 11px; text-decoration:none; border-left: 3px solid var(--accent);
+  }
+  .stock-news-item:hover { border-color: var(--accent); }
+  .stock-news-item .sn-title { color: var(--text); font-size:0.86em; font-weight:600; line-height:1.32; }
+  .stock-news-item .sn-meta { color: var(--text-faint); font-size:0.72em; margin-top:3px; }
   .stock-chart-ranges { display:flex; gap:6px; margin-bottom:8px; }
   .stock-chart-ranges button {
     flex:1; background: transparent; border:1px solid var(--border-soft); color: var(--text-muted);
@@ -661,6 +677,21 @@
   .pf-hist-chip b.up { color: #34c759; }
   .pf-hist-chip b.down { color: #ef4444; }
   .pf-hist-chip b.flat { color: var(--text-muted); }
+  /* 🏆 BIST100 karşı performans kartı */
+  .bist100-compare { background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); padding: 12px 14px; margin-bottom: 14px; }
+  .bist100-head { display:flex; justify-content:space-between; align-items:baseline; font-size: 0.72em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 10px; }
+  .bist100-span { color: var(--text-faint); font-weight: 500; text-transform: none; letter-spacing: 0; }
+  .bist100-loading { color: var(--text-faint); font-size: 0.82em; }
+  .bist100-rows { display:flex; flex-direction:column; gap:7px; }
+  .bist100-row { display:flex; justify-content:space-between; align-items:baseline; font-size: 0.9em; color: var(--text); }
+  .bist100-row b { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .bist100-row b.up { color: #34c759; }
+  .bist100-row b.down { color: #ef4444; }
+  .bist100-row b.flat { color: var(--text-muted); }
+  .bist100-verdict { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border-soft); font-size: 0.86em; color: var(--text-muted); }
+  .bist100-verdict b.up { color: #34c759; }
+  .bist100-verdict b.down { color: #ef4444; }
+  .bist100-note { margin: 7px 0 0; font-size: 0.68em; color: var(--text-faint); }
   /* Portföy dağılımı (donut) */
   .portfolio-pie { background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); padding: 12px 14px; margin-bottom: 14px; }
   .pf-pie-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.72em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 10px; }
@@ -2664,6 +2695,68 @@
     .topbar-value { font-size: 13px; }
     .brand-name { font-size: 19px; }
   }
+
+  /* ===== 📅 Gün Planlayıcı ===== */
+  .plan-sub { color: var(--text-muted); font-size: 0.86em; margin-bottom: 16px; line-height: 1.4; }
+  .plan-window {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 10px 12px; margin-bottom: 12px;
+  }
+  .plan-window label { font-size: 0.78em; color: var(--text-muted); font-weight: 600; }
+  .plan-window input[type=time] { width: auto; padding: 6px 8px; font-size: 0.9em; margin: 0; }
+  .plan-window span { color: var(--text-faint); }
+  .plan-actions { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+  .plan-ai-btn {
+    flex: 1; min-width: 160px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font-weight: 600; font-size: 0.95em;
+  }
+  .plan-ai-btn .icon { width: 1.05em; height: 1.05em; }
+  .plan-ai-btn:disabled { opacity: 0.6; cursor: default; }
+  .plan-clear { flex: 0 0 auto; }
+  /* Timeline */
+  .plan-block {
+    position: relative; display: flex; gap: 12px; align-items: stretch;
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 4px solid var(--accent); border-radius: var(--radius);
+    padding: 12px 12px 12px 14px; margin-bottom: 10px;
+    transition: border-color 0.15s, opacity 0.15s;
+  }
+  .plan-block.kind-break { border-left-color: var(--success); }
+  .plan-block.kind-fixed { border-left-color: var(--warning); }
+  .plan-block.kind-custom { border-left-color: var(--info); }
+  .plan-block.now { box-shadow: 0 0 0 2px var(--accent-glow); border-color: var(--accent); }
+  .plan-block.done { opacity: 0.5; }
+  .plan-block.done .pb-label { text-decoration: line-through; }
+  .pb-time {
+    flex: 0 0 auto; min-width: 50px; text-align: right;
+    font-variant-numeric: tabular-nums; font-weight: 600; font-size: 0.92em; color: var(--text);
+    display: flex; flex-direction: column; gap: 2px; padding-top: 1px;
+  }
+  .pb-time .pb-end { font-size: 0.78em; color: var(--text-muted); font-weight: 500; }
+  .pb-body { flex: 1; min-width: 0; }
+  .pb-label { font-size: 0.96em; font-weight: 500; word-break: break-word; }
+  .pb-meta { font-size: 0.74em; color: var(--text-muted); margin-top: 3px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .pb-now-tag { color: var(--accent); font-weight: 700; }
+  .pb-actions { flex: 0 0 auto; display: flex; flex-direction: column; gap: 4px; align-items: center; }
+  .pb-actions button {
+    background: transparent; border: none; box-shadow: none; padding: 4px;
+    font-size: 1em; line-height: 1; color: var(--text-muted); opacity: 0.6; cursor: pointer;
+    width: auto; margin: 0;
+  }
+  .pb-actions button:hover { opacity: 1; background: var(--surface-hover); box-shadow: none; }
+  .pb-check {
+    flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+    border: 2px solid var(--border); background: transparent; cursor: pointer;
+    padding: 0; align-self: center; transition: all 0.15s; color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 0.8em; box-shadow: none;
+  }
+  .pb-check:hover { border-color: var(--accent); background: transparent; box-shadow: none; }
+  .plan-block.done .pb-check { background: var(--success); border-color: var(--success); }
+  .plan-empty { text-align: center; color: var(--text-muted); padding: 30px 16px; font-size: 0.9em; line-height: 1.6; }
+  .plan-empty .pe-emoji { font-size: 2em; display: block; margin-bottom: 8px; }
+  .plan-gap { text-align: center; color: var(--text-faint); font-size: 0.72em; margin: -4px 0 10px; }
+  .pbm-label { display: block; font-size: 0.76em; color: var(--text-muted); font-weight: 600; margin: 10px 0 4px; }
 </style>
 </head>
 <body>
@@ -2680,6 +2773,7 @@
   <nav class="app-menu" id="appMenu" aria-label="Sekme menüsü">
     <div class="app-menu-head"><img src="icon.png" alt="">Aidan</div>
     <button type="button" data-nav="tasks" onclick="navTo('tasks')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 17 5 19 9 15"/><polyline points="3 7 5 9 9 5"/><line x1="13" y1="6" x2="21" y2="6"/><line x1="13" y1="12" x2="21" y2="12"/><line x1="13" y1="18" x2="21" y2="18"/></svg>Görevler</button>
+    <button type="button" data-nav="plan" onclick="navTo('plan')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="13" y2="18"/></svg>Plan</button>
     <button type="button" data-nav="focus" onclick="navTo('focus')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>Odak</button>
     <button type="button" data-nav="stocks" onclick="navTo('stocks')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Borsa</button>
     <button type="button" data-nav="settings" onclick="navTo('settings')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ayarlar</button>
@@ -2730,6 +2824,7 @@
 
   <div class="tabs">
     <button class="tab active" data-tab="tasks" onclick="showTab('tasks', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 17 5 19 9 15"/><polyline points="3 7 5 9 9 5"/><line x1="13" y1="6" x2="21" y2="6"/><line x1="13" y1="12" x2="21" y2="12"/><line x1="13" y1="18" x2="21" y2="18"/></svg>Görevler</button>
+    <button class="tab" data-tab="plan" onclick="showTab('plan', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Plan</button>
     <button class="tab" data-tab="focus" onclick="showTab('focus', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>Odak</button>
     <button class="tab" data-tab="stocks" onclick="showTab('stocks', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Borsa</button>
     <button class="tab" data-tab="settings" onclick="showTab('settings', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ayarlar</button>
@@ -2833,6 +2928,30 @@
     <div id="taskList"></div>
   </div>
 
+  <!-- PLAN (Gün Planlayıcı) -->
+  <div id="plan" class="panel">
+    <h2 style="margin-bottom:4px;">📅 Günü Planla</h2>
+    <p class="plan-sub" id="planSub">Günü saat saat bloklara böl — zaman körlüğüne karşı.</p>
+
+    <div class="plan-window">
+      <label>Uyanık penceren</label>
+      <input type="time" id="planFrom" onchange="savePlanWindow()">
+      <span>→</span>
+      <input type="time" id="planTo" onchange="savePlanWindow()">
+    </div>
+
+    <div class="plan-actions">
+      <button class="plan-ai-btn" id="planAiBtn" onclick="planMyDay()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z"/><path d="M19 14l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></svg>
+        Günümü planla
+      </button>
+      <button class="secondary" onclick="addPlanBlock()">＋ Blok ekle</button>
+      <button class="secondary plan-clear" onclick="clearDayPlan()" title="Planı temizle">🗑️</button>
+    </div>
+
+    <div id="planTimeline"></div>
+  </div>
+
   <!-- ODAK -->
   <div id="focus" class="panel">
     <h2>🎧 Odak Modu</h2>
@@ -2887,6 +3006,7 @@
     <div class="portfolio-summary" id="portfolioSummary" style="display:none;"></div>
     <div class="portfolio-pie" id="portfolioPie" style="display:none;"></div>
     <div class="portfolio-history" id="portfolioHistory" style="display:none;"></div>
+    <div class="bist100-compare" id="bist100Compare" style="display:none;"></div>
     <button class="pf-comment-btn" id="pfCommentBtn" onclick="aiCommentPortfolio()" style="display:none;"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg> Portföyü yorumla</button>
     <button class="pf-tech-btn" id="pfTechBtn" onclick="openPfTechModal()" style="display:none;"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/><circle cx="11" cy="11" r="1.2"/><circle cx="14" cy="14" r="1.2"/><circle cx="19" cy="8" r="1.2"/></svg> Portföy teknik özet</button>
     <div class="market-chips" id="marketChips">
@@ -3042,6 +3162,32 @@
   </div>
 </div>
 
+<!-- 📅 Plan blok ekle/düzenle modal -->
+<div class="modal-overlay" id="planBlockModal" onclick="if(event.target.id==='planBlockModal')closePlanBlock()">
+  <div class="modal">
+    <div class="modal-title" id="planBlockTitle">Blok ekle</div>
+    <label class="pbm-label" for="pbmLabel">Ne yapacaksın?</label>
+    <input type="text" id="pbmLabel" class="modal-input" placeholder="örn. Matematik ödevi">
+    <label class="pbm-label" for="pbmTask">Görev bağla (opsiyonel)</label>
+    <select id="pbmTask" class="modal-input" onchange="pbmTaskChange()"><option value="">— görev bağlama —</option></select>
+    <div style="display:flex; gap:10px;">
+      <div style="flex:1;"><label class="pbm-label" for="pbmStart">Başlangıç</label><input type="time" id="pbmStart" class="modal-input"></div>
+      <div style="flex:1;"><label class="pbm-label" for="pbmEnd">Bitiş</label><input type="time" id="pbmEnd" class="modal-input"></div>
+    </div>
+    <label class="pbm-label" for="pbmKind">Tür</label>
+    <select id="pbmKind" class="modal-input">
+      <option value="task">📚 İş / Görev</option>
+      <option value="break">☕ Mola</option>
+      <option value="fixed">📌 Sabit (ders / yemek)</option>
+      <option value="custom">✦ Diğer</option>
+    </select>
+    <div class="modal-actions">
+      <button onclick="savePlanBlock()">Kaydet</button>
+      <button class="secondary" onclick="closePlanBlock()">İptal</button>
+    </div>
+  </div>
+</div>
+
 <!-- Seri detay modal -->
 <div class="modal-overlay" id="seriesModal" onclick="if(event.target.id==='seriesModal')closeSeriesModal()">
   <div class="modal" style="max-width:540px;">
@@ -3188,6 +3334,11 @@
         <div class="pct flat" id="stockChartPct"></div>
       </div>
     </div>
+    <div class="stock-chart-views" id="stockChartViews">
+      <button data-view="chart" class="active" onclick="setStockView('chart')">📈 Grafik</button>
+      <button data-view="news" onclick="setStockView('news')">📰 Haberler</button>
+    </div>
+    <div id="stockChartView">
     <div class="stock-chart-ranges" id="stockChartRanges">
       <button data-range="1mo" class="active" onclick="loadStockHistory('1mo')">1 ay</button>
       <button data-range="3mo" onclick="loadStockHistory('3mo')">3 ay</button>
@@ -3218,6 +3369,16 @@
       <div class="stock-ta-ai-result" id="stockTaAiResult" style="display:none;"></div>
       <p class="stock-ta-disclaimer">Göstergeler bilgi amaçlıdır — yatırım tavsiyesi değildir.</p>
     </div>
+    </div>
+    <div id="stockNewsView" style="display:none;">
+      <button type="button" class="stock-ta-ai-btn" id="stockNewsAiBtn" onclick="aiStockNews()" disabled>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/></svg>
+        AI ile özetle
+      </button>
+      <div class="stock-ta-ai-result" id="stockNewsAiResult" style="display:none;"></div>
+      <div class="stock-news-list" id="stockNewsList"><div class="stock-chart-loading">Yükleniyor…</div></div>
+      <p class="stock-ta-disclaimer">Haberler Yahoo Finance kaynaklıdır — yatırım tavsiyesi değildir.</p>
+    </div>
     <button class="modal-close" onclick="closeStockChart()">Kapat</button>
   </div>
 </div>
@@ -3246,6 +3407,9 @@ data.pomoToday = data.pomoToday || { date: today(), count: 0 };
 data.settings = data.settings || {};
 if (data.lastWeeklyView === undefined) data.lastWeeklyView = null;
 data.templates = data.templates || [];
+// 📅 Gün planı — saat saat bloklar. Sadece BUGÜN için; tarih değişince temizlenir.
+data.dayPlan = data.dayPlan || { date: today(), blocks: [] };
+if (data.dayPlan.date !== today()) data.dayPlan = { date: today(), blocks: [] };
 if (data.pomoToday.date !== today()) data.pomoToday = { date: today(), count: 0 };
 
 // Geriye uyumluluk: eski görevlere yeni alanlar ekle
@@ -3322,6 +3486,7 @@ function showTab(name, btn) {
     }
   }
   if (name === 'tasks') renderCountdowns();
+  if (name === 'plan') renderDayPlan();
   // Borsa sekmesinden çıkınca canlı güncellemeyi durdur (batarya/kota)
   if (name !== 'stocks') stopStockAutoRefresh();
   if (name === 'stocks') {
@@ -3376,7 +3541,7 @@ function exitStocksTo(name) {
 }
 
 // ===== Global app-bar (her sekme borsa gibi tam ekran) =====
-const APP_TAB_TITLES = { tasks: '📋 Görevler', focus: '🎧 Odak', stocks: '📈 Borsa', settings: '⚙️ Ayarlar' };
+const APP_TAB_TITLES = { tasks: '📋 Görevler', plan: '📅 Plan', focus: '🎧 Odak', stocks: '📈 Borsa', settings: '⚙️ Ayarlar' };
 // Global drawer'dan sekme seçimi
 function navTo(name) {
   toggleAppMenu(false);
@@ -3736,6 +3901,192 @@ async function aiSplitTask(id) {
     showToast(`✨ ${steps.length} adıma bölündü`, 'success', 3000);
   } catch (e) {
     showToast('Bölünemedi: ' + e.message, 'error', 4000);
+  }
+}
+
+// ===== 📅 Gün Planlayıcı =====
+const PLAN_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/plan';
+let _editingBlockId = null;
+
+// Saat (HH:MM) ↔ dakika çevirici yardımcıları
+function hmToMin(hm) { const [h, m] = (hm || '0:0').split(':').map(Number); return (h || 0) * 60 + (m || 0); }
+function minToHM(min) { min = ((Math.round(min) % 1440) + 1440) % 1440; const h = Math.floor(min / 60), m = min % 60; return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'); }
+function nowHM() { const n = new Date(); return String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0'); }
+
+// Uyanık pencere: kayıtlıysa onu, değilse şimdi(30dk'ya yuvarlı, min 08:00) → 22:00
+function planWindow() {
+  const dp = data.dayPlan || {};
+  let from = dp.windowFrom, to = dp.windowTo;
+  if (!from) { const nm = hmToMin(nowHM()); from = minToHM(Math.max(8 * 60, Math.ceil(nm / 30) * 30)); }
+  if (!to) to = '22:00';
+  return { from, to };
+}
+function savePlanWindow() {
+  data.dayPlan.windowFrom = document.getElementById('planFrom').value || null;
+  data.dayPlan.windowTo = document.getElementById('planTo').value || null;
+  save();
+}
+
+function renderDayPlan() {
+  if (data.dayPlan.date !== today()) data.dayPlan = { date: today(), blocks: [] };
+  const w = planWindow();
+  const pf = document.getElementById('planFrom'), pt = document.getElementById('planTo');
+  if (pf) pf.value = w.from;
+  if (pt) pt.value = w.to;
+  const tl = document.getElementById('planTimeline');
+  if (!tl) return;
+  const blocks = (data.dayPlan.blocks || []).slice().sort((a, b) => hmToMin(a.start) - hmToMin(b.start));
+  if (!blocks.length) {
+    tl.innerHTML = '<div class="plan-empty"><span class="pe-emoji">📅</span>Günün henüz boş.<br>Görevlerin varsa <b>Günümü planla</b>\'ya bas — Aidan saat saat doldursun.<br>Ya da <b>＋ Blok ekle</b> ile elle kur.</div>';
+    return;
+  }
+  const nowM = hmToMin(nowHM());
+  let html = '';
+  blocks.forEach((b, i) => {
+    const s = hmToMin(b.start), e = hmToMin(b.end);
+    const isNow = nowM >= s && nowM < e && !b.done;
+    if (i > 0) { const gap = s - hmToMin(blocks[i - 1].end); if (gap >= 15) html += `<div class="plan-gap">⌄ ${gap} dk boşluk</div>`; }
+    const kind = b.kind || 'task';
+    const linked = b.taskId ? (data.tasks || []).find(t => t.id === b.taskId) : null;
+    const dur = e > s ? (e - s) : 0;
+    html += `<div class="plan-block kind-${kind} ${isNow ? 'now' : ''} ${b.done ? 'done' : ''}">
+      <button class="pb-check" onclick="togglePlanBlock(${b.id})" title="Bitti olarak işaretle">${b.done ? '✓' : ''}</button>
+      <div class="pb-time"><span>${b.start}</span><span class="pb-end">${b.end}</span></div>
+      <div class="pb-body">
+        <div class="pb-label">${escapeHtml(b.label || '(boş)')}</div>
+        <div class="pb-meta">${isNow ? '<span class="pb-now-tag">● şu an</span>' : ''}<span>${dur} dk</span>${linked ? '<span>🔗 görev</span>' : ''}</div>
+      </div>
+      <div class="pb-actions">
+        ${kind === 'task' && linked ? `<button onclick="focusPlanBlock(${b.taskId})" title="Bu göreve odaklan">🎧</button>` : ''}
+        <button onclick="editPlanBlock(${b.id})" title="Düzenle">✏️</button>
+        <button onclick="deletePlanBlock(${b.id})" title="Sil">🗑️</button>
+      </div>
+    </div>`;
+  });
+  tl.innerHTML = html;
+}
+
+function fillPlanTaskSelect(sel) {
+  const open = (data.tasks || []).filter(t => !t.done);
+  sel.innerHTML = '<option value="">— görev bağlama —</option>' +
+    open.map(t => `<option value="${t.id}">${escapeHtml(t.text).slice(0, 50)}</option>`).join('');
+}
+function addPlanBlock() {
+  _editingBlockId = null;
+  document.getElementById('planBlockTitle').textContent = 'Blok ekle';
+  document.getElementById('pbmLabel').value = '';
+  const sel = document.getElementById('pbmTask'); fillPlanTaskSelect(sel); sel.value = '';
+  const blocks = (data.dayPlan.blocks || []).slice().sort((a, b) => hmToMin(a.start) - hmToMin(b.start));
+  const start = blocks.length ? blocks[blocks.length - 1].end : planWindow().from;
+  document.getElementById('pbmStart').value = start;
+  document.getElementById('pbmEnd').value = minToHM(hmToMin(start) + 30);
+  document.getElementById('pbmKind').value = 'task';
+  document.getElementById('planBlockModal').classList.add('active');
+}
+function editPlanBlock(id) {
+  const b = (data.dayPlan.blocks || []).find(x => x.id === id);
+  if (!b) return;
+  _editingBlockId = id;
+  document.getElementById('planBlockTitle').textContent = 'Bloğu düzenle';
+  document.getElementById('pbmLabel').value = b.label || '';
+  const sel = document.getElementById('pbmTask'); fillPlanTaskSelect(sel); sel.value = b.taskId || '';
+  document.getElementById('pbmStart').value = b.start;
+  document.getElementById('pbmEnd').value = b.end;
+  document.getElementById('pbmKind').value = b.kind || 'task';
+  document.getElementById('planBlockModal').classList.add('active');
+}
+// Görev seçilince başlığı + tahmini süreden bitiş saatini otomatik doldur
+function pbmTaskChange() {
+  const id = Number(document.getElementById('pbmTask').value);
+  if (!id) return;
+  const t = (data.tasks || []).find(x => x.id === id);
+  if (!t) return;
+  document.getElementById('pbmLabel').value = t.text;
+  document.getElementById('pbmKind').value = 'task';
+  if (t.estimateMin) {
+    const s = hmToMin(document.getElementById('pbmStart').value);
+    document.getElementById('pbmEnd').value = minToHM(s + t.estimateMin);
+  }
+}
+function savePlanBlock() {
+  const label = document.getElementById('pbmLabel').value.trim();
+  const start = document.getElementById('pbmStart').value;
+  const end = document.getElementById('pbmEnd').value;
+  const kind = document.getElementById('pbmKind').value;
+  const taskId = Number(document.getElementById('pbmTask').value) || null;
+  if (!label) { showToast('Bir başlık yaz', 'warning'); return; }
+  if (!start || !end) { showToast('Saatleri gir', 'warning'); return; }
+  if (hmToMin(end) <= hmToMin(start)) { showToast('Bitiş başlangıçtan sonra olmalı', 'warning'); return; }
+  if (_editingBlockId) {
+    const b = data.dayPlan.blocks.find(x => x.id === _editingBlockId);
+    if (b) { b.label = label; b.start = start; b.end = end; b.kind = kind; b.taskId = taskId; }
+  } else {
+    data.dayPlan.blocks.push({ id: Date.now() + Math.floor(Math.random() * 1000), label, start, end, kind, taskId, done: false });
+  }
+  save(); closePlanBlock(); renderDayPlan();
+}
+function closePlanBlock() { document.getElementById('planBlockModal').classList.remove('active'); _editingBlockId = null; }
+function deletePlanBlock(id) { data.dayPlan.blocks = (data.dayPlan.blocks || []).filter(x => x.id !== id); save(); renderDayPlan(); }
+function togglePlanBlock(id) { const b = (data.dayPlan.blocks || []).find(x => x.id === id); if (!b) return; b.done = !b.done; save(); renderDayPlan(); }
+function focusPlanBlock(taskId) { bindFocusTask(taskId); showTab('focus', document.querySelector('[data-tab=focus]')); }
+function clearDayPlan() {
+  if (!(data.dayPlan.blocks || []).length) { showToast('Plan zaten boş', 'info'); return; }
+  if (!confirm('Bugünün tüm planını sil?')) return;
+  data.dayPlan.blocks = []; save(); renderDayPlan();
+  showToast('🗑️ Plan temizlendi', 'info');
+}
+
+// 🪄 AI: görevleri + uyanık pencereyi → saat saat plan (Worker /plan)
+async function planMyDay() {
+  if (!window._supa || !window._user) { showToast('AI için bulut girişi gerekli — Ayarlar → giriş yap', 'warning', 4000); return; }
+  const open = (data.tasks || []).filter(t => !t.done);
+  if (!open.length) { showToast('Planlanacak görev yok — önce görev ekle', 'info', 3500); return; }
+  const w = planWindow();
+  // AI'ya kompakt, index referanslı liste (sayı uydurmasın diye süreler net)
+  const tasksForAi = open.slice(0, 20).map((t, i) => ({
+    i,
+    text: t.text.slice(0, 80),
+    min: t.estimateMin || null,
+    pri: t.priority === 'urgent' ? 'acil' : 'normal',
+    mit: t.mitDate === today(),
+    due: t.due || null,
+    cat: t.category || null,
+  }));
+  const btn = document.getElementById('planAiBtn');
+  if (btn) btn.disabled = true;
+  showToast('🪄 Günün planlanıyor… 10-15 sn sürebilir', 'info', 4000);
+  try {
+    const { data: sess } = await window._supa.auth.getSession();
+    const token = sess && sess.session && sess.session.access_token;
+    if (!token) throw new Error('oturum bulunamadı, tekrar giriş yap');
+    const r = await fetch(PLAN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ tasks: tasksForAi, from: w.from, to: w.to, now: nowHM() }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || ('sunucu hatası ' + r.status));
+    const raw = j.blocks || [];
+    if (!raw.length) { showToast('AI plan üretemedi — elle ekleyebilirsin', 'warning', 4000); return; }
+    const mapped = raw.map(b => {
+      const ti = (b.task === 0 || b.task) ? Number(b.task) : null;
+      const linked = (ti !== null && open[ti]) ? open[ti] : null;
+      return {
+        id: Date.now() + Math.floor(Math.random() * 100000),
+        label: (b.label || '').toString().slice(0, 100) || (linked ? linked.text : 'Blok'),
+        start: b.start, end: b.end,
+        kind: b.kind || (linked ? 'task' : 'custom'),
+        taskId: linked ? linked.id : null,
+        done: false,
+      };
+    }).filter(b => b.start && b.end && hmToMin(b.end) > hmToMin(b.start));
+    data.dayPlan = { date: today(), blocks: mapped, windowFrom: w.from, windowTo: w.to };
+    save(); renderDayPlan();
+    showToast(`✨ Günün planlandı — ${mapped.length} blok`, 'success', 3500);
+  } catch (e) {
+    showToast('Planlanamadı: ' + e.message, 'error', 4500);
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -4272,11 +4623,14 @@ const STOCKS_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/stocks'
 const STOCK_HISTORY_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/stock-history';
 const STOCK_ANALYSIS_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/stock-analysis';
 const PF_TECHNICAL_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/portfolio-technical';
+const STOCK_NEWS_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/stock-news';
 let _stockChartIdx = null;
 let _stockChartRange = '1mo';
 let _stockChartPayload = null;
 let _stockChartMode = 'line';   // 'line' | 'candle' — modal grafik tipi
 let _stockChartFib = false;     // Fibonacci overlay açık mı
+let _stockNewsLoaded = false;   // haber sekmesi bu açılışta çekildi mi
+let _stockNewsItems = [];       // [{title,publisher,link,time}] — AI özet için
 // Teknik analiz sadece hisselerde (BIST + ABD) anlamlı — döviz/kripto'da panel gizli
 const TA_MARKETS = new Set(['bist', 'abd']);
 
@@ -4512,6 +4866,7 @@ function renderStocks() {
   renderPortfolioSummary();
   renderPortfolioPie();
   renderPortfolioHistory();
+  renderBist100Compare();
   const _hasHoldings = (data.watchlist || []).some(w => w.qty != null && w.qty > 0 && w.cost != null);
   const _hasTaHoldings = (data.watchlist || []).some(w =>
     w.qty != null && w.qty > 0 && w.cost != null && TA_MARKETS.has(w.market || 'bist')
@@ -4784,6 +5139,82 @@ function renderPortfolioHistory() {
   `;
 }
 
+// 🏆 Portföyün BIST100 (XU100) endeksine karşı performansı.
+// Sadece baskın para birimi TRY ise anlamlı — portföyün kendi geçmiş penceresindeki
+// getirisini, aynı dönemdeki XU100 getirisiyle kıyaslar. Yeni endpoint yok: /stock-history XU100.IS ile.
+let _bist100Cache = null;  // {span, portfolioPct, ts} — sekme her render'da tekrar fetch etmesin
+async function renderBist100Compare() {
+  const el = document.getElementById('bist100Compare');
+  if (!el) return;
+  const hist = (data.portfolioHistory || []).slice().sort((a, b) => a.date < b.date ? -1 : 1);
+  const holdings = (data.watchlist || []).filter(w => w.qty != null && w.qty > 0 && w.cost != null);
+  if (hist.length < 2 || !holdings.length) { el.style.display = 'none'; return; }
+
+  // Baskın para birimi TRY mi?
+  const last = hist[hist.length - 1];
+  let cur = null, maxV = -1;
+  for (const c in (last.byCur || {})) { if (last.byCur[c].value > maxV) { maxV = last.byCur[c].value; cur = c; } }
+  if (cur !== 'TRY') { el.style.display = 'none'; return; }
+
+  const series = hist.filter(s => s.byCur && s.byCur.TRY).map(s => ({ date: s.date, value: s.byCur.TRY.value }));
+  if (series.length < 2) { el.style.display = 'none'; return; }
+  const firstDate = series[0].date;
+  const firstVal = series[0].value;
+  const lastVal = series[series.length - 1].value;
+  if (firstVal <= 0) { el.style.display = 'none'; return; }
+  const portfolioPct = (lastVal - firstVal) / firstVal * 100;
+
+  const spanDays = Math.round((Date.parse(last.date) - Date.parse(firstDate)) / 86400000) || 1;
+  const range = spanDays <= 25 ? '1mo' : (spanDays <= 80 ? '3mo' : '6mo');
+
+  el.style.display = 'block';
+  el.innerHTML = `<div class="bist100-head">🏆 BIST100'e karşı</div><div class="bist100-loading">Endeks getirisi çekiliyor…</div>`;
+
+  let xuPct = null, xuErr = null;
+  try {
+    const token = window._supa ? (await window._supa.auth.getSession()).data.session?.access_token : null;
+    if (!token) throw new Error('giriş yok');
+    const r = await fetch(STOCK_HISTORY_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ ySymbol: 'XU100.IS', range }),
+    });
+    if (!r.ok) throw new Error('endeks alınamadı');
+    const j = await r.json();
+    const ts = j.timestamps || [], cl = j.closes || [];
+    if (cl.length < 2) throw new Error('endeks verisi yetersiz');
+    // Portföy başlangıç tarihine en yakın (>=) endeks kapanışını bul → aynı pencere
+    const firstTs = Date.parse(firstDate) / 1000;
+    let startIdx = 0;
+    for (let i = 0; i < ts.length; i++) { if (ts[i] >= firstTs) { startIdx = i; break; } }
+    const startClose = cl[startIdx], endClose = cl[cl.length - 1];
+    if (startClose > 0) xuPct = (endClose - startClose) / startClose * 100;
+  } catch (e) { xuErr = e.message; }
+
+  const pctStr = p => (p > 0 ? '+' : '') + p.toFixed(1) + '%';
+  const cls = p => p > 0 ? 'up' : (p < 0 ? 'down' : 'flat');
+  const spanLbl = spanDays >= 60 ? `${Math.round(spanDays / 30)} ay` : `${spanDays} gün`;
+
+  if (xuPct == null) {
+    el.innerHTML = `<div class="bist100-head">🏆 BIST100'e karşı</div>
+      <div class="bist100-loading">⚠️ Endeks getirisi alınamadı${xuErr ? ' (' + escapeHtml(xuErr) + ')' : ''}.</div>`;
+    return;
+  }
+  const diff = portfolioPct - xuPct;
+  const verdict = diff >= 0
+    ? `Son ${spanLbl}'de portföyün endeksi <b class="up">${pctStr(diff)}</b> geçti 🎯`
+    : `Son ${spanLbl}'de portföyün endeksin <b class="down">${pctStr(Math.abs(diff))}</b> gerisinde`;
+  el.innerHTML = `
+    <div class="bist100-head">🏆 BIST100'e karşı <span class="bist100-span">son ${escapeHtml(spanLbl)}</span></div>
+    <div class="bist100-rows">
+      <div class="bist100-row"><span>💼 Portföyün</span><b class="${cls(portfolioPct)}">${pctStr(portfolioPct)}</b></div>
+      <div class="bist100-row"><span>📊 BIST100 (XU100)</span><b class="${cls(xuPct)}">${pctStr(xuPct)}</b></div>
+    </div>
+    <div class="bist100-verdict">${verdict}</div>
+    <p class="bist100-note">Portföy değer geçmişinin başından bugüne — yatırım tavsiyesi değildir.</p>
+  `;
+}
+
 // Tek hisse mini grafik (modal) — Yahoo geçmiş veriden line chart
 function openStockChart(idx) {
   const wl = data.watchlist || [];
@@ -4824,6 +5255,10 @@ function openStockChart(idx) {
   document.getElementById('stockTaAiResult').style.display = 'none';
   document.getElementById('stockTaAiResult').textContent = '';
   _stockChartPayload = null;
+  // Haber sekmesini sıfırla, varsayılan Grafik görünümü
+  _stockNewsLoaded = false;
+  _stockNewsItems = [];
+  setStockView('chart');
   document.getElementById('stockChartModal').classList.add('active');
   loadStockHistory('1mo');
 }
@@ -4832,6 +5267,106 @@ function closeStockChart() {
   document.getElementById('stockChartModal').classList.remove('active');
   _stockChartIdx = null;
   _stockChartPayload = null;
+  _stockNewsLoaded = false;
+  _stockNewsItems = [];
+}
+
+// Grafik ↔ Haberler görünüm geçişi
+function setStockView(view) {
+  document.querySelectorAll('#stockChartViews button').forEach(b => {
+    b.classList.toggle('active', b.dataset.view === view);
+  });
+  document.getElementById('stockChartView').style.display = view === 'chart' ? 'block' : 'none';
+  document.getElementById('stockNewsView').style.display = view === 'news' ? 'block' : 'none';
+  if (view === 'news' && !_stockNewsLoaded) loadStockNews();
+}
+
+async function loadStockNews() {
+  if (_stockChartIdx == null) return;
+  const w = (data.watchlist || [])[_stockChartIdx];
+  if (!w) return;
+  _stockNewsLoaded = true;
+  const listEl = document.getElementById('stockNewsList');
+  const aiBtn = document.getElementById('stockNewsAiBtn');
+  const aiRes = document.getElementById('stockNewsAiResult');
+  aiRes.style.display = 'none';
+  aiRes.textContent = '';
+  aiBtn.disabled = true;
+  listEl.innerHTML = '<div class="stock-chart-loading">Yükleniyor…</div>';
+  try {
+    const ySymbol = w.ySymbol || legacyYSymbol(w);
+    const token = window._supa ? (await window._supa.auth.getSession()).data.session?.access_token : null;
+    if (!token) throw new Error('giriş yapılmamış');
+    const r = await fetch(STOCK_NEWS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ ySymbol, symbol: w.symbol }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.error || `http ${r.status}`);
+    }
+    const j = await r.json();
+    _stockNewsItems = Array.isArray(j.news) ? j.news : [];
+    if (!_stockNewsItems.length) {
+      listEl.innerHTML = '<div class="stock-chart-loading">Bu hisse için güncel haber bulunamadı. BIST hisselerinde haber az olabilir — ABD/kripto sembollerinde daha zengin.</div>';
+      return;
+    }
+    listEl.innerHTML = _stockNewsItems.map(n => {
+      const when = n.time ? relTimeFromUnix(n.time) : '';
+      return `<a class="stock-news-item" href="${escapeHtml(n.link)}" target="_blank" rel="noopener noreferrer">
+        <div class="sn-title">${escapeHtml(n.title)}</div>
+        <div class="sn-meta">${escapeHtml(n.publisher || '')}${when ? ' · ' + when : ''}</div>
+      </a>`;
+    }).join('');
+    aiBtn.disabled = false;
+  } catch (e) {
+    listEl.innerHTML = `<div class="stock-chart-loading">⚠️ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function aiStockNews() {
+  if (!_stockNewsItems.length) return;
+  const w = (data.watchlist || [])[_stockChartIdx];
+  const btn = document.getElementById('stockNewsAiBtn');
+  const resEl = document.getElementById('stockNewsAiResult');
+  btn.disabled = true;
+  resEl.style.display = 'block';
+  resEl.textContent = '⏳ AI haber özeti hazırlanıyor…';
+  try {
+    const token = window._supa ? (await window._supa.auth.getSession()).data.session?.access_token : null;
+    if (!token) throw new Error('giriş yapılmamış');
+    const headlines = _stockNewsItems.map(n => n.title).slice(0, 12);
+    const r = await fetch(STOCK_NEWS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ summarize: true, symbol: w ? w.symbol : '', headlines }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `http ${r.status}`);
+    resEl.textContent = j.summary || 'Özet üretilemedi.';
+  } catch (e) {
+    resEl.textContent = '⚠️ ' + e.message;
+  }
+  btn.disabled = false;
+}
+
+// Unix saniye → "3 saat önce" / "dün" gibi Türkçe göreli zaman
+function relTimeFromUnix(sec) {
+  if (!sec || !isFinite(sec)) return '';
+  const diff = Date.now() - sec * 1000;
+  if (diff < 0) return 'az önce';
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'az önce';
+  if (mins < 60) return mins + ' dk önce';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + ' saat önce';
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return 'dün';
+  if (days < 30) return days + ' gün önce';
+  const months = Math.floor(days / 30);
+  if (months < 12) return months + ' ay önce';
+  return Math.floor(months / 12) + ' yıl önce';
 }
 
 async function loadStockHistory(range) {
@@ -8915,9 +9450,11 @@ async function pullFromCloud() {
       data.dumps = data.dumps || [];
       data.settings = data.settings || {};
       data.pomoToday = data.pomoToday || { date: today(), count: 0 };
+      data.dayPlan = data.dayPlan || { date: today(), blocks: [] };
       localStorage.setItem('aidan', JSON.stringify(data));
       // Yenilemeden re-render et (aktif sekmeyi koru)
       renderTasks();
+      if (document.getElementById('plan').classList.contains('active')) renderDayPlan();
             document.getElementById('pomoCount').textContent = data.pomoToday.count;
       showSupaStatus('✅ Buluttan veri çekildi.', '#50fa7b');
     } else {
@@ -8979,9 +9516,11 @@ function subscribeToCloud() {
       data.dumps = data.dumps || [];
       data.settings = data.settings || {};
       data.pomoToday = data.pomoToday || { date: today(), count: 0 };
+      data.dayPlan = data.dayPlan || { date: today(), blocks: [] };
       localStorage.setItem('aidan', JSON.stringify(data));
       // Sekmeyi koruyarak yeniden render et
       renderTasks();
+      if (document.getElementById('plan').classList.contains('active')) renderDayPlan();
             showSupaStatus('🔄 Diğer cihazdan güncelleme alındı.', '#bd93f9');
     })
     .subscribe();

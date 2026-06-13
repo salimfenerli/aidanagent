@@ -1983,6 +1983,107 @@ Görev: "Sunumu hazırla"
   }
 }
 
+// Gün planı JSON ayıklayıcı — AI'dan dizi-of-obje bekler, çer-çöpe toleranslı
+function extractPlanJson(raw) {
+  if (!raw) return [];
+  let s = String(raw).trim().replace(/```(?:json)?/gi, '').trim();
+  let arr = null;
+  const m = s.match(/\[[\s\S]*\]/);
+  if (m) { try { arr = JSON.parse(m[0]); } catch {} }
+  if (!Array.isArray(arr)) return [];
+  const hm = /^([01]?\d|2[0-3]):[0-5]\d$/;
+  const pad = t => { const mt = String(t).match(/^(\d{1,2}):(\d{2})$/); return mt ? String(mt[1]).padStart(2, '0') + ':' + mt[2] : String(t); };
+  return arr
+    .filter(b => b && typeof b === 'object')
+    .map(b => {
+      const start = pad((b.start || b.from || '').toString().trim());
+      const end = pad((b.end || b.to || '').toString().trim());
+      let task = (b.task === 0 || b.task) ? Number(b.task) : null;
+      if (!Number.isInteger(task)) task = null;
+      const kind = ['task', 'break', 'fixed', 'custom'].includes(b.kind) ? b.kind : (task !== null ? 'task' : 'custom');
+      return { start, end, label: (b.label || '').toString().slice(0, 100), task, kind };
+    })
+    .filter(b => hm.test(b.start) && hm.test(b.end))
+    .slice(0, 24);
+}
+
+// 📅 Gün planlayıcı — görevler + uyanık pencere → saat saat blok dizisi. Llama, tool YOK.
+async function handlePlanApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const tasks = Array.isArray(body.tasks) ? body.tasks.slice(0, 20) : [];
+  const from = (body.from || '08:00').toString();
+  const to = (body.to || '22:00').toString();
+  const now = (body.now || '').toString();
+  if (!tasks.length) return jsonCors({ error: 'no-tasks' }, 400, cors);
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
+
+  const taskLines = tasks.map(t => {
+    const bits = [`[${t.i}] ${t.text}`];
+    if (t.min) bits.push(`~${t.min}dk`);
+    if (t.pri === 'acil') bits.push('ACİL');
+    if (t.mit) bits.push('⭐bugünün-3ü');
+    if (t.due) bits.push(`son-tarih:${t.due}`);
+    if (t.cat) bits.push(t.cat);
+    return bits.join(' · ');
+  }).join('\n');
+
+  try {
+    const planPrompt = `Sen Aidan'sın — ADHD'li bir lise öğrencisi için gün planlayıcı. Verilen görevleri uyanık pencereye saat saat YERLEŞTİR.
+
+⚙️ KURALLAR:
+- Bloklar uyanık pencere içinde kalsın (verilen başlangıç-bitiş aralığı). "Şu an" verilmişse ondan önceye blok koyma.
+- Her görevin ~süresi verildiyse o kadar zaman ayır. Süre yoksa 30-45 dk varsay.
+- 🔥 ACİL ve ⭐bugünün-3ü görevleri güne ÖNCE / yüksek-enerji saatlerine koy (öğleden önce ya da ilk bloklar).
+- Bloklar ÇAKIŞMASIN, ardışık olsun (biri biter, diğeri başlar).
+- Uzun çalışma blokları (45 dk+) arasına 5-10 dk "break" (mola) koy. ADHD beyni molasız çalışamaz.
+- Öğle/akşam yemeği için makul bir "fixed" blok bırak (saat uygunsa).
+- Bütün görevleri sığdıramıyorsan en önemlilerini koy, gerisini bırak — günü tıka basa doldurma.
+- Etiketler (label) Türkçe, kısa ve net olsun.
+
+📦 ÇIKTI: Yalnızca JSON dizisi. Her eleman:
+{"start":"HH:MM","end":"HH:MM","label":"kısa açıklama","task":<görev indeksi ya da null>,"kind":"task|break|fixed|custom"}
+- "task" = ilgili görevin köşeli parantezdeki indeksi (örn [2] → 2). Göreve bağlı değilse null.
+- "kind": görev=task, mola=break, ders/yemek=fixed, diğer=custom.
+- Saatler 24 saat formatı, sıfır dolgulu (09:00, 14:30).
+
+🚫 YASAK: Açıklama, başlık, markdown, \` işareti, "İşte plan:" gibi giriş. SADECE JSON dizisi.
+
+📝 ÖRNEK (pencere 15:00-19:00, görevler [0] Matematik ~60dk ACİL, [1] Tarih oku ~30dk):
+[{"start":"15:00","end":"16:00","label":"Matematik ödevi","task":0,"kind":"task"},{"start":"16:00","end":"16:10","label":"Kısa mola","task":null,"kind":"break"},{"start":"16:10","end":"16:40","label":"Tarih oku","task":1,"kind":"task"}]`;
+
+    const userMsg = `Uyanık pencere: ${from} - ${to}.${now ? ` Şu an saat: ${now}.` : ''}\n\nGörevler (indeks · metin · süre · etiketler):\n${taskLines}\n\nGünü saat saat planla. Sadece JSON dizisi döndür.`;
+
+    const r = await env.AI.run(AI_MODEL, {
+      messages: [
+        { role: 'system', content: planPrompt },
+        { role: 'user', content: userMsg },
+      ],
+      max_tokens: 1200,
+      temperature: 0.4,
+    });
+    const raw = typeof r.response === 'string' ? r.response : JSON.stringify(r.response || '');
+    const blocks = extractPlanJson(raw);
+    if (!blocks.length) return jsonCors({ blocks: [] }, 200, cors);
+    return jsonCors({ blocks }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
 // AI portföy yorumu — BETİMLEYİCİ özet (yatırım tavsiyesi DEĞİL). Sayılar PWA'dan gelir (uydurma yok).
 async function handlePortfolioCommentApi(request, env) {
   const cors = {
@@ -3360,6 +3461,11 @@ export default {
     // AI görev bölücü (POST {text} → AI küçük adımlar dizisi, tool YOK)
     if (url.pathname === '/split') {
       return handleSplitApi(request, env);
+    }
+
+    // AI gün planlayıcı (POST {tasks, from, to, now} → saat saat blok dizisi, tool YOK)
+    if (url.pathname === '/plan') {
+      return handlePlanApi(request, env);
     }
 
     // AI portföy yorumu (POST {facts} → AI betimleyici özet, tavsiye YOK, tool YOK)
