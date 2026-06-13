@@ -2249,6 +2249,100 @@ async function handleStockHistoryApi(request, env) {
 }
 
 // ============================================================
+// 📰 Hisse haberleri — Yahoo Finance search news proxy + opsiyonel AI özet
+// İki mod: (1) default → haber listesi döner, (2) {summarize:true, headlines:[...]} → Türkçe AI özet.
+// PWA önce listeyi çeker (hızlı), kullanıcı "AI özetle" derse aynı endpoint'e başlıkları yollar.
+// ============================================================
+async function handleStockNewsApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
+
+  // --- Mod 2: AI özet ---
+  if (body.summarize) {
+    const symbol = String(body.symbol || '').trim().toUpperCase().slice(0, 20);
+    const headlines = Array.isArray(body.headlines)
+      ? body.headlines.map(h => String(h || '').trim()).filter(Boolean).slice(0, 12)
+      : [];
+    if (!headlines.length) return jsonCors({ error: 'no headlines' }, 400, cors);
+
+    let name = 'kanka';
+    try {
+      const session = await fetchUserDataForApi(env, user);
+      name = getUserDisplayName(session.data, user.email);
+    } catch {}
+
+    const sysPrompt = `Sen Aidan'sın — ${name}'in asistanı. Sana bir hisseyle ilgili haber BAŞLIKLARI veriliyor. Görevin: 3-5 cümlelik TARAFSIZ Türkçe özet — başlıkların ne hakkında olduğunu, ortak temayı/gündemi betimle.
+
+🚫 YASAK: al/sat/tut tavsiyesi, fiyat tahmini, "iyi/kötü haber" yargısı, İngilizce, başlıkta olmayan bilgi uydurmak.
+✅ İZİN: hangi konuların öne çıktığını betimlemek (bilanço, sözleşme, sektör, yönetim vb.), gündem hakkında nötr gözlem.
+TON: kısa, net, haber bülteni dili. Son cümle: "Bu sadece haber özeti — yatırım tavsiyesi değildir. 💜"`;
+
+    const userMsg = `${symbol} ile ilgili son haber başlıkları:\n${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}\n\nBunları 3-5 cümlelik tarafsız Türkçe özete dök.`;
+
+    try {
+      const r = await env.AI.run(AI_MODEL, {
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: userMsg },
+        ],
+        max_tokens: 320,
+        temperature: 0.4,
+      });
+      let summary = (r.response || '').trim();
+      if (!summary || /^i'?m sorry|^as an ai|your input/i.test(summary)) {
+        summary = `${name}, şu an özet üretemedim — başlıkları yukarıda görebilirsin. Bu yatırım tavsiyesi değildir.`;
+      }
+      return jsonCors({ summary, symbol }, 200, cors);
+    } catch (e) {
+      return jsonCors({ error: e.message }, 500, cors);
+    }
+  }
+
+  // --- Mod 1: haber listesi ---
+  const ySymbol = String(body.ySymbol || body.symbol || '').trim().toUpperCase();
+  if (!ySymbol || !/^[A-Z0-9.=-]{1,20}$/.test(ySymbol)) {
+    return jsonCors({ error: 'bad symbol' }, 400, cors);
+  }
+
+  try {
+    const r = await fetch(
+      `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(ySymbol)}&newsCount=12&quotesCount=0&enableFuzzyQuery=false`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' }, cf: { cacheTtl: 600, cacheEverything: true } }
+    );
+    if (!r.ok) return jsonCors({ error: `yahoo http ${r.status}` }, 502, cors);
+    const j = await r.json();
+    const raw = Array.isArray(j.news) ? j.news : [];
+    const news = raw
+      .filter(n => n && n.title && n.link)
+      .map(n => ({
+        title: String(n.title).slice(0, 220),
+        publisher: String(n.publisher || '').slice(0, 60),
+        link: String(n.link).slice(0, 400),
+        time: (n.providerPublishTime && isFinite(n.providerPublishTime)) ? n.providerPublishTime : null,
+      }))
+      .sort((a, b) => (b.time || 0) - (a.time || 0))
+      .slice(0, 10);
+    return jsonCors({ ySymbol, news, at: Date.now() }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
+// ============================================================
 // 👥 Multi-user — /signup + /invite endpoint'leri (davet kodlu kapalı kayıt)
 // ============================================================
 // Akış: Salim /invite/create ile kod üretir → arkadaşa yollar →
@@ -2302,14 +2396,23 @@ async function handleStockAnalysisApi(request, env) {
 - Taktik sinyaller listesini özetle (zaten nötr dilde verildi)
 - ${name}'e hitap
 
+📚 ÖĞRETİCİ KURAL (ÇOK ÖNEMLİ — ${name} öğrenmek istiyor):
+Bahsettiğin HER göstergenin NE ANLAMA GELDİĞİNİ kısacık parantez/cümle içinde açıkla. ${name} bu göstergeleri öğreniyor — terimi söyleyip geçme, tanımını ver.
+Örnekler (bu kalıpta):
+- "RSI 28 — RSI son 14 günkü alış/satış baskısını 0-100 arası ölçer; 30 altı 'aşırı satım' yani yakın dönemde satıcı baskın demek."
+- "Fiyat SMA50'nin altında — SMA50, son 50 günün ortalama fiyatı; fiyatın altında olması son dönem ortalamasının gerisinde işlem gördüğünü gösterir."
+- "MACD histogramı negatif — MACD iki ortalamanın farkıdır, negatif histogram kısa vadeli momentumun zayıfladığını gösterir."
+- "Bollinger alt bandına yakın — bantlar ortalamanın ±2 standart sapması; alt banda yakınlık fiyatın kendi oynaklığına göre düşük bölgede olduğunu gösterir."
+Açıklama TANIM düzeyinde kalsın — "bu yüzden yükselir/düşer/alınır" DEME. Göstergenin ne ölçtüğünü öğret, geleceği söyleme.
+
 🚫 MUTLAK YASAK:
 1. AL / SAT / TUT tavsiyesi
 2. Fiyat hedefi / gelecek tahmini ("yükselir", "düşer", "kırılır")
-3. Değer yargısı ("iyi fırsat", "riskli")
+3. Değer yargısı ("iyi fırsat", "riskli", "ucuz/pahalı", "fiyat düşük kalmış")
 4. Verilenin dışında sayı uydurma
 5. İngilizce
 
-✅ TON: deneyimli grafik okuyucu — gözlüyor, tarif ediyor, karar vermiyor.
+✅ TON: deneyimli grafik okuyucu + sabırlı öğretmen — gözlüyor, tarif ediyor, terimi öğretiyor, ama karar vermiyor.
 Son cümle: "Bu betimleyici bir gözlem — yatırım tavsiyesi değildir" (+ kısa 💜).`;
 
   const signalsBlock = Array.isArray(facts.signals) && facts.signals.length
@@ -2334,7 +2437,7 @@ ${facts.recentChange7d != null ? `Son 7 periyot: ${facts.recentChange7d >= 0 ? '
 Taktik gözlemler:
 ${signalsBlock}
 
-Bu verileri 5-8 cümlelik tarafsız teknik özete dök. ADX'in trend gücünü, Stochastic'in RSI ile uyumunu/diverjansını, EMA9/21 kesişimini ve pivot konumunu özetle. Tavsiye YOK.`;
+Bu verileri 5-8 cümlelik tarafsız teknik özete dök. ADX'in trend gücünü, Stochastic'in RSI ile uyumunu/diverjansını, EMA9/21 kesişimini ve pivot konumunu özetle. HER bahsettiğin göstergenin ne anlama geldiğini kısaca açıkla (${name} öğreniyor). Tavsiye YOK, gelecek tahmini YOK.`;
 
   try {
     const r = await env.AI.run(AI_MODEL, {
@@ -2418,22 +2521,27 @@ async function handlePortfolioTechnicalApi(request, env) {
 - En dikkat çeken 1-2 hissenin durumu (sayıyla, betimleyici dil)
 - ${name}'e hitap
 
+📚 ÖĞRETİCİ KURAL (${name} göstergeleri öğreniyor):
+Geçen göstergeyi ilk kez kullanırken NE ANLAMA GELDİĞİNİ bir kez kısaca açıkla — terimi söyleyip geçme.
+Örnek: "ikisi RSI 70 üstünde (RSI 0-100 arası alış/satış baskısını ölçer, 70 üstü 'aşırı alım' yani yakın dönemde alıcı baskın demek)."
+Açıklama TANIM düzeyinde — "bu yüzden alınır/yükselir" DEME.
+
 🚫 MUTLAK YASAK:
 1. AL / SAT / TUT tavsiyesi (tek tek de, toplu da)
 2. Fiyat hedefi / gelecek tahmini
-3. "İyi/kötü/riskli/fırsat" değer yargısı
+3. "İyi/kötü/riskli/fırsat/ucuz/pahalı/düşük kalmış" değer yargısı
 4. Belirli hisseyi övme/kötüleme
 5. Sayı uydurma — sadece verileni kullan
 6. İngilizce
 
-✅ TON: deneyimli grafik okuyucu — gözlüyor, tarif ediyor, karar vermiyor.
+✅ TON: deneyimli grafik okuyucu + sabırlı öğretmen — gözlüyor, tarif ediyor, terimi öğretiyor, karar vermiyor.
 Son cümle: "Bu betimleyici bir gözlem — yatırım tavsiyesi değildir" (+ kısa 💜).`;
 
   const userMsg = `📊 ${name}'in portföyü — hisse hisse teknik snapshot:
 
 ${lines}
 
-Bu verileri 4-7 cümlelik tarafsız taktik özete dök. Hangisi alınır/satılır YOK.`;
+Bu verileri 4-7 cümlelik tarafsız taktik özete dök. Geçen göstergelerin ne anlama geldiğini kısaca açıkla (${name} öğreniyor). Hangisi alınır/satılır YOK.`;
 
   try {
     const r = await env.AI.run(AI_MODEL, {
@@ -3292,6 +3400,11 @@ export default {
     // 📊 Portföy teknik özet — tüm pozisyonların TA snapshot'u betimleyici özet
     if (url.pathname === '/portfolio-technical') {
       return handlePortfolioTechnicalApi(request, env);
+    }
+
+    // 📰 Hisse haberleri — Yahoo news proxy + opsiyonel AI özet
+    if (url.pathname === '/stock-news') {
+      return handleStockNewsApi(request, env);
     }
 
     // 👥 Multi-user (davet kodlu)
