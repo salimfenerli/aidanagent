@@ -4,6 +4,27 @@
 - Aksi söylenmedikçe tüm dokümantasyon/dosya düzenleme işlemleri bu dosya (`CLAUDE.md`) üzerinden yürütülür.
 - **Gerekmedikçe bu dosyayı güncelleme komutu verilmez** — sadece önemli mimari/özellik/karar değişikliklerinde güncellenir, küçük/geçici detaylar için değil.
 
+## 🎨 Tasarım Standardı — "Impeccable" (KALICI / ZORUNLU)
+Salim'in talebi (Haz 13): **Tüm UI/arayüz işlerinde Impeccable framework standardında çalış.** Tam framework `C:\Users\Salim\Downloads\impeccable-main\` içinde açılı (OpenAI-format skill: `.agents/skills/impeccable/SKILL.md` + `reference/*.md`). Yeni bir UI işine başlamadan önce `SKILL.md` + register referansı `reference/product.md` (Aidan app UI = "product register") okunmalı. Aşağıdaki kurallar her arayüz kodunda İSTİSNASIZ uygulanır:
+
+1. **Yasaklı AI alışkanlıkları:** mor/neon gradyan YOK, glassmorphism (cam/`backdrop-filter: blur`) YOK, gereksiz parlama/glow YOK, gradient-text YOK.
+2. **MUTLAK YASAK — yan-şerit kenarlık:** `border-left`/`border-right` >1px renkli accent (kart/liste/callout/toast'ta) ASLA. Bunun yerine **tam kenar + arka plan tinti + leading dot/ikon**. (Aidan'ın eski görev/borsa/plan/toast kartları hep bunu yapıyordu → v9'da temizlendi.)
+3. **Tipografi:** Inter/Roboto/Arial/sistem-varsayılanı gibi aşırı kullanılmış fontlar YOK — karakterli modern fontlar. **Product UI'da tek font ailesi doğru**; iki benzer grotesk eşleştirme YOK; **UI label/buton/data'da display font YOK**. Hiyerarşi boyut + **kalınlık + renk tonu** ile. Çok küçük metinden kaçın (≥4.5:1 kontrast).
+4. **Renk/kontrast:** saf `#000`/`#fff` YOK — renkler hafif tonlanır. Renkli zemine asla gri metin. WCAG AA (gövde ≥4.5:1, büyük ≥3:1). Restrained palet: accent yalnız aksiyon/seçim/durum için, dekor için DEĞİL.
+5. **Düzen/boşluk:** her şeyi zorla ortalama YOK; kart tembel cevaptır, **iç içe kart kesinlikle YOK**; kart radius 12–16px (32px+ YOK). 8pt grid, monoton-olmayan ritim.
+6. **Mikro etkileşim:** bounce/elastik YOK; ease-out (quart/quint/expo), 150–250ms, durum bildiren hareket. `prefers-reduced-motion` alternatifi zorunlu.
+7. **Product ban:** standart affordance'ları yeniden icat etme — **özel scrollbar YOK**, garip form kontrolü YOK, "modal ilk düşünce" YOK (önce inline/progressive). Ghost-card YOK (1px kenar + ≥16px gölge aynı öğede birlikte değil).
+
+**Aidan'da uygulanan token'lar (asistan.html, v7-59):**
+- Tema: **koyu** (mor TAMAMEN kaldırıldı). `--bg:#0c0d11`, yüzeyler `#16171d`/`#1b1c23`/`#24262e`.
+- Accent: **amber** `#f5a524` (hover `#ffb43a`, light `#fbbf5a`, tint `#fcd34d`). Amber dolgular üzerine **koyu** metin `--on-accent:#1c1206` (beyaz okunmaz!).
+- Tonlu beyaz/siyah: başlık `--text-strong:#f4f4f7`, gövde `--text:#e7e8ec`, açık metin `--on-dark:#f6f5f2`. Saf beyaz/siyah kullanılmaz.
+- Semantik: success `#34c759`, danger `#ef4444` (üstüne `--on-dark`), info/mavi `#5aa2ff`, kategori şeritleri amber/mavi/teal/coral (mor yok).
+- Font: **tek aile — Hanken Grotesk** (400–800, `--font-sans`; `--font-display` de buna eşit). Bricolage düştü (display font UI/data'da yasak + iki grotesk eşleştirme öneriye aykırı). Google Fonts ile yüklü; CSP `_headers`'da `fonts.googleapis.com`+`fonts.gstatic.com` izinli.
+- CSS katmanları (hepsi tek dosyada, en sondaki en yüksek öncelik): STITCH `:root` (aktif palet) → "DARK + AMBER THEME (v7)" (amber kontrast) → "IMPECCABLE PASS (v8)" (tipografi, 8pt ritim, glow/glass/gradyan temizliği) → **"IMPECCABLE FRAMEWORK SPEC (v9)"** (`</style>` öncesi: yan-şerit→tam kenar+tint, tek aile, özel scrollbar kaldırma, ghost-card düzeltme, ease-out motion).
+- Emoji politikası (v60): **dekoratif/corny emojiler tamamen kaldırıldı** (kategori/başlık/buton/toast prefix'leri + 💜🎉🌙☀️ vb. ~400+ yer). Korunanlar yalnız işlevsel olanlar: durum noktaları 🟢🔴🟡, bayraklar 🇹🇷🇺🇸, onay/çarpı ✓✕❌, oklar →↑↓ ve birkaç buton ikon glyph'i (✏️🗑️✂️🎧). Bunlar ileride Lucide/Tabler SVG'ye çevrilecek (Impeccable "tutarlı ikon stili"). Yeni UI'da emoji KULLANMA — SVG ikon kullan.
+- ⏳ Açık iş: kalan buton-glyph emojilerini SVG'ye çevir; `icon.png` mascot logosu hâlâ MOR — amber tonlu yeniden üretilecek. Değişiklikler henüz **deploy edilmedi** (Salim onayı bekliyor). Cache `v7-60`.
+
 ## Kullanıcı
 - **İsim:** Salim
 - **Durum:** ADHD, **kod bilmiyor**
