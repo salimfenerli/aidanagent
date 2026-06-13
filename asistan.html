@@ -556,11 +556,57 @@
     padding: 5px 0; border-radius: 7px; font-size:0.82em; font-weight:600; cursor:pointer;
   }
   .stock-chart-ranges button.active { background: var(--accent); color:#fff; border-color: var(--accent); }
+  /* Chart mode (Çizgi / Mum / Fib) — ranges ile aynı stil ama 3 button */
+  .stock-chart-modes { display:flex; gap:6px; margin-bottom:8px; }
+  .stock-chart-modes button {
+    flex:1; background: transparent; border:1px solid var(--border-soft); color: var(--text-muted);
+    padding: 5px 0; border-radius: 7px; font-size:0.78em; font-weight:600; cursor:pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  }
+  .stock-chart-modes button.active { background: var(--accent); color:#fff; border-color: var(--accent); }
+  .stock-chart-modes button.fib-on { background: var(--secondary-soft); color: var(--secondary); border-color: var(--secondary); }
   .stock-chart-area { background: var(--bg); border:1px solid var(--border-soft); border-radius: var(--radius); padding: 10px; min-height: 160px; display:flex; align-items:center; justify-content:center; }
   .stock-chart-area svg { width:100%; height: 140px; display:block; }
   .stock-chart-loading { color: var(--text-faint); font-size:0.85em; }
   .stock-chart-stats { display:flex; justify-content:space-between; gap:10px; margin-top:10px; font-size:0.78em; color:var(--text-muted); font-variant-numeric: tabular-nums; }
   .stock-chart-stats b { color: var(--text); font-weight:600; }
+  .stock-ta-panel { margin-top: 12px; border-top: 1px solid var(--border-soft); padding-top: 12px; }
+  .stock-ta-title { font-size: 0.72em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); margin-bottom: 8px; }
+  .stock-ta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
+  @media (max-width: 400px) { .stock-ta-grid { grid-template-columns: repeat(2, 1fr); } }
+  .stock-ta-cell {
+    background: var(--bg); border: 1px solid var(--border-soft); border-radius: 8px;
+    padding: 8px 8px 6px; text-align: center;
+  }
+  .stock-ta-cell .lbl { font-size: 0.65em; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em; }
+  .stock-ta-cell .val { font-size: 0.95em; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; color: var(--text); }
+  .stock-ta-cell .sub { font-size: 0.62em; color: var(--text-muted); margin-top: 1px; }
+  .stock-ta-cell.up .val { color: #34c759; }
+  .stock-ta-cell.down .val { color: #ef4444; }
+  .stock-ta-cell.warn .val { color: #ffc640; }
+  .stock-ta-signals { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .stock-ta-sig {
+    font-size: 0.72em; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--border-soft);
+    background: var(--surface); color: var(--text-muted); line-height: 1.3;
+  }
+  .stock-ta-sig.up { border-color: rgba(52,199,89,0.35); color: #34c759; }
+  .stock-ta-sig.down { border-color: rgba(239,68,68,0.35); color: #ef4444; }
+  .stock-ta-sig.warn { border-color: rgba(255,198,64,0.4); color: #ffc640; }
+  .stock-ta-ai-btn {
+    width: 100%; padding: 10px; border-radius: var(--radius); border: 1px dashed var(--accent);
+    background: transparent; color: var(--accent); font-size: 0.85em; font-weight: 500; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .stock-ta-ai-btn:disabled { opacity: 0.5; cursor: wait; }
+  .stock-ta-ai-result {
+    margin-top: 10px; padding: 10px 12px; border-radius: var(--radius);
+    background: var(--bg); border: 1px solid var(--border-soft);
+    font-size: 0.84em; line-height: 1.55; color: var(--text);
+  }
+  .stock-ta-disclaimer { font-size: 0.68em; color: var(--text-faint); margin-top: 8px; text-align: center; line-height: 1.4; }
+  .stock-chart-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; font-size: 0.65em; color: var(--text-faint); }
+  .stock-chart-legend span { display: flex; align-items: center; gap: 4px; }
+  .stock-chart-legend i { display: inline-block; width: 14px; height: 2px; border-radius: 1px; }
   .stock-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
   .stock-sym { font-weight: 700; font-size: 1.05em; color: var(--text); letter-spacing: 0.02em; }
   .stock-name { font-size: 0.76em; color: var(--text-faint); margin-top: 2px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -631,6 +677,108 @@
   .pf-comment-btn:hover { border-color: var(--accent); color: var(--text); }
   .pf-comment-body { font-size: 0.92em; line-height: 1.6; color: var(--text); white-space: pre-wrap; min-height: 40px; }
   .pf-comment-note { font-size: 0.74em; color: var(--text-faint); margin-top: 12px; font-style: italic; }
+  /* Portföy teknik özet — modal + her hisse mini özet satırı */
+  .pf-tech-modal .modal { max-width: 500px; }
+  .pf-tech-status { font-size: 0.85em; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5; }
+  .pf-tech-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; max-height: 38vh; overflow-y: auto; }
+  .pf-tech-row { background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: 10px; padding: 9px 11px; }
+  .pf-tech-row.up { border-left: 3px solid #34c759; }
+  .pf-tech-row.down { border-left: 3px solid #ef4444; }
+  .pf-tech-row.flat { border-left: 3px solid var(--border); }
+  .pf-tech-row.err { border-left: 3px solid var(--text-faint); opacity: 0.7; }
+  .pf-tech-sym { font-weight: 700; letter-spacing: 0.02em; font-size: 0.92em; color: var(--text); display: flex; justify-content: space-between; align-items: center; }
+  .pf-tech-sym .px { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text-muted); font-size: 0.85em; }
+  .pf-tech-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .pf-tech-badge { font-size: 0.7em; padding: 2px 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border-soft); color: var(--text-muted); line-height: 1.3; font-variant-numeric: tabular-nums; }
+  .pf-tech-badge.up { color: #34c759; border-color: rgba(52,199,89,0.35); }
+  .pf-tech-badge.down { color: #ef4444; border-color: rgba(239,68,68,0.35); }
+  .pf-tech-badge.warn { color: #ffc640; border-color: rgba(255,198,64,0.4); }
+  .pf-tech-ai-btn {
+    width: 100%; padding: 10px; border-radius: var(--radius); border: 1px dashed var(--accent);
+    background: transparent; color: var(--accent); font-size: 0.86em; font-weight: 500; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .pf-tech-ai-btn:disabled { opacity: 0.5; cursor: wait; }
+  .pf-tech-ai-result {
+    margin-top: 10px; padding: 12px; border-radius: var(--radius);
+    background: var(--bg); border: 1px solid var(--border-soft);
+    font-size: 0.86em; line-height: 1.6; color: var(--text); white-space: pre-wrap;
+  }
+  .pf-tech-disclaimer { font-size: 0.7em; color: var(--text-faint); margin-top: 10px; text-align: center; line-height: 1.4; font-style: italic; }
+  .pf-tech-btn { width: 100%; background: transparent; border: 1px dashed var(--border); color: var(--text-muted); padding: 9px; border-radius: var(--radius-sm); font-size: 0.85em; cursor: pointer; box-shadow: none; display: flex; align-items: center; justify-content: center; gap: 7px; margin-bottom: 14px; }
+  .pf-tech-btn:hover { border-color: var(--accent); color: var(--text); }
+  /* ===== Borsa modu — tam ekran "terminal" hissi (body.stocks-mode) ===== */
+  .stocks-mode-header { display: none; }
+  .stocks-mode-h2 { display: block; }
+  body.stocks-mode { background: #060710; }
+  body.stocks-mode .brand-row,
+  body.stocks-mode #dateHero,
+  body.stocks-mode #appSubtitle,
+  body.stocks-mode .topbar,
+  body.stocks-mode #nowCard,
+  body.stocks-mode .quick-capture,
+  body.stocks-mode .quick-actions,
+  body.stocks-mode .action-row { display: none !important; }
+  body.stocks-mode .container { padding: 0 !important; max-width: 100% !important; }
+  body.stocks-mode .tabs { display: none !important; }
+  body.stocks-mode #stocks { padding: 0 14px 100px !important; margin-top: 0 !important; }
+  body.stocks-mode .stocks-mode-h2 { display: none; }
+  body.stocks-mode .stocks-mode-header {
+    display: flex; padding: 12px 16px 14px;
+    align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border-soft); margin-bottom: 16px;
+    margin-left: -14px; margin-right: -14px;
+    position: sticky; top: 0; z-index: 40;
+    background: rgba(6,7,16,0.96); backdrop-filter: blur(8px);
+  }
+  .stocks-mode-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .stocks-menu-btn {
+    background: transparent; border: 1px solid var(--border-soft); border-radius: 9px;
+    width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text); cursor: pointer; box-shadow: none; padding: 0; flex-shrink: 0;
+  }
+  .stocks-menu-btn:hover { background: var(--surface-hover); border-color: var(--border); }
+  .stocks-menu-btn svg { width: 19px; height: 19px; }
+  /* Slide-in drawer — borsa modundan diğer sekmelere geçiş */
+  .stocks-menu-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 90;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  .stocks-menu-backdrop.open { opacity: 1; pointer-events: auto; }
+  .stocks-menu {
+    position: fixed; top: 0; left: 0; height: 100%; width: 232px; z-index: 95;
+    background: var(--bg-elev); border-right: 1px solid var(--border-soft);
+    padding: 18px 12px; box-sizing: border-box;
+    transform: translateX(-100%); transition: transform 0.22s ease;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .stocks-menu.open { transform: translateX(0); }
+  .stocks-menu-head {
+    display: flex; align-items: center; gap: 9px; padding: 4px 10px 14px;
+    font-weight: 700; font-size: 1.05em; color: var(--text);
+    border-bottom: 1px solid var(--border-soft); margin-bottom: 10px;
+  }
+  .stocks-menu-head img { width: 26px; height: 26px; border-radius: 7px; }
+  .stocks-menu button {
+    display: flex; align-items: center; gap: 11px; width: 100%;
+    background: transparent; border: none; box-shadow: none;
+    color: var(--text); padding: 12px; border-radius: 10px;
+    font-size: 0.95em; font-weight: 600; cursor: pointer; text-align: left;
+  }
+  .stocks-menu button:hover { background: var(--surface-hover); }
+  .stocks-menu button .icon { width: 18px; height: 18px; color: var(--text-muted); flex-shrink: 0; }
+  .stocks-menu-note { margin-top: auto; font-size: 0.7em; color: var(--text-faint); padding: 10px; line-height: 1.5; }
+  .stocks-mode-title {
+    font-size: 1.18em; font-weight: 700; color: var(--text);
+    display: flex; align-items: center; gap: 9px; letter-spacing: 0.01em; white-space: nowrap;
+  }
+  .stocks-mode-title svg { width: 22px; height: 22px; color: var(--accent); }
+  .stocks-mode-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 0; }
+  .stocks-mode-clock { font-size: 1.05em; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+  .stocks-mode-date { font-size: 0.7em; color: var(--text-faint); display: flex; gap: 6px; align-items: center; }
+  .stocks-mode-mkt { font-size: 0.66em; padding: 1px 6px; border-radius: 999px; font-weight: 600; }
+  .stocks-mode-mkt.open { background: var(--success-soft); color: var(--success); }
+  .stocks-mode-mkt.closed { background: var(--border-soft); color: var(--text-muted); }
   /* Çok para birimi portföy */
   .pf-multi { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
   .pf-cur-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -2629,11 +2777,35 @@
 
   <!-- BORSA -->
   <div id="stocks" class="panel">
-    <h2>📈 Borsa</h2>
+    <h2 class="stocks-mode-h2">📈 Borsa</h2>
+    <div class="stocks-mode-header">
+      <div class="stocks-mode-left">
+        <button type="button" class="stocks-menu-btn" onclick="toggleStocksMenu()" aria-label="Menü" title="Diğer sekmeler">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+        </button>
+        <div class="stocks-mode-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+          Borsa
+        </div>
+      </div>
+      <div class="stocks-mode-meta">
+        <div class="stocks-mode-clock" id="stocksModeClock">—</div>
+        <div class="stocks-mode-date" id="stocksModeDate">—</div>
+      </div>
+    </div>
+    <div class="stocks-menu-backdrop" id="stocksMenuBackdrop" onclick="toggleStocksMenu(false)"></div>
+    <nav class="stocks-menu" id="stocksMenu" aria-label="Sekme menüsü">
+      <div class="stocks-menu-head"><img src="icon.png" alt="">Aidan</div>
+      <button type="button" onclick="exitStocksTo('tasks')"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 17 5 19 9 15"/><polyline points="3 7 5 9 9 5"/><line x1="13" y1="6" x2="21" y2="6"/><line x1="13" y1="12" x2="21" y2="12"/><line x1="13" y1="18" x2="21" y2="18"/></svg>Görevler</button>
+      <button type="button" onclick="exitStocksTo('focus')"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>Odak</button>
+      <button type="button" onclick="exitStocksTo('settings')"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ayarlar</button>
+      <div class="stocks-menu-note">Borsa tam ekran modundasın — bir sekme seçince normal görünüme dönersin.</div>
+    </nav>
     <div class="portfolio-summary" id="portfolioSummary" style="display:none;"></div>
     <div class="portfolio-pie" id="portfolioPie" style="display:none;"></div>
     <div class="portfolio-history" id="portfolioHistory" style="display:none;"></div>
     <button class="pf-comment-btn" id="pfCommentBtn" onclick="aiCommentPortfolio()" style="display:none;"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg> Portföyü yorumla</button>
+    <button class="pf-tech-btn" id="pfTechBtn" onclick="openPfTechModal()" style="display:none;"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/><circle cx="11" cy="11" r="1.2"/><circle cx="14" cy="14" r="1.2"/><circle cx="19" cy="8" r="1.2"/></svg> Portföy teknik özet</button>
     <div class="market-chips" id="marketChips">
       <button class="market-chip active" data-market="bist" onclick="selectMarket('bist')">🇹🇷 BIST</button>
       <button class="market-chip" data-market="abd" onclick="selectMarket('abd')">🇺🇸 ABD</button>
@@ -2904,6 +3076,22 @@
   </div>
 </div>
 
+<!-- Portföy teknik özet modali — her pozisyon için RSI/trend rozetleri + AI taktik yorumu -->
+<div class="modal-overlay pf-tech-modal" id="pfTechModal" onclick="if(event.target.id==='pfTechModal')closePfTechModal()">
+  <div class="modal">
+    <div class="modal-title">📊 Portföy teknik özet</div>
+    <div id="pfTechStatus" class="pf-tech-status">Hisseler tek tek hesaplanıyor…</div>
+    <div id="pfTechList" class="pf-tech-list"></div>
+    <button type="button" class="pf-tech-ai-btn" id="pfTechAiBtn" onclick="aiPortfolioTechnical()" disabled>
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/></svg>
+      AI taktik özet
+    </button>
+    <div class="pf-tech-ai-result" id="pfTechAiResult" style="display:none;"></div>
+    <p class="pf-tech-disclaimer">Teknik göstergeler bilgi amaçlıdır — yatırım tavsiyesi değildir.</p>
+    <button class="modal-close" onclick="closePfTechModal()">Kapat</button>
+  </div>
+</div>
+
 <!-- Tek hisse mini grafik modalı -->
 <div class="modal-overlay stock-chart-modal" id="stockChartModal" onclick="if(event.target.id==='stockChartModal')closeStockChart()">
   <div class="modal">
@@ -2920,10 +3108,33 @@
     <div class="stock-chart-ranges" id="stockChartRanges">
       <button data-range="1mo" class="active" onclick="loadStockHistory('1mo')">1 ay</button>
       <button data-range="3mo" onclick="loadStockHistory('3mo')">3 ay</button>
+      <button data-range="6mo" onclick="loadStockHistory('6mo')">6 ay</button>
       <button data-range="1y" onclick="loadStockHistory('1y')">1 yıl</button>
     </div>
+    <div class="stock-chart-modes" id="stockChartModes" style="display:none;">
+      <button data-mode="line" class="active" onclick="setChartMode('line')">Çizgi</button>
+      <button data-mode="candle" onclick="setChartMode('candle')">Mum</button>
+      <button id="stockChartFibBtn" onclick="toggleFib()" title="Fibonacci geri çekilme seviyeleri">Fib</button>
+    </div>
     <div class="stock-chart-area" id="stockChartArea"><div class="stock-chart-loading">Yükleniyor…</div></div>
+    <div class="stock-chart-legend" id="stockChartLegend" style="display:none;">
+      <span><i style="background:#34c759;"></i>Fiyat</span>
+      <span><i style="background:#ffc640;"></i>SMA20</span>
+      <span><i style="background:#6463ff;"></i>SMA50</span>
+    </div>
     <div class="stock-chart-stats" id="stockChartStats" style="display:none;"></div>
+    <div class="stock-ta-panel" id="stockTaPanel" style="display:none;">
+      <div class="stock-ta-title">Teknik göstergeler</div>
+      <div class="stock-ta-grid" id="stockTaGrid"></div>
+      <div class="stock-ta-title" style="margin-top:4px;">Taktik gözlemler</div>
+      <div class="stock-ta-signals" id="stockTaSignals"></div>
+      <button type="button" class="stock-ta-ai-btn" id="stockTaAiBtn" onclick="aiStockAnalysis()">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/></svg>
+        AI teknik yorum
+      </button>
+      <div class="stock-ta-ai-result" id="stockTaAiResult" style="display:none;"></div>
+      <p class="stock-ta-disclaimer">Göstergeler bilgi amaçlıdır — yatırım tavsiyesi değildir.</p>
+    </div>
     <button class="modal-close" onclick="closeStockChart()">Kapat</button>
   </div>
 </div>
@@ -3004,6 +3215,12 @@ function showTab(name, btn) {
   document.getElementById(name).classList.add('active');
   if (btn) btn.classList.add('active');
   else document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+  // Borsa modu: borsa sekmesi açıkken body.stocks-mode → tam ekran terminal hissi
+  document.body.classList.toggle('stocks-mode', name === 'stocks');
+  if (name === 'stocks') tickStocksModeHeader();
+  // Sekme değişiminde hamburger drawer'ı kapat (açık kalmasın)
+  const _sm = document.getElementById('stocksMenu');
+  if (_sm) { _sm.classList.remove('open'); document.getElementById('stocksMenuBackdrop').classList.remove('open'); }
   if (name === 'settings') {
     updateEstimateStats();
     renderNotifSettings();
@@ -3038,6 +3255,7 @@ function startStockAutoRefresh() {
   stopStockAutoRefresh();
   _stockTick = 0;
   updateStocksMeta();                                  // anında rozet/etiket
+  tickStocksModeHeader();                              // borsa modu üst başlığı (saat + piyasa durumu)
   _stockAutoTimer = setInterval(() => {
     if (document.hidden) return;                       // sayfa görünmüyorsa boşa çekme
     if (!document.getElementById('stocks').classList.contains('active')) { stopStockAutoRefresh(); return; }
@@ -3045,9 +3263,53 @@ function startStockAutoRefresh() {
     _stockTick++;
     if (_stockTick % 3 === 0 && (data.watchlist || []).length) refreshStocks(); // 60sn'de bir ağ
   }, 20000);
+  // Borsa modu saat — saniyelik canlı, sadece borsa sekmesi açıkken çalışır
+  _stocksHeaderTimer = setInterval(() => {
+    if (document.hidden) return;
+    if (!document.body.classList.contains('stocks-mode')) { clearInterval(_stocksHeaderTimer); _stocksHeaderTimer = null; return; }
+    tickStocksModeHeader();
+  }, 1000);
 }
 function stopStockAutoRefresh() {
   if (_stockAutoTimer) { clearInterval(_stockAutoTimer); _stockAutoTimer = null; }
+  if (_stocksHeaderTimer) { clearInterval(_stocksHeaderTimer); _stocksHeaderTimer = null; }
+}
+
+// Borsa modu hamburger menüsü — drawer aç/kapa + sekmeye çıkış
+function toggleStocksMenu(open) {
+  const m = document.getElementById('stocksMenu');
+  const bd = document.getElementById('stocksMenuBackdrop');
+  if (!m || !bd) return;
+  const want = open !== undefined ? open : !m.classList.contains('open');
+  m.classList.toggle('open', want);
+  bd.classList.toggle('open', want);
+}
+function exitStocksTo(name) {
+  toggleStocksMenu(false);
+  showTab(name, document.querySelector(`[data-tab="${name}"]`));
+}
+
+// Borsa modu üst başlığı — saniyelik saat + bugünün adı + BIST/ABD durumu kompakt rozeti
+let _stocksHeaderTimer = null;
+function tickStocksModeHeader() {
+  const clk = document.getElementById('stocksModeClock');
+  const dt = document.getElementById('stocksModeDate');
+  if (!clk || !dt) return;
+  const now = new Date();
+  const HH = String(now.getHours()).padStart(2, '0');
+  const MM = String(now.getMinutes()).padStart(2, '0');
+  const SS = String(now.getSeconds()).padStart(2, '0');
+  clk.textContent = `${HH}:${MM}:${SS}`;
+  const dayName = now.toLocaleDateString('tr-TR', { weekday: 'long' });
+  // Watchlist'teki tek tek piyasaları izle — BIST/ABD aktif mi
+  const wl = data.watchlist || [];
+  const seen = new Set(wl.map(w => w.market || 'bist').filter(m => m === 'bist' || m === 'abd'));
+  const chips = [];
+  if (seen.has('bist')) chips.push({ label: 'BIST', open: isMarketOpen('bist', now) });
+  if (seen.has('abd'))  chips.push({ label: 'NYSE', open: isMarketOpen('abd', now) });
+  if (!chips.length) chips.push({ label: 'BIST', open: isMarketOpen('bist', now) });
+  const chipHtml = chips.map(c => `<span class="stocks-mode-mkt ${c.open ? 'open' : 'closed'}">${c.label} ${c.open ? '●' : '○'}</span>`).join('');
+  dt.innerHTML = `<span>${escapeHtml(dayName)}</span>${chipHtml}`;
 }
 // Sayfa tekrar görünür olunca (kilidi açınca): borsayı tazele + pomodoro'yu gerçek zamana eşitle
 document.addEventListener('visibilitychange', () => {
@@ -3884,8 +4146,15 @@ function journalVoice() {
 //                     alarmAbove, alarmBelow, lastAlertedAbove, lastAlertedBelow, qty, cost, fetchedAt, error }]
 const STOCKS_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/stocks';
 const STOCK_HISTORY_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/stock-history';
+const STOCK_ANALYSIS_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/stock-analysis';
+const PF_TECHNICAL_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/portfolio-technical';
 let _stockChartIdx = null;
 let _stockChartRange = '1mo';
+let _stockChartPayload = null;
+let _stockChartMode = 'line';   // 'line' | 'candle' — modal grafik tipi
+let _stockChartFib = false;     // Fibonacci overlay açık mı
+// Teknik analiz sadece hisselerde (BIST + ABD) anlamlı — döviz/kripto'da panel gizli
+const TA_MARKETS = new Set(['bist', 'abd']);
 
 let selectedMarket = 'bist';
 const MARKET_PLACEHOLDERS = {
@@ -4120,8 +4389,13 @@ function renderStocks() {
   renderPortfolioPie();
   renderPortfolioHistory();
   const _hasHoldings = (data.watchlist || []).some(w => w.qty != null && w.qty > 0 && w.cost != null);
+  const _hasTaHoldings = (data.watchlist || []).some(w =>
+    w.qty != null && w.qty > 0 && w.cost != null && TA_MARKETS.has(w.market || 'bist')
+  );
   const _cb = document.getElementById('pfCommentBtn');
   if (_cb) _cb.style.display = _hasHoldings ? 'flex' : 'none';
+  const _tb = document.getElementById('pfTechBtn');
+  if (_tb) _tb.style.display = _hasTaHoldings ? 'flex' : 'none';
   if (wl.length === 0) {
     list.innerHTML = '<div class="stocks-empty">Henüz hisse yok.<br>Yukarıdan BIST kodu ekle (örn THYAO).<br>Fiyatını gör, pozisyon gir, alarm kur 🔔</div>';
     return;
@@ -4393,6 +4667,9 @@ function openStockChart(idx) {
   if (!w) return;
   _stockChartIdx = idx;
   _stockChartRange = '1mo';
+  _stockChartMode = 'line';
+  _stockChartFib = false;
+  const taOk = TA_MARKETS.has(w.market || 'bist');
   document.getElementById('stockChartSym').textContent = w.symbol + (w.market && w.market !== 'bist' ? ` · ${({abd:'🇺🇸',fx:'💱',crypto:'₿'})[w.market]||''}` : '');
   document.getElementById('stockChartName').textContent = w.name || '';
   document.getElementById('stockChartPrice').innerHTML = w.price != null
@@ -4409,8 +4686,20 @@ function openStockChart(idx) {
   document.querySelectorAll('#stockChartRanges button').forEach(b => {
     b.classList.toggle('active', b.dataset.range === '1mo');
   });
+  // Chart modes: sadece hisse piyasalarında göster (döviz/kripto için TA az anlamlı)
+  document.getElementById('stockChartModes').style.display = taOk ? 'flex' : 'none';
+  document.querySelectorAll('#stockChartModes button[data-mode]').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === 'line');
+  });
+  const fibBtn = document.getElementById('stockChartFibBtn');
+  if (fibBtn) fibBtn.classList.remove('fib-on');
   document.getElementById('stockChartArea').innerHTML = '<div class="stock-chart-loading">Yükleniyor…</div>';
   document.getElementById('stockChartStats').style.display = 'none';
+  document.getElementById('stockChartLegend').style.display = 'none';
+  document.getElementById('stockTaPanel').style.display = 'none';
+  document.getElementById('stockTaAiResult').style.display = 'none';
+  document.getElementById('stockTaAiResult').textContent = '';
+  _stockChartPayload = null;
   document.getElementById('stockChartModal').classList.add('active');
   loadStockHistory('1mo');
 }
@@ -4418,6 +4707,7 @@ function openStockChart(idx) {
 function closeStockChart() {
   document.getElementById('stockChartModal').classList.remove('active');
   _stockChartIdx = null;
+  _stockChartPayload = null;
 }
 
 async function loadStockHistory(range) {
@@ -4430,8 +4720,13 @@ async function loadStockHistory(range) {
   });
   const area = document.getElementById('stockChartArea');
   const stats = document.getElementById('stockChartStats');
+  const legend = document.getElementById('stockChartLegend');
+  const taPanel = document.getElementById('stockTaPanel');
   area.innerHTML = '<div class="stock-chart-loading">Yükleniyor…</div>';
   stats.style.display = 'none';
+  legend.style.display = 'none';
+  taPanel.style.display = 'none';
+  document.getElementById('stockTaAiResult').style.display = 'none';
   try {
     const ySymbol = w.ySymbol || legacyYSymbol(w);
     const token = window._supa ? (await window._supa.auth.getSession()).data.session?.access_token : null;
@@ -4447,23 +4742,810 @@ async function loadStockHistory(range) {
     }
     const j = await r.json();
     if (!j.closes || j.closes.length < 2) throw new Error('yetersiz veri');
-    area.innerHTML = lineChart(j.closes, j.changePct != null && j.changePct < 0);
+    const ta = computeStockTA(j);
+    _stockChartPayload = { j, ta, symbol: w.symbol, range };
+    redrawStockChart();
+    legend.style.display = ta.sma20 != null ? 'flex' : 'none';
     const cur = j.currency || w.currency || '';
     const dir = j.changePct == null ? 'flat' : (j.changePct > 0 ? 'up' : (j.changePct < 0 ? 'down' : 'flat'));
     const ds = j.changePct == null ? '' : (j.changePct > 0 ? '+' : '');
-    const rangeLabel = { '1mo': '1 ay', '3mo': '3 ay', '1y': '1 yıl' }[range] || range;
+    const rangeLabel = { '1mo': '1 ay', '3mo': '3 ay', '6mo': '6 ay', '1y': '1 yıl' }[range] || range;
     stats.style.display = 'flex';
     stats.innerHTML = `
       <span>Min <b>${formatStockPrice(j.min)} ${escapeHtml(cur)}</b></span>
       <span class="${dir}" style="color:${dir==='up'?'#34c759':dir==='down'?'#ef4444':'var(--text-muted)'};">${rangeLabel}: <b>${ds}${(j.changePct||0).toFixed(2)}%</b></span>
       <span>Max <b>${formatStockPrice(j.max)} ${escapeHtml(cur)}</b></span>
     `;
+    // TA paneli: sadece hisselerde (BIST/ABD) göster — döviz/kripto'da boş bırak
+    const taOk = TA_MARKETS.has(w.market || 'bist');
+    if (taOk) {
+      renderStockTA(ta, cur);
+      taPanel.style.display = 'block';
+      document.getElementById('stockTaAiBtn').disabled = false;
+    } else {
+      taPanel.style.display = 'none';
+    }
   } catch (e) {
     area.innerHTML = `<div class="stock-chart-loading">⚠️ ${escapeHtml(e.message)}</div>`;
   }
 }
 
-// Daha büyük SVG line chart — area fill + line. Mini grafiğin "ağabey" versiyonu.
+// Chart mode (Çizgi / Mum) — payload aynı, sadece yeniden çiz
+function setChartMode(mode) {
+  if (mode !== 'line' && mode !== 'candle') return;
+  _stockChartMode = mode;
+  document.querySelectorAll('#stockChartModes button[data-mode]').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  redrawStockChart();
+}
+
+// Fibonacci geri çekilme overlay toggle
+function toggleFib() {
+  _stockChartFib = !_stockChartFib;
+  const btn = document.getElementById('stockChartFibBtn');
+  if (btn) btn.classList.toggle('fib-on', _stockChartFib);
+  redrawStockChart();
+}
+
+// Payload'tan yeniden çiz — mode + fib state'ine göre
+function redrawStockChart() {
+  if (!_stockChartPayload) return;
+  const { j, ta } = _stockChartPayload;
+  const area = document.getElementById('stockChartArea');
+  const fib = _stockChartFib ? computeFibLevels(j) : null;
+  if (_stockChartMode === 'candle' && j.opens && j.highs && j.lows) {
+    area.innerHTML = candleChartTA(j, ta, fib);
+  } else {
+    area.innerHTML = lineChartTA(j.closes, ta, fib);
+  }
+}
+
+// Fibonacci geri çekilme seviyeleri — trend yönüne göre
+// Yukarı trend: 0% = en yüksek, 100% = en düşük (zirveden geri çekilme)
+// Aşağı trend: 0% = en düşük, 100% = en yüksek (dipten geri yükselme)
+function computeFibLevels(j) {
+  const closes = j.closes || [];
+  if (closes.length < 5) return null;
+  const highs = (j.highs || closes).filter(v => v != null);
+  const lows = (j.lows || closes).filter(v => v != null);
+  if (!highs.length || !lows.length) return null;
+  const high = Math.max(...highs);
+  const low = Math.min(...lows);
+  if (high <= low) return null;
+  const isUp = closes[closes.length - 1] >= closes[0];
+  const ratios = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+  const range = high - low;
+  return {
+    isUp, high, low,
+    levels: ratios.map(r => ({
+      ratio: r,
+      label: (r * 100).toFixed(1).replace(/\.0$/, '') + '%',
+      price: Math.round((isUp ? high - range * r : low + range * r) * 100) / 100,
+    })),
+  };
+}
+
+// ——— Teknik analiz hesapları (saf JS, harici lib yok) ———
+function taSma(arr, period) {
+  if (!arr || arr.length < period) return null;
+  let s = 0;
+  for (let i = arr.length - period; i < arr.length; i++) s += arr[i];
+  return Math.round((s / period) * 100) / 100;
+}
+
+function taSmaSeries(arr, period) {
+  const out = new Array(arr.length).fill(null);
+  for (let i = period - 1; i < arr.length; i++) {
+    let s = 0;
+    for (let j = i - period + 1; j <= i; j++) s += arr[j];
+    out[i] = s / period;
+  }
+  return out;
+}
+
+function taEmaSeries(arr, period) {
+  const out = new Array(arr.length).fill(null);
+  if (arr.length < period) return out;
+  let sum = 0;
+  for (let i = 0; i < period; i++) sum += arr[i];
+  let ema = sum / period;
+  out[period - 1] = ema;
+  const k = 2 / (period + 1);
+  for (let i = period; i < arr.length; i++) {
+    ema = arr[i] * k + ema * (1 - k);
+    out[i] = ema;
+  }
+  return out;
+}
+
+function taRsi(closes, period = 14) {
+  if (closes.length < period + 1) return null;
+  let avgGain = 0, avgLoss = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = closes[i] - closes[i - 1];
+    if (d >= 0) avgGain += d; else avgLoss -= d;
+  }
+  avgGain /= period; avgLoss /= period;
+  for (let i = period + 1; i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1];
+    avgGain = (avgGain * (period - 1) + (d > 0 ? d : 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + (d < 0 ? -d : 0)) / period;
+  }
+  if (avgLoss === 0) return 100;
+  return Math.round((100 - 100 / (1 + avgGain / avgLoss)) * 10) / 10;
+}
+
+function taMacd(closes) {
+  if (closes.length < 35) return null;
+  const e12 = taEmaSeries(closes, 12);
+  const e26 = taEmaSeries(closes, 26);
+  const macdLine = closes.map((_, i) => (e12[i] != null && e26[i] != null) ? e12[i] - e26[i] : null);
+  const macdVals = macdLine.filter(v => v != null);
+  if (macdVals.length < 9) return null;
+  const sigSeries = taEmaSeries(macdVals, 9);
+  const line = macdVals[macdVals.length - 1];
+  const signal = sigSeries[sigSeries.length - 1];
+  if (line == null || signal == null) return null;
+  return {
+    line: Math.round(line * 100) / 100,
+    signal: Math.round(signal * 100) / 100,
+    histogram: Math.round((line - signal) * 100) / 100,
+  };
+}
+
+function taBollinger(closes, period = 20, mult = 2) {
+  const mid = taSma(closes, period);
+  if (mid == null) return null;
+  const slice = closes.slice(-period);
+  const variance = slice.reduce((a, v) => a + (v - mid) ** 2, 0) / period;
+  const std = Math.sqrt(variance);
+  return {
+    mid,
+    upper: Math.round((mid + mult * std) * 100) / 100,
+    lower: Math.round((mid - mult * std) * 100) / 100,
+  };
+}
+
+function taAtrPct(highs, lows, closes, period = 14) {
+  if (closes.length < period + 1) return null;
+  const trs = [];
+  for (let i = 1; i < closes.length; i++) {
+    const h = highs[i] ?? closes[i];
+    const l = lows[i] ?? closes[i];
+    const prev = closes[i - 1];
+    trs.push(Math.max(h - l, Math.abs(h - prev), Math.abs(l - prev)));
+  }
+  if (trs.length < period) return null;
+  let atr = trs.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < trs.length; i++) {
+    atr = (atr * (period - 1) + trs[i]) / period;
+  }
+  const last = closes[closes.length - 1];
+  return last > 0 ? Math.round((atr / last) * 10000) / 100 : null;
+}
+
+// ——— Yeni indikatörler (Haz 13) ———
+// Stochastic %K (lookback) + %D (k SMA) — momentum osilatörü, RSI'a alternatif
+// %K = ((C - LL) / (HH - LL)) * 100 — son lookback periyodu içinde fiyatın konumu
+function taStoch(highs, lows, closes, kPeriod = 14, dPeriod = 3) {
+  if (closes.length < kPeriod + dPeriod) return null;
+  const kArr = [];
+  for (let i = kPeriod - 1; i < closes.length; i++) {
+    const hs = highs.slice(i - kPeriod + 1, i + 1).filter(v => v != null);
+    const ls = lows.slice(i - kPeriod + 1, i + 1).filter(v => v != null);
+    if (!hs.length || !ls.length) { kArr.push(null); continue; }
+    const hh = Math.max(...hs), ll = Math.min(...ls), c = closes[i];
+    kArr.push(hh === ll ? 50 : ((c - ll) / (hh - ll)) * 100);
+  }
+  const kLast = kArr[kArr.length - 1];
+  const kValid = kArr.slice(-dPeriod).filter(v => v != null);
+  if (kLast == null || kValid.length < dPeriod) return null;
+  const dLast = kValid.reduce((a, b) => a + b, 0) / kValid.length;
+  return { k: Math.round(kLast * 10) / 10, d: Math.round(dLast * 10) / 10 };
+}
+
+// ADX (14) — trend gücü. <20 trendsiz/yatay, 20-25 zayıf, 25-50 güçlü, >50 çok güçlü trend.
+// +DI / -DI yön sinyalleri kullanılır ama gücün netliği ADX'tir.
+function taAdx(highs, lows, closes, period = 14) {
+  if (closes.length < period * 2 + 1) return null;
+  const tr = [], plusDM = [], minusDM = [];
+  for (let i = 1; i < closes.length; i++) {
+    const h = highs[i], l = lows[i], ph = highs[i - 1], pl = lows[i - 1], pc = closes[i - 1];
+    if ([h, l, ph, pl, pc].some(v => v == null)) { tr.push(0); plusDM.push(0); minusDM.push(0); continue; }
+    tr.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
+    const up = h - ph, dn = pl - l;
+    plusDM.push(up > dn && up > 0 ? up : 0);
+    minusDM.push(dn > up && dn > 0 ? dn : 0);
+  }
+  if (tr.length < period * 2) return null;
+  let atr = tr.slice(0, period).reduce((a, b) => a + b, 0);
+  let pSum = plusDM.slice(0, period).reduce((a, b) => a + b, 0);
+  let mSum = minusDM.slice(0, period).reduce((a, b) => a + b, 0);
+  const dxArr = [];
+  for (let i = period; i < tr.length; i++) {
+    atr = atr - atr / period + tr[i];
+    pSum = pSum - pSum / period + plusDM[i];
+    mSum = mSum - mSum / period + minusDM[i];
+    if (atr <= 0) { dxArr.push(0); continue; }
+    const pdi = (pSum / atr) * 100;
+    const mdi = (mSum / atr) * 100;
+    const sum = pdi + mdi;
+    dxArr.push(sum > 0 ? (Math.abs(pdi - mdi) / sum) * 100 : 0);
+  }
+  if (dxArr.length < period) return null;
+  let adx = dxArr.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < dxArr.length; i++) {
+    adx = (adx * (period - 1) + dxArr[i]) / period;
+  }
+  return Math.round(adx * 10) / 10;
+}
+
+// OBV (On-Balance Volume) — kümülatif hacim, fiyatla aynı yönde olmalı (diverjans uyarısı)
+// Sadece son değeri değil, son 10 vs önceki 10 ortalamasını kıyaslayıp trend etiketi de döner.
+function taObv(closes, volumes) {
+  if (!volumes || volumes.length !== closes.length || closes.length < 5) return null;
+  let obv = 0;
+  const series = [0];
+  for (let i = 1; i < closes.length; i++) {
+    const v = volumes[i] != null && isFinite(volumes[i]) ? volumes[i] : 0;
+    if (closes[i] > closes[i - 1]) obv += v;
+    else if (closes[i] < closes[i - 1]) obv -= v;
+    series.push(obv);
+  }
+  const tail = series.slice(-10), head = series.slice(-20, -10);
+  let trend = 'belirsiz';
+  if (tail.length >= 5 && head.length >= 5) {
+    const t = tail.reduce((a, b) => a + b, 0) / tail.length;
+    const h = head.reduce((a, b) => a + b, 0) / head.length;
+    const abs = Math.max(Math.abs(t), Math.abs(h), 1);
+    const diff = (t - h) / abs;
+    if (diff > 0.05) trend = 'yukarı';
+    else if (diff < -0.05) trend = 'aşağı';
+    else trend = 'yatay';
+  }
+  return { value: Math.round(obv), trend };
+}
+
+// Klasik Pivot Points — son tam günün H/L/C'sinden bugünün PP/R1/R2/S1/S2'si
+function taPivots(highs, lows, closes) {
+  const i = closes.length - 2;  // son tam gün (son index = bugün, oluşum dünden gelir)
+  if (i < 0) return null;
+  const h = highs[i], l = lows[i], c = closes[i];
+  if (h == null || l == null || c == null) return null;
+  const pp = (h + l + c) / 3;
+  const round = v => Math.round(v * 100) / 100;
+  return {
+    pp: round(pp),
+    r1: round(2 * pp - l),
+    s1: round(2 * pp - h),
+    r2: round(pp + (h - l)),
+    s2: round(pp - (h - l)),
+  };
+}
+
+function taSupportResistance(closes, highs, lows, lookback = 20) {
+  const n = Math.min(lookback, closes.length);
+  const cSlice = closes.slice(-n);
+  const hSlice = (highs && highs.length >= n) ? highs.slice(-n) : cSlice;
+  const lSlice = (lows && lows.length >= n) ? lows.slice(-n) : cSlice;
+  return {
+    support: Math.round(Math.min(...lSlice.filter(v => v != null)) * 100) / 100,
+    resistance: Math.round(Math.max(...hSlice.filter(v => v != null)) * 100) / 100,
+  };
+}
+
+function taTrend(closes) {
+  if (closes.length < 5) return 'belirsiz';
+  const recent = closes.slice(-Math.min(10, closes.length));
+  const first = recent[0], last = recent[recent.length - 1];
+  const chg = first > 0 ? ((last - first) / first) * 100 : 0;
+  if (chg > 2) return 'yukarı';
+  if (chg < -2) return 'aşağı';
+  return 'yatay';
+}
+
+function taRsiZone(rsi) {
+  if (rsi == null) return '—';
+  if (rsi >= 70) return 'aşırı alım bölgesi';
+  if (rsi <= 30) return 'aşırı satım bölgesi';
+  return 'nötr bölge';
+}
+
+function computeStockTA(j) {
+  const closes = j.closes || [];
+  const highs = j.highs || closes;
+  const lows = j.lows || closes;
+  const volumes = j.volumes || [];
+  const current = closes[closes.length - 1];
+  const sma20 = taSma(closes, 20);
+  const sma50 = taSma(closes, 50);
+  // EMA9 / EMA21 — kısa vade hızlı tepkili ortalamalar (trader klasiği)
+  const ema9Series = taEmaSeries(closes, 9);
+  const ema21Series = taEmaSeries(closes, 21);
+  const ema9 = ema9Series.length ? ema9Series[ema9Series.length - 1] : null;
+  const ema21 = ema21Series.length ? ema21Series[ema21Series.length - 1] : null;
+  const rsi = taRsi(closes, 14);
+  const macd = taMacd(closes);
+  const bb = taBollinger(closes, 20, 2);
+  const sr = taSupportResistance(closes, highs, lows, 20);
+  const atrPct = taAtrPct(highs, lows, closes, 14);
+  const stoch = taStoch(highs, lows, closes, 14, 3);
+  const adx = taAdx(highs, lows, closes, 14);
+  const obv = taObv(closes, volumes);
+  const pivots = taPivots(highs, lows, closes);
+  let volRatio = null;
+  if (volumes.length >= 10) {
+    const valid = volumes.filter(v => v != null && v > 0);
+    if (valid.length >= 5) {
+      const avg = valid.slice(0, -1).reduce((a, b) => a + b, 0) / (valid.length - 1);
+      const last = valid[valid.length - 1];
+      if (avg > 0) volRatio = Math.round((last / avg) * 100) / 100;
+    }
+  }
+  let recentChange7d = null;
+  if (closes.length >= 8) {
+    const prev = closes[closes.length - 8];
+    if (prev > 0) recentChange7d = Math.round(((current - prev) / prev) * 10000) / 100;
+  }
+  let bbPosition = '—';
+  if (bb && current != null && bb.upper > bb.lower) {
+    const pct = ((current - bb.lower) / (bb.upper - bb.lower)) * 100;
+    if (pct >= 85) bbPosition = 'üst banda yakın';
+    else if (pct <= 15) bbPosition = 'alt banda yakın';
+    else bbPosition = 'orta bölge';
+  }
+  let priceVsSma20 = '—';
+  if (sma20 && current) {
+    const d = ((current - sma20) / sma20) * 100;
+    priceVsSma20 = (d >= 0 ? '+' : '') + d.toFixed(1) + '%';
+  }
+  // Stochastic + ADX zone etiketleri
+  const stochZone = stoch == null ? '—' : (stoch.k >= 80 ? 'aşırı alım' : stoch.k <= 20 ? 'aşırı satım' : 'nötr');
+  const adxZone = adx == null ? '—' : (adx >= 50 ? 'çok güçlü trend' : adx >= 25 ? 'güçlü trend' : adx >= 20 ? 'zayıf trend' : 'yatay/trendsiz');
+  // Pivot konumu — fiyat hangi pivot seviyesinde
+  let pivotZone = '—';
+  if (pivots && current != null) {
+    if (current >= pivots.r2) pivotZone = 'R2 üstünde';
+    else if (current >= pivots.r1) pivotZone = 'R1-R2 arası';
+    else if (current >= pivots.pp) pivotZone = 'PP-R1 arası';
+    else if (current >= pivots.s1) pivotZone = 'S1-PP arası';
+    else if (current >= pivots.s2) pivotZone = 'S2-S1 arası';
+    else pivotZone = 'S2 altında';
+  }
+  const sma20Series = taSmaSeries(closes, 20);
+  const sma50Series = taSmaSeries(closes, 50);
+  const trend = taTrend(closes);
+  const signals = buildTacticalSignals({
+    current, sma20, sma50, ema9, ema21, rsi, macd, bb, bbPosition, volRatio, sr, trend,
+    stoch, stochZone, adx, adxZone, obv, pivots, pivotZone,
+  });
+  return {
+    current, sma20, sma50, ema9, ema21, rsi, rsiZone: taRsiZone(rsi), macd, bb, sr, atrPct, volRatio,
+    stoch, stochZone, adx, adxZone, obv, pivots, pivotZone,
+    trend, bbPosition, priceVsSma20, recentChange7d,
+    sma20Series, sma50Series, ema9Series, ema21Series, signals,
+    changePct: j.changePct, min: j.min, max: j.max,
+  };
+}
+
+function buildTacticalSignals(ta) {
+  const out = [];
+  if (ta.rsi != null) {
+    if (ta.rsi >= 70) out.push(`RSI ${ta.rsi} — aşırı alım bölgesinde`);
+    else if (ta.rsi <= 30) out.push(`RSI ${ta.rsi} — aşırı satım bölgesinde`);
+    else out.push(`RSI ${ta.rsi} — nötr bölgede`);
+  }
+  if (ta.stoch != null) {
+    out.push(`Stochastic %K ${ta.stoch.k} / %D ${ta.stoch.d} — ${ta.stochZone}`);
+  }
+  if (ta.adx != null) {
+    out.push(`ADX ${ta.adx} — ${ta.adxZone}`);
+  }
+  if (ta.sma20 != null && ta.sma50 != null) {
+    if (ta.sma20 > ta.sma50) out.push('SMA20 > SMA50 — kısa vade ortalama uzun vadenin üstünde (altın kesişim bölgesi)');
+    else if (ta.sma20 < ta.sma50) out.push('SMA20 < SMA50 — kısa vade ortalama uzun vadenin altında (ölüm kesişim bölgesi)');
+  } else if (ta.sma20 != null && ta.current) {
+    out.push(ta.current >= ta.sma20 ? 'Fiyat SMA20 üzerinde' : 'Fiyat SMA20 altında');
+  }
+  if (ta.ema9 != null && ta.ema21 != null) {
+    out.push(ta.ema9 > ta.ema21
+      ? 'EMA9 > EMA21 — kısa vade momentum yukarı eğilimli'
+      : 'EMA9 < EMA21 — kısa vade momentum aşağı eğilimli');
+  }
+  if (ta.macd) {
+    out.push(ta.macd.histogram >= 0
+      ? `MACD histogram pozitif (${ta.macd.histogram}) — momentum yukarı eğilimli`
+      : `MACD histogram negatif (${ta.macd.histogram}) — momentum aşağı eğilimli`);
+  }
+  if (ta.bb && ta.current) {
+    out.push(`Bollinger: fiyat ${ta.bbPosition}`);
+  }
+  if (ta.obv && ta.obv.trend && ta.obv.trend !== 'belirsiz') {
+    out.push(`OBV hacim akışı ${ta.obv.trend} eğilimde`);
+  }
+  if (ta.volRatio != null && ta.volRatio >= 1.4) {
+    out.push(`Hacim ortalamanın ${ta.volRatio}× üzerinde — hareketli seans`);
+  } else if (ta.volRatio != null && ta.volRatio <= 0.6) {
+    out.push(`Hacim düşük (${ta.volRatio}× ortalama) — sakin seans`);
+  }
+  if (ta.pivots && ta.current && ta.pivotZone && ta.pivotZone !== '—') {
+    out.push(`Pivot: fiyat ${ta.pivotZone} (PP ${ta.pivots.pp})`);
+  }
+  if (ta.sr && ta.current) {
+    const nearSup = ta.sr.support && Math.abs(ta.current - ta.sr.support) / ta.current < 0.02;
+    const nearRes = ta.sr.resistance && Math.abs(ta.current - ta.sr.resistance) / ta.current < 0.02;
+    if (nearSup) out.push(`Destek ${ta.sr.support} seviyesine yakın`);
+    if (nearRes) out.push(`Direnç ${ta.sr.resistance} seviyesine yakın`);
+  }
+  return out.slice(0, 10);
+}
+
+function renderStockTA(ta, cur) {
+  const grid = document.getElementById('stockTaGrid');
+  const sigEl = document.getElementById('stockTaSignals');
+  const fmt = v => v == null ? '—' : (typeof v === 'number' ? formatStockPrice(v) : v);
+  const emaCross = ta.ema9 != null && ta.ema21 != null
+    ? (ta.ema9 > ta.ema21 ? 'EMA9 ↑' : 'EMA9 ↓')
+    : '—';
+  const stochCls = ta.stoch == null ? '' : (ta.stoch.k >= 80 ? 'warn' : ta.stoch.k <= 20 ? 'down' : '');
+  const adxCls = ta.adx == null ? '' : (ta.adx >= 25 ? 'up' : ta.adx >= 20 ? 'warn' : '');
+  const obvCls = ta.obv == null ? '' : (ta.obv.trend === 'yukarı' ? 'up' : ta.obv.trend === 'aşağı' ? 'down' : '');
+  const cells = [
+    { lbl: 'RSI (14)', val: ta.rsi != null ? ta.rsi.toFixed(1) : '—', sub: ta.rsiZone, cls: ta.rsi != null ? (ta.rsi >= 70 ? 'warn' : (ta.rsi <= 30 ? 'down' : '')) : '' },
+    { lbl: 'Stoch %K/%D', val: ta.stoch ? `${ta.stoch.k} / ${ta.stoch.d}` : '—', sub: ta.stochZone, cls: stochCls },
+    { lbl: 'ADX (14)', val: ta.adx != null ? ta.adx.toFixed(1) : '—', sub: ta.adxZone, cls: adxCls },
+    { lbl: 'SMA 20', val: fmt(ta.sma20), sub: ta.priceVsSma20, cls: ta.sma20 != null && ta.current >= ta.sma20 ? 'up' : (ta.sma20 != null ? 'down' : '') },
+    { lbl: 'SMA 50', val: fmt(ta.sma50), sub: cur, cls: '' },
+    { lbl: 'EMA 9 / 21', val: ta.ema9 != null ? fmt(Math.round(ta.ema9 * 100) / 100) : '—', sub: emaCross, cls: ta.ema9 != null && ta.ema21 != null ? (ta.ema9 > ta.ema21 ? 'up' : 'down') : '' },
+    { lbl: 'MACD', val: ta.macd ? ta.macd.histogram.toFixed(2) : '—', sub: ta.macd ? `çizgi ${ta.macd.line}` : 'yetersiz veri', cls: ta.macd && ta.macd.histogram >= 0 ? 'up' : 'down' },
+    { lbl: 'Bollinger', val: ta.bb ? fmt(ta.bb.mid) : '—', sub: ta.bbPosition, cls: '' },
+    { lbl: 'ATR %', val: ta.atrPct != null ? ta.atrPct + '%' : '—', sub: 'volatilite', cls: ta.atrPct > 3 ? 'warn' : '' },
+    { lbl: 'OBV', val: ta.obv ? ta.obv.trend : '—', sub: 'hacim akışı', cls: obvCls },
+    { lbl: 'Pivot PP', val: ta.pivots ? fmt(ta.pivots.pp) : '—', sub: ta.pivotZone, cls: '' },
+    { lbl: 'R1 / S1', val: ta.pivots ? `${fmt(ta.pivots.r1)} / ${fmt(ta.pivots.s1)}` : '—', sub: 'pivot', cls: '' },
+    { lbl: 'Destek', val: fmt(ta.sr?.support), sub: '20 periyot', cls: '' },
+    { lbl: 'Direnç', val: fmt(ta.sr?.resistance), sub: '20 periyot', cls: '' },
+    { lbl: 'Hacim', val: ta.volRatio != null ? ta.volRatio + '×' : '—', sub: 'son/ort', cls: ta.volRatio >= 1.4 ? 'warn' : '' },
+  ];
+  grid.innerHTML = cells.map(c => `
+    <div class="stock-ta-cell ${c.cls}">
+      <div class="lbl">${c.lbl}</div>
+      <div class="val">${escapeHtml(String(c.val))}</div>
+      <div class="sub">${escapeHtml(String(c.sub || ''))}</div>
+    </div>
+  `).join('');
+  sigEl.innerHTML = (ta.signals || []).map(s => {
+    const cls = /üstünde|pozitif|altın|yukarı|aşırı alım/i.test(s) ? 'up'
+      : /altında|negatif|ölüm|aşağı|aşırı satım/i.test(s) ? 'down'
+      : /Hacim ortalamanın|üst banda|Direnç/i.test(s) ? 'warn' : '';
+    return `<span class="stock-ta-sig ${cls}">${escapeHtml(s)}</span>`;
+  }).join('') || '<span class="stock-ta-sig">Yeterli veri yok — 3 ay veya 6 ay dene</span>';
+}
+
+function buildStockAnalysisFacts(ta, j) {
+  return {
+    currency: j.currency || '',
+    current: ta.current,
+    min: j.min,
+    max: j.max,
+    changePct: j.changePct ?? 0,
+    trend: ta.trend,
+    sma20: ta.sma20,
+    sma50: ta.sma50,
+    ema9: ta.ema9 != null ? Math.round(ta.ema9 * 100) / 100 : null,
+    ema21: ta.ema21 != null ? Math.round(ta.ema21 * 100) / 100 : null,
+    priceVsSma20: ta.priceVsSma20,
+    rsi: ta.rsi,
+    rsiZone: ta.rsiZone,
+    stochK: ta.stoch?.k ?? null,
+    stochD: ta.stoch?.d ?? null,
+    stochZone: ta.stochZone,
+    adx: ta.adx,
+    adxZone: ta.adxZone,
+    macdLine: ta.macd?.line ?? null,
+    macdSignal: ta.macd?.signal ?? null,
+    macdHist: ta.macd?.histogram ?? null,
+    bbLower: ta.bb?.lower ?? null,
+    bbMid: ta.bb?.mid ?? null,
+    bbUpper: ta.bb?.upper ?? null,
+    bbPosition: ta.bbPosition,
+    support: ta.sr?.support ?? null,
+    resistance: ta.sr?.resistance ?? null,
+    atrPct: ta.atrPct,
+    volRatio: ta.volRatio,
+    obvTrend: ta.obv?.trend ?? null,
+    pivotPP: ta.pivots?.pp ?? null,
+    pivotR1: ta.pivots?.r1 ?? null,
+    pivotS1: ta.pivots?.s1 ?? null,
+    pivotR2: ta.pivots?.r2 ?? null,
+    pivotS2: ta.pivots?.s2 ?? null,
+    pivotZone: ta.pivotZone,
+    recentChange7d: ta.recentChange7d,
+    signals: ta.signals || [],
+  };
+}
+
+async function aiStockAnalysis() {
+  if (!_stockChartPayload) return;
+  const btn = document.getElementById('stockTaAiBtn');
+  const resEl = document.getElementById('stockTaAiResult');
+  btn.disabled = true;
+  resEl.style.display = 'block';
+  resEl.textContent = '⏳ AI teknik yorum hazırlanıyor…';
+  try {
+    const token = window._supa ? (await window._supa.auth.getSession()).data.session?.access_token : null;
+    if (!token) throw new Error('giriş yapılmamış');
+    const facts = buildStockAnalysisFacts(_stockChartPayload.ta, _stockChartPayload.j);
+    const r = await fetch(STOCK_ANALYSIS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        symbol: _stockChartPayload.symbol,
+        range: _stockChartPayload.range,
+        facts,
+      }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `http ${r.status}`);
+    resEl.textContent = j.analysis || 'Yorum üretilemedi.';
+  } catch (e) {
+    resEl.textContent = '⚠️ ' + e.message;
+  }
+  btn.disabled = false;
+}
+
+// ============================================================
+// 📊 Portföy teknik özet — pozisyonlu hisselerin TA snapshot'u + AI taktik
+// ============================================================
+let _pfTechItems = [];   // [{symbol, range, facts}] — AI'a yollanacak hazır liste
+
+function closePfTechModal() {
+  document.getElementById('pfTechModal').classList.remove('active');
+  _pfTechItems = [];
+}
+
+async function openPfTechModal() {
+  const positions = (data.watchlist || []).filter(w =>
+    w.qty != null && w.qty > 0 && w.cost != null && TA_MARKETS.has(w.market || 'bist')
+  );
+  const listEl = document.getElementById('pfTechList');
+  const statusEl = document.getElementById('pfTechStatus');
+  const aiBtn = document.getElementById('pfTechAiBtn');
+  const aiRes = document.getElementById('pfTechAiResult');
+  _pfTechItems = [];
+  aiBtn.disabled = true;
+  aiRes.style.display = 'none';
+  aiRes.textContent = '';
+  listEl.innerHTML = '';
+  if (positions.length === 0) {
+    statusEl.textContent = 'Teknik analiz için pozisyon (adet + maliyet girilmiş BIST/ABD hissesi) gerekli.';
+    document.getElementById('pfTechModal').classList.add('active');
+    return;
+  }
+  statusEl.textContent = `${positions.length} hisse için 3 aylık veri çekiliyor…`;
+  document.getElementById('pfTechModal').classList.add('active');
+
+  const token = window._supa ? (await window._supa.auth.getSession()).data.session?.access_token : null;
+  if (!token) {
+    statusEl.textContent = '⚠️ Önce Supabase girişi gerekli.';
+    return;
+  }
+
+  const range = '3mo';
+  // Paralel TA çekimi — her hisse için /stock-history + computeStockTA
+  const results = await Promise.all(positions.map(async w => {
+    const ySymbol = w.ySymbol || legacyYSymbol(w);
+    try {
+      const r = await fetch(STOCK_HISTORY_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ ySymbol, range }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        return { w, error: e.error || `http ${r.status}` };
+      }
+      const j = await r.json();
+      if (!j.closes || j.closes.length < 5) return { w, error: 'yetersiz veri' };
+      const ta = computeStockTA(j);
+      const facts = buildStockAnalysisFacts(ta, j);
+      return { w, j, ta, facts };
+    } catch (e) {
+      return { w, error: e.message };
+    }
+  }));
+
+  // Render satırlar + items
+  listEl.innerHTML = results.map(rs => {
+    const w = rs.w;
+    if (rs.error) {
+      return `<div class="pf-tech-row err">
+        <div class="pf-tech-sym">${escapeHtml(w.symbol)} <span class="px">—</span></div>
+        <div class="pf-tech-badges"><span class="pf-tech-badge">⚠️ ${escapeHtml(rs.error)}</span></div>
+      </div>`;
+    }
+    const ta = rs.ta;
+    const dir = ta.trend === 'yukarı' ? 'up' : ta.trend === 'aşağı' ? 'down' : 'flat';
+    const badges = [];
+    if (ta.rsi != null) {
+      const cls = ta.rsi >= 70 ? 'warn' : ta.rsi <= 30 ? 'down' : '';
+      badges.push(`<span class="pf-tech-badge ${cls}">RSI ${ta.rsi.toFixed(1)}</span>`);
+    }
+    if (ta.sma20 != null && ta.current != null) {
+      const above = ta.current >= ta.sma20;
+      badges.push(`<span class="pf-tech-badge ${above ? 'up' : 'down'}">SMA20 ${above ? '↑' : '↓'}</span>`);
+    }
+    if (ta.sma20 != null && ta.sma50 != null) {
+      const cross = ta.sma20 > ta.sma50;
+      badges.push(`<span class="pf-tech-badge ${cross ? 'up' : 'down'}">SMA20${cross ? '>' : '<'}SMA50</span>`);
+    }
+    if (ta.macd) {
+      badges.push(`<span class="pf-tech-badge ${ta.macd.histogram >= 0 ? 'up' : 'down'}">MACD ${ta.macd.histogram >= 0 ? '+' : ''}${ta.macd.histogram}</span>`);
+    }
+    if (ta.adx != null) {
+      const cls = ta.adx >= 25 ? 'up' : (ta.adx >= 20 ? 'warn' : '');
+      badges.push(`<span class="pf-tech-badge ${cls}">ADX ${ta.adx.toFixed(0)}</span>`);
+    }
+    if (ta.stoch != null) {
+      const sCls = ta.stoch.k >= 80 ? 'warn' : ta.stoch.k <= 20 ? 'down' : '';
+      badges.push(`<span class="pf-tech-badge ${sCls}">Stoch ${ta.stoch.k.toFixed(0)}</span>`);
+    }
+    if (ta.bbPosition && ta.bbPosition !== '—') {
+      const bbCls = ta.bbPosition.includes('üst') ? 'warn' : ta.bbPosition.includes('alt') ? 'down' : '';
+      badges.push(`<span class="pf-tech-badge ${bbCls}">BB: ${escapeHtml(ta.bbPosition)}</span>`);
+    }
+    badges.push(`<span class="pf-tech-badge">trend ${escapeHtml(ta.trend)}</span>`);
+    _pfTechItems.push({ symbol: w.symbol, range, facts: rs.facts });
+    return `<div class="pf-tech-row ${dir}">
+      <div class="pf-tech-sym">${escapeHtml(w.symbol)} <span class="px">${formatStockPrice(ta.current)} ${escapeHtml(rs.j.currency || w.currency || '')}</span></div>
+      <div class="pf-tech-badges">${badges.join('')}</div>
+    </div>`;
+  }).join('');
+
+  if (_pfTechItems.length === 0) {
+    statusEl.textContent = '⚠️ Hiçbir hisse için veri çekilemedi.';
+  } else {
+    statusEl.textContent = `${_pfTechItems.length} hisse için teknik özet hazır. AI taktik yorumu için butona bas 👇`;
+    aiBtn.disabled = false;
+  }
+}
+
+async function aiPortfolioTechnical() {
+  if (!_pfTechItems.length) return;
+  const btn = document.getElementById('pfTechAiBtn');
+  const resEl = document.getElementById('pfTechAiResult');
+  btn.disabled = true;
+  resEl.style.display = 'block';
+  resEl.textContent = '⏳ Aidan portföyünün teknik durumuna bakıyor…';
+  try {
+    const token = window._supa ? (await window._supa.auth.getSession()).data.session?.access_token : null;
+    if (!token) throw new Error('giriş yapılmamış');
+    const r = await fetch(PF_TECHNICAL_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ items: _pfTechItems }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `http ${r.status}`);
+    resEl.textContent = j.summary || 'Özet üretilemedi.';
+  } catch (e) {
+    resEl.textContent = '⚠️ ' + e.message;
+  }
+  btn.disabled = false;
+}
+
+// Grafik + SMA20/SMA50 overlay + opsiyonel Fibonacci seviyeleri
+function lineChartTA(values, ta, fib) {
+  if (!values || values.length < 2) return '';
+  const w = 420, h = 140, padX = 8, padY = 10;
+  const allVals = [...values];
+  if (ta.sma20Series) ta.sma20Series.forEach(v => { if (v != null) allVals.push(v); });
+  if (ta.sma50Series) ta.sma50Series.forEach(v => { if (v != null) allVals.push(v); });
+  if (fib) fib.levels.forEach(l => allVals.push(l.price));
+  const min = Math.min(...allVals), max = Math.max(...allVals);
+  const range = (max - min) || 1;
+  const toY = v => padY + (1 - (v - min) / range) * (h - 2 * padY);
+  const toXY = (v, i) => [padX + (i / (values.length - 1)) * (w - 2 * padX), toY(v)];
+  const pts = values.map((v, i) => toXY(v, i));
+  const line = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const area = line + ` L${pts[pts.length-1][0].toFixed(1)},${(h-padY).toFixed(1)} L${pts[0][0].toFixed(1)},${(h-padY).toFixed(1)} Z`;
+  const up = values[values.length - 1] >= values[0];
+  const color = up ? '#34c759' : '#ef4444';
+  const fillId = 'lc-fill-' + (up ? 'u' : 'd');
+  const seriesPath = (series, stroke, dash) => {
+    if (!series) return '';
+    let d = '';
+    for (let i = 0; i < series.length; i++) {
+      if (series[i] == null) continue;
+      const [x, y] = toXY(series[i], i);
+      d += (d ? ' L' : 'M') + x.toFixed(1) + ',' + y.toFixed(1);
+    }
+    if (!d) return '';
+    const dashAttr = dash ? ` stroke-dasharray="${dash}"` : '';
+    return `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-linecap="round"${dashAttr}/>`;
+  };
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+    <defs><linearGradient id="${fillId}" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="${color}" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+    </linearGradient></defs>
+    <path d="${area}" fill="url(#${fillId})" stroke="none"/>
+    ${fibOverlay(fib, padX, w, toY)}
+    ${seriesPath(ta.sma50Series, '#6463ff', '4,3')}
+    ${seriesPath(ta.sma20Series, '#ffc640', '')}
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+// Candlestick (mum) grafiği + SMA overlay + opsiyonel Fib — Yahoo OHLC verisinden
+function candleChartTA(j, ta, fib) {
+  const opens = j.opens || [], highs = j.highs || [], lows = j.lows || [], closes = j.closes || [];
+  if (closes.length < 2 || opens.length !== closes.length) return lineChartTA(closes, ta, fib);
+  const w = 420, h = 140, padX = 8, padY = 10;
+  const n = closes.length;
+  const allVals = [];
+  for (let i = 0; i < n; i++) {
+    if (highs[i] != null) allVals.push(highs[i]);
+    if (lows[i] != null) allVals.push(lows[i]);
+  }
+  if (ta.sma20Series) ta.sma20Series.forEach(v => { if (v != null) allVals.push(v); });
+  if (ta.sma50Series) ta.sma50Series.forEach(v => { if (v != null) allVals.push(v); });
+  if (fib) fib.levels.forEach(l => allVals.push(l.price));
+  const min = Math.min(...allVals), max = Math.max(...allVals);
+  const range = (max - min) || 1;
+  const toY = v => padY + (1 - (v - min) / range) * (h - 2 * padY);
+  const innerW = w - 2 * padX;
+  // Bar genişliği: dar — wick + body sığsın
+  const slot = innerW / n;
+  const bw = Math.max(1.2, Math.min(slot * 0.7, 9));
+  const xOf = i => padX + slot * (i + 0.5);
+  let candles = '';
+  for (let i = 0; i < n; i++) {
+    const o = opens[i], c = closes[i], hi = highs[i], lo = lows[i];
+    if (o == null || c == null || hi == null || lo == null) continue;
+    const x = xOf(i);
+    const up = c >= o;
+    const col = up ? '#34c759' : '#ef4444';
+    const yH = toY(hi), yL = toY(lo);
+    const yT = toY(Math.max(o, c)), yB = toY(Math.min(o, c));
+    const bodyH = Math.max(1, yB - yT);
+    candles += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${yH.toFixed(1)}" y2="${yL.toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
+    candles += `<rect x="${(x - bw / 2).toFixed(1)}" y="${yT.toFixed(1)}" width="${bw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}" opacity="${up ? 0.9 : 1}"/>`;
+  }
+  const seriesPath = (series, stroke, dash) => {
+    if (!series) return '';
+    let d = '';
+    for (let i = 0; i < series.length; i++) {
+      if (series[i] == null) continue;
+      const x = xOf(i), y = toY(series[i]);
+      d += (d ? ' L' : 'M') + x.toFixed(1) + ',' + y.toFixed(1);
+    }
+    if (!d) return '';
+    const dashAttr = dash ? ` stroke-dasharray="${dash}"` : '';
+    return `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-linecap="round"${dashAttr}/>`;
+  };
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+    ${fibOverlay(fib, padX, w, toY)}
+    ${candles}
+    ${seriesPath(ta.sma50Series, '#6463ff', '4,3')}
+    ${seriesPath(ta.sma20Series, '#ffc640', '')}
+  </svg>`;
+}
+
+// Fibonacci yatay seviye çizgileri + sağ köşede % etiketi — line/candle ikisinde de kullanılır
+function fibOverlay(fib, padX, w, toY) {
+  if (!fib) return '';
+  const palette = ['#9ca3af', '#ffc640', '#34c759', '#6463ff', '#a78bfa', '#ec4899', '#9ca3af'];
+  return fib.levels.map((lv, i) => {
+    const y = toY(lv.price);
+    const col = palette[i] || '#9ca3af';
+    return `<line x1="${padX}" x2="${w - padX}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${col}" stroke-width="0.6" stroke-dasharray="2,3" opacity="0.65"/>
+      <text x="${w - padX - 2}" y="${(y - 1.5).toFixed(1)}" text-anchor="end" fill="${col}" font-size="7" font-family="ui-monospace,Menlo,monospace" opacity="0.85">${lv.label}</text>`;
+  }).join('');
+}
+
+// Basit line chart (sparkline/portföy geçmişi için — TA overlay yok)
 function lineChart(values, isDown) {
   if (!values || values.length < 2) return '';
   const w = 420, h = 140, padX = 8, padY = 10;

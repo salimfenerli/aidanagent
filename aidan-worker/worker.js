@@ -2159,6 +2159,7 @@ async function handleStocksApi(request, env) {
 const STOCK_HISTORY_RANGES = {
   '1mo': { range: '1mo', interval: '1d' },
   '3mo': { range: '3mo', interval: '1d' },
+  '6mo': { range: '6mo', interval: '1d' },
   '1y':  { range: '1y',  interval: '1wk' },
 };
 
@@ -2197,16 +2198,28 @@ async function handleStockHistoryApi(request, env) {
     if (!res) return jsonCors({ error: 'veri yok' }, 404, cors);
 
     const ts = Array.isArray(res.timestamp) ? res.timestamp : [];
-    const closeArr = res.indicators && res.indicators.quote && res.indicators.quote[0] && res.indicators.quote[0].close;
-    const closes = Array.isArray(closeArr) ? closeArr : [];
+    const q = res.indicators && res.indicators.quote && res.indicators.quote[0] || {};
+    const closeArr = Array.isArray(q.close) ? q.close : [];
+    const openArr = Array.isArray(q.open) ? q.open : [];
+    const highArr = Array.isArray(q.high) ? q.high : [];
+    const lowArr = Array.isArray(q.low) ? q.low : [];
+    const volArr = Array.isArray(q.volume) ? q.volume : [];
     const meta = res.meta || {};
 
-    // null close değerleri (kapalı gün/tatil) atla — paralel index
+    // null close değerleri (kapalı gün/tatil) atla — OHLCV paralel index korunur
     const points = [];
     for (let i = 0; i < ts.length; i++) {
-      const c = closes[i];
+      const c = closeArr[i];
       if (c == null || !isFinite(c)) continue;
-      points.push({ t: ts[i], c: Math.round(c * 100) / 100 });
+      const round = v => (v != null && isFinite(v)) ? Math.round(v * 100) / 100 : null;
+      points.push({
+        t: ts[i],
+        c: round(c),
+        o: round(openArr[i]),
+        h: round(highArr[i]),
+        l: round(lowArr[i]),
+        v: (volArr[i] != null && isFinite(volArr[i])) ? Math.round(volArr[i]) : null,
+      });
     }
     if (points.length < 2) return jsonCors({ error: 'yetersiz veri' }, 404, cors);
 
@@ -2224,6 +2237,10 @@ async function handleStockHistoryApi(request, env) {
       currency: meta.currency || 'TRY',
       timestamps: points.map(p => p.t),
       closes: values,
+      opens: points.map(p => p.o),
+      highs: points.map(p => p.h),
+      lows: points.map(p => p.l),
+      volumes: points.map(p => p.v),
       min, max, first, last, changePct,
     }, 200, cors);
   } catch (e) {
@@ -2238,6 +2255,204 @@ async function handleStockHistoryApi(request, env) {
 // arkadaş /signup'a email+şifre+kod yollar → kod doğruysa Supabase auth'a kayıt + kodu used işaretle.
 // Service key olmadan da /invite/create çalışır (kodu kendi user'ı adına yazar),
 // /signup'da service key yoksa kullanılır mevcut Supabase auth signup endpoint'i.
+
+// 📈 AI teknik analiz — BETİMLEYİCİ (yatırım tavsiyesi DEĞİL).
+// PWA göstergeleri (SMA7/SMA30/volatilite/trend) hesaplar, AI sadece tarif eder.
+async function handleStockAnalysisApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
+
+  const symbol = String(body.symbol || '').trim().toUpperCase().slice(0, 20);
+  const range = String(body.range || '1mo').trim();
+  const facts = body.facts;
+  if (!symbol || !facts || typeof facts !== 'object') return jsonCors({ error: 'missing' }, 400, cors);
+
+  // User adı (settings.displayName)
+  let name = 'kanka';
+  try {
+    const session = await fetchUserDataForApi(env, user);
+    name = getUserDisplayName(session.data, user.email);
+  } catch {}
+
+  const rangeLabels = { '1mo': '1 ay', '3mo': '3 ay', '6mo': '6 ay', '1y': '1 yıl' };
+  const rangeLabel = rangeLabels[range] || range;
+  const currency = String(facts.currency || '').slice(0, 8);
+
+  const sysPrompt = `Sen Aidan'sın — ${name}'in asistanı. Sana bir hissenin teknik göstergeleri (PWA hesapladı) veriliyor. Görevin: SADECE BETİMLEYİCİ Türkçe teknik/taktik gözlem yaz. 5-8 cümle.
+
+✅ İZİN VERİLEN (tarafsız betimleme):
+- Trend yönü, volatilite, RSI/MACD/Bollinger BAND konumunu TARİF et (sayıları kullan)
+- SMA20 vs SMA50 ilişkisi, altın/ölüm kesişimi TERİMİNİ kullanabilirsin ama "al/sat sinyali" deme
+- Destek/direnç seviyelerini BİLGİ olarak söyle (tavsiye değil)
+- Hacim ortalamanın üstünde/altında betimlemesi
+- Taktik sinyaller listesini özetle (zaten nötr dilde verildi)
+- ${name}'e hitap
+
+🚫 MUTLAK YASAK:
+1. AL / SAT / TUT tavsiyesi
+2. Fiyat hedefi / gelecek tahmini ("yükselir", "düşer", "kırılır")
+3. Değer yargısı ("iyi fırsat", "riskli")
+4. Verilenin dışında sayı uydurma
+5. İngilizce
+
+✅ TON: deneyimli grafik okuyucu — gözlüyor, tarif ediyor, karar vermiyor.
+Son cümle: "Bu betimleyici bir gözlem — yatırım tavsiyesi değildir" (+ kısa 💜).`;
+
+  const signalsBlock = Array.isArray(facts.signals) && facts.signals.length
+    ? facts.signals.map(s => `- ${s}`).join('\n')
+    : '(yok)';
+
+  const userMsg = `📊 ${symbol} (${rangeLabel}) — teknik göstergeler:
+
+Fiyat: ${facts.current} ${currency} | Aralık: ${facts.min} → ${facts.max} | Değişim: ${facts.changePct >= 0 ? '+' : ''}${facts.changePct}%
+Trend: ${facts.trend} | ADX: ${facts.adx ?? '—'} (${facts.adxZone ?? '—'}) | Volatilite (ATR%): ${facts.atrPct ?? '—'}
+SMA20: ${facts.sma20 ?? '—'} | SMA50: ${facts.sma50 ?? '—'} | Fiyat/SMA20: ${facts.priceVsSma20 ?? '—'}
+EMA9: ${facts.ema9 ?? '—'} | EMA21: ${facts.ema21 ?? '—'} (kısa vade hızlı ortalamalar)
+RSI(14): ${facts.rsi ?? '—'} (${facts.rsiZone ?? '—'})
+Stochastic %K/%D: ${facts.stochK ?? '—'} / ${facts.stochD ?? '—'} (${facts.stochZone ?? '—'})
+MACD: çizgi ${facts.macdLine ?? '—'}, sinyal ${facts.macdSignal ?? '—'}, histogram ${facts.macdHist ?? '—'}
+Bollinger: alt ${facts.bbLower ?? '—'} | orta ${facts.bbMid ?? '—'} | üst ${facts.bbUpper ?? '—'} | konum ${facts.bbPosition ?? '—'}
+Pivot (klasik): PP ${facts.pivotPP ?? '—'} | R1 ${facts.pivotR1 ?? '—'} | S1 ${facts.pivotS1 ?? '—'} | R2 ${facts.pivotR2 ?? '—'} | S2 ${facts.pivotS2 ?? '—'} | konum ${facts.pivotZone ?? '—'}
+Destek (yakın): ${facts.support ?? '—'} | Direnç (yakın): ${facts.resistance ?? '—'}
+Hacim: son/ort ${facts.volRatio ?? '—'}× | OBV akışı: ${facts.obvTrend ?? '—'}
+${facts.recentChange7d != null ? `Son 7 periyot: ${facts.recentChange7d >= 0 ? '+' : ''}${facts.recentChange7d}%` : ''}
+
+Taktik gözlemler:
+${signalsBlock}
+
+Bu verileri 5-8 cümlelik tarafsız teknik özete dök. ADX'in trend gücünü, Stochastic'in RSI ile uyumunu/diverjansını, EMA9/21 kesişimini ve pivot konumunu özetle. Tavsiye YOK.`;
+
+  try {
+    const r = await env.AI.run(AI_MODEL, {
+      messages: [
+        { role: 'system', content: sysPrompt },
+        { role: 'user', content: userMsg },
+      ],
+      max_tokens: 400,
+      temperature: 0.4,
+    });
+    let analysis = (r.response || '').trim();
+    if (!analysis || /^i'?m sorry|^as an ai|your input/i.test(analysis)) {
+      analysis = `${name}, şu an analiz üretemedim. Grafiği ve sayıları yukarıda görebilirsin — yatırım tavsiyesi değildir.`;
+    }
+    return jsonCors({ analysis, symbol, range: rangeLabel }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
+// ============================================================
+// 📊 Portföy teknik özet — tüm pozisyonların TA snapshot'unu betimleyici özetler
+// PWA her hisse için kendi /stock-history + computeStockTA çağırır, sonuçları (facts)
+// burada toplar → Llama'ya verir. Tek hisse /stock-analysis ile aynı no-advice kuralı.
+// ============================================================
+async function handlePortfolioTechnicalApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
+
+  const items = Array.isArray(body.items) ? body.items : null;
+  if (!items || items.length === 0) return jsonCors({ error: 'no items' }, 400, cors);
+
+  let name = 'kanka';
+  try {
+    const session = await fetchUserDataForApi(env, user);
+    name = getUserDisplayName(session.data, user.email);
+  } catch {}
+
+  // Her pozisyon için kısa özet satırı yaz — zenginleştirilmiş indikatörlerle
+  const lines = items.slice(0, 20).map(it => {
+    const sym = String(it.symbol || '').toUpperCase().slice(0, 12);
+    const f = it.facts || {};
+    const parts = [
+      `Fiyat ${f.current ?? '—'} ${f.currency || ''}`.trim(),
+      `aralık ${f.changePct >= 0 ? '+' : ''}${f.changePct ?? '—'}%`,
+      `trend ${f.trend || '—'}`,
+      f.adx != null ? `ADX ${f.adx} (${f.adxZone || '—'})` : null,
+      `RSI ${f.rsi ?? '—'} (${f.rsiZone || '—'})`,
+      f.stochK != null ? `Stoch %K ${f.stochK} (${f.stochZone || '—'})` : null,
+      f.sma20 != null && f.sma50 != null ? `SMA20/50 ${f.sma20 > f.sma50 ? '↑' : '↓'}` : null,
+      f.ema9 != null && f.ema21 != null ? `EMA9/21 ${f.ema9 > f.ema21 ? '↑' : '↓'}` : null,
+      f.macdHist != null ? `MACD hist ${f.macdHist >= 0 ? '+' : ''}${f.macdHist}` : null,
+      f.bbPosition ? `BB: ${f.bbPosition}` : null,
+      f.pivotZone && f.pivotZone !== '—' ? `Pivot: ${f.pivotZone}` : null,
+      f.obvTrend ? `OBV ${f.obvTrend}` : null,
+      f.atrPct != null ? `ATR% ${f.atrPct}` : null,
+    ].filter(Boolean);
+    return `- ${sym} (${it.range || '1mo'}): ${parts.join(' · ')}`;
+  }).join('\n');
+
+  const sysPrompt = `Sen Aidan'sın — ${name}'in asistanı. Sana ${name}'in PORTFÖYÜNDEKİ tüm hisselerin teknik göstergeleri (PWA hesapladı) veriliyor. Görevin: SADECE BETİMLEYİCİ Türkçe taktik özet yaz. 4-7 cümle.
+
+✅ İZİN VERİLEN (tarafsız betimleme):
+- Portföydeki hisselerin trend dağılımını TARİF et ("3 hisseden 2'si SMA20 üzerinde", "biri aşırı alımda")
+- Genel momentum gözlemi (yukarı/yatay/aşağı eğilim hakim mi)
+- Volatilite (ATR) ve hacim karşılaştırması
+- En dikkat çeken 1-2 hissenin durumu (sayıyla, betimleyici dil)
+- ${name}'e hitap
+
+🚫 MUTLAK YASAK:
+1. AL / SAT / TUT tavsiyesi (tek tek de, toplu da)
+2. Fiyat hedefi / gelecek tahmini
+3. "İyi/kötü/riskli/fırsat" değer yargısı
+4. Belirli hisseyi övme/kötüleme
+5. Sayı uydurma — sadece verileni kullan
+6. İngilizce
+
+✅ TON: deneyimli grafik okuyucu — gözlüyor, tarif ediyor, karar vermiyor.
+Son cümle: "Bu betimleyici bir gözlem — yatırım tavsiyesi değildir" (+ kısa 💜).`;
+
+  const userMsg = `📊 ${name}'in portföyü — hisse hisse teknik snapshot:
+
+${lines}
+
+Bu verileri 4-7 cümlelik tarafsız taktik özete dök. Hangisi alınır/satılır YOK.`;
+
+  try {
+    const r = await env.AI.run(AI_MODEL, {
+      messages: [
+        { role: 'system', content: sysPrompt },
+        { role: 'user', content: userMsg },
+      ],
+      max_tokens: 450,
+      temperature: 0.4,
+    });
+    let summary = (r.response || '').trim();
+    if (!summary || /^i'?m sorry|^as an ai|your input/i.test(summary)) {
+      summary = `${name}, şu an özet üretemedim. Hisselerin teknik göstergelerini yukarıda görebilirsin — yatırım tavsiyesi değildir.`;
+    }
+    return jsonCors({ summary, count: items.length }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
 
 // 🎯 AI "Sen ne yapayım?" — context'ten tek görev önerir (Llama).
 // PWA'dan görev özetleri + energy + saat + bugün biten/pomodoro yollanır.
@@ -3067,6 +3282,16 @@ export default {
     // 🎯 AI "Sen ne yapayım?" — context'ten tek görev önerir
     if (url.pathname === '/suggest') {
       return handleSuggestApi(request, env);
+    }
+
+    // 📈 AI teknik analiz — betimleyici (yatırım tavsiyesi DEĞİL)
+    if (url.pathname === '/stock-analysis') {
+      return handleStockAnalysisApi(request, env);
+    }
+
+    // 📊 Portföy teknik özet — tüm pozisyonların TA snapshot'u betimleyici özet
+    if (url.pathname === '/portfolio-technical') {
+      return handlePortfolioTechnicalApi(request, env);
     }
 
     // 👥 Multi-user (davet kodlu)
