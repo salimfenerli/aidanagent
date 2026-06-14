@@ -3048,6 +3048,45 @@
   .diet-goals input { width:140px; }
   .diet-hint { font-size:0.82em; color:var(--text-muted); margin:6px 0; }
   .meal-rem-btns { display:flex; flex-wrap:wrap; gap:8px; padding-bottom:10px; }
+
+  /* ===== DİYET — FatSecret tarzı günlük + ekle barı + yemek modalı ===== */
+  .food-addbar { display:flex; gap:8px; margin-bottom:14px; }
+  .food-addbar-main { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:13px; font-weight:700; font-size:0.95em; background:var(--accent); color:var(--on-accent); border:none; border-radius:var(--radius); cursor:pointer; box-shadow:none; }
+  .food-addbar-plus { font-size:1.15em; line-height:1; }
+  .food-addbar-scan { flex:0 0 auto; width:52px; display:inline-flex; align-items:center; justify-content:center; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; box-shadow:none; }
+  .food-addbar-scan .icon { width:1.25em; height:1.25em; }
+  .diary-sec { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:12px 14px; margin-bottom:10px; }
+  .diary-sec-head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px; }
+  .diary-sec-name { font-weight:700; color:var(--text-strong); }
+  .diary-sec-kcal { font-size:0.82em; color:var(--text-muted); font-weight:600; }
+  .diary-items { margin-bottom:8px; }
+  .diary-add { display:inline-flex; align-items:center; gap:6px; padding:7px 12px; font-size:0.85em; font-weight:600; background:var(--surface-hover); color:var(--accent); border:1px dashed var(--border); border-radius:var(--radius-sm); cursor:pointer; box-shadow:none; transition:border-color .15s ease; }
+  .diary-add:hover { border-color:var(--accent); }
+  .diary-add-plus { font-size:1.05em; line-height:1; }
+  .food-tabs { display:flex; gap:6px; margin-bottom:12px; }
+  .food-tab { flex:1; padding:9px 6px; font-size:0.85em; font-weight:600; background:var(--surface-hover); color:var(--text-muted); border:1px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; box-shadow:none; transition:background .15s ease, color .15s ease, border-color .15s ease; }
+  .food-tab.active { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
+  .food-modal-slot { color:var(--accent); }
+  .food-search-row { display:flex; gap:8px; margin-bottom:10px; }
+  .food-search-row input { flex:1; min-width:0; }
+  .food-results { display:flex; flex-direction:column; gap:6px; max-height:46vh; overflow-y:auto; }
+  .food-result { display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; text-align:left; padding:10px 12px; background:var(--surface-hover); border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; box-shadow:none; }
+  .food-result:hover { border-color:var(--accent); }
+  .food-result-name { color:var(--text); font-size:0.9em; }
+  .food-result-brand { color:var(--text-muted); font-size:0.85em; }
+  .food-result-kcal { color:var(--text-muted); font-size:0.8em; flex:0 0 auto; white-space:nowrap; }
+  .food-portion { margin-top:12px; padding:12px; background:var(--surface-hover); border:1px solid var(--border); border-radius:var(--radius); }
+  .portion-pick { font-weight:700; color:var(--text-strong); margin-bottom:10px; }
+  .portion-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .portion-row label { font-size:0.85em; color:var(--text-muted); }
+  .portion-row input { width:120px; }
+  .portion-preview { font-size:0.9em; color:var(--accent); font-weight:600; margin-bottom:12px; }
+  .portion-add { width:100%; padding:11px; font-weight:700; background:var(--accent); color:var(--on-accent); border:none; border-radius:var(--radius); cursor:pointer; box-shadow:none; }
+  .barcode-reader { width:100%; border-radius:var(--radius); overflow:hidden; background:#000; margin-bottom:10px; }
+  .barcode-reader:empty { background:transparent; margin-bottom:0; }
+  .barcode-btns { display:flex; gap:8px; margin-bottom:8px; }
+  .barcode-manual { display:flex; gap:8px; margin-top:10px; }
+  .barcode-manual input { flex:1; min-width:0; }
 </style>
 </head>
 <body>
@@ -3410,30 +3449,12 @@
       </div>
     </div>
 
-    <!-- Öğün ekle -->
-    <div class="diet-card">
-      <div class="diet-card-head"><span class="diet-card-title">Öğün ekle</span></div>
-      <div class="meal-add">
-        <input id="mealName" placeholder="ne yedin? (örn. tost)" onkeydown="if(event.key==='Enter')addMeal()">
-        <div class="slot-chips" id="mealSlotChips">
-          <button type="button" class="slot-chip active" onclick="selectMealSlot('kahvalti',this)">Kahvaltı</button>
-          <button type="button" class="slot-chip" onclick="selectMealSlot('ogle',this)">Öğle</button>
-          <button type="button" class="slot-chip" onclick="selectMealSlot('aksam',this)">Akşam</button>
-          <button type="button" class="slot-chip" onclick="selectMealSlot('atistirma',this)">Atıştırma</button>
-        </div>
-        <div class="meal-add-row2">
-          <input id="mealKcal" type="number" inputmode="numeric" min="0" placeholder="kcal (ops.)" class="meal-kcal">
-          <button class="small primary" onclick="addMeal()">Ekle</button>
-        </div>
-        <div class="macro-lookup">
-          <button class="small macro-btn" onclick="lookupMealMacros()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>makro bul</button>
-          <span class="macro-pending" id="macroPending"></span>
-        </div>
-        <div id="macroResult" class="macro-result"></div>
-      </div>
-      <div class="freq-meals" id="freqMeals"></div>
-      <div id="mealList"></div>
+    <!-- Günlük + ekle barı (FatSecret tarzı) -->
+    <div class="food-addbar">
+      <button class="food-addbar-main" onclick="openFoodModal()"><span class="food-addbar-plus">＋</span> Yemek ekle</button>
+      <button class="food-addbar-scan" onclick="openFoodModal('','barkod')" title="Barkod tara" aria-label="Barkod tara"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5v14"/><path d="M7 5v14"/><path d="M11 5v14"/><path d="M15 5v14"/><path d="M19 5v14"/></svg></button>
     </div>
+    <div id="diaryList"></div>
 
     <!-- Kilo takibi -->
     <div class="diet-card">
@@ -3745,6 +3766,64 @@
   </div>
 </div>
 
+<!-- Yemek ekleme modalı (Ara / Barkod / Elle) — FatSecret tarzı -->
+<div class="modal-overlay food-modal" id="foodModal" onclick="if(event.target.id==='foodModal')closeFoodModal()">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-title">Yemek ekle · <span id="foodModalSlot" class="food-modal-slot"></span></div>
+    <div class="food-tabs">
+      <button type="button" class="food-tab active" id="foodTab-ara" onclick="foodModalTab('ara')">Ara</button>
+      <button type="button" class="food-tab" id="foodTab-barkod" onclick="foodModalTab('barkod')">Barkod</button>
+      <button type="button" class="food-tab" id="foodTab-elle" onclick="foodModalTab('elle')">Elle</button>
+    </div>
+
+    <div class="food-pane" id="foodPane-ara">
+      <div class="food-search-row">
+        <input id="foodSearchInput" placeholder="ürün/yemek ara (örn. yoğurt)" onkeydown="if(event.key==='Enter')searchFood()">
+        <button class="small primary" onclick="searchFood()">Ara</button>
+      </div>
+      <div class="freq-meals" id="freqMeals"></div>
+      <div id="foodSearchResults" class="food-results"></div>
+      <div id="foodPortion" class="food-portion" style="display:none;"></div>
+    </div>
+
+    <div class="food-pane" id="foodPane-barkod" style="display:none;">
+      <div id="barcodeReader" class="barcode-reader"></div>
+      <div class="barcode-btns">
+        <button class="small primary" id="barcodeStartBtn" onclick="startBarcodeScan()">Taramayı başlat</button>
+        <button class="small" id="barcodeStopBtn" style="display:none;" onclick="stopBarcodeScan()">Durdur</button>
+      </div>
+      <div id="barcodeStatus" class="diet-hint">Paket barkodunu okut. Kamera açılmazsa numarayı elle yaz.</div>
+      <div class="barcode-manual">
+        <input id="barcodeManual" inputmode="numeric" placeholder="barkod no (örn. 8690...)" onkeydown="if(event.key==='Enter')barcodeManualLookup()">
+        <button class="small" onclick="barcodeManualLookup()">Bul</button>
+      </div>
+    </div>
+
+    <div class="food-pane" id="foodPane-elle" style="display:none;">
+      <div class="meal-add">
+        <input id="mealName" placeholder="ne yedin? (örn. tost)" onkeydown="if(event.key==='Enter')addMeal()">
+        <div class="slot-chips" id="mealSlotChips">
+          <button type="button" class="slot-chip active" data-slot="kahvalti" onclick="selectMealSlot('kahvalti',this)">Kahvaltı</button>
+          <button type="button" class="slot-chip" data-slot="ogle" onclick="selectMealSlot('ogle',this)">Öğle</button>
+          <button type="button" class="slot-chip" data-slot="aksam" onclick="selectMealSlot('aksam',this)">Akşam</button>
+          <button type="button" class="slot-chip" data-slot="atistirma" onclick="selectMealSlot('atistirma',this)">Atıştırma</button>
+        </div>
+        <div class="meal-add-row2">
+          <input id="mealKcal" type="number" inputmode="numeric" min="0" placeholder="kcal (ops.)" class="meal-kcal">
+          <button class="small primary" onclick="addMeal()">Ekle</button>
+        </div>
+        <div class="macro-lookup">
+          <button class="small macro-btn" onclick="lookupMealMacros()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>makro bul</button>
+          <span class="macro-pending" id="macroPending"></span>
+        </div>
+        <div id="macroResult" class="macro-result"></div>
+      </div>
+    </div>
+
+    <button class="modal-close" onclick="closeFoodModal()">Kapat</button>
+  </div>
+</div>
+
 <!-- Haftalık karne modalı -->
 <div class="modal-overlay" id="karneModal" onclick="if(event.target.id==='karneModal')closeKarneModal()">
   <div class="modal" style="max-width:460px;">
@@ -3978,7 +4057,7 @@ function renderDiet() {
   // Alt bölümler
   renderDietPlan();
   renderWater();
-  renderMealList();
+  renderDiary();
   renderFrequentMeals();
   renderWeightTrend();
   renderMacroBars();
@@ -4027,7 +4106,7 @@ function addMeal() {
   const _mp = document.getElementById('macroPending'); if (_mp) _mp.textContent = '';
   const _mr = document.getElementById('macroResult'); if (_mr) _mr.innerHTML = '';
   nameEl.value = ''; kcalEl.value = '';
-  save(); renderDiet(); nameEl.focus();
+  save(); renderDiet(); closeFoodModal(); nameEl.focus();
 }
 function removeMeal(id) { const day = dietDay(); day.meals = day.meals.filter(m => m.id !== id); save(); renderDiet(); }
 function renderMealList() {
@@ -4088,7 +4167,7 @@ function quickAddMeal(i) {
   if (!m) return;
   const day = dietDay();
   day.meals.push({ id: Date.now(), slot: m.slot || _mealSlot || 'atistirma', name: m.name, kcal: (m.kcal != null ? m.kcal : null), protein: m.protein, carb: m.carb, fat: m.fat });
-  save(); renderDiet();
+  save(); renderDiet(); closeFoodModal();
   showToast(m.name + ' eklendi', 'success');
 }
 
@@ -4375,6 +4454,215 @@ function applyMacro(m) {
   const mp = document.getElementById('macroPending');
   if (mp) mp.textContent = `seçildi: P${m.protein || 0} K${m.carb || 0} Y${m.fat || 0}`;
   document.getElementById('macroResult').innerHTML = '';
+}
+
+// ===== FatSecret tarzı GÜNLÜK (diary) — öğüne göre bölümler + inline ekle =====
+function renderDiary() {
+  const day = dietDay(false);
+  const el = document.getElementById('diaryList');
+  if (!el) return;
+  let html = '';
+  Object.keys(MEAL_SLOTS).forEach(slot => {
+    const items = day.meals.filter(m => m.slot === slot);
+    const sub = items.reduce((s, m) => s + (Number(m.kcal) || 0), 0);
+    html += `<div class="diary-sec"><div class="diary-sec-head"><span class="diary-sec-name">${MEAL_SLOTS[slot]}</span><span class="diary-sec-kcal">${sub ? sub + ' kcal' : ''}</span></div>`;
+    if (items.length) {
+      html += '<div class="diary-items">';
+      items.forEach(m => {
+        const macroTag = (m.protein != null || m.carb != null || m.fat != null) ? ` · P${m.protein || 0} K${m.carb || 0} Y${m.fat || 0}` : '';
+        html += `<div class="meal-item"><span class="meal-name">${escapeHtml(m.name)}</span><span class="meal-kcal-tag">${m.kcal != null ? m.kcal + ' kcal' : ''}${macroTag}</span><button class="meal-del" onclick="removeMeal(${m.id})" title="Sil" aria-label="Sil">✕</button></div>`;
+      });
+      html += '</div>';
+    }
+    html += `<button class="diary-add" onclick="openFoodModal('${slot}')"><span class="diary-add-plus">＋</span> ekle</button></div>`;
+  });
+  el.innerHTML = html;
+}
+
+// ===== Yemek ekleme modalı (Ara / Barkod / Elle) + Open Food Facts =====
+const OFF_BASE = 'https://world.openfoodfacts.org';
+let _foodResults = [];
+let _foodPick = null;
+let _barcodeScanner = null;
+let _barcodeLibLoading = null;
+
+function openFoodModal(slot, tab) {
+  if (slot) { _mealSlot = slot; syncMealSlotChips(); }
+  _foodPick = null; _foodResults = [];
+  const m = document.getElementById('foodModal');
+  if (!m) return;
+  const slotLbl = document.getElementById('foodModalSlot');
+  if (slotLbl) slotLbl.textContent = MEAL_SLOTS[_mealSlot] || '';
+  const sr = document.getElementById('foodSearchResults'); if (sr) sr.innerHTML = '';
+  const fp = document.getElementById('foodPortion'); if (fp) { fp.style.display = 'none'; fp.innerHTML = ''; }
+  m.classList.add('active');
+  renderFrequentMeals();
+  foodModalTab(tab || 'ara');
+}
+function closeFoodModal() {
+  stopBarcodeScan();
+  const m = document.getElementById('foodModal');
+  if (m) m.classList.remove('active');
+  const sr = document.getElementById('foodSearchResults'); if (sr) sr.innerHTML = '';
+  const fp = document.getElementById('foodPortion'); if (fp) { fp.style.display = 'none'; fp.innerHTML = ''; }
+}
+function foodModalTab(tab) {
+  ['ara', 'barkod', 'elle'].forEach(t => {
+    const pane = document.getElementById('foodPane-' + t);
+    const btn = document.getElementById('foodTab-' + t);
+    if (pane) pane.style.display = (t === tab) ? 'block' : 'none';
+    if (btn) btn.classList.toggle('active', t === tab);
+  });
+  if (tab !== 'barkod') stopBarcodeScan();
+  if (tab === 'ara') { const i = document.getElementById('foodSearchInput'); if (i) setTimeout(() => i.focus(), 50); }
+}
+function syncMealSlotChips() {
+  document.querySelectorAll('#mealSlotChips .slot-chip').forEach(c => {
+    c.classList.toggle('active', c.getAttribute('data-slot') === _mealSlot);
+  });
+}
+
+// --- Open Food Facts arama ---
+function parseOffProduct(p) {
+  if (!p) return null;
+  const n = p.nutriments || {};
+  const name = (p.product_name_tr || p.product_name || '').trim();
+  if (!name) return null;
+  const kcal100 = n['energy-kcal_100g'] != null ? n['energy-kcal_100g'] : (n['energy-kcal'] != null ? n['energy-kcal'] : null);
+  return {
+    name, brand: (p.brands || '').split(',')[0].trim(), code: p.code || '',
+    kcal100: kcal100 != null ? Number(kcal100) : null,
+    p100: n.proteins_100g != null ? Number(n.proteins_100g) : null,
+    c100: n.carbohydrates_100g != null ? Number(n.carbohydrates_100g) : null,
+    f100: n.fat_100g != null ? Number(n.fat_100g) : null
+  };
+}
+function scaleFood(p, grams) {
+  const f = (Number(grams) || 0) / 100;
+  const rnd = v => v != null ? Math.round(v * f) : null;
+  return { kcal: rnd(p.kcal100), protein: rnd(p.p100), carb: rnd(p.c100), fat: rnd(p.f100) };
+}
+async function offSearch(q) {
+  const url = OFF_BASE + '/cgi/search.pl?search_terms=' + encodeURIComponent(q) + '&search_simple=1&action=process&json=1&page_size=20&fields=product_name,product_name_tr,brands,nutriments,code';
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('ağ hatası ' + r.status);
+  const j = await r.json();
+  return (j.products || []).map(parseOffProduct).filter(Boolean);
+}
+async function offBarcode(code) {
+  const url = OFF_BASE + '/api/v2/product/' + encodeURIComponent(code) + '.json?fields=product_name,product_name_tr,brands,nutriments,code';
+  const r = await fetch(url);
+  if (!r.ok) { if (r.status === 404) return null; throw new Error('ağ hatası ' + r.status); }
+  const j = await r.json();
+  if (j.status !== 1 || !j.product) return null;
+  return parseOffProduct(j.product);
+}
+async function searchFood() {
+  const q = (document.getElementById('foodSearchInput').value || '').trim();
+  const out = document.getElementById('foodSearchResults');
+  const fp = document.getElementById('foodPortion'); if (fp) { fp.style.display = 'none'; fp.innerHTML = ''; }
+  if (!q) { document.getElementById('foodSearchInput').focus(); return; }
+  out.innerHTML = '<div class="diet-empty">Aranıyor…</div>';
+  try {
+    _foodResults = await offSearch(q);
+    if (!_foodResults.length) { out.innerHTML = '<div class="diet-empty">Sonuç yok. Farklı yaz ya da "Elle" sekmesinden ekle.</div>'; return; }
+    out.innerHTML = _foodResults.map((p, i) => `<button class="food-result" onclick="pickFood(${i})"><span class="food-result-name">${escapeHtml(p.name)}${p.brand ? ` <span class="food-result-brand">${escapeHtml(p.brand)}</span>` : ''}</span><span class="food-result-kcal">${p.kcal100 != null ? Math.round(p.kcal100) + ' kcal/100g' : '—'}</span></button>`).join('');
+  } catch (e) {
+    out.innerHTML = '<div class="diet-empty">Arama başarısız: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+// i: arama sonucundaki index VEYA doğrudan ürün objesi (barkod akışı)
+function pickFood(i) {
+  const p = (typeof i === 'number') ? _foodResults[i] : i;
+  if (!p) return;
+  _foodPick = p;
+  const por = document.getElementById('foodPortion');
+  por.style.display = 'block';
+  por.innerHTML = `<div class="portion-pick">${escapeHtml(p.name)}${p.brand ? ' · ' + escapeHtml(p.brand) : ''}</div>` +
+    `<div class="portion-row"><label>Miktar (g)</label><input id="portionGrams" type="number" inputmode="numeric" value="100" min="1" oninput="updatePortionPreview()"></div>` +
+    `<div class="portion-preview" id="portionPreview"></div>` +
+    `<button class="portion-add" onclick="addPickedFood()">${MEAL_SLOTS[_mealSlot] || 'Öğün'}'e ekle</button>`;
+  updatePortionPreview();
+  por.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function updatePortionPreview() {
+  if (!_foodPick) return;
+  const g = document.getElementById('portionGrams').value;
+  const sc = scaleFood(_foodPick, g);
+  document.getElementById('portionPreview').innerHTML = `${sc.kcal != null ? sc.kcal + ' kcal' : '? kcal'} · P${sc.protein || 0} K${sc.carb || 0} Y${sc.fat || 0}`;
+}
+function addPickedFood() {
+  if (!_foodPick) return;
+  const g = document.getElementById('portionGrams').value;
+  const sc = scaleFood(_foodPick, g);
+  const day = dietDay();
+  const gv = Math.round(Number(g) || 0);
+  const label = _foodPick.name + (gv && gv !== 100 ? ` (${gv}g)` : '');
+  day.meals.push({ id: Date.now(), slot: _mealSlot, name: label, kcal: sc.kcal, protein: sc.protein, carb: sc.carb, fat: sc.fat });
+  save(); renderDiet(); closeFoodModal();
+  showToast(_foodPick.name + ' eklendi', 'success');
+}
+
+// --- Barkod tarama (html5-qrcode, CDN'den tembel yüklenir) ---
+function loadBarcodeLib() {
+  if (window.Html5Qrcode) return Promise.resolve();
+  if (_barcodeLibLoading) return _barcodeLibLoading;
+  _barcodeLibLoading = new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
+    sc.onload = () => res();
+    sc.onerror = () => { _barcodeLibLoading = null; rej(new Error('tarayıcı kütüphanesi yüklenemedi')); };
+    document.head.appendChild(sc);
+  });
+  return _barcodeLibLoading;
+}
+async function startBarcodeScan() {
+  const st = document.getElementById('barcodeStatus');
+  if (st) st.textContent = 'Kamera hazırlanıyor…';
+  try {
+    await loadBarcodeLib();
+    if (_barcodeScanner) { try { await _barcodeScanner.stop(); } catch (e) {} _barcodeScanner = null; }
+    const F = Html5QrcodeSupportedFormats;
+    const fmts = [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E];
+    _barcodeScanner = new Html5Qrcode('barcodeReader', { formatsToSupport: fmts, verbose: false });
+    await _barcodeScanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 240, height: 140 } },
+      (txt) => { onBarcodeDecoded(txt); }, () => {});
+    if (st) st.textContent = 'Barkodu çerçeveye getir.';
+    const sb = document.getElementById('barcodeStartBtn'); if (sb) sb.style.display = 'none';
+    const tb = document.getElementById('barcodeStopBtn'); if (tb) tb.style.display = 'inline-flex';
+  } catch (e) {
+    if (st) st.textContent = 'Kamera açılamadı (' + e.message + '). Barkod numarasını elle yazabilirsin.';
+  }
+}
+async function stopBarcodeScan() {
+  if (_barcodeScanner) { try { await _barcodeScanner.stop(); } catch (e) {} try { _barcodeScanner.clear(); } catch (e) {} _barcodeScanner = null; }
+  const sb = document.getElementById('barcodeStartBtn'); if (sb) sb.style.display = 'inline-flex';
+  const tb = document.getElementById('barcodeStopBtn'); if (tb) tb.style.display = 'none';
+}
+async function onBarcodeDecoded(code) {
+  await stopBarcodeScan();
+  lookupBarcode(code);
+}
+async function lookupBarcode(code) {
+  code = String(code || '').trim();
+  if (!code) return;
+  const st = document.getElementById('barcodeStatus');
+  if (st) st.textContent = 'Ürün aranıyor… (' + code + ')';
+  try {
+    const p = await offBarcode(code);
+    if (!p) { if (st) st.textContent = 'Bu barkod veritabanında yok (' + code + '). "Elle" sekmesinden ekleyebilirsin.'; return; }
+    if (st) st.textContent = 'Bulundu: ' + p.name;
+    foodModalTab('ara');
+    const sr = document.getElementById('foodSearchResults'); if (sr) sr.innerHTML = '';
+    pickFood(p);
+  } catch (e) {
+    if (st) st.textContent = 'Sorgu başarısız: ' + e.message;
+  }
+}
+function barcodeManualLookup() {
+  const v = (document.getElementById('barcodeManual').value || '').trim();
+  if (!v) return;
+  lookupBarcode(v);
 }
 
 function renderMacroBars() {

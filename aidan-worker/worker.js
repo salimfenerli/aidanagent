@@ -3251,9 +3251,11 @@ function parseMacroJson(raw) {
 function parseMealItemsJson(raw) {
   if (!raw) return [];
   let s = String(raw).replace(/```(?:json)?/gi, '').trim();
-  const m = s.match(/\{[\s\S]*\}/);
-  if (!m) return [];
-  let o; try { o = JSON.parse(m[0]); } catch { return []; }
+  let o = null;
+  try { o = JSON.parse(s); } catch (_) {}
+  if (o == null) { const a = s.match(/\[[\s\S]*\]/); if (a) { try { o = JSON.parse(a[0]); } catch (_) {} } }
+  if (o == null) { const m = s.match(/\{[\s\S]*\}/); if (m) { try { o = JSON.parse(m[0]); } catch (_) {} } }
+  if (o == null) return [];
   let arr;
   if (Array.isArray(o)) arr = o;
   else if (o && Array.isArray(o.items)) arr = o.items;
@@ -3321,21 +3323,22 @@ async function handleFoodMacrosApi(request, env) {
 
   try {
     const sys = `Sen bir beslenme asistanısın. Kullanıcının yazdığı ÖĞÜNÜ bileşenlerine ayır.
-Bir öğünde birden fazla yemek olabilir: "4 yumurta 2 dilim ekmek" -> yumurta + ekmek (2 bileşen).
+Öğünde KAÇ yemek varsa HEPSİNİ ayrı ayrı çıkar — 1, 2, 3, 4 ya da daha fazla, sayı sınırı YOK. Hiçbirini atlama, birleştirme.
 SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
 {"items":[{"name":"<yemek adı, Türkçe>","en":"<sade İngilizce ad>","grams":<bu bileşenin toplam gram ağırlığı>,"kcal":<sayı>,"protein":<gram>,"carb":<gram>,"fat":<gram>}]}
-- Her ayrı yemek için bir nesne. Tek yemek varsa items'ta tek nesne olur.
+- Her ayrı yemek için bir nesne. "ve"/virgül/boşlukla ayrılan her yemek ayrı bileşendir.
 - grams + makrolar: o bileşenin BELİRTİLEN MİKTARI için (örn "4 yumurta" -> 4 yumurtanın toplamı, ~50g/yumurta).
-- en: USDA araması için sade İngilizce ad ("egg whole cooked", "white bread", "cooked white rice"). Marka yazma.
+- ÇİĞ/PİŞMİŞ ayrımı, kullanıcının kelimesine sadık kal: "pirinç"=ÇİĞ (raw white rice), "pilav"=PİŞMİŞ (cooked white rice). "bulgur"/"un"/"yulaf"/"kuru makarna"=çiğ/kuru. Et/tavuk/balık yazılmamışsa pişmiş varsay.
+- en: USDA için sade İngilizce ad ("egg cooked", "white bread", "raw white rice", "cooked white rice", "beef tenderloin cooked"). Marka yazma.
 - Miktar belirtilmemişse mantıklı 1 porsiyon varsay.
-Örnek: "4 yumurta 2 dilim ekmek" -> {"items":[{"name":"yumurta","en":"egg whole cooked","grams":200,"kcal":310,"protein":26,"carb":2,"fat":22},{"name":"ekmek","en":"white bread","grams":50,"kcal":133,"protein":4,"carb":25,"fat":1}]}
-Örnek: "1 kase pilav" -> {"items":[{"name":"pilav","en":"cooked white rice","grams":150,"kcal":205,"protein":4,"carb":45,"fat":0}]}`;
+Örnek: "4 yumurta 2 dilim ekmek 1 kase pilav" -> {"items":[{"name":"yumurta","en":"egg cooked","grams":200,"kcal":310,"protein":26,"carb":2,"fat":22},{"name":"ekmek","en":"white bread","grams":50,"kcal":133,"protein":4,"carb":25,"fat":1},{"name":"pilav","en":"cooked white rice","grams":150,"kcal":195,"protein":4,"carb":42,"fat":0}]}
+Örnek: "60 gram pirinç" -> {"items":[{"name":"pirinç","en":"raw white rice","grams":60,"kcal":216,"protein":4,"carb":47,"fat":1}]}`;
     const r = await env.AI.run(AI_MODEL, {
       messages: [
         { role: 'system', content: sys },
         { role: 'user', content: query },
       ],
-      max_tokens: 500,
+      max_tokens: 800,
       temperature: 0.2,
     });
     const raw = typeof r.response === 'string' ? r.response : JSON.stringify(r.response || '');
