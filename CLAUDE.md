@@ -749,6 +749,18 @@ Salim iki fikir istedi: (1) iPhone ekran süresi kısıtlama, (2) diyet sekmesi.
 - **Doğrulama:** node --check (her iki dosya) + sahte-DOM mantık testi (öğün/su/kilo/plan/yedim) + `extractDietPlanJson` 4 formatla + closing-tag/endpoint/cron sayımı (scheduled+/signup+/stock-history korundu).
 - **Cache:** v7-63 → v7-64
 
+### Haziran 14, 2026 — 2. seans (🐛 beyaz input bug + 💧 su: bardak→litre)
+- **🐛 Beyaz input bug (kök neden):** Koyu tema input stili `input[type="text"], ...` ile yazılmış — `type` attribute'u OLMAYAN inputları (`#mealName`, `#planName`) yakalamıyordu → tarayıcı varsayılanı (bembeyaz) kalıyor, diyet formunu bozuyordu. **Çözüm:** her iki CSS form kuralına (satır ~178 ve ~2283) `input:not([type])` eklendi → tüm bare inputlar artık koyu tema, ileride de korur. (Sitedeki tek 2 bare input bunlardı.)
+- **💧 Su: bardak → litre** (Salim: "boş bardaklar çirkin, litre olarak girerim"):
+  - Boş bardak ikonları (`.water-glasses`/`.glass`) ve `± bardak` butonları kaldırıldı.
+  - Yeni: hızlı butonlar (+0,25 / +0,5 / +1 / −0,25 L) + "toplam (L)" elle giriş (`#waterSet`, Türk virgül parse). İlerleme çubuğu litre/hedef oranına göre.
+  - `fmtL(n)` helper — 1.5 → "1,5" (sondaki sıfır atılır, Türkçe gösterim).
+  - **Veri modeli:** `day.waterL` (litre, ondalık) + `data.diet.waterGoalL` (varsayılan 2.5 L). Eski `day.water` (bardak) + `waterGoal` geriye uyumluluk için duruyor ama artık YAZILMIYOR/okunmuyor. Üst özet mini stat "su (bardak)"→"su (L)". Hedef input litre (0,5–10, step 0,1).
+  - `.glass` CSS ölü kaldı (zararsız, dokunulmadı).
+- **Doğrulama:** node --check (inline JS) SYNTAX OK + dangling eski referans (waterGlasses/addWater/setWater/day.water) taraması temiz.
+- **Cache:** v7-65 → v7-66
+- ⏳ Sırada (Salim'in seçtikleri, henüz yapılmadı): diyet karnesi (haftalık) · makro hedefleri+çubuk · geçmiş günleri gör · akşam diyet push özeti.
+
 ## Mevcut Durum
 
 ### ✅ Çalışıyor
