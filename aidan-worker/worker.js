@@ -3247,6 +3247,33 @@ function parseMacroJson(raw) {
   return { en, grams: Math.round(grams), ai: { kcal: num(ai.kcal), protein: num(ai.protein), carb: num(ai.carb), fat: num(ai.fat) } };
 }
 
+// Çoklu yemek: AI'dan {items:[{name,en,grams,kcal,protein,carb,fat}]} bekler (bare obje/dizi de tolere edilir)
+function parseMealItemsJson(raw) {
+  if (!raw) return [];
+  let s = String(raw).replace(/```(?:json)?/gi, '').trim();
+  const m = s.match(/\{[\s\S]*\}/);
+  if (!m) return [];
+  let o; try { o = JSON.parse(m[0]); } catch { return []; }
+  let arr;
+  if (Array.isArray(o)) arr = o;
+  else if (o && Array.isArray(o.items)) arr = o.items;
+  else if (o && (o.name || o.en || o.kcal != null)) arr = [o];
+  else return [];
+  const num = v => { const n = Number(v); return (isFinite(n) && n >= 0 && n < 20000) ? Math.round(n * 10) / 10 : null; };
+  const out = [];
+  for (const it of arr) {
+    if (!it || typeof it !== 'object') continue;
+    const name = String(it.name || it.en || '').trim().slice(0, 60);
+    const en = String(it.en || it.name || '').trim().slice(0, 80);
+    if (!name && !en) continue;
+    let grams = Number(it.grams);
+    if (!isFinite(grams) || grams <= 0 || grams > 5000) grams = 100;
+    out.push({ name: name || en, en, grams: Math.round(grams), kcal: num(it.kcal), protein: num(it.protein), carb: num(it.carb), fat: num(it.fat) });
+    if (out.length >= 12) break;
+  }
+  return out;
+}
+
 // USDA FoodData Central — İngilizce besin adı → 100g makroları, porsiyona ölçekle. Key yoksa null.
 async function usdaLookup(env, enName, grams) {
   const key = env.USDA_API_KEY;
@@ -3293,29 +3320,38 @@ async function handleFoodMacrosApi(request, env) {
   if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
 
   try {
-    const sys = `Sen bir beslenme asistanısın. Kullanıcının yazdığı yemek + porsiyonu analiz et.
-SADECE şu JSON nesnesini döndür, başka hiçbir açıklama/metin yazma:
-{"en":"<veritabanı araması için sade İngilizce besin adı>","grams":<porsiyonun toplam gram ağırlığı, sayı>,"ai":{"kcal":<sayı>,"protein":<gram>,"carb":<gram>,"fat":<gram>}}
-- en: USDA gibi besin veritabanında aranacak SADE İngilizce ad ("cooked white rice", "chicken breast", "peanut butter", "rolled oats"). Marka/porsiyon yazma.
-- grams: porsiyonun yaklaşık toplam gram ağırlığı.
-- ai: bu PORSİYONUN TAMAMI için TAHMİNİ makrolar (gram cinsinden protein/carb/fat, kcal sayı).
-Örnek: "1 kase pilav" -> {"en":"cooked white rice","grams":150,"ai":{"kcal":205,"protein":4,"carb":45,"fat":0}}
-Örnek: "2 yumurta" -> {"en":"egg whole cooked","grams":100,"ai":{"kcal":155,"protein":13,"carb":1,"fat":11}}
-Örnek: "1 kaşık fıstık ezmesi" -> {"en":"peanut butter","grams":16,"ai":{"kcal":94,"protein":4,"carb":3,"fat":8}}`;
+    const sys = `Sen bir beslenme asistanısın. Kullanıcının yazdığı ÖĞÜNÜ bileşenlerine ayır.
+Bir öğünde birden fazla yemek olabilir: "4 yumurta 2 dilim ekmek" -> yumurta + ekmek (2 bileşen).
+SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
+{"items":[{"name":"<yemek adı, Türkçe>","en":"<sade İngilizce ad>","grams":<bu bileşenin toplam gram ağırlığı>,"kcal":<sayı>,"protein":<gram>,"carb":<gram>,"fat":<gram>}]}
+- Her ayrı yemek için bir nesne. Tek yemek varsa items'ta tek nesne olur.
+- grams + makrolar: o bileşenin BELİRTİLEN MİKTARI için (örn "4 yumurta" -> 4 yumurtanın toplamı, ~50g/yumurta).
+- en: USDA araması için sade İngilizce ad ("egg whole cooked", "white bread", "cooked white rice"). Marka yazma.
+- Miktar belirtilmemişse mantıklı 1 porsiyon varsay.
+Örnek: "4 yumurta 2 dilim ekmek" -> {"items":[{"name":"yumurta","en":"egg whole cooked","grams":200,"kcal":310,"protein":26,"carb":2,"fat":22},{"name":"ekmek","en":"white bread","grams":50,"kcal":133,"protein":4,"carb":25,"fat":1}]}
+Örnek: "1 kase pilav" -> {"items":[{"name":"pilav","en":"cooked white rice","grams":150,"kcal":205,"protein":4,"carb":45,"fat":0}]}`;
     const r = await env.AI.run(AI_MODEL, {
       messages: [
         { role: 'system', content: sys },
         { role: 'user', content: query },
       ],
-      max_tokens: 200,
+      max_tokens: 500,
       temperature: 0.2,
     });
     const raw = typeof r.response === 'string' ? r.response : JSON.stringify(r.response || '');
-    const parsed = parseMacroJson(raw);
-    if (!parsed) return jsonCors({ error: 'parse', raw: String(raw).slice(0, 200) }, 200, cors);
+    const items = parseMealItemsJson(raw);
+    if (!items.length) return jsonCors({ error: 'parse', raw: String(raw).slice(0, 200) }, 200, cors);
+    // Bileşenleri topla
+    const sum = items.reduce((a, it) => ({
+      kcal: a.kcal + (it.kcal || 0), protein: a.protein + (it.protein || 0),
+      carb: a.carb + (it.carb || 0), fat: a.fat + (it.fat || 0), grams: a.grams + (it.grams || 0),
+    }), { kcal: 0, protein: 0, carb: 0, fat: 0, grams: 0 });
+    const ai = { kcal: Math.round(sum.kcal), protein: Math.round(sum.protein), carb: Math.round(sum.carb), fat: Math.round(sum.fat) };
+    // Tek yemekse USDA da dene (çoklu öğünde N çağrı yapma)
     let db = null;
-    try { db = await usdaLookup(env, parsed.en, parsed.grams); } catch (_) {}
-    return jsonCors({ name: query, grams: parsed.grams, en: parsed.en, ai: parsed.ai, db }, 200, cors);
+    if (items.length === 1 && items[0].en) { try { db = await usdaLookup(env, items[0].en, items[0].grams); } catch (_) {} }
+    const breakdown = items.map(it => ({ name: it.name, kcal: Math.round(it.kcal || 0), protein: Math.round(it.protein || 0), carb: Math.round(it.carb || 0), fat: Math.round(it.fat || 0) }));
+    return jsonCors({ name: query, grams: Math.round(sum.grams), ai, db, items: breakdown, multi: items.length > 1 }, 200, cors);
   } catch (e) {
     return jsonCors({ error: e.message }, 500, cors);
   }

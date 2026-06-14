@@ -779,7 +779,13 @@ Salim "diyet sekmesini FatSecret/MyFitnessPal'a benzet, eksikleri ekle" dedi. Ba
 - **🔁 Sık yediklerin:** `frequentMeals(limit)` geçmiş tüm günlerin öğünlerini ada göre (tr-lowercase key) gruplar, sayar, son görülen kcal/makro/slot'u tutar, sayıya göre sıralar. Öğün ekle kartında `#freqMeals` chip satırı (`renderFrequentMeals`). Dokun → `quickAddMeal(i)` o öğünü kcal+makro+slot'uyla seçili güne ekler. Yeni veri alanı YOK (geçmişten türetilir). ADHD friction-killer.
 - **Doğrulama:** asistan.html `node --check` OK + node mantık testi (shiftDateStr/gelecek-engeli/frequentMeals sıralama+son-kcal+slot/kalan+makro math, 10/10 geçti) + dangling tarama temiz.
 - **Cache:** v7-67 → v7-68
-- ⏳ Sırada (Salim'in seçtikleri/öneriler): akşam diyet push özeti · diyet karnesi (haftalık) · porsiyon seçici · barkod (Salim "zor" dedi, ertelendi).
+
+### Haziran 14, 2026 — 5. seans (🍳 çoklu yemek makro — bileşene ayır + topla)
+Salim: "4 yumurta buluyor ama '4 yumurta 2 dilim ekmek' bulamıyor, tek tek yazınca buluyor." Kök neden: `/food-macros` tek yemek için yazılmıştı (`parseMacroJson` tek nesne bekliyordu). Türk yemekleri DB fikri Salim'in isteğiyle ertelendi ("boş ver").
+- **Worker `handleFoodMacrosApi`:** AI prompt artık öğünü **bileşenlerine ayırıyor** → `{items:[{name,en,grams,kcal,protein,carb,fat}]}`. `parseMealItemsJson` (markdown/önsöz/bare-obje/dizi toleranslı, max 12 bileşen) parse eder, **server bileşenleri toplar** (AI toplamına güvenmez). max_tokens 200→500. Tek yemekse USDA da denenir (çoklu öğünde N çağrı yapılmaz). Yanıt: `{name, grams, ai:toplam, db, items:[breakdown], multi}`.
+- **PWA `renderMacroResult`:** çoklu öğünde AI satırı "Toplam" etiketli + altında bileşen dökümü ("yumurta · 310 kcal + ekmek · 133 kcal"). Tek yemekte eski davranış ("AI tahmini" + USDA "Veritabanı"). Dokun → toplam kcal+makro mealKcal'a dolar, tek satır öğün olarak loglanır.
+- **Doğrulama:** worker+asistan `node --check` OK + `parseMealItemsJson` 8 format testi (çoklu toplam 443 kcal/30 P doğru, fence/önsöz/bare/junk/gramsız-varsayılan). Canlı uçtan uca test deploy sonrası (Supabase login tekniği).
+- **Cache:** v7-68 → v7-69
 
 ## Mevcut Durum
 
