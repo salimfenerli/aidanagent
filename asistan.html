@@ -509,6 +509,7 @@
   .pf-import-list { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; }
   .pf-import-row { display: flex; flex-direction: column; gap: 7px; background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: 10px; padding: 9px 11px; }
   .pf-import-row input { padding: 7px 8px; font-size: 0.88em; border-radius: 7px; min-width: 0; width: 100%; box-sizing: border-box; }
+  .pf-import-row select { padding: 7px 8px; font-size: 0.88em; border-radius: 7px; width: 100%; box-sizing: border-box; background: var(--bg); color: var(--text); border: 1px solid var(--border); }
   /* Üst satır: sembol + piyasa + sil */
   .pf-imp-top { display: flex; gap: 6px; align-items: center; }
   .pf-imp-top .pf-imp-sym { flex: 1; text-transform: uppercase; font-weight: 700; letter-spacing: 0.02em; }
@@ -2971,6 +2972,9 @@
   .meal-add { display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
   .meal-add input, .meal-add select { width:100%; }
   .meal-add-row2 { display:flex; gap:8px; }
+  .slot-chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .slot-chip { flex:1; min-width:62px; padding:8px 6px; font-size:0.82em; font-weight:600; background:var(--surface-hover); color:var(--text-muted); border:1px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; box-shadow:none; transition:background .15s ease, color .15s ease, border-color .15s ease; }
+  .slot-chip.active { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
   .meal-add-row2 select { flex:1; min-width:0; }
   .meal-kcal { width:110px; flex:0 0 auto; }
   .meal-group { margin-bottom:10px; }
@@ -3341,13 +3345,13 @@
         <summary>Planı düzenle</summary>
         <div class="meal-add">
           <input id="planName" placeholder="yemek (örn. 2 yumurta)" onkeydown="if(event.key==='Enter')addPlanMeal()">
+          <div class="slot-chips" id="planSlotChips">
+            <button type="button" class="slot-chip active" onclick="selectPlanSlot('kahvalti',this)">Kahvaltı</button>
+            <button type="button" class="slot-chip" onclick="selectPlanSlot('ogle',this)">Öğle</button>
+            <button type="button" class="slot-chip" onclick="selectPlanSlot('aksam',this)">Akşam</button>
+            <button type="button" class="slot-chip" onclick="selectPlanSlot('atistirma',this)">Ara öğün</button>
+          </div>
           <div class="meal-add-row2">
-            <select id="planSlot">
-              <option value="kahvalti">Kahvaltı</option>
-              <option value="ogle">Öğle</option>
-              <option value="aksam">Akşam</option>
-              <option value="atistirma">Ara öğün</option>
-            </select>
             <input id="planKcal" type="number" inputmode="numeric" min="0" placeholder="kcal (ops.)" class="meal-kcal">
             <button class="small primary" onclick="addPlanMeal()">Ekle</button>
           </div>
@@ -3385,13 +3389,13 @@
       <div class="diet-card-head"><span class="diet-card-title">Öğün ekle</span></div>
       <div class="meal-add">
         <input id="mealName" placeholder="ne yedin? (örn. tost)" onkeydown="if(event.key==='Enter')addMeal()">
+        <div class="slot-chips" id="mealSlotChips">
+          <button type="button" class="slot-chip active" onclick="selectMealSlot('kahvalti',this)">Kahvaltı</button>
+          <button type="button" class="slot-chip" onclick="selectMealSlot('ogle',this)">Öğle</button>
+          <button type="button" class="slot-chip" onclick="selectMealSlot('aksam',this)">Akşam</button>
+          <button type="button" class="slot-chip" onclick="selectMealSlot('atistirma',this)">Atıştırma</button>
+        </div>
         <div class="meal-add-row2">
-          <select id="mealSlot">
-            <option value="kahvalti">Kahvaltı</option>
-            <option value="ogle">Öğle</option>
-            <option value="aksam">Akşam</option>
-            <option value="atistirma">Atıştırma</option>
-          </select>
           <input id="mealKcal" type="number" inputmode="numeric" min="0" placeholder="kcal (ops.)" class="meal-kcal">
           <button class="small primary" onclick="addMeal()">Ekle</button>
         </div>
@@ -3691,6 +3695,20 @@
   </div>
 </div>
 
+<!-- Görselden diyet programı onay modalı -->
+<div class="modal-overlay" id="dietPlanImportModal" onclick="if(event.target.id==='dietPlanImportModal')closeDietPlanImport()">
+  <div class="modal" style="max-width:540px;">
+    <div class="modal-title">Programdan okunanlar</div>
+    <div id="dpImportStatus" class="pf-import-status"></div>
+    <div id="dpImportList" class="pf-import-list"></div>
+    <div class="modal-actions" id="dpImportActions" style="margin-top:14px; display:none;">
+      <button onclick="confirmDietPlanImport()">Plana ekle</button>
+      <button class="secondary" onclick="closeDietPlanImport()">İptal</button>
+    </div>
+    <button class="modal-close" onclick="closeDietPlanImport()">Kapat</button>
+  </div>
+</div>
+
 <!-- Haftalık karne modalı -->
 <div class="modal-overlay" id="karneModal" onclick="if(event.target.id==='karneModal')closeKarneModal()">
   <div class="modal" style="max-width:460px;">
@@ -3915,14 +3933,20 @@ function setWaterL() {
 }
 
 // --- Öğün ---
+let _mealSlot = 'kahvalti';
+function selectMealSlot(slot, btn) {
+  _mealSlot = slot;
+  btn.parentElement.querySelectorAll('.slot-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+}
 function addMeal() {
-  const nameEl = document.getElementById('mealName'), kcalEl = document.getElementById('mealKcal'), slotEl = document.getElementById('mealSlot');
+  const nameEl = document.getElementById('mealName'), kcalEl = document.getElementById('mealKcal');
   const name = (nameEl.value || '').trim();
   if (!name) { showToast('Ne yediğini yaz', 'info'); nameEl.focus(); return; }
   const kcal = kcalEl.value !== '' ? Math.max(0, parseInt(kcalEl.value, 10) || 0) : null;
   const day = dietDay();
   const pm = _pendingMacros || {};
-  day.meals.push({ id: Date.now(), slot: slotEl.value, name, kcal, protein: pm.protein != null ? pm.protein : null, carb: pm.carb != null ? pm.carb : null, fat: pm.fat != null ? pm.fat : null });
+  day.meals.push({ id: Date.now(), slot: _mealSlot, name, kcal, protein: pm.protein != null ? pm.protein : null, carb: pm.carb != null ? pm.carb : null, fat: pm.fat != null ? pm.fat : null });
   _pendingMacros = null;
   const _mp = document.getElementById('macroPending'); if (_mp) _mp.textContent = '';
   const _mr = document.getElementById('macroResult'); if (_mr) _mr.innerHTML = '';
@@ -4033,13 +4057,19 @@ function renderDietPlan() {
   el.innerHTML = html;
 }
 
+let _planSlot = 'kahvalti';
+function selectPlanSlot(slot, btn) {
+  _planSlot = slot;
+  btn.parentElement.querySelectorAll('.slot-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+}
 function addPlanMeal() {
-  const nameEl = document.getElementById('planName'), kcalEl = document.getElementById('planKcal'), slotEl = document.getElementById('planSlot');
+  const nameEl = document.getElementById('planName'), kcalEl = document.getElementById('planKcal');
   const name = (nameEl.value || '').trim();
   if (!name) { showToast('Yemek yaz', 'info'); nameEl.focus(); return; }
   const kcal = kcalEl.value !== '' ? Math.max(0, parseInt(kcalEl.value, 10) || 0) : null;
   ensureDiet();
-  data.diet.plan.push({ id: Date.now(), slot: slotEl.value, name, kcal });
+  data.diet.plan.push({ id: Date.now(), slot: _planSlot, name, kcal });
   nameEl.value = ''; kcalEl.value = '';
   save(); renderDiet(); nameEl.focus();
 }
@@ -4092,17 +4122,81 @@ async function dietPlanFromImage(ev) {
       setS('Programı okuyamadım. Daha net bir fotoğraf dene ya da elle ekle.' + dbg);
       return;
     }
-    ensureDiet();
-    items.forEach(it => data.diet.plan.push({
-      id: Date.now() + Math.floor(Math.random() * 100000),
-      slot: it.slot || 'atistirma', name: it.name, kcal: (it.kcal != null ? it.kcal : null),
-    }));
-    save(); renderDiet();
-    setS(`${items.length} yemek eklendi — yanlış olanları ✕ ile silebilirsin.`);
-    showToast(items.length + ' yemek plana eklendi', 'success');
+    setS(`${items.length} yemek okundu — onay ekranında kontrol et, düzelt, ekle.`);
+    openDietPlanImport(items);
   } catch (e) {
     setS('Okuma başarısız: ' + e.message);
   }
+}
+
+// ===== Görselden okunan programı düzelt-onayla =====
+let _dpImportItems = [];
+function openDietPlanImport(items) {
+  _dpImportItems = (items || []).map(it => ({
+    name: String(it.name || '').trim(),
+    slot: it.slot || 'atistirma',
+    kcal: (it.kcal != null ? it.kcal : null),
+  })).filter(x => x.name);
+  document.getElementById('dietPlanImportModal').classList.add('active');
+  if (!_dpImportItems.length) {
+    document.getElementById('dpImportStatus').textContent = 'Yemek bulunamadı. Daha net bir fotoğraf dene ya da elle ekle.';
+    document.getElementById('dpImportActions').style.display = 'none';
+    document.getElementById('dpImportList').innerHTML = '';
+    return;
+  }
+  renderDpImportList();
+}
+function closeDietPlanImport() {
+  document.getElementById('dietPlanImportModal').classList.remove('active');
+  _dpImportItems = [];
+}
+const DP_SLOT_OPTS = [['kahvalti', 'Kahvaltı'], ['ogle', 'Öğle'], ['aksam', 'Akşam'], ['atistirma', 'Ara öğün']];
+function renderDpImportList() {
+  document.getElementById('dpImportStatus').textContent = `${_dpImportItems.length} yemek okundu. Yanlış olanı düzelt/sil, sonra ekle.`;
+  const list = document.getElementById('dpImportList');
+  list.innerHTML = _dpImportItems.map((it, i) => `
+    <div class="pf-import-row">
+      <div class="pf-imp-top">
+        <input value="${escapeHtml(it.name || '')}" oninput="updateDpImport(${i},'name',this.value)" placeholder="yemek">
+        <button class="pf-imp-del" onclick="removeDpImport(${i})" title="Çıkar" aria-label="Çıkar">✕</button>
+      </div>
+      <div class="pf-imp-bot">
+        <label style="flex:2;">Öğün<select onchange="updateDpImport(${i},'slot',this.value)">
+          ${DP_SLOT_OPTS.map(([v, t]) => `<option value="${v}" ${it.slot === v ? 'selected' : ''}>${t}</option>`).join('')}
+        </select></label>
+        <label>kcal<input type="number" inputmode="numeric" placeholder="—" value="${it.kcal != null ? it.kcal : ''}" oninput="updateDpImport(${i},'kcal',this.value)"></label>
+      </div>
+    </div>`).join('');
+  document.getElementById('dpImportActions').style.display = 'flex';
+}
+function updateDpImport(i, field, val) {
+  if (!_dpImportItems[i]) return;
+  if (field === 'name') _dpImportItems[i].name = val;
+  else if (field === 'slot') _dpImportItems[i].slot = val;
+  else if (field === 'kcal') { const n = parseInt(String(val).replace(/[^\d]/g, ''), 10); _dpImportItems[i].kcal = (isFinite(n) && n > 0) ? n : null; }
+}
+function removeDpImport(i) {
+  _dpImportItems.splice(i, 1);
+  if (!_dpImportItems.length) {
+    document.getElementById('dpImportStatus').textContent = 'Liste boş. İptal et ya da yeni fotoğraf dene.';
+    document.getElementById('dpImportActions').style.display = 'none';
+    document.getElementById('dpImportList').innerHTML = '';
+    return;
+  }
+  renderDpImportList();
+}
+function confirmDietPlanImport() {
+  ensureDiet();
+  let added = 0;
+  for (const it of _dpImportItems) {
+    const name = (it.name || '').trim();
+    if (!name) continue;
+    data.diet.plan.push({ id: Date.now() + Math.floor(Math.random() * 100000), slot: it.slot || 'atistirma', name, kcal: (it.kcal != null ? it.kcal : null) });
+    added++;
+  }
+  closeDietPlanImport();
+  save(); renderDiet();
+  showToast(added + ' yemek plana eklendi', 'success');
 }
 
 // ===== Besin makro arama (veritabanı + AI tahmini) =====

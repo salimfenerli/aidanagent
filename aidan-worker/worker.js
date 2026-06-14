@@ -3166,31 +3166,69 @@ async function handleDietPlanImageApi(request, env) {
   try { bytes = base64ToBytes(image); } catch { return jsonCors({ error: 'görsel okunamadı' }, 400, cors); }
   if (!bytes.length) return jsonCors({ error: 'boş görsel' }, 400, cors);
 
-  const prompt = [
-    'Bu bir diyetisyen/beslenme programının fotoğrafı (kağıt, ekran veya PDF görüntüsü).',
-    'Programdaki TÜM yemekleri, HİÇBİRİNİ ATLAMADAN oku. Her yemek/içecek satırı için bir nesne üret:',
-    '- name: yemeğin adı + miktarı (örn "2 yumurta", "1 dilim tam buğday ekmeği", "1 kase yoğurt"). Görseldeki haliyle.',
-    '- slot: yemek hangi öğüne ait? Sadece şunlardan biri: "kahvalti", "ogle", "aksam", "atistirma".',
-    '  Sabah=kahvalti, öğlen=ogle, akşam=aksam, ara öğün/kuşluk/ikindi=atistirma. Emin değilsen "atistirma".',
-    '- kcal: o yemeğin kalorisi yazıyorsa SAYI olarak (örn 150). Yazmıyorsa null.',
-    '',
-    'SADECE geçerli bir JSON dizisi döndür, başka hiçbir açıklama yazma. Örnek:',
-    '[{"slot":"kahvalti","name":"2 haşlanmış yumurta","kcal":140},{"slot":"kahvalti","name":"1 dilim peynir","kcal":80},{"slot":"ogle","name":"1 porsiyon tavuk","kcal":250}]',
-    'Hiç yemek göremezsen [] döndür.',
+  // --- Aşama 1: Vision modeli SADECE transkript (OCR) — küçük model yapılandırmaya değil okumaya odaklanır ---
+  const ocrPrompt = [
+    'Bu bir diyetisyen/beslenme programının görüntüsü (kağıt, ekran ya da PDF).',
+    'Görseldeki TÜM yazıyı satır satır, gördüğün gibi AYNEN yaz.',
+    'Öğün başlıklarını (Kahvaltı, Ara öğün, Öğle, İkindi, Akşam vb.) ve altlarındaki yemek/içecek satırlarını koru.',
+    'Hiçbir şey ekleme, yorumlama, özetleme. Sadece görünen metin.',
   ].join('\n');
 
-  let lastRaw = '', debug = '', lastErr = '';
+  // --- Fallback (iki-aşama boş dönerse) için eski tek-aşama prompt ---
+  const directPrompt = [
+    'Bu bir diyetisyen/beslenme programının fotoğrafı (kağıt, ekran veya PDF görüntüsü).',
+    'Programdaki TÜM yemekleri, HİÇBİRİNİ ATLAMADAN oku. Her yemek/içecek satırı için bir nesne üret:',
+    '- name: yemeğin adı + miktarı (örn "2 yumurta", "1 dilim tam buğday ekmeği"). Görseldeki haliyle.',
+    '- slot: "kahvalti" | "ogle" | "aksam" | "atistirma". Emin değilsen "atistirma".',
+    '- kcal: kalori yazıyorsa SAYI, yoksa null.',
+    'SADECE geçerli bir JSON dizisi döndür, başka açıklama yazma. Hiç yemek yoksa [].',
+  ].join('\n');
+
+  let transcript = '', lastRaw = '', debug = '', lastErr = '';
+
+  // Aşama 1: OCR transkript
   try {
-    const r = await visionRun(env, { image: bytes, prompt, max_tokens: 1024 });
-    const rr = r && (r.response != null ? r.response : (r.description != null ? r.description : r.text));
-    lastRaw = (typeof rr === 'string') ? rr : JSON.stringify(rr);
-    debug = (typeof r === 'object') ? JSON.stringify(r).slice(0, 700) : String(r).slice(0, 700);
-    const items = extractDietPlanJson(lastRaw);
-    if (items.length) return jsonCors({ items }, 200, cors);
-  } catch (e) {
-    lastErr = e.message;
+    const v = await visionRun(env, { image: bytes, prompt: ocrPrompt, max_tokens: 1500 });
+    const vr = v && (v.response != null ? v.response : (v.description != null ? v.description : v.text));
+    transcript = (typeof vr === 'string') ? vr : JSON.stringify(vr);
+  } catch (e) { lastErr = 'ocr: ' + e.message; }
+
+  // Aşama 2: 70B metin modeli transkripti öğünlere bölüp JSON üretir (asıl doğruluk burada)
+  let items = [];
+  if (transcript && transcript.trim()) {
+    const sys = [
+      'Sana bir diyet programının ham metin transkripti verilecek. Bunu öğünlere böl.',
+      'Her yemek/içecek satırı için bir JSON nesnesi üret:',
+      '- name: yemeğin adı + miktarı, transkriptteki haliyle (örn "2 yumurta", "1 dilim tam buğday ekmeği").',
+      '- slot: "kahvalti" | "ogle" | "aksam" | "atistirma". Sabah=kahvalti, öğlen=ogle, akşam=aksam, ara öğün/kuşluk/ikindi=atistirma. Başlıklara göre karar ver. Emin değilsen "atistirma".',
+      '- kcal: kalori yazıyorsa sayı, yoksa null.',
+      'SADECE geçerli bir JSON dizisi döndür, başka metin yazma. Yemek yoksa [].',
+    ].join('\n');
+    try {
+      const r = await env.AI.run(AI_MODEL, {
+        messages: [{ role: 'system', content: sys }, { role: 'user', content: String(transcript).slice(0, 6000) }],
+        max_tokens: 1024, temperature: 0.1,
+      });
+      lastRaw = (typeof r.response === 'string') ? r.response : JSON.stringify(r.response || '');
+      items = extractDietPlanJson(lastRaw);
+    } catch (e) { lastErr = (lastErr ? lastErr + ' | ' : '') + 'struct: ' + e.message; }
   }
-  return jsonCors({ items: [], raw: String(lastRaw || '').slice(0, 400), debug: debug || undefined, aiError: lastErr || undefined }, 200, cors);
+
+  // Fallback: iki-aşama boş döndüyse eski tek-aşama (vision direkt JSON)
+  if (!items.length) {
+    try {
+      const r = await visionRun(env, { image: bytes, prompt: directPrompt, max_tokens: 1024 });
+      const rr = r && (r.response != null ? r.response : (r.description != null ? r.description : r.text));
+      const raw = (typeof rr === 'string') ? rr : JSON.stringify(rr);
+      debug = (typeof r === 'object') ? JSON.stringify(r).slice(0, 700) : String(r).slice(0, 700);
+      const di = extractDietPlanJson(raw);
+      if (di.length) { items = di; lastRaw = raw; }
+      else if (!lastRaw) lastRaw = raw;
+    } catch (e) { lastErr = (lastErr ? lastErr + ' | ' : '') + 'direct: ' + e.message; }
+  }
+
+  if (items.length) return jsonCors({ items, transcript: String(transcript).slice(0, 600) || undefined }, 200, cors);
+  return jsonCors({ items: [], transcript: String(transcript).slice(0, 600) || undefined, raw: String(lastRaw || '').slice(0, 400), debug: debug || undefined, aiError: lastErr || undefined }, 200, cors);
 }
 
 // Besin makro JSON ayıkla (Llama'dan {en, grams, ai:{...}} bekler)

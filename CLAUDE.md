@@ -759,7 +759,18 @@ Salim iki fikir istedi: (1) iPhone ekran süresi kısıtlama, (2) diyet sekmesi.
   - `.glass` CSS ölü kaldı (zararsız, dokunulmadı).
 - **Doğrulama:** node --check (inline JS) SYNTAX OK + dangling eski referans (waterGlasses/addWater/setWater/day.water) taraması temiz.
 - **Cache:** v7-65 → v7-66
-- ⏳ Sırada (Salim'in seçtikleri, henüz yapılmadı): diyet karnesi (haftalık) · makro hedefleri+çubuk · geçmiş günleri gör · akşam diyet push özeti.
+
+### Haziran 14, 2026 — 3. seans (🔱 iki aşamalı program okuma + ✅ onay modalı + öğün chip)
+- **🔱 Diyet programı okuma — iki aşamalı (Worker `handleDietPlanImageApi`):** Eskiden tek küçük vision modeline (Llama 3.2 11B) hem OCR hem JSON yapılandırma yaptırılıyordu → atlama/hata. Yeni:
+  - **Aşama 1:** `visionRun` SADECE transkript (ham OCR, max_tokens 1500) — küçük model okumaya odaklanır.
+  - **Aşama 2:** `env.AI.run(AI_MODEL)` = **Llama 3.3 70B** transkripti öğünlere bölüp JSON üretir (asıl doğruluk burada, temperature 0.1).
+  - **Fallback:** iki-aşama boş dönerse eski tek-aşama (vision→direkt JSON) `directPrompt` ile denenir. Response'a `transcript` (ilk 600 char) teşhis için eklendi.
+  - `extractDietPlanJson` aynen kullanılıyor. worker.js **LF** satır sonu (asistan.html CRLF — Python replace'te dikkat!).
+- **✅ Görselden okuma artık doğrudan plana yazmıyor:** `dietPlanFromImage` → `openDietPlanImport(items)` düzenlenebilir onay modalı (`#dietPlanImportModal`, borsa import kalıbı). Her satır: yemek adı + öğün select + kcal + sil. `confirmDietPlanImport` plana ekler. AI hatası plana sızmaz. `_dpImportItems` geçici liste.
+- **🍔 Öğün seçimi gizli dropdown → görünür chip:** Plan ekle + öğün ekle formlarındaki `<select>` (Salim hep kahvaltıya düşüyordu, dropdown fark edilmiyordu) → `.slot-chips` segmented butonlar (Kahvaltı/Öğle/Akşam/Ara öğün), seçili amber vurgulu. `_planSlot`/`_mealSlot` state + `selectPlanSlot`/`selectMealSlot`. `addPlanMeal`/`addMeal` artık state'ten okur (eski `planSlot`/`mealSlot` element id'leri kaldırıldı).
+- **Doğrulama:** worker.js + asistan.html `node --check` OK, dangling referans (slotEl/planSlot/mealSlot getElementById) taraması temiz. Canlı görsel-okuma testi deploy sonrası yapılacak.
+- **Cache:** v7-66 → v7-67
+- ⏳ Sırada (Salim'in seçtikleri, henüz yapılmadı): favori/sık öğünler (tek tık tekrar) · diyet karnesi (haftalık) · makro hedefleri+çubuk · geçmiş günleri gör · akşam diyet push özeti.
 
 ## Mevcut Durum
 
