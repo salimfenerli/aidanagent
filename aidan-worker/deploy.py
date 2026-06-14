@@ -95,6 +95,7 @@ def upload_script(worker_js: str):
             {"type": "inherit", "name": "WEBHOOK_SECRET"},
             {"type": "inherit", "name": "VAPID_PUBLIC_KEY"},
             {"type": "inherit", "name": "VAPID_PRIVATE_KEY"},
+            {"type": "inherit", "name": "USDA_API_KEY"},
         ],
     }
     files = {
