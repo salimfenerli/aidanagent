@@ -3088,6 +3088,49 @@
   .barcode-manual { display:flex; gap:8px; margin-top:10px; }
   .barcode-manual input { flex:1; min-width:0; }
   .ai-src { font-size:0.75em; color:var(--text-muted); font-weight:600; margin-left:6px; }
+  .food-recent { margin:2px 0 8px; }
+
+  /* Takviyeler */
+  .supp-item { display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--surface-hover); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:6px; }
+  .supp-item.off { opacity:0.5; }
+  .supp-item.taken { background:rgba(52,199,89,0.10); border-color:rgba(52,199,89,0.35); }
+  .supp-check { width:24px; height:24px; flex:0 0 auto; border:1.5px solid var(--border); border-radius:7px; background:transparent; color:#fff; font-size:0.85em; line-height:1; padding:0; cursor:pointer; box-shadow:none; display:flex; align-items:center; justify-content:center; transition:background .15s ease, border-color .15s ease; }
+  .supp-check.on { background:#34c759; border-color:#34c759; }
+  .supp-time { font-weight:700; color:var(--text-strong); font-size:0.9em; min-width:46px; }
+  .supp-name { flex:1; color:var(--text); }
+  .supp-item.taken .supp-name { text-decoration:line-through; color:var(--text-muted); }
+  .supp-days { font-size:0.74em; color:var(--text-muted); }
+  .supp-del { background:transparent; border:none; color:var(--text-muted); cursor:pointer; padding:2px 6px; box-shadow:none; }
+  .supp-del:hover { color:#ef4444; }
+  .supp-add { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+  .supp-add-row2 { display:flex; gap:8px; }
+  .supp-add-row2 input[type=time] { flex:1; min-width:0; }
+  .supp-add-row2 select { flex:1; min-width:0; }
+
+  /* Sık yediklerin — düzenle modu */
+  .freq-editbtn { background:transparent; border:none; color:var(--accent); font-size:0.82em; font-weight:600; cursor:pointer; padding:0 0 0 8px; box-shadow:none; text-transform:none; letter-spacing:0; }
+  .freq-chip.pinned { border-color:var(--accent); }
+  .freq-chip-edit { display:inline-flex; align-items:center; gap:6px; padding:5px 8px; background:var(--surface-hover); border:1px solid var(--border); border-radius:99px; }
+  .freq-chip-name { font-size:0.82em; color:var(--text); }
+  .freq-pin, .freq-hide { background:transparent; border:none; cursor:pointer; padding:0 2px; box-shadow:none; font-size:0.85em; line-height:1; }
+  .freq-pin { color:var(--text-muted); }
+  .freq-pin.on { color:var(--accent); }
+  .freq-hide { color:var(--text-muted); }
+  .freq-hide:hover { color:#ef4444; }
+
+  /* Barkod -> isimle ara köprüsü */
+  .barcode-toname { width:100%; margin-top:8px; }
+
+  /* Kilo detay modalı */
+  .meal-name-edit { cursor:pointer; }
+  .wd-chart svg { width:100%; height:140px; }
+  .wd-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:12px 0; }
+  .wd-stats > div { display:flex; flex-direction:column; align-items:center; background:var(--surface-hover); border:1px solid var(--border); border-radius:var(--radius); padding:8px 4px; }
+  .wd-num { font-size:1.05em; font-weight:700; color:var(--text-strong); }
+  .wd-lbl { font-size:0.68em; color:var(--text-muted); margin-top:2px; }
+  .wd-list { display:flex; flex-direction:column; gap:4px; max-height:34vh; overflow-y:auto; }
+  .wd-row { display:flex; justify-content:space-between; font-size:0.85em; color:var(--text); padding:5px 8px; background:var(--surface-hover); border-radius:var(--radius-sm); }
+  .wd-kg { font-weight:700; color:var(--text-strong); }
 </style>
 </head>
 <body>
@@ -3463,11 +3506,26 @@
         <span class="diet-card-title">Kilo</span>
         <span class="diet-card-meta" id="weightMeta"></span>
       </div>
-      <div id="weightTrend" class="weight-trend"></div>
+      <div id="weightTrend" class="weight-trend" onclick="openWeightDetail()"></div>
       <div class="weight-add">
         <input id="weightKg" type="number" step="0.1" inputmode="decimal" placeholder="bugünkü kilo (kg)" onkeydown="if(event.key==='Enter')logWeight()">
         <button class="small primary" onclick="logWeight()">Kaydet</button>
       </div>
+    </div>
+
+    <!-- Takviyeler (push hatırlatıcı — data.reminders kind:supp) -->
+    <div class="diet-card">
+      <div class="diet-card-head"><span class="diet-card-title">Takviyeler</span><span class="diet-card-meta" id="suppMeta"></span></div>
+      <div id="suppList"></div>
+      <div class="supp-add">
+        <input id="suppName" placeholder="takviye (örn. D Vitamini)" onkeydown="if(event.key==='Enter')addSupplement()">
+        <div class="supp-add-row2">
+          <input id="suppTime" type="time">
+          <select id="suppDays"><option value="daily">Her gün</option><option value="weekdays">Hafta içi</option></select>
+          <button class="small primary" onclick="addSupplement()">Ekle</button>
+        </div>
+      </div>
+      <p class="diet-hint">Saati gelince telefonuna bildirim gelir (~15 dk hassasiyet). Günde 2 kez içiyorsan iki ayrı saat ekle.</p>
     </div>
 
     <!-- Öğün hatırlatıcı + hedefler -->
@@ -3782,6 +3840,7 @@
         <input id="foodSearchInput" placeholder="ne yedin? (örn. 2 yumurta, 150g dana bonfile)" onkeydown="if(event.key==='Enter')aiFoodSearch()">
         <button class="small primary" onclick="aiFoodSearch()">Ara</button>
       </div>
+      <div id="foodRecent" class="food-recent"></div>
       <div class="freq-meals" id="freqMeals"></div>
       <div id="foodSearchResults" class="food-results"></div>
       <div id="foodPortion" class="food-portion" style="display:none;"></div>
@@ -3798,6 +3857,7 @@
         <input id="barcodeManual" inputmode="numeric" placeholder="barkod no (örn. 8690...)" onkeydown="if(event.key==='Enter')barcodeManualLookup()">
         <button class="small" onclick="barcodeManualLookup()">Bul</button>
       </div>
+      <button class="small barcode-toname" onclick="foodModalTab('ara')">Bulamadın mı? İsimle ara</button>
     </div>
 
     <div class="food-pane" id="foodPane-elle" style="display:none;">
@@ -3817,6 +3877,39 @@
     </div>
 
     <button class="modal-close" onclick="closeFoodModal()">Kapat</button>
+  </div>
+</div>
+
+<!-- Loglanan öğünü düzenle modalı -->
+<div class="modal-overlay" id="mealEditModal" onclick="if(event.target.id==='mealEditModal')closeMealEdit()">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-title">Öğünü düzenle</div>
+    <div class="meal-add">
+      <input id="editMealName" placeholder="yemek adı" onkeydown="if(event.key==='Enter')saveMealEdit()">
+      <div class="slot-chips" id="editMealSlotChips">
+        <button type="button" class="slot-chip active" data-slot="kahvalti" onclick="selectEditMealSlot('kahvalti',this)">Kahvaltı</button>
+        <button type="button" class="slot-chip" data-slot="ogle" onclick="selectEditMealSlot('ogle',this)">Öğle</button>
+        <button type="button" class="slot-chip" data-slot="aksam" onclick="selectEditMealSlot('aksam',this)">Akşam</button>
+        <button type="button" class="slot-chip" data-slot="atistirma" onclick="selectEditMealSlot('atistirma',this)">Atıştırma</button>
+      </div>
+      <div class="meal-add-row2">
+        <input id="editMealKcal" type="number" inputmode="numeric" min="0" placeholder="kcal" class="meal-kcal">
+        <button class="small primary" onclick="saveMealEdit()">Kaydet</button>
+      </div>
+    </div>
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="secondary" onclick="deleteMealFromEdit()">Sil</button>
+    </div>
+    <button class="modal-close" onclick="closeMealEdit()">Kapat</button>
+  </div>
+</div>
+
+<!-- Kilo detay modalı -->
+<div class="modal-overlay" id="weightDetailModal" onclick="if(event.target.id==='weightDetailModal')closeWeightDetail()">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-title">Kilo takibi</div>
+    <div id="weightDetailBody"></div>
+    <button class="modal-close" onclick="closeWeightDetail()">Kapat</button>
   </div>
 </div>
 
@@ -3988,6 +4081,9 @@ function ensureDiet() {
   if (d.proteinGoal === undefined) d.proteinGoal = Math.round((d.kcalGoal || 2000) * 0.25 / 4);
   if (d.carbGoal === undefined) d.carbGoal = Math.round((d.kcalGoal || 2000) * 0.50 / 4);
   if (d.fatGoal === undefined) d.fatGoal = Math.round((d.kcalGoal || 2000) * 0.25 / 9);
+  d.freqHidden = d.freqHidden || [];
+  d.freqPinned = d.freqPinned || [];
+  d.recentFoods = d.recentFoods || [];
 }
 // Seçili diyet günü (varsayılan bugün). _dietDate ile geçmiş günlere gezilir.
 let _dietDate = null;
@@ -4056,6 +4152,7 @@ function renderDiet() {
   renderDiary();
   renderFrequentMeals();
   renderWeightTrend();
+  renderSupplements();
   renderMacroBars();
   // Hedef inputları
   const gk = document.getElementById('goalKcal'); if (gk) gk.value = d.kcalGoal;
@@ -4116,7 +4213,7 @@ function renderMealList() {
     html += `<div class="meal-group"><div class="meal-group-head">${MEAL_SLOTS[slot]}${sub ? ` · ${sub} kcal` : ''}</div>`;
     items.forEach(m => {
       const macroTag = (m.protein != null || m.carb != null || m.fat != null) ? ` · P${m.protein || 0} K${m.carb || 0} Y${m.fat || 0}` : '';
-      html += `<div class="meal-item"><span class="meal-name">${escapeHtml(m.name)}</span><span class="meal-kcal-tag">${m.kcal != null ? m.kcal + ' kcal' : ''}${macroTag}</span><button class="meal-del" onclick="removeMeal(${m.id})" title="Sil" aria-label="Sil">✕</button></div>`;
+      html += `<div class="meal-item"><span class="meal-name meal-name-edit" onclick="editMeal(${m.id})">${escapeHtml(m.name)}</span><span class="meal-kcal-tag">${m.kcal != null ? m.kcal + ' kcal' : ''}${macroTag}</span><button class="meal-del" onclick="removeMeal(${m.id})" title="Sil" aria-label="Sil">✕</button></div>`;
     });
     html += '</div>';
   });
@@ -4146,17 +4243,50 @@ function frequentMeals(limit = 8) {
       map.set(key, e);
     }
   }
-  return [...map.values()].sort((a, b) => b.count - a.count || (a.last < b.last ? 1 : -1)).slice(0, limit);
+  const hidden = data.diet.freqHidden || [], pinned = data.diet.freqPinned || [];
+  return [...map.values()]
+    .filter(e => !hidden.includes(e.name.toLocaleLowerCase('tr')))
+    .sort((a, b) => {
+      const pa = pinned.includes(a.name.toLocaleLowerCase('tr')) ? 1 : 0;
+      const pb = pinned.includes(b.name.toLocaleLowerCase('tr')) ? 1 : 0;
+      if (pa !== pb) return pb - pa;
+      return b.count - a.count || (a.last < b.last ? 1 : -1);
+    }).slice(0, limit);
 }
 let _freqMeals = [];
+let _freqEdit = false;
+function toggleFreqEdit() { _freqEdit = !_freqEdit; renderFrequentMeals(); }
 function renderFrequentMeals() {
-  _freqMeals = frequentMeals(8);
+  _freqMeals = frequentMeals(10);
   const el = document.getElementById('freqMeals');
   if (!el) return;
-  if (!_freqMeals.length) { el.innerHTML = ''; return; }
-  el.innerHTML = '<div class="freq-head">Sık yediklerin</div><div class="freq-chips">' +
-    _freqMeals.map((m, i) => `<button class="freq-chip" onclick="quickAddMeal(${i})" title="Ekle">${escapeHtml(m.name)}${m.kcal != null ? ` · ${m.kcal}` : ''}</button>`).join('') +
-    '</div>';
+  if (!_freqMeals.length) { el.innerHTML = ''; _freqEdit = false; return; }
+  const pinned = data.diet.freqPinned || [];
+  const head = `<div class="freq-head">Sık yediklerin <button class="freq-editbtn" onclick="toggleFreqEdit()">${_freqEdit ? 'bitti' : 'düzenle'}</button></div>`;
+  const chips = _freqMeals.map((m, i) => {
+    const low = m.name.toLocaleLowerCase('tr');
+    const isPin = pinned.includes(low);
+    if (_freqEdit) {
+      return `<span class="freq-chip-edit"><button class="freq-pin${isPin ? ' on' : ''}" onclick="pinFreq(${i})" title="Sabitle">★</button><span class="freq-chip-name">${escapeHtml(m.name)}</span><button class="freq-hide" onclick="hideFreq(${i})" title="Gizle">✕</button></span>`;
+    }
+    return `<button class="freq-chip${isPin ? ' pinned' : ''}" onclick="quickAddMeal(${i})" title="Ekle">${escapeHtml(m.name)}${m.kcal != null ? ` · ${m.kcal}` : ''}</button>`;
+  }).join('');
+  el.innerHTML = head + '<div class="freq-chips">' + chips + '</div>';
+}
+function hideFreq(i) {
+  const m = _freqMeals[i]; if (!m) return; ensureDiet();
+  const low = m.name.toLocaleLowerCase('tr');
+  if (!data.diet.freqHidden.includes(low)) data.diet.freqHidden.push(low);
+  data.diet.freqPinned = (data.diet.freqPinned || []).filter(x => x !== low);
+  save(); renderFrequentMeals();
+}
+function pinFreq(i) {
+  const m = _freqMeals[i]; if (!m) return; ensureDiet();
+  const low = m.name.toLocaleLowerCase('tr');
+  const arr = data.diet.freqPinned;
+  const ix = arr.indexOf(low);
+  if (ix >= 0) arr.splice(ix, 1); else arr.push(low);
+  save(); renderFrequentMeals();
 }
 function quickAddMeal(i) {
   const m = _freqMeals[i];
@@ -4466,7 +4596,7 @@ function renderDiary() {
       html += '<div class="diary-items">';
       items.forEach(m => {
         const macroTag = (m.protein != null || m.carb != null || m.fat != null) ? ` · P${m.protein || 0} K${m.carb || 0} Y${m.fat || 0}` : '';
-        html += `<div class="meal-item"><span class="meal-name">${escapeHtml(m.name)}</span><span class="meal-kcal-tag">${m.kcal != null ? m.kcal + ' kcal' : ''}${macroTag}</span><button class="meal-del" onclick="removeMeal(${m.id})" title="Sil" aria-label="Sil">✕</button></div>`;
+        html += `<div class="meal-item"><span class="meal-name meal-name-edit" onclick="editMeal(${m.id})">${escapeHtml(m.name)}</span><span class="meal-kcal-tag">${m.kcal != null ? m.kcal + ' kcal' : ''}${macroTag}</span><button class="meal-del" onclick="removeMeal(${m.id})" title="Sil" aria-label="Sil">✕</button></div>`;
       });
       html += '</div>';
     }
@@ -4493,6 +4623,7 @@ function openFoodModal(slot, tab) {
   const fp = document.getElementById('foodPortion'); if (fp) { fp.style.display = 'none'; fp.innerHTML = ''; }
   m.classList.add('active');
   renderFrequentMeals();
+  renderRecentFoods();
   foodModalTab(tab || 'ara');
 }
 function closeFoodModal() {
@@ -4683,6 +4814,7 @@ function aiFoodSearch() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || ('hata ' + r.status));
       renderAiFood(q, j);
+      pushRecentFood(q);
     } catch (e) {
       out.innerHTML = '<div class="diet-empty">Bulamadım: ' + escapeHtml(e.message) + '</div>';
     }
@@ -4734,6 +4866,110 @@ function addAiFood() {
   save(); renderDiet(); closeFoodModal();
   showToast('Eklendi', 'success');
 }
+
+// ===== TAKVİYELER (push hatırlatıcı — mevcut data.reminders + Worker 15dk cron) =====
+function renderSupplements() {
+  const el = document.getElementById('suppList'); if (!el) return;
+  const supps = (data.reminders || []).filter(r => r.kind === 'supp').sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  const meta = document.getElementById('suppMeta');
+  const t = today();
+  if (meta) meta.textContent = supps.length ? `${supps.filter(r => r.takenDate === t).length}/${supps.length} alındı` : '';
+  if (!supps.length) { el.innerHTML = '<div class="diet-empty">Henüz takviye yok. Aşağıdan ekle — saatinde bildirim gelir.</div>'; return; }
+  el.innerHTML = supps.map(r => {
+    const taken = r.takenDate === t;
+    return `<div class="supp-item${r.enabled === false ? ' off' : ''}${taken ? ' taken' : ''}">` +
+      `<button class="supp-check${taken ? ' on' : ''}" onclick="markSuppTaken(${r.id})" title="${taken ? 'işareti kaldır' : 'aldım'}" aria-label="aldım">${taken ? '✓' : ''}</button>` +
+      `<span class="supp-time">${escapeHtml(r.time || '–')}</span>` +
+      `<span class="supp-name">${escapeHtml(r.label || '')}</span>` +
+      `<span class="supp-days">${r.days === 'weekdays' ? 'Hafta içi' : 'Her gün'}</span>` +
+      `<input type="checkbox" ${r.enabled !== false ? 'checked' : ''} onchange="toggleSupplement(${r.id})" aria-label="Aç/kapa">` +
+      `<button class="supp-del" onclick="deleteSupplement(${r.id})" aria-label="Sil">✕</button></div>`;
+  }).join('');
+}
+function addSupplement() {
+  const name = (document.getElementById('suppName').value || '').trim();
+  const time = document.getElementById('suppTime').value;
+  const days = document.getElementById('suppDays').value;
+  if (!name) { showToast('Takviye adı yaz', 'info'); return; }
+  if (!time) { showToast('Saat seç', 'info'); return; }
+  data.reminders = data.reminders || [];
+  data.reminders.push({ id: Date.now(), label: name, time, days, enabled: true, lastFired: null, kind: 'supp' });
+  document.getElementById('suppName').value = ''; document.getElementById('suppTime').value = '';
+  save(); renderSupplements();
+  if (typeof renderFixedReminders === 'function') renderFixedReminders();
+  showToast(`${time} — ${name} kuruldu`, 'success');
+}
+function toggleSupplement(id) { const r = (data.reminders || []).find(x => x.id === id); if (!r) return; r.enabled = (r.enabled === false); save(); renderSupplements(); }
+function deleteSupplement(id) {
+  data.reminders = (data.reminders || []).filter(x => x.id !== id);
+  save(); renderSupplements();
+  if (typeof renderFixedReminders === 'function') renderFixedReminders();
+  showToast('Takviye silindi', 'info');
+}
+function markSuppTaken(id) { const r = (data.reminders || []).find(x => x.id === id); if (!r) return; const t = today(); r.takenDate = (r.takenDate === t) ? null : t; save(); renderSupplements(); }
+
+// ===== Loglanan öğünü düzenle =====
+let _editMealId = null, _editMealSlot = 'kahvalti';
+function editMeal(id) {
+  const day = dietDay(false); const m = (day.meals || []).find(x => x.id === id); if (!m) return;
+  _editMealId = id; _editMealSlot = m.slot || 'kahvalti';
+  document.getElementById('editMealName').value = m.name || '';
+  document.getElementById('editMealKcal').value = (m.kcal != null ? m.kcal : '');
+  document.querySelectorAll('#editMealSlotChips .slot-chip').forEach(c => c.classList.toggle('active', c.getAttribute('data-slot') === _editMealSlot));
+  document.getElementById('mealEditModal').classList.add('active');
+  setTimeout(() => document.getElementById('editMealName').focus(), 50);
+}
+function selectEditMealSlot(slot, btn) { _editMealSlot = slot; btn.parentElement.querySelectorAll('.slot-chip').forEach(c => c.classList.remove('active')); btn.classList.add('active'); }
+function closeMealEdit() { document.getElementById('mealEditModal').classList.remove('active'); _editMealId = null; }
+function saveMealEdit() {
+  if (_editMealId == null) return;
+  const day = dietDay(); const m = (day.meals || []).find(x => x.id === _editMealId); if (!m) { closeMealEdit(); return; }
+  const name = (document.getElementById('editMealName').value || '').trim();
+  if (!name) { showToast('İsim boş olamaz', 'info'); return; }
+  const kv = document.getElementById('editMealKcal').value;
+  m.name = name; m.kcal = (kv !== '' ? Math.max(0, parseInt(kv, 10) || 0) : null); m.slot = _editMealSlot;
+  save(); renderDiet(); closeMealEdit();
+}
+function deleteMealFromEdit() { if (_editMealId != null) removeMeal(_editMealId); closeMealEdit(); }
+
+// ===== Kilo detay modalı =====
+function openWeightDetail() {
+  const arr = (data.diet.weights || []);
+  const modal = document.getElementById('weightDetailModal'); if (!modal) return;
+  const body = document.getElementById('weightDetailBody');
+  if (!arr.length) { body.innerHTML = '<div class="diet-empty">Henüz kilo kaydı yok.</div>'; modal.classList.add('active'); return; }
+  const vals = arr.map(w => w.kg);
+  const min = Math.min(...vals), max = Math.max(...vals), last = vals[vals.length - 1], first = vals[0];
+  const diff = +(last - first).toFixed(1), sign = diff > 0 ? '+' : '';
+  const chart = arr.length >= 2 ? `<div class="wd-chart">${lineChart(vals, diff > 0)}</div>` : '<div class="diet-empty">En az 2 kayıt olunca grafik çıkar.</div>';
+  const rows = [...arr].slice(-12).reverse().map(w => `<div class="wd-row"><span>${new Date(w.date + 'T12:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: '2-digit' })}</span><span class="wd-kg">${w.kg} kg</span></div>`).join('');
+  body.innerHTML = chart +
+    `<div class="wd-stats"><div><span class="wd-num">${last}</span><span class="wd-lbl">son (kg)</span></div>` +
+    `<div><span class="wd-num ${diff > 0 ? 'wt-up' : (diff < 0 ? 'wt-down' : '')}">${sign}${diff}</span><span class="wd-lbl">değişim</span></div>` +
+    `<div><span class="wd-num">${min}</span><span class="wd-lbl">en düşük</span></div>` +
+    `<div><span class="wd-num">${max}</span><span class="wd-lbl">en yüksek</span></div></div>` +
+    `<div class="wd-list">${rows}</div>`;
+  modal.classList.add('active');
+}
+function closeWeightDetail() { document.getElementById('weightDetailModal').classList.remove('active'); }
+
+// ===== Son aramalar (Ara sekmesi) =====
+function pushRecentFood(q) {
+  q = (q || '').trim(); if (!q) return; ensureDiet();
+  const low = q.toLocaleLowerCase('tr');
+  data.diet.recentFoods = (data.diet.recentFoods || []).filter(x => x.toLocaleLowerCase('tr') !== low);
+  data.diet.recentFoods.unshift(q);
+  data.diet.recentFoods = data.diet.recentFoods.slice(0, 8);
+  save(); renderRecentFoods();
+}
+function renderRecentFoods() {
+  const el = document.getElementById('foodRecent'); if (!el) return;
+  const rec = (data.diet.recentFoods || []);
+  if (!rec.length) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="freq-head">Son aramalar</div><div class="freq-chips">' +
+    rec.map(q => `<button class="freq-chip" data-q="${escapeHtml(q)}" onclick="recentFoodSearch(this.dataset.q)">${escapeHtml(q)}</button>`).join('') + '</div>';
+}
+function recentFoodSearch(q) { const i = document.getElementById('foodSearchInput'); if (i) { i.value = q; aiFoodSearch(); } }
 
 function renderMacroBars() {
   const d = data.diet, day = dietDay(false);
@@ -10262,7 +10498,7 @@ function renderPushLog() {
 function renderFixedReminders() {
   const el = document.getElementById('fixedRemindersList');
   if (!el) return;
-  const rems = data.reminders || [];
+  const rems = (data.reminders || []).filter(r => r.kind !== 'supp');
   if (!rems.length) {
     el.innerHTML = '<div class="fixedrem-empty">Henüz sabit hatırlatıcın yok — aşağıdan ekle.</div>';
     return;
