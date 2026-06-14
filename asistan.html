@@ -3087,6 +3087,7 @@
   .barcode-btns { display:flex; gap:8px; margin-bottom:8px; }
   .barcode-manual { display:flex; gap:8px; margin-top:10px; }
   .barcode-manual input { flex:1; min-width:0; }
+  .ai-src { font-size:0.75em; color:var(--text-muted); font-weight:600; margin-left:6px; }
 </style>
 </head>
 <body>
@@ -3778,8 +3779,8 @@
 
     <div class="food-pane" id="foodPane-ara">
       <div class="food-search-row">
-        <input id="foodSearchInput" placeholder="ürün/yemek ara (örn. yoğurt)" onkeydown="if(event.key==='Enter')searchFood()">
-        <button class="small primary" onclick="searchFood()">Ara</button>
+        <input id="foodSearchInput" placeholder="ne yedin? (örn. 2 yumurta, 150g dana bonfile)" onkeydown="if(event.key==='Enter')aiFoodSearch()">
+        <button class="small primary" onclick="aiFoodSearch()">Ara</button>
       </div>
       <div class="freq-meals" id="freqMeals"></div>
       <div id="foodSearchResults" class="food-results"></div>
@@ -3812,11 +3813,6 @@
           <input id="mealKcal" type="number" inputmode="numeric" min="0" placeholder="kcal (ops.)" class="meal-kcal">
           <button class="small primary" onclick="addMeal()">Ekle</button>
         </div>
-        <div class="macro-lookup">
-          <button class="small macro-btn" onclick="lookupMealMacros()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>makro bul</button>
-          <span class="macro-pending" id="macroPending"></span>
-        </div>
-        <div id="macroResult" class="macro-result"></div>
       </div>
     </div>
 
@@ -4663,6 +4659,80 @@ function barcodeManualLookup() {
   const v = (document.getElementById('barcodeManual').value || '').trim();
   if (!v) return;
   lookupBarcode(v);
+}
+
+// ===== Ara sekmesi: USDA+AI akıllı arama (jenerik besin + adet/porsiyon) =====
+let _aiFood = null;
+function aiFoodSearch() {
+  const q = (document.getElementById('foodSearchInput').value || '').trim();
+  const out = document.getElementById('foodSearchResults');
+  const fp = document.getElementById('foodPortion'); if (fp) { fp.style.display = 'none'; fp.innerHTML = ''; }
+  if (!q) { document.getElementById('foodSearchInput').focus(); return; }
+  if (!window._supa || !window._user) { out.innerHTML = '<div class="diet-empty">Önce Ayarlar → bulut girişi yap.</div>'; return; }
+  out.innerHTML = '<div class="diet-empty">Aranıyor… birkaç sn.</div>';
+  (async () => {
+    try {
+      const { data: sess } = await window._supa.auth.getSession();
+      const token = sess && sess.session && sess.session.access_token;
+      if (!token) throw new Error('oturum yok');
+      const r = await fetch(FOOD_MACROS_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ query: q }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || ('hata ' + r.status));
+      renderAiFood(q, j);
+    } catch (e) {
+      out.innerHTML = '<div class="diet-empty">Bulamadım: ' + escapeHtml(e.message) + '</div>';
+    }
+  })();
+}
+function renderAiFood(q, j) {
+  const out = document.getElementById('foodSearchResults');
+  const base = j.ai || j.db;
+  if (!base || base.kcal == null) { out.innerHTML = '<div class="diet-empty">Net sonuç yok. "Elle" sekmesinden kalori girebilirsin.</div>'; return; }
+  _aiFood = {
+    name: q, kcal: base.kcal, protein: base.protein, carb: base.carb, fat: base.fat,
+    multi: !!(j.items && j.items.length > 1), items: j.items || [], source: j.source
+  };
+  out.innerHTML = '';
+  const srcLbl = j.source === 'usda' ? 'Veritabanı' : (j.source === 'mixed' ? 'Veritabanı + AI' : (_aiFood.multi ? 'Toplam' : 'AI tahmini'));
+  const bd = _aiFood.multi ? `<div class="macro-note">${_aiFood.items.map(it => `${escapeHtml(it.name)} · ${it.kcal} kcal${it.source === 'usda' ? '' : ' (tahmin)'}`).join('  +  ')}</div>` : '';
+  const fp = document.getElementById('foodPortion');
+  fp.style.display = 'block';
+  fp.innerHTML = `<div class="portion-pick">${escapeHtml(q)} <span class="ai-src">${srcLbl}</span></div>` +
+    bd +
+    `<div class="portion-row"><label>Adet / porsiyon</label><input id="aiQty" type="number" inputmode="decimal" value="1" min="0.25" step="0.25" oninput="updateAiPreview()"></div>` +
+    `<div class="portion-preview" id="aiPreview"></div>` +
+    `<button class="portion-add" onclick="addAiFood()">${MEAL_SLOTS[_mealSlot] || 'Öğün'}'e ekle</button>`;
+  updateAiPreview();
+  fp.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function _aiQtyVal() { const v = Number((document.getElementById('aiQty') || {}).value); return (isFinite(v) && v > 0) ? v : 0; }
+function updateAiPreview() {
+  if (!_aiFood) return;
+  const m = _aiQtyVal();
+  const k = Math.round((_aiFood.kcal || 0) * m);
+  const p = Math.round((_aiFood.protein || 0) * m), c = Math.round((_aiFood.carb || 0) * m), f = Math.round((_aiFood.fat || 0) * m);
+  document.getElementById('aiPreview').innerHTML = `${k} kcal · P${p} K${c} Y${f}`;
+}
+function addAiFood() {
+  if (!_aiFood) return;
+  const m = _aiQtyVal();
+  if (!m) { showToast('Adet gir', 'info'); return; }
+  const day = dietDay();
+  const qStr = (m % 1) ? m.toString().replace('.', ',') : String(m);
+  const label = _aiFood.name + (m !== 1 ? ` ×${qStr}` : '');
+  day.meals.push({
+    id: Date.now(), slot: _mealSlot, name: label,
+    kcal: Math.round((_aiFood.kcal || 0) * m),
+    protein: Math.round((_aiFood.protein || 0) * m),
+    carb: Math.round((_aiFood.carb || 0) * m),
+    fat: Math.round((_aiFood.fat || 0) * m)
+  });
+  save(); renderDiet(); closeFoodModal();
+  showToast('Eklendi', 'success');
 }
 
 function renderMacroBars() {
