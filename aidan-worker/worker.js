@@ -3111,6 +3111,88 @@ async function handlePortfolioImageApi(request, env) {
   }, 200, cors);
 }
 
+// Diyet programı görselinden öğün/yemek listesi çıkar (markdown/çer-çöp toleranslı)
+function extractDietPlanJson(text) {
+  if (!text) return [];
+  let s = String(text).trim();
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) s = fence[1].trim();
+  const arr = s.match(/\[[\s\S]*\]/);
+  if (arr) s = arr[0];
+  let parsed;
+  try { parsed = JSON.parse(s); } catch { return []; }
+  if (!Array.isArray(parsed)) return [];
+  const SLOTS = { kahvalti: 'kahvalti', ogle: 'ogle', 'öğle': 'ogle', aksam: 'aksam', 'akşam': 'aksam', atistirma: 'atistirma', 'atıştırma': 'atistirma', ara: 'atistirma' };
+  const out = [];
+  for (const it of parsed) {
+    if (!it || typeof it !== 'object') continue;
+    const name = String(it.name || it.yemek || '').trim();
+    if (!name || name.length > 120) continue;
+    let slot = String(it.slot || it.ogun || '').toLowerCase().trim();
+    slot = SLOTS[slot] || 'ogle';
+    let kcal = null;
+    if (it.kcal != null && it.kcal !== '') {
+      const n = parseInt(String(it.kcal).replace(/[^\d]/g, ''), 10);
+      if (!isNaN(n) && n >= 0 && n < 5000) kcal = n;
+    }
+    out.push({ slot, name, kcal });
+    if (out.length >= 60) break;
+  }
+  return out;
+}
+
+async function handleDietPlanImageApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const image = body.image;
+  if (!image) return jsonCors({ error: 'image yok' }, 400, cors);
+  if (String(image).length > 8_000_000) return jsonCors({ error: 'görsel çok büyük' }, 413, cors);
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
+
+  let bytes;
+  try { bytes = base64ToBytes(image); } catch { return jsonCors({ error: 'görsel okunamadı' }, 400, cors); }
+  if (!bytes.length) return jsonCors({ error: 'boş görsel' }, 400, cors);
+
+  const prompt = [
+    'Bu bir diyetisyen/beslenme programının fotoğrafı (kağıt, ekran veya PDF görüntüsü).',
+    'Programdaki TÜM yemekleri, HİÇBİRİNİ ATLAMADAN oku. Her yemek/içecek satırı için bir nesne üret:',
+    '- name: yemeğin adı + miktarı (örn "2 yumurta", "1 dilim tam buğday ekmeği", "1 kase yoğurt"). Görseldeki haliyle.',
+    '- slot: yemek hangi öğüne ait? Sadece şunlardan biri: "kahvalti", "ogle", "aksam", "atistirma".',
+    '  Sabah=kahvalti, öğlen=ogle, akşam=aksam, ara öğün/kuşluk/ikindi=atistirma. Emin değilsen "atistirma".',
+    '- kcal: o yemeğin kalorisi yazıyorsa SAYI olarak (örn 150). Yazmıyorsa null.',
+    '',
+    'SADECE geçerli bir JSON dizisi döndür, başka hiçbir açıklama yazma. Örnek:',
+    '[{"slot":"kahvalti","name":"2 haşlanmış yumurta","kcal":140},{"slot":"kahvalti","name":"1 dilim peynir","kcal":80},{"slot":"ogle","name":"1 porsiyon tavuk","kcal":250}]',
+    'Hiç yemek göremezsen [] döndür.',
+  ].join('\n');
+
+  let lastRaw = '', debug = '', lastErr = '';
+  try {
+    const r = await visionRun(env, { image: bytes, prompt, max_tokens: 1024 });
+    const rr = r && (r.response != null ? r.response : (r.description != null ? r.description : r.text));
+    lastRaw = (typeof rr === 'string') ? rr : JSON.stringify(rr);
+    debug = (typeof r === 'object') ? JSON.stringify(r).slice(0, 700) : String(r).slice(0, 700);
+    const items = extractDietPlanJson(lastRaw);
+    if (items.length) return jsonCors({ items }, 200, cors);
+  } catch (e) {
+    lastErr = e.message;
+  }
+  return jsonCors({ items: [], raw: String(lastRaw || '').slice(0, 400), debug: debug || undefined, aiError: lastErr || undefined }, 200, cors);
+}
+
 // Vision modeli çağır. Llama 3.2 Vision, Meta lisansı yüzünden ilk kullanımda
 // 5016 hatası verir ("you must submit the prompt 'agree'"). Bunu yakalayıp bir
 // kez 'agree' gönderir (lisans kabulü, hesap için kalıcı), sonra asıl isteği tekrarlar.
@@ -3486,6 +3568,11 @@ export default {
     // Portföy görseli → AI vision (POST {image} → sembol/adet/maliyet JSON)
     if (url.pathname === '/portfolio-image') {
       return handlePortfolioImageApi(request, env);
+    }
+
+    // Diyet programı görseli → AI vision (POST {image} → öğün/yemek/kcal JSON)
+    if (url.pathname === '/diet-plan-image') {
+      return handleDietPlanImageApi(request, env);
     }
 
     // PWA bootstrap config (Supabase URL + anon key)

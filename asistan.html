@@ -2979,6 +2979,19 @@
   .meal-del { background:transparent; border:none; color:var(--text-muted); cursor:pointer; padding:2px 6px; box-shadow:none; }
   .meal-del:hover { color:#ef4444; }
 
+  /* Diyet programı (Planım) */
+  .plan-item { display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--surface-hover); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:5px; }
+  .plan-item.eaten { background:rgba(52,199,89,0.10); border-color:rgba(52,199,89,0.35); }
+  .plan-check { width:22px; height:22px; flex:0 0 auto; border:1.5px solid var(--border); border-radius:6px; background:transparent; color:#fff; font-size:0.8em; line-height:1; padding:0; cursor:pointer; box-shadow:none; display:flex; align-items:center; justify-content:center; transition:background .15s ease, border-color .15s ease; }
+  .plan-check.on { background:#34c759; border-color:#34c759; }
+  .plan-name { flex:1; color:var(--text); }
+  .plan-item.eaten .plan-name { color:var(--text-muted); text-decoration:line-through; }
+  .plan-edit { margin-top:6px; }
+  .plan-edit summary { cursor:pointer; padding:6px 0; font-size:0.85em; font-weight:600; color:var(--text-muted); }
+  .plan-edit summary:hover { color:var(--text); }
+  .diet-photo-btn { display:inline-flex; align-items:center; gap:7px; margin-top:8px; }
+  .diet-photo-btn .icon { width:1.05em; height:1.05em; }
+
   .weight-trend { margin-bottom:10px; }
   .weight-trend svg { width:100%; height:46px; }
   .weight-add { display:flex; gap:8px; }
@@ -3296,6 +3309,37 @@
         <div class="diet-mini" id="dietWaterMini"><span class="diet-mini-num">0</span><span class="diet-mini-lbl">su (bardak)</span></div>
         <div class="diet-mini" id="dietWeightMini"><span class="diet-mini-num">–</span><span class="diet-mini-lbl">kilo (kg)</span></div>
       </div>
+    </div>
+
+    <!-- Diyet programım (her gün aynı şablon) -->
+    <div class="diet-card">
+      <div class="diet-card-head">
+        <span class="diet-card-title">Planım</span>
+        <span class="diet-card-meta" id="planMeta"></span>
+      </div>
+      <div id="planList"></div>
+      <details class="plan-edit">
+        <summary>Planı düzenle</summary>
+        <div class="meal-add">
+          <input id="planName" placeholder="yemek (örn. 2 yumurta)" onkeydown="if(event.key==='Enter')addPlanMeal()">
+          <div class="meal-add-row2">
+            <select id="planSlot">
+              <option value="kahvalti">Kahvaltı</option>
+              <option value="ogle">Öğle</option>
+              <option value="aksam">Akşam</option>
+              <option value="atistirma">Ara öğün</option>
+            </select>
+            <input id="planKcal" type="number" inputmode="numeric" min="0" placeholder="kcal (ops.)" class="meal-kcal">
+            <button class="small primary" onclick="addPlanMeal()">Ekle</button>
+          </div>
+        </div>
+        <button class="small diet-photo-btn" onclick="document.getElementById('planPhoto').click()">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+          Fotoğraftan oku (diyetisyen kağıdı)
+        </button>
+        <input type="file" id="planPhoto" accept="image/*" capture="environment" style="display:none" onchange="dietPlanFromImage(event)">
+        <div class="diet-hint" id="planPhotoStatus"></div>
+      </details>
     </div>
 
     <!-- Su takibi -->
@@ -3780,6 +3824,7 @@ function ensureDiet() {
   if (d.waterGoal === undefined) d.waterGoal = 8;    // günlük su hedefi (bardak)
   d.days = d.days || {};
   d.weights = d.weights || [];
+  d.plan = d.plan || [];   // diyet programı (her gün aynı şablon): [{id, slot, name, kcal}]
 }
 // Bugünün diyet günü objesi (yoksa oluştur)
 function dietDay() {
@@ -3811,6 +3856,7 @@ function renderDiet() {
   const lastW = (d.weights || []).length ? d.weights[d.weights.length - 1].kg : null;
   document.querySelector('#dietWeightMini .diet-mini-num').textContent = lastW != null ? lastW : '–';
   // Alt bölümler
+  renderDietPlan();
   renderWater();
   renderMealList();
   renderWeightTrend();
@@ -3909,6 +3955,114 @@ function addMealReminder(label, time) {
   save();
   if (typeof renderFixedReminders === 'function') renderFixedReminders();
   showToast(label + ' ' + time + ' hatırlatıcısı eklendi', 'success');
+}
+
+// ===== DİYET PROGRAMI (her gün aynı şablon) =====
+const DIET_PLAN_IMAGE_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/diet-plan-image';
+
+// Planı öğüne göre gruplu göster. Her satırda 'yedim' işareti bugünün öğün loguna bağlı (kalori halkasına yansır).
+function renderDietPlan() {
+  ensureDiet();
+  const plan = data.diet.plan || [];
+  const el = document.getElementById('planList'), meta = document.getElementById('planMeta');
+  if (!plan.length) {
+    el.innerHTML = '<div class="diet-empty">Henüz plan yok. "Planı düzenle" ile ekle veya diyetisyen kağıdının fotoğrafını oku.</div>';
+    if (meta) meta.textContent = '';
+    return;
+  }
+  const day = dietDay();
+  const eatenIds = new Set(day.meals.filter(m => m.planId != null).map(m => m.planId));
+  const totalK = plan.reduce((s, p) => s + (Number(p.kcal) || 0), 0);
+  if (meta) meta.textContent = `${eatenIds.size}/${plan.length} yendi${totalK ? ` · ${totalK} kcal` : ''}`;
+  let html = '';
+  Object.keys(MEAL_SLOTS).forEach(slot => {
+    const items = plan.filter(p => p.slot === slot);
+    if (!items.length) return;
+    html += `<div class="meal-group"><div class="meal-group-head">${MEAL_SLOTS[slot]}</div>`;
+    items.forEach(p => {
+      const eaten = eatenIds.has(p.id);
+      html += `<div class="plan-item${eaten ? ' eaten' : ''}">` +
+        `<button class="plan-check${eaten ? ' on' : ''}" onclick="togglePlanEaten(${p.id})" title="${eaten ? 'işareti kaldır' : 'yedim'}" aria-label="yedim">${eaten ? '✓' : ''}</button>` +
+        `<span class="plan-name">${escapeHtml(p.name)}</span>` +
+        `<span class="meal-kcal-tag">${p.kcal != null ? p.kcal + ' kcal' : ''}</span>` +
+        `<button class="meal-del" onclick="removePlanMeal(${p.id})" title="Sil" aria-label="Sil">✕</button>` +
+        `</div>`;
+    });
+    html += '</div>';
+  });
+  el.innerHTML = html;
+}
+
+function addPlanMeal() {
+  const nameEl = document.getElementById('planName'), kcalEl = document.getElementById('planKcal'), slotEl = document.getElementById('planSlot');
+  const name = (nameEl.value || '').trim();
+  if (!name) { showToast('Yemek yaz', 'info'); nameEl.focus(); return; }
+  const kcal = kcalEl.value !== '' ? Math.max(0, parseInt(kcalEl.value, 10) || 0) : null;
+  ensureDiet();
+  data.diet.plan.push({ id: Date.now(), slot: slotEl.value, name, kcal });
+  nameEl.value = ''; kcalEl.value = '';
+  save(); renderDiet(); nameEl.focus();
+}
+
+function removePlanMeal(id) {
+  ensureDiet();
+  data.diet.plan = data.diet.plan.filter(p => p.id !== id);
+  const day = dietDay();
+  day.meals = day.meals.filter(m => m.planId !== id);   // bugünün logundan bağlı kaydı da temizle
+  save(); renderDiet();
+}
+
+// 'yedim' işareti: planlı yemeği bugünün öğün loguna ekle/çıkar
+function togglePlanEaten(planId) {
+  ensureDiet();
+  const p = (data.diet.plan || []).find(x => x.id === planId);
+  if (!p) return;
+  const day = dietDay();
+  const idx = day.meals.findIndex(m => m.planId === planId);
+  if (idx >= 0) day.meals.splice(idx, 1);
+  else day.meals.push({ id: Date.now(), slot: p.slot, name: p.name, kcal: p.kcal, planId });
+  save(); renderDiet();
+}
+
+// Diyetisyen kağıdı/PDF fotoğrafı → AI vision → plana ekle
+async function dietPlanFromImage(ev) {
+  const file = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if (!file) return;
+  const status = document.getElementById('planPhotoStatus');
+  const setS = (m) => { if (status) status.textContent = m; };
+  if (!window._supa || !window._user) { setS('Önce Ayarlar → bulut girişi yap.'); return; }
+  setS('Görsel hazırlanıyor…');
+  try {
+    const dataUrl = await resizeImageToDataUrl(file);
+    setS('Aidan programı okuyor… 10-15 sn sürebilir.');
+    const { data: sess } = await window._supa.auth.getSession();
+    const token = sess && sess.session && sess.session.access_token;
+    if (!token) throw new Error('oturum yok');
+    const r = await fetch(DIET_PLAN_IMAGE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ image: dataUrl }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || ('hata ' + r.status));
+    const items = Array.isArray(j.items) ? j.items : [];
+    if (!items.length) {
+      const dbg = j.aiError ? ` (AI hatası: ${j.aiError})` : (j.raw ? ` (AI: ${String(j.raw).slice(0, 120)})` : '');
+      setS('Programı okuyamadım. Daha net bir fotoğraf dene ya da elle ekle.' + dbg);
+      return;
+    }
+    ensureDiet();
+    items.forEach(it => data.diet.plan.push({
+      id: Date.now() + Math.floor(Math.random() * 100000),
+      slot: it.slot || 'atistirma', name: it.name, kcal: (it.kcal != null ? it.kcal : null),
+    }));
+    save(); renderDiet();
+    setS(`${items.length} yemek eklendi — yanlış olanları ✕ ile silebilirsin.`);
+    showToast(items.length + ' yemek plana eklendi', 'success');
+  } catch (e) {
+    setS('Okuma başarısız: ' + e.message);
+  }
 }
 function timeStr() { return new Date().toLocaleString('tr-TR'); }
 

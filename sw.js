@@ -1,4 +1,4 @@
-const CACHE = 'aidan-v7-63';
+const CACHE = 'aidan-v7-64';
 const ASSETS = [
   '/',
   '/manifest.webmanifest',
