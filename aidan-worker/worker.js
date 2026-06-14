@@ -3193,6 +3193,96 @@ async function handleDietPlanImageApi(request, env) {
   return jsonCors({ items: [], raw: String(lastRaw || '').slice(0, 400), debug: debug || undefined, aiError: lastErr || undefined }, 200, cors);
 }
 
+// Besin makro JSON ayıkla (Llama'dan {en, grams, ai:{...}} bekler)
+function parseMacroJson(raw) {
+  if (!raw) return null;
+  let s = String(raw).replace(/```(?:json)?/gi, '').trim();
+  const m = s.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  let o; try { o = JSON.parse(m[0]); } catch { return null; }
+  if (!o || typeof o !== 'object') return null;
+  const en = String(o.en || '').trim().slice(0, 80);
+  let grams = Number(o.grams);
+  if (!isFinite(grams) || grams <= 0 || grams > 5000) grams = 100;
+  const ai = (o.ai && typeof o.ai === 'object') ? o.ai : {};
+  const num = v => { const n = Number(v); return (isFinite(n) && n >= 0 && n < 10000) ? Math.round(n) : null; };
+  return { en, grams: Math.round(grams), ai: { kcal: num(ai.kcal), protein: num(ai.protein), carb: num(ai.carb), fat: num(ai.fat) } };
+}
+
+// USDA FoodData Central — İngilizce besin adı → 100g makroları, porsiyona ölçekle. Key yoksa null.
+async function usdaLookup(env, enName, grams) {
+  const key = env.USDA_API_KEY;
+  if (!key || !enName) return null;
+  const url = `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(key)}&query=${encodeURIComponent(enName)}&pageSize=1&dataType=Foundation,SR%20Legacy`;
+  let r;
+  try { r = await fetch(url, { cf: { cacheTtl: 86400, cacheEverything: true } }); } catch { return null; }
+  if (!r.ok) return null;
+  let j; try { j = await r.json(); } catch { return null; }
+  const food = j && j.foods && j.foods[0];
+  if (!food) return null;
+  const ns = food.foodNutrients || [];
+  const get = (num, nameRe) => {
+    let n = ns.find(x => String(x.nutrientNumber) === num);
+    if (!n && nameRe) n = ns.find(x => nameRe.test(String(x.nutrientName || '')));
+    return n && typeof n.value === 'number' ? n.value : null;
+  };
+  const f = (grams || 100) / 100;
+  const sc = v => v == null ? null : Math.round(v * f);
+  const kcal = get('208', /energy/i), protein = get('203', /protein/i), fat = get('204', /total lipid|fat/i), carb = get('205', /carbohydrate/i);
+  if (kcal == null && protein == null) return null;
+  return { name: food.description || enName, kcal: sc(kcal), protein: sc(protein), carb: sc(carb), fat: sc(fat) };
+}
+
+async function handleFoodMacrosApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const query = (body.query || '').trim();
+  if (!query) return jsonCors({ error: 'empty' }, 400, cors);
+  if (query.length > 120) return jsonCors({ error: 'too long' }, 400, cors);
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
+
+  try {
+    const sys = `Sen bir beslenme asistanısın. Kullanıcının yazdığı yemek + porsiyonu analiz et.
+SADECE şu JSON nesnesini döndür, başka hiçbir açıklama/metin yazma:
+{"en":"<veritabanı araması için sade İngilizce besin adı>","grams":<porsiyonun toplam gram ağırlığı, sayı>,"ai":{"kcal":<sayı>,"protein":<gram>,"carb":<gram>,"fat":<gram>}}
+- en: USDA gibi besin veritabanında aranacak SADE İngilizce ad ("cooked white rice", "chicken breast", "peanut butter", "rolled oats"). Marka/porsiyon yazma.
+- grams: porsiyonun yaklaşık toplam gram ağırlığı.
+- ai: bu PORSİYONUN TAMAMI için TAHMİNİ makrolar (gram cinsinden protein/carb/fat, kcal sayı).
+Örnek: "1 kase pilav" -> {"en":"cooked white rice","grams":150,"ai":{"kcal":205,"protein":4,"carb":45,"fat":0}}
+Örnek: "2 yumurta" -> {"en":"egg whole cooked","grams":100,"ai":{"kcal":155,"protein":13,"carb":1,"fat":11}}
+Örnek: "1 kaşık fıstık ezmesi" -> {"en":"peanut butter","grams":16,"ai":{"kcal":94,"protein":4,"carb":3,"fat":8}}`;
+    const r = await env.AI.run(AI_MODEL, {
+      messages: [
+        { role: 'system', content: sys },
+        { role: 'user', content: query },
+      ],
+      max_tokens: 200,
+      temperature: 0.2,
+    });
+    const raw = typeof r.response === 'string' ? r.response : JSON.stringify(r.response || '');
+    const parsed = parseMacroJson(raw);
+    if (!parsed) return jsonCors({ error: 'parse', raw: String(raw).slice(0, 200) }, 200, cors);
+    let db = null;
+    try { db = await usdaLookup(env, parsed.en, parsed.grams); } catch (_) {}
+    return jsonCors({ name: query, grams: parsed.grams, en: parsed.en, ai: parsed.ai, db }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
 // Vision modeli çağır. Llama 3.2 Vision, Meta lisansı yüzünden ilk kullanımda
 // 5016 hatası verir ("you must submit the prompt 'agree'"). Bunu yakalayıp bir
 // kez 'agree' gönderir (lisans kabulü, hesap için kalıcı), sonra asıl isteği tekrarlar.
@@ -3573,6 +3663,11 @@ export default {
     // Diyet programı görseli → AI vision (POST {image} → öğün/yemek/kcal JSON)
     if (url.pathname === '/diet-plan-image') {
       return handleDietPlanImageApi(request, env);
+    }
+
+    // Besin makro arama (POST {query} → {db, ai} kalori+protein+karb+yağ)
+    if (url.pathname === '/food-macros') {
+      return handleFoodMacrosApi(request, env);
     }
 
     // PWA bootstrap config (Supabase URL + anon key)

@@ -2992,6 +2992,21 @@
   .diet-photo-btn { display:inline-flex; align-items:center; gap:7px; margin-top:8px; }
   .diet-photo-btn .icon { width:1.05em; height:1.05em; }
 
+  /* Besin makro arama */
+  .macro-lookup { display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap; }
+  .macro-btn { display:inline-flex; align-items:center; gap:6px; }
+  .macro-btn .icon { width:1em; height:1em; }
+  .macro-pending { font-size:0.78em; color:#34c759; font-weight:600; }
+  .macro-result { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+  .macro-opt { display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%; text-align:left; background:var(--surface-hover); border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px; cursor:pointer; box-shadow:none; }
+  .macro-opt:hover { border-color:var(--accent); }
+  .macro-src { font-weight:700; color:var(--text-strong); font-size:0.85em; }
+  .macro-vals { font-size:0.82em; color:var(--text-muted); }
+  .macro-note { font-size:0.74em; color:var(--text-muted); }
+  .diet-macro-row { display:flex; gap:14px; margin:-6px 0 14px; padding:0 2px; }
+  .macro-tot { font-size:0.82em; color:var(--text-muted); }
+  .macro-tot b { color:var(--accent); }
+
   .weight-trend { margin-bottom:10px; }
   .weight-trend svg { width:100%; height:46px; }
   .weight-add { display:flex; gap:8px; }
@@ -3311,6 +3326,8 @@
       </div>
     </div>
 
+    <div class="diet-macro-row" id="dietMacroRow"></div>
+
     <!-- Diyet programım (her gün aynı şablon) -->
     <div class="diet-card">
       <div class="diet-card-head">
@@ -3371,6 +3388,11 @@
           <input id="mealKcal" type="number" inputmode="numeric" min="0" placeholder="kcal (ops.)" class="meal-kcal">
           <button class="small primary" onclick="addMeal()">Ekle</button>
         </div>
+        <div class="macro-lookup">
+          <button class="small macro-btn" onclick="lookupMealMacros()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>makro bul</button>
+          <span class="macro-pending" id="macroPending"></span>
+        </div>
+        <div id="macroResult" class="macro-result"></div>
       </div>
       <div id="mealList"></div>
     </div>
@@ -3860,6 +3882,7 @@ function renderDiet() {
   renderWater();
   renderMealList();
   renderWeightTrend();
+  renderDietMacros();
   // Hedef inputları
   const gk = document.getElementById('goalKcal'); if (gk) gk.value = d.kcalGoal;
   const gw = document.getElementById('goalWater'); if (gw) gw.value = d.waterGoal;
@@ -3886,7 +3909,11 @@ function addMeal() {
   if (!name) { showToast('Ne yediğini yaz', 'info'); nameEl.focus(); return; }
   const kcal = kcalEl.value !== '' ? Math.max(0, parseInt(kcalEl.value, 10) || 0) : null;
   const day = dietDay();
-  day.meals.push({ id: Date.now(), slot: slotEl.value, name, kcal });
+  const pm = _pendingMacros || {};
+  day.meals.push({ id: Date.now(), slot: slotEl.value, name, kcal, protein: pm.protein != null ? pm.protein : null, carb: pm.carb != null ? pm.carb : null, fat: pm.fat != null ? pm.fat : null });
+  _pendingMacros = null;
+  const _mp = document.getElementById('macroPending'); if (_mp) _mp.textContent = '';
+  const _mr = document.getElementById('macroResult'); if (_mr) _mr.innerHTML = '';
   nameEl.value = ''; kcalEl.value = '';
   save(); renderDiet(); nameEl.focus();
 }
@@ -3901,7 +3928,8 @@ function renderMealList() {
     const sub = items.reduce((s, m) => s + (Number(m.kcal) || 0), 0);
     html += `<div class="meal-group"><div class="meal-group-head">${MEAL_SLOTS[slot]}${sub ? ` · ${sub} kcal` : ''}</div>`;
     items.forEach(m => {
-      html += `<div class="meal-item"><span class="meal-name">${escapeHtml(m.name)}</span><span class="meal-kcal-tag">${m.kcal != null ? m.kcal + ' kcal' : ''}</span><button class="meal-del" onclick="removeMeal(${m.id})" title="Sil" aria-label="Sil">✕</button></div>`;
+      const macroTag = (m.protein != null || m.carb != null || m.fat != null) ? ` · P${m.protein || 0} K${m.carb || 0} Y${m.fat || 0}` : '';
+      html += `<div class="meal-item"><span class="meal-name">${escapeHtml(m.name)}</span><span class="meal-kcal-tag">${m.kcal != null ? m.kcal + ' kcal' : ''}${macroTag}</span><button class="meal-del" onclick="removeMeal(${m.id})" title="Sil" aria-label="Sil">✕</button></div>`;
     });
     html += '</div>';
   });
@@ -4063,6 +4091,65 @@ async function dietPlanFromImage(ev) {
   } catch (e) {
     setS('Okuma başarısız: ' + e.message);
   }
+}
+
+// ===== Besin makro arama (veritabanı + AI tahmini) =====
+const FOOD_MACROS_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/food-macros';
+let _pendingMacros = null;
+
+async function lookupMealMacros() {
+  const q = (document.getElementById('mealName').value || '').trim();
+  const out = document.getElementById('macroResult');
+  if (!q) { showToast('Önce ne yediğini yaz', 'info'); document.getElementById('mealName').focus(); return; }
+  if (!window._supa || !window._user) { out.innerHTML = '<div class="diet-empty">Önce Ayarlar → bulut girişi yap.</div>'; return; }
+  out.innerHTML = '<div class="diet-empty">Aranıyor… birkaç sn.</div>';
+  try {
+    const { data: sess } = await window._supa.auth.getSession();
+    const token = sess && sess.session && sess.session.access_token;
+    if (!token) throw new Error('oturum yok');
+    const r = await fetch(FOOD_MACROS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ query: q }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || ('hata ' + r.status));
+    renderMacroResult(j);
+  } catch (e) {
+    out.innerHTML = '<div class="diet-empty">Bulamadım: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function _macroLine(m) { return `${m.kcal != null ? m.kcal + ' kcal' : '? kcal'} · P${m.protein || 0} K${m.carb || 0} Y${m.fat || 0}`; }
+
+function renderMacroResult(j) {
+  const out = document.getElementById('macroResult');
+  const mk = m => ({ kcal: m.kcal != null ? m.kcal : null, protein: m.protein != null ? m.protein : null, carb: m.carb != null ? m.carb : null, fat: m.fat != null ? m.fat : null });
+  const rows = [];
+  if (j.db) rows.push(`<button class="macro-opt" onclick='applyMacro(${JSON.stringify(mk(j.db))})'><span class="macro-src">Veritabanı</span><span class="macro-vals">${_macroLine(j.db)}</span></button>`);
+  if (j.ai) rows.push(`<button class="macro-opt" onclick='applyMacro(${JSON.stringify(mk(j.ai))})'><span class="macro-src">AI tahmini</span><span class="macro-vals">${_macroLine(j.ai)}</span></button>`);
+  if (!rows.length) { out.innerHTML = '<div class="diet-empty">Sonuç yok, kaloriyi elle gir.</div>'; return; }
+  const note = j.grams ? `<div class="macro-note">≈ ${j.grams} g porsiyon · birine dokun → otomatik dolar</div>` : '';
+  out.innerHTML = rows.join('') + note;
+}
+
+function applyMacro(m) {
+  if (!m) return;
+  if (m.kcal != null) document.getElementById('mealKcal').value = m.kcal;
+  _pendingMacros = { protein: m.protein != null ? m.protein : null, carb: m.carb != null ? m.carb : null, fat: m.fat != null ? m.fat : null };
+  const mp = document.getElementById('macroPending');
+  if (mp) mp.textContent = `seçildi: P${m.protein || 0} K${m.carb || 0} Y${m.fat || 0}`;
+  document.getElementById('macroResult').innerHTML = '';
+}
+
+function renderDietMacros() {
+  const day = dietDay();
+  const el = document.getElementById('dietMacroRow');
+  if (!el) return;
+  let p = 0, c = 0, f = 0, has = false;
+  day.meals.forEach(m => { if (m.protein != null || m.carb != null || m.fat != null) has = true; p += Number(m.protein) || 0; c += Number(m.carb) || 0; f += Number(m.fat) || 0; });
+  if (!has) { el.innerHTML = ''; return; }
+  el.innerHTML = `<span class="macro-tot"><b>P</b> ${Math.round(p)}g</span><span class="macro-tot"><b>K</b> ${Math.round(c)}g</span><span class="macro-tot"><b>Y</b> ${Math.round(f)}g</span>`;
 }
 function timeStr() { return new Date().toLocaleString('tr-TR'); }
 

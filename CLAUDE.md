@@ -731,6 +731,24 @@ Pros/cons'tan en büyük yapısal eksikti: tek-user kilidi. Salim "davet kodlu k
 - **Risk yok:** Service key + invite_codes tablosu olmadan Worker mevcut tek-user davranışını korur. PWA auth ekranındaki "Yeni Hesap" akışı service key gerektirir — yoksa 503 nazik mesaj.
 - **Cache:** v7-36 → v7-37
 
+### Haziran 14, 2026 (🥗 Diyet sekmesi + diyet programı)
+Salim iki fikir istedi: (1) iPhone ekran süresi kısıtlama, (2) diyet sekmesi.
+- **Ekran süresi:** PWA iOS'ta başka uygulamayı kilitleyemez (Apple izni yok). Kestirme (Shortcuts) ile en fazla Odak modu (yumuşak) açılır, sert kilit olmaz. Salim "şimdilik gerek yok" dedi → yapılmadı (ileride: push hatırlatıcı + iOS Odak tetik butonu hibriti).
+- **🥗 Diyet sekmesi (6. sekme):** Görevler·Plan·Odak·Borsa·**Diyet**·Ayarlar. Tab bar + drawer item + showTab hook + APP_TAB_TITLES.
+  - **Kalori halkası** (SVG ring, hedefe göre dolar, aşınca kırmızı) + öğün log (kahvaltı/öğle/akşam/atıştırma, opsiyonel kcal, öğüne gruplu).
+  - **Su takibi:** tıklanır bardak ikonları + ilerleme çubuğu, ＋/− ve `setWater` toggle.
+  - **Kilo trendi:** gir (Türk sayı "70,1" parse) → sparkline + son değişim (düşüş yeşil = wt-down).
+  - **Öğün hatırlatıcı:** tek tıkla mevcut sabit hatırlatıcı (`data.reminders`) sistemine ekler — Worker değişikliği YOK.
+- **🥗 Diyet programı (Planım):** her gün aynı şablon `data.diet.plan[]`.
+  - **Elle ekle** + **fotoğraf→AI:** Worker `POST /diet-plan-image` (`handleDietPlanImageApi`, vision = portföy-görsel kalıbı) diyetisyen kağıdını okuyup öğünlere böler. `extractDietPlanJson` (markdown/çer-çöp toleranslı). ⚠️ İSİM: mevcut Gün-Planı parser'ı `extractPlanJson(raw)` ile çakışmasın diye `extractDietPlanJson` adı zorunlu.
+  - **"yedim" işareti:** planlı yemeği bugünün öğün loguna ekler/çıkarır (`meal.planId` ile bağlı) → kalori halkasına yansır, üstü çizilir. Plan sabit, işaret günlük.
+- **Impeccable uyumlu:** yan-şerit yok, amber accent, tam kenar+tint, dekoratif emoji yok (foto/yedim Lucide SVG).
+- **Veri modeli yeni:** `data.diet` (aşağıda) + `day.meals[i].planId` (plana bağlı log).
+- ⚠️ **TOOLING UYARISI (önemli):** Edit aracı bu büyük dosyaları (asistan.html ~10.5k satır, worker.js ~3.6k) yazışta SESSİZCE KUYRUĞUNDAN KIRPIYOR — iki kez oldu (asistan.html 10421→10369; worker.js'te `scheduled()` + tüm cron'lar + /signup + /stock-history uçtu). Her seferinde `git show HEAD:<dosya>` ile geri yüklenip değişiklikler **Python string-replace** ile uygulandı (CRLF korunur). **Bu büyük dosyalarda Edit aracı KULLANMA → Python/sed.**
+- **Deploy:** GitHub Desktop'tan commit+push. Sandbox git `.git`'e yazamıyor (mount izni: kilit dosyası yaratır ama silemez → her komut index.lock bırakır). Çözüm: hiç sandbox-git çalıştırma; GHD'den commit+push, kilit kalırsa Explorer'dan `.git/index.lock` sil.
+- **Doğrulama:** node --check (her iki dosya) + sahte-DOM mantık testi (öğün/su/kilo/plan/yedim) + `extractDietPlanJson` 4 formatla + closing-tag/endpoint/cron sayımı (scheduled+/signup+/stock-history korundu).
+- **Cache:** v7-63 → v7-64
+
 ## Mevcut Durum
 
 ### ✅ Çalışıyor
@@ -901,6 +919,12 @@ py aidan-pages-deploy.py
                alarmAbove, alarmBelow, lastAlertedAbove, lastAlertedBelow, qty, cost, fetchedAt, error}],  // (Haz 6-8) borsa
   portfolioHistory: [{date:'YYYY-MM-DD', byCur:{TRY:{value,cost}}}],  // (Haz 8) portföy değer geçmişi, son 180 gün
   reminders: [{id, label, time:'HH:MM', days:'daily'|'weekdays', enabled, lastFired:'YYYY-MM-DD'}],  // (Haz 10) sabit hatırlatıcılar — Worker 15dk cron push'lar
+  diet: {  // (Haz 14) diyet sekmesi + diyet programı
+    kcalGoal, waterGoal,
+    days: { 'YYYY-MM-DD': { meals:[{id, slot, name, kcal, planId?}], water } },  // günlük öğün log + su; planId = plandan gelen kayıt
+    weights: [{date:'YYYY-MM-DD', kg}],  // kilo trendi
+    plan: [{id, slot, name, kcal}]  // diyet programı — her gün aynı şablon
+  },
   settings: {
     supaUrl, supaKey,         // Aidan'ın kendi Supabase config'i
     muteUntil,                // (Haz 2) bildirim sustur (epoch ms)
