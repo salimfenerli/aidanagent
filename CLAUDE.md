@@ -770,7 +770,16 @@ Salim iki fikir istedi: (1) iPhone ekran süresi kısıtlama, (2) diyet sekmesi.
 - **🍔 Öğün seçimi gizli dropdown → görünür chip:** Plan ekle + öğün ekle formlarındaki `<select>` (Salim hep kahvaltıya düşüyordu, dropdown fark edilmiyordu) → `.slot-chips` segmented butonlar (Kahvaltı/Öğle/Akşam/Ara öğün), seçili amber vurgulu. `_planSlot`/`_mealSlot` state + `selectPlanSlot`/`selectMealSlot`. `addPlanMeal`/`addMeal` artık state'ten okur (eski `planSlot`/`mealSlot` element id'leri kaldırıldı).
 - **Doğrulama:** worker.js + asistan.html `node --check` OK, dangling referans (slotEl/planSlot/mealSlot getElementById) taraması temiz. Canlı görsel-okuma testi deploy sonrası yapılacak.
 - **Cache:** v7-66 → v7-67
-- ⏳ Sırada (Salim'in seçtikleri, henüz yapılmadı): favori/sık öğünler (tek tık tekrar) · diyet karnesi (haftalık) · makro hedefleri+çubuk · geçmiş günleri gör · akşam diyet push özeti.
+
+### Haziran 14, 2026 — 4. seans (🍽️ FatSecret tarzı: tarih gezinme + kalan-kalori panosu + makro çubuk + sık yedikleri)
+Salim "diyet sekmesini FatSecret/MyFitnessPal'a benzet, eksikleri ekle" dedi. Barkod hariç 3 özellik seçti.
+- **📅 Tarih gezinme (diary):** `_dietDate` runtime state (varsayılan null=bugün). `dietKey()` + `dietDay(create=true)` seçili güne göre çalışır — render'lar `dietDay(false)` (boş geçmiş gün yaratmaz), mutator'lar `dietDay(true)`. Üstte `‹ Bugün ›` navigatörü (`dietDateShift`/`dietDateToday`/`renderDietDateNav`), gelecek engelli (next disabled). `shiftDateStr` öğlen-demirli. `logWeight` artık `dietKey()`'e yazar. showTab('diet') → `_dietDate=null` (sekmeye girince bugüne döner).
+- **🎯 Kalan-kalori panosu:** Halka merkezi artık **KALAN kcal** (hedef−yenen, eksiyse kırmızı `.over`). Sağ minik kartlar (su/kilo) → **hedef kcal / yenen kcal** (`#calGoal`/`#calFood`). FatSecret ana ekran hissi.
+- **📊 Makro çubukları:** `dietMacroRow` (düz P/K/Y metni, kaldırıldı) → `#macroBars` = Protein(mavi)/Karbonhidrat(amber)/Yağ(coral) hedef+ilerleme çubukları (`renderMacroBars`). Hedefler: `data.diet.proteinGoal/carbGoal/fatGoal` — kcalGoal'dan türetilen varsayılan (%25/%50/%25 → 4/4/9 kcal/g). Hedefler bölümüne 3 input + `setDietGoals` parse. (Eski `renderDietMacros` + `.diet-macro-row` CSS silindi.)
+- **🔁 Sık yediklerin:** `frequentMeals(limit)` geçmiş tüm günlerin öğünlerini ada göre (tr-lowercase key) gruplar, sayar, son görülen kcal/makro/slot'u tutar, sayıya göre sıralar. Öğün ekle kartında `#freqMeals` chip satırı (`renderFrequentMeals`). Dokun → `quickAddMeal(i)` o öğünü kcal+makro+slot'uyla seçili güne ekler. Yeni veri alanı YOK (geçmişten türetilir). ADHD friction-killer.
+- **Doğrulama:** asistan.html `node --check` OK + node mantık testi (shiftDateStr/gelecek-engeli/frequentMeals sıralama+son-kcal+slot/kalan+makro math, 10/10 geçti) + dangling tarama temiz.
+- **Cache:** v7-67 → v7-68
+- ⏳ Sırada (Salim'in seçtikleri/öneriler): akşam diyet push özeti · diyet karnesi (haftalık) · porsiyon seçici · barkod (Salim "zor" dedi, ertelendi).
 
 ## Mevcut Durum
 

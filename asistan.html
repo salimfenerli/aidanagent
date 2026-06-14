@@ -2941,6 +2941,10 @@
   .mit-title .icon { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 6px; color: var(--accent); }
 
   /* ===== DİYET ===== */
+  .diet-datenav { display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:14px; }
+  .diet-date-arrow { width:34px; height:34px; padding:0; font-size:1.2em; line-height:1; background:var(--surface-hover); color:var(--text); border:1px solid var(--border); border-radius:10px; cursor:pointer; box-shadow:none; }
+  .diet-date-arrow:disabled { opacity:0.35; cursor:default; }
+  .diet-date-label { min-width:120px; padding:7px 14px; font-weight:700; color:var(--text-strong); background:var(--surface-hover); border:1px solid var(--border); border-radius:10px; cursor:pointer; box-shadow:none; }
   .diet-summary { display:flex; align-items:center; gap:18px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px; margin-bottom:14px; }
   .diet-ring-wrap { position:relative; width:120px; height:120px; flex:0 0 auto; }
   .diet-ring { width:120px; height:120px; transform:rotate(-90deg); }
@@ -2951,6 +2955,18 @@
   .diet-ring-num { font-size:1.7em; font-weight:800; color:var(--text-strong); line-height:1; }
   .diet-ring-sub { font-size:0.72em; color:var(--text-muted); margin-top:3px; }
   .diet-mini-stats { display:flex; flex-direction:column; gap:10px; flex:1; }
+  .diet-cal-stats { display:flex; flex-direction:column; gap:10px; flex:1; }
+  .cal-stat { display:flex; flex-direction:column; background:var(--surface-hover); border:1px solid var(--border); border-radius:var(--radius); padding:10px 12px; }
+  .cal-stat-num { font-size:1.3em; font-weight:700; color:var(--text-strong); }
+  .cal-stat-lbl { font-size:0.72em; color:var(--text-muted); }
+  .diet-ring-num.over { color:#ef4444; }
+  .macro-bars { display:flex; flex-direction:column; gap:9px; margin-bottom:14px; }
+  .macro-bar-top { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; }
+  .macro-bar-name { font-size:0.82em; font-weight:600; color:var(--text); }
+  .macro-bar-val { font-size:0.78em; color:var(--text-muted); }
+  .macro-bar-val.over { color:#ef4444; font-weight:700; }
+  .macro-bar-track { height:8px; background:var(--border); border-radius:99px; overflow:hidden; }
+  .macro-bar-fill { display:block; height:100%; border-radius:99px; transition:width .4s cubic-bezier(.22,1,.36,1); }
   .diet-mini { display:flex; flex-direction:column; background:var(--surface-hover); border:1px solid var(--border); border-radius:var(--radius); padding:10px 12px; }
   .diet-mini-num { font-size:1.3em; font-weight:700; color:var(--text-strong); }
   .diet-mini-lbl { font-size:0.72em; color:var(--text-muted); }
@@ -3009,7 +3025,6 @@
   .macro-src { font-weight:700; color:var(--text-strong); font-size:0.85em; }
   .macro-vals { font-size:0.82em; color:var(--text-muted); }
   .macro-note { font-size:0.74em; color:var(--text-muted); }
-  .diet-macro-row { display:flex; gap:14px; margin:-6px 0 14px; padding:0 2px; }
   .macro-tot { font-size:0.82em; color:var(--text-muted); }
   .macro-tot b { color:var(--accent); }
 
@@ -3020,6 +3035,11 @@
   .wt-up { color:#ef4444; font-weight:700; }
   .wt-down { color:#34c759; font-weight:700; }
 
+  .freq-meals { margin:4px 0 10px; }
+  .freq-head { font-size:0.72em; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }
+  .freq-chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .freq-chip { padding:6px 11px; font-size:0.82em; font-weight:600; background:var(--surface-hover); color:var(--text); border:1px solid var(--border); border-radius:99px; cursor:pointer; box-shadow:none; }
+  .freq-chip:hover { border-color:var(--accent); }
   .diet-empty { font-size:0.85em; color:var(--text-muted); padding:8px 2px; }
   .diet-extra { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:4px 14px; margin-bottom:14px; }
   .diet-extra summary { cursor:pointer; padding:10px 0; font-weight:600; color:var(--text); }
@@ -3314,6 +3334,12 @@
   <div id="diet" class="panel">
     <h2>Bugün ne yedin?</h2>
 
+    <div class="diet-datenav">
+      <button class="diet-date-arrow" onclick="dietDateShift(-1)" aria-label="Önceki gün">‹</button>
+      <button class="diet-date-label" id="dietDateLabel" onclick="dietDateToday()">Bugün</button>
+      <button class="diet-date-arrow" id="dietDateNext" onclick="dietDateShift(1)" aria-label="Sonraki gün">›</button>
+    </div>
+
     <!-- Özet: kalori + su + kilo -->
     <div class="diet-summary">
       <div class="diet-ring-wrap">
@@ -3323,16 +3349,16 @@
         </svg>
         <div class="diet-ring-center">
           <div class="diet-ring-num" id="dietKcalNum">0</div>
-          <div class="diet-ring-sub" id="dietKcalSub">/ 2000 kcal</div>
+          <div class="diet-ring-sub" id="dietKcalSub">kalan kcal</div>
         </div>
       </div>
-      <div class="diet-mini-stats">
-        <div class="diet-mini" id="dietWaterMini"><span class="diet-mini-num">0</span><span class="diet-mini-lbl">su (L)</span></div>
-        <div class="diet-mini" id="dietWeightMini"><span class="diet-mini-num">–</span><span class="diet-mini-lbl">kilo (kg)</span></div>
+      <div class="diet-cal-stats">
+        <div class="cal-stat"><span class="cal-stat-num" id="calGoal">2000</span><span class="cal-stat-lbl">hedef kcal</span></div>
+        <div class="cal-stat"><span class="cal-stat-num" id="calFood">0</span><span class="cal-stat-lbl">yenen kcal</span></div>
       </div>
     </div>
 
-    <div class="diet-macro-row" id="dietMacroRow"></div>
+    <div class="macro-bars" id="macroBars"></div>
 
     <!-- Diyet programım (her gün aynı şablon) -->
     <div class="diet-card">
@@ -3405,6 +3431,7 @@
         </div>
         <div id="macroResult" class="macro-result"></div>
       </div>
+      <div class="freq-meals" id="freqMeals"></div>
       <div id="mealList"></div>
     </div>
 
@@ -3430,6 +3457,15 @@
         </label>
         <label>Günlük su hedefi (L)
           <input id="goalWater" type="number" inputmode="decimal" min="0.5" max="10" step="0.1" onchange="setDietGoals()">
+        </label>
+        <label>Protein hedefi (g)
+          <input id="goalProtein" type="number" inputmode="numeric" min="0" onchange="setDietGoals()">
+        </label>
+        <label>Karbonhidrat hedefi (g)
+          <input id="goalCarb" type="number" inputmode="numeric" min="0" onchange="setDietGoals()">
+        </label>
+        <label>Yağ hedefi (g)
+          <input id="goalFat" type="number" inputmode="numeric" min="0" onchange="setDietGoals()">
         </label>
       </div>
       <div class="diet-meal-rem">
@@ -3873,13 +3909,47 @@ function ensureDiet() {
   d.days = d.days || {};
   d.weights = d.weights || [];
   d.plan = d.plan || [];   // diyet programı (her gün aynı şablon): [{id, slot, name, kcal}]
+  // Makro hedefleri — kcal hedefinden türetilen varsayılan (protein %25, karb %50, yağ %25)
+  if (d.proteinGoal === undefined) d.proteinGoal = Math.round((d.kcalGoal || 2000) * 0.25 / 4);
+  if (d.carbGoal === undefined) d.carbGoal = Math.round((d.kcalGoal || 2000) * 0.50 / 4);
+  if (d.fatGoal === undefined) d.fatGoal = Math.round((d.kcalGoal || 2000) * 0.25 / 9);
 }
-// Bugünün diyet günü objesi (yoksa oluştur)
-function dietDay() {
+// Seçili diyet günü (varsayılan bugün). _dietDate ile geçmiş günlere gezilir.
+let _dietDate = null;
+function dietKey() { return _dietDate || today(); }
+function dietDay(create = true) {
   ensureDiet();
-  const k = today();
-  if (!data.diet.days[k]) data.diet.days[k] = { meals: [], water: 0 };
+  const k = dietKey();
+  if (!data.diet.days[k]) {
+    if (!create) return { meals: [], waterL: 0 };
+    data.diet.days[k] = { meals: [], water: 0 };
+  }
   return data.diet.days[k];
+}
+// Tarih gezinme
+function shiftDateStr(dateStr, delta) {
+  const d = new Date(dateStr + 'T12:00:00');
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+function dietDateShift(delta) {
+  const next = shiftDateStr(dietKey(), delta);
+  if (next > today()) return;          // gelecek yok
+  _dietDate = (next === today()) ? null : next;
+  renderDiet();
+}
+function dietDateToday() { _dietDate = null; renderDiet(); }
+function renderDietDateNav() {
+  const lbl = document.getElementById('dietDateLabel');
+  const nextBtn = document.getElementById('dietDateNext');
+  if (!lbl) return;
+  const k = dietKey(), t = today();
+  let text;
+  if (k === t) text = 'Bugün';
+  else if (k === shiftDateStr(t, -1)) text = 'Dün';
+  else text = new Date(k + 'T12:00:00').toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' });
+  lbl.textContent = text;
+  if (nextBtn) nextBtn.disabled = (k === t);
 }
 
 // ===== DİYET render + handler =====
@@ -3887,38 +3957,44 @@ const MEAL_SLOTS = { kahvalti: 'Kahvaltı', ogle: 'Öğle', aksam: 'Akşam', ati
 
 function renderDiet() {
   ensureDiet();
-  const d = data.diet, day = dietDay();
+  renderDietDateNav();
+  const d = data.diet, day = dietDay(false);
   // Kalori toplamı + ring
   const totalKcal = day.meals.reduce((s, m) => s + (Number(m.kcal) || 0), 0);
   const goal = d.kcalGoal || 2000;
-  document.getElementById('dietKcalNum').textContent = totalKcal;
-  document.getElementById('dietKcalSub').textContent = '/ ' + goal + ' kcal';
+  const left = goal - totalKcal;
+  const numEl = document.getElementById('dietKcalNum');
+  numEl.textContent = left;
+  numEl.classList.toggle('over', left < 0);
+  document.getElementById('dietKcalSub').textContent = 'kalan kcal';
+  const cgEl = document.getElementById('calGoal'); if (cgEl) cgEl.textContent = goal;
+  const cfEl = document.getElementById('calFood'); if (cfEl) cfEl.textContent = totalKcal;
   const r = 52, circ = 2 * Math.PI * r;
   const pct = Math.max(0, Math.min(1, goal ? totalKcal / goal : 0));
   const fg = document.getElementById('dietRingFg');
   fg.style.strokeDasharray = circ.toFixed(1);
   fg.style.strokeDashoffset = (circ * (1 - pct)).toFixed(1);
   fg.classList.toggle('over', totalKcal > goal);
-  // Mini istatistikler
-  document.querySelector('#dietWaterMini .diet-mini-num').textContent = fmtL(day.waterL || 0);
-  const lastW = (d.weights || []).length ? d.weights[d.weights.length - 1].kg : null;
-  document.querySelector('#dietWeightMini .diet-mini-num').textContent = lastW != null ? lastW : '–';
   // Alt bölümler
   renderDietPlan();
   renderWater();
   renderMealList();
+  renderFrequentMeals();
   renderWeightTrend();
-  renderDietMacros();
+  renderMacroBars();
   // Hedef inputları
   const gk = document.getElementById('goalKcal'); if (gk) gk.value = d.kcalGoal;
   const gw = document.getElementById('goalWater'); if (gw) gw.value = (d.waterGoalL || 2.5);
+  const gp = document.getElementById('goalProtein'); if (gp) gp.value = d.proteinGoal;
+  const gc = document.getElementById('goalCarb'); if (gc) gc.value = d.carbGoal;
+  const gf = document.getElementById('goalFat'); if (gf) gf.value = d.fatGoal;
 }
 
 // --- Su ---
 // Litre format: 1.5 -> "1,5" (Turkce gosterim). Sondaki sifir atilir.
 function fmtL(n) { return (Math.round((Number(n) || 0) * 100) / 100).toString().replace('.', ','); }
 function renderWater() {
-  const d = data.diet, day = dietDay();
+  const d = data.diet, day = dietDay(false);
   const goal = d.waterGoalL || 2.5, cur = Math.round((day.waterL || 0) * 100) / 100;
   document.getElementById('waterMeta').textContent = fmtL(cur) + ' / ' + fmtL(goal) + ' L';
   document.getElementById('waterFill').style.width = Math.min(100, goal ? (cur / goal * 100) : 0).toFixed(0) + '%';
@@ -3955,7 +4031,7 @@ function addMeal() {
 }
 function removeMeal(id) { const day = dietDay(); day.meals = day.meals.filter(m => m.id !== id); save(); renderDiet(); }
 function renderMealList() {
-  const day = dietDay(), el = document.getElementById('mealList');
+  const day = dietDay(false), el = document.getElementById('mealList');
   if (!day.meals.length) { el.innerHTML = '<div class="diet-empty">Henüz öğün eklenmedi.</div>'; return; }
   let html = '';
   Object.keys(MEAL_SLOTS).forEach(slot => {
@@ -3972,13 +4048,57 @@ function renderMealList() {
   el.innerHTML = html;
 }
 
+// --- Sık yediklerin (geçmişten türetilir, tek tık tekrar ekle) ---
+function frequentMeals(limit = 8) {
+  ensureDiet();
+  const days = data.diet.days || {};
+  const map = new Map();
+  const keys = Object.keys(days).sort();   // eski->yeni: son görülen kcal/slot güncel kalsın
+  for (const dk of keys) {
+    const meals = (days[dk].meals) || [];
+    for (const m of meals) {
+      const name = String(m.name || '').trim();
+      if (!name) continue;
+      const key = name.toLocaleLowerCase('tr');
+      const e = map.get(key) || { name, count: 0, kcal: null, protein: null, carb: null, fat: null, slot: 'atistirma', last: '' };
+      e.count++; e.name = name;
+      if (m.kcal != null) e.kcal = m.kcal;
+      if (m.protein != null) e.protein = m.protein;
+      if (m.carb != null) e.carb = m.carb;
+      if (m.fat != null) e.fat = m.fat;
+      if (m.slot) e.slot = m.slot;
+      e.last = dk;
+      map.set(key, e);
+    }
+  }
+  return [...map.values()].sort((a, b) => b.count - a.count || (a.last < b.last ? 1 : -1)).slice(0, limit);
+}
+let _freqMeals = [];
+function renderFrequentMeals() {
+  _freqMeals = frequentMeals(8);
+  const el = document.getElementById('freqMeals');
+  if (!el) return;
+  if (!_freqMeals.length) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="freq-head">Sık yediklerin</div><div class="freq-chips">' +
+    _freqMeals.map((m, i) => `<button class="freq-chip" onclick="quickAddMeal(${i})" title="Ekle">${escapeHtml(m.name)}${m.kcal != null ? ` · ${m.kcal}` : ''}</button>`).join('') +
+    '</div>';
+}
+function quickAddMeal(i) {
+  const m = _freqMeals[i];
+  if (!m) return;
+  const day = dietDay();
+  day.meals.push({ id: Date.now(), slot: m.slot || _mealSlot || 'atistirma', name: m.name, kcal: (m.kcal != null ? m.kcal : null), protein: m.protein, carb: m.carb, fat: m.fat });
+  save(); renderDiet();
+  showToast(m.name + ' eklendi', 'success');
+}
+
 // --- Kilo ---
 function logWeight() {
   const el = document.getElementById('weightKg');
   const kg = parseFloat((el.value || '').replace(',', '.'));
   if (!kg || kg <= 0 || kg > 500) { showToast('Geçerli kilo gir', 'info'); el.focus(); return; }
   ensureDiet();
-  const k = today(), arr = data.diet.weights;
+  const k = dietKey(), arr = data.diet.weights;
   const ex = arr.find(w => w.date === k);
   if (ex) ex.kg = kg; else arr.push({ date: k, kg });
   arr.sort((a, b) => a.date < b.date ? -1 : 1);
@@ -4008,6 +4128,12 @@ function setDietGoals() {
   const gw = parseFloat((document.getElementById('goalWater').value || '').replace(',', '.'));
   if (gk > 0) data.diet.kcalGoal = gk;
   if (gw > 0) data.diet.waterGoalL = Math.min(10, Math.round(gw * 100) / 100);
+  const gp = parseInt(document.getElementById('goalProtein').value, 10);
+  const gc = parseInt(document.getElementById('goalCarb').value, 10);
+  const gf = parseInt(document.getElementById('goalFat').value, 10);
+  if (isFinite(gp) && gp >= 0) data.diet.proteinGoal = gp;
+  if (isFinite(gc) && gc >= 0) data.diet.carbGoal = gc;
+  if (isFinite(gf) && gf >= 0) data.diet.fatGoal = gf;
   save(); renderDiet();
 }
 
@@ -4034,7 +4160,7 @@ function renderDietPlan() {
     if (meta) meta.textContent = '';
     return;
   }
-  const day = dietDay();
+  const day = dietDay(false);
   const eatenIds = new Set(day.meals.filter(m => m.planId != null).map(m => m.planId));
   const totalK = plan.reduce((s, p) => s + (Number(p.kcal) || 0), 0);
   if (meta) meta.textContent = `${eatenIds.size}/${plan.length} yendi${totalK ? ` · ${totalK} kcal` : ''}`;
@@ -4248,14 +4374,25 @@ function applyMacro(m) {
   document.getElementById('macroResult').innerHTML = '';
 }
 
-function renderDietMacros() {
-  const day = dietDay();
-  const el = document.getElementById('dietMacroRow');
+function renderMacroBars() {
+  const d = data.diet, day = dietDay(false);
+  let p = 0, c = 0, f = 0;
+  day.meals.forEach(m => { p += Number(m.protein) || 0; c += Number(m.carb) || 0; f += Number(m.fat) || 0; });
+  const rows = [
+    ['Protein', Math.round(p), d.proteinGoal || 0, '#5aa2ff'],
+    ['Karbonhidrat', Math.round(c), d.carbGoal || 0, '#f5a524'],
+    ['Yağ', Math.round(f), d.fatGoal || 0, '#e0726e'],
+  ];
+  const el = document.getElementById('macroBars');
   if (!el) return;
-  let p = 0, c = 0, f = 0, has = false;
-  day.meals.forEach(m => { if (m.protein != null || m.carb != null || m.fat != null) has = true; p += Number(m.protein) || 0; c += Number(m.carb) || 0; f += Number(m.fat) || 0; });
-  if (!has) { el.innerHTML = ''; return; }
-  el.innerHTML = `<span class="macro-tot"><b>P</b> ${Math.round(p)}g</span><span class="macro-tot"><b>K</b> ${Math.round(c)}g</span><span class="macro-tot"><b>Y</b> ${Math.round(f)}g</span>`;
+  el.innerHTML = rows.map(([name, val, gl, col]) => {
+    const pct = gl ? Math.min(100, Math.round(val / gl * 100)) : 0;
+    const over = gl && val > gl;
+    return `<div class="macro-bar">
+      <div class="macro-bar-top"><span class="macro-bar-name">${name}</span><span class="macro-bar-val${over ? ' over' : ''}">${val} / ${gl} g</span></div>
+      <div class="macro-bar-track"><span class="macro-bar-fill" style="width:${pct}%; background:${col}"></span></div>
+    </div>`;
+  }).join('');
 }
 function timeStr() { return new Date().toLocaleString('tr-TR'); }
 
@@ -4307,7 +4444,7 @@ function showTab(name, btn) {
   }
   if (name === 'tasks') renderCountdowns();
   if (name === 'plan') renderDayPlan();
-  if (name === 'diet') renderDiet();
+  if (name === 'diet') { _dietDate = null; renderDiet(); }
   // Borsa sekmesinden çıkınca canlı güncellemeyi durdur (batarya/kota)
   if (name !== 'stocks') stopStockAutoRefresh();
   if (name === 'stocks') {
