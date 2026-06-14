@@ -786,6 +786,7 @@ Salim: "4 yumurta buluyor ama '4 yumurta 2 dilim ekmek' bulamıyor, tek tek yaz�
 - **PWA `renderMacroResult`:** çoklu öğünde AI satırı "Toplam" etiketli + altında bileşen dökümü ("yumurta · 310 kcal + ekmek · 133 kcal"). Tek yemekte eski davranış ("AI tahmini" + USDA "Veritabanı"). Dokun → toplam kcal+makro mealKcal'a dolar, tek satır öğün olarak loglanır.
 - **Doğrulama:** worker+asistan `node --check` OK + `parseMealItemsJson` 8 format testi (çoklu toplam 443 kcal/30 P doğru, fence/önsöz/bare/junk/gramsız-varsayılan). Canlı uçtan uca test deploy sonrası (Supabase login tekniği).
 - **Cache:** v7-68 → v7-69
+- **🔢 Devamı (Salim: "AI tahmin etmesin, USDA'dan bulup toplasın"):** Çoklu yemekte artık **her bileşen ayrı ayrı USDA'dan** çekiliyor (gramına ölçekli, `Promise.all` paralel), USDA bulamazsa o bileşen AI tahminine düşer, sonra **server toplar**. Yanıt `{ai:toplam, items:[{...,source:'usda'|'ai'}], source:'usda'|'mixed'|'ai'}`. PWA etiketi kaynağa göre ("Veritabanı" / "Veritabanı + AI" / "Toplam (AI)"), bileşen dökümünde AI olanlara "(tahmin)" notu. `db` alanı kaldırıldı (USDA artık toplama entegre). ⚠️ USDA İngilizce/jenerik; Türk yemek isimleri AI'nın verdiği `en` ile aranır (bonfile→beef tenderloin). **Cache:** v7-69 → v7-70
 
 ## Mevcut Durum
 

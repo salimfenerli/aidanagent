@@ -4358,11 +4358,12 @@ function renderMacroResult(j) {
   const out = document.getElementById('macroResult');
   const mk = m => ({ kcal: m.kcal != null ? m.kcal : null, protein: m.protein != null ? m.protein : null, carb: m.carb != null ? m.carb : null, fat: m.fat != null ? m.fat : null });
   const multi = !!(j.items && j.items.length > 1);
+  const srcLabel = j.source === 'usda' ? 'Veritabanı' : (j.source === 'mixed' ? 'Veritabanı + AI' : (multi ? 'Toplam (AI)' : 'AI tahmini'));
   const rows = [];
   if (j.db) rows.push(`<button class="macro-opt" onclick='applyMacro(${JSON.stringify(mk(j.db))})'><span class="macro-src">Veritabanı</span><span class="macro-vals">${_macroLine(j.db)}</span></button>`);
-  if (j.ai) rows.push(`<button class="macro-opt" onclick='applyMacro(${JSON.stringify(mk(j.ai))})'><span class="macro-src">${multi ? 'Toplam' : 'AI tahmini'}</span><span class="macro-vals">${_macroLine(j.ai)}</span></button>`);
+  if (j.ai) rows.push(`<button class="macro-opt" onclick='applyMacro(${JSON.stringify(mk(j.ai))})'><span class="macro-src">${srcLabel}</span><span class="macro-vals">${_macroLine(j.ai)}</span></button>`);
   if (!rows.length) { out.innerHTML = '<div class="diet-empty">Sonuç yok, kaloriyi elle gir.</div>'; return; }
-  const bd = multi ? `<div class="macro-note">${j.items.map(it => `${escapeHtml(it.name)} · ${it.kcal} kcal`).join('  +  ')}</div>` : '';
+  const bd = multi ? `<div class="macro-note">${j.items.map(it => `${escapeHtml(it.name)} · ${it.kcal} kcal${it.source === 'usda' ? '' : ' (tahmin)'}`).join('  +  ')}</div>` : '';
   const note = j.grams ? `<div class="macro-note">≈ ${j.grams} g · birine dokun → otomatik dolar</div>` : '';
   out.innerHTML = rows.join('') + bd + note;
 }

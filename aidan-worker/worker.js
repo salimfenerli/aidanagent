@@ -3341,17 +3341,22 @@ SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
     const raw = typeof r.response === 'string' ? r.response : JSON.stringify(r.response || '');
     const items = parseMealItemsJson(raw);
     if (!items.length) return jsonCors({ error: 'parse', raw: String(raw).slice(0, 200) }, 200, cors);
-    // Bileşenleri topla
-    const sum = items.reduce((a, it) => ({
+    // Her bileşeni USDA'dan bul (gramına ölçekli), bulunamazsa AI tahminine düş — sonra topla
+    const usdaResults = await Promise.all(items.map(it => (it.en ? usdaLookup(env, it.en, it.grams).catch(() => null) : Promise.resolve(null))));
+    const merged = items.map((it, idx) => {
+      const u = usdaResults[idx];
+      if (u && u.kcal != null) return { name: it.name, grams: it.grams, kcal: Math.round(u.kcal), protein: Math.round(u.protein || 0), carb: Math.round(u.carb || 0), fat: Math.round(u.fat || 0), source: 'usda' };
+      return { name: it.name, grams: it.grams, kcal: Math.round(it.kcal || 0), protein: Math.round(it.protein || 0), carb: Math.round(it.carb || 0), fat: Math.round(it.fat || 0), source: 'ai' };
+    });
+    const sum = merged.reduce((a, it) => ({
       kcal: a.kcal + (it.kcal || 0), protein: a.protein + (it.protein || 0),
       carb: a.carb + (it.carb || 0), fat: a.fat + (it.fat || 0), grams: a.grams + (it.grams || 0),
     }), { kcal: 0, protein: 0, carb: 0, fat: 0, grams: 0 });
     const ai = { kcal: Math.round(sum.kcal), protein: Math.round(sum.protein), carb: Math.round(sum.carb), fat: Math.round(sum.fat) };
-    // Tek yemekse USDA da dene (çoklu öğünde N çağrı yapma)
-    let db = null;
-    if (items.length === 1 && items[0].en) { try { db = await usdaLookup(env, items[0].en, items[0].grams); } catch (_) {} }
-    const breakdown = items.map(it => ({ name: it.name, kcal: Math.round(it.kcal || 0), protein: Math.round(it.protein || 0), carb: Math.round(it.carb || 0), fat: Math.round(it.fat || 0) }));
-    return jsonCors({ name: query, grams: Math.round(sum.grams), ai, db, items: breakdown, multi: items.length > 1 }, 200, cors);
+    const anyUsda = merged.some(m => m.source === 'usda');
+    const allUsda = merged.every(m => m.source === 'usda');
+    const source = allUsda ? 'usda' : (anyUsda ? 'mixed' : 'ai');
+    return jsonCors({ name: query, grams: Math.round(sum.grams), ai, items: merged, multi: items.length > 1, source }, 200, cors);
   } catch (e) {
     return jsonCors({ error: e.message }, 500, cors);
   }
