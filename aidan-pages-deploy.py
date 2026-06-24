@@ -26,6 +26,11 @@ ROOT = Path(__file__).parent
 # (local source filename, served path) — Pages .html strip için kritik
 INCLUDE = [
     ("asistan.html", "/index.html"),  # / için Pages default, .html strip yok
+    ("core.js", "/core.js"),
+    ("tasks.js", "/tasks.js"),
+    ("stocks.js", "/stocks.js"),
+    ("ui.js", "/ui.js"),
+    ("styles.css", "/styles.css"),
     ("404.html", "/404.html"),
     ("sw.js", "/sw.js"),
     ("manifest.webmanifest", "/manifest.webmanifest"),
@@ -41,6 +46,7 @@ SPECIAL_FILES = ["_headers", "_redirects"]
 MIME_MAP = {
     ".html": "text/html; charset=utf-8",
     ".js":   "application/javascript; charset=utf-8",
+    ".css":  "text/css; charset=utf-8",
     ".webmanifest": "application/manifest+json",
     ".svg":  "image/svg+xml",
     ".png":  "image/png",

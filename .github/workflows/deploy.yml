@@ -5,6 +5,11 @@ on:
     branches: [main]
     paths:
       - 'asistan.html'
+      - 'core.js'
+      - 'tasks.js'
+      - 'stocks.js'
+      - 'ui.js'
+      - 'styles.css'
       - '404.html'
       - 'sw.js'
       - 'manifest.webmanifest'

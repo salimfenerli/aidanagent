@@ -32,3 +32,7 @@ build/
 # Claude Code yerel ayarlar (kullanıcıya özel)
 .claude/settings.local.json
 
+
+# Faz B: app.js 4 parçaya bölündü (core/tasks/stocks/ui), eski tek dosya + yedekler commit edilmesin
+app.js
+*.bak

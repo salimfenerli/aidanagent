@@ -1,6 +1,11 @@
-const CACHE = 'aidan-v7-75';
+const CACHE = 'aidan-v7-78';
 const ASSETS = [
   '/',
+  '/core.js',
+  '/tasks.js',
+  '/stocks.js',
+  '/ui.js',
+  '/styles.css',
   '/manifest.webmanifest',
   '/icon.png',
   '/icon-maskable.png',
