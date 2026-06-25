@@ -812,12 +812,11 @@
   .stock-market-badge { font-size: 0.75em; vertical-align: middle; margin-left: 4px; opacity: 0.8; }
 
   /* ===== Global tam-ekran mod — her sekme borsa gibi (body.app-mode) ===== */
-  /* Üstteki marka/tarih/topbar ve alt sekme barı gizlenir; tek satırlık app-bar kalır */
+  /* Üstteki marka/tarih/topbar gizlenir; tab bar açık kalır */
   body.app-mode .brand-row,
   body.app-mode #dateHero,
   body.app-mode #appSubtitle,
-  body.app-mode .topbar,
-  body.app-mode .tabs { display: none !important; }
+  body.app-mode .topbar { display: none !important; }
   body.app-mode:not(.stocks-mode) { padding-top: 0; }
   /* Borsa kendi özel başlığını kullanır — global header'ı orada gizle */
   body.app-mode:not(.stocks-mode) .app-header { display: flex; }
