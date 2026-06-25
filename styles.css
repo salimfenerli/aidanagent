@@ -738,7 +738,6 @@
   body.stocks-mode .quick-actions,
   body.stocks-mode .action-row { display: none !important; }
   body.stocks-mode .container { padding: 0 !important; max-width: 100% !important; }
-  body.stocks-mode .tabs { display: none !important; }
   body.stocks-mode #stocks { padding: 0 14px 100px !important; margin-top: 0 !important; }
   body.stocks-mode .stocks-mode-h2 { display: none; }
   body.stocks-mode .stocks-mode-header {
@@ -3140,3 +3139,4 @@
   .wd-list { display:flex; flex-direction:column; gap:4px; max-height:34vh; overflow-y:auto; }
   .wd-row { display:flex; justify-content:space-between; font-size:0.85em; color:var(--text); padding:5px 8px; background:var(--surface-hover); border-radius:var(--radius-sm); }
   .wd-kg { font-weight:700; color:var(--text-strong); }
+
