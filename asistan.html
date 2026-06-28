@@ -332,7 +332,7 @@
 
     <div class="macro-bars" id="macroBars"></div>
 
-    <!-- Diyet programım (her gün aynı şablon) -->
+    <!-- Diyet programım (çoklu plan + haftalık + net porsiyon) -->
     <div class="diet-card">
       <div class="diet-card-head">
         <span class="diet-card-title">Planım</span>
@@ -341,6 +341,7 @@
       <div id="planList"></div>
       <details class="plan-edit">
         <summary>Planı düzenle</summary>
+        <div id="planEditor"></div>
         <div class="meal-add">
           <input id="planName" placeholder="yemek (örn. 2 yumurta)" onkeydown="if(event.key==='Enter')addPlanMeal()">
           <div class="slot-chips" id="planSlotChips">
@@ -352,6 +353,11 @@
           <div class="meal-add-row2">
             <input id="planKcal" type="number" inputmode="numeric" min="0" placeholder="kcal (ops.)" class="meal-kcal">
             <button class="small primary" onclick="addPlanMeal()">Ekle</button>
+          </div>
+          <div class="meal-macro-row">
+            <input id="planP" type="number" inputmode="decimal" min="0" placeholder="protein g" title="Protein (g, opsiyonel)">
+            <input id="planC" type="number" inputmode="decimal" min="0" placeholder="karb g" title="Karbonhidrat (g, opsiyonel)">
+            <input id="planF" type="number" inputmode="decimal" min="0" placeholder="yağ g" title="Yağ (g, opsiyonel)">
           </div>
         </div>
         <button class="small diet-photo-btn" onclick="document.getElementById('planPhoto').click()">

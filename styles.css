@@ -3202,3 +3202,20 @@
 .chat-foot { font-size: 0.74rem; color: var(--text-muted); text-align: center; opacity: 0.8; }
 
 @media (prefers-reduced-motion: reduce) { .chat-typing span { animation: none; } }
+
+/* ============ Öğün planı — çoklu + haftalık ============ */
+.plan-picker { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+.plan-pick-chip { background: var(--surface-mid); border: 1px solid var(--border-soft); color: var(--text-muted); font-size: 0.84rem; font-weight: 600; padding: 6px 12px; border-radius: var(--radius-pill); cursor: pointer; transition: background .18s cubic-bezier(.22,1,.36,1), color .18s; }
+.plan-pick-chip:hover { background: var(--surface-high); color: var(--text); }
+.plan-pick-chip.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.plan-pick-add { background: var(--surface-mid); border: 1px dashed var(--border); color: var(--accent-tint); width: 30px; height: 30px; border-radius: 50%; font-size: 1rem; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: background .18s; }
+.plan-pick-add:hover { background: var(--accent-soft); }
+.plan-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.plan-weekly { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text); cursor: pointer; margin-right: auto; }
+.plan-weekly input { accent-color: var(--accent); width: 16px; height: 16px; }
+.plan-day-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+.day-chip { background: var(--surface-mid); border: 1px solid var(--border-soft); color: var(--text-muted); font-size: 0.8rem; font-weight: 600; padding: 5px 10px; border-radius: var(--radius-sm); cursor: pointer; transition: background .18s, color .18s; }
+.day-chip:hover { background: var(--surface-high); color: var(--text); }
+.day-chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-tint); }
+.plan-bucket { margin-bottom: 10px; }
+.plan-bucket .meal-group { margin-bottom: 8px; }

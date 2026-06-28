@@ -55,6 +55,14 @@ function ensureDiet() {
   d.days = d.days || {};
   d.weights = d.weights || [];
   d.plan = d.plan || [];   // diyet programı (her gün aynı şablon): [{id, slot, name, kcal}]
+  // Çoklu + haftalık plan modeli (eski tek 'plan' migrate edilir)
+  if (!d.plans) {
+    const mm = emptyPlanMeals();
+    if (d.plan.length) mm.all = d.plan.map(pp => ({ id: pp.id || (Date.now() + Math.floor(Math.random() * 1e5)), slot: pp.slot || 'kahvalti', name: pp.name, kcal: pp.kcal != null ? pp.kcal : null, protein: pp.protein != null ? pp.protein : null, carb: pp.carb != null ? pp.carb : null, fat: pp.fat != null ? pp.fat : null }));
+    d.plans = [{ id: Date.now(), name: 'Planım', weekly: false, meals: mm }];
+    d.activePlanId = d.plans[0].id;
+  }
+  if (d.activePlanId == null && (d.plans || []).length) d.activePlanId = d.plans[0].id;
   // Makro hedefleri — kcal hedefinden türetilen varsayılan (protein %25, karb %50, yağ %25)
   if (d.proteinGoal === undefined) d.proteinGoal = Math.round((d.kcalGoal || 2000) * 0.25 / 4);
   if (d.carbGoal === undefined) d.carbGoal = Math.round((d.kcalGoal || 2000) * 0.50 / 4);
@@ -405,31 +413,117 @@ function addMealReminder(label, time) {
 const DIET_PLAN_IMAGE_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/diet-plan-image';
 
 // Planı öğüne göre gruplu göster. Her satırda 'yedim' işareti bugünün öğün loguna bağlı (kalori halkasına yansır).
+// ===== Öğün planı — çoklu plan + haftalık (güne göre) + net porsiyon =====
+const PLAN_DAYS = [
+  { k: 'all', t: 'Her gün' }, { k: 'pzt', t: 'Pzt' }, { k: 'sal', t: 'Sal' }, { k: 'car', t: 'Çar' },
+  { k: 'per', t: 'Per' }, { k: 'cum', t: 'Cum' }, { k: 'cmt', t: 'Cmt' }, { k: 'paz', t: 'Paz' }
+];
+const _DAY_KEYS = ['paz', 'pzt', 'sal', 'car', 'per', 'cum', 'cmt']; // getDay(): 0=Paz..6=Cmt
+function emptyPlanMeals() { return { all: [], pzt: [], sal: [], car: [], per: [], cum: [], cmt: [], paz: [] }; }
+function dayKeyOf(dateKey) {
+  const a = (dateKey || dietKey()).split('-').map(Number);
+  return _DAY_KEYS[new Date(a[0], a[1] - 1, a[2]).getDay()];
+}
+function activePlan() {
+  ensureDiet();
+  const d = data.diet;
+  let p = (d.plans || []).find(x => x.id === d.activePlanId);
+  if (!p) { p = (d.plans || [])[0]; if (p) d.activePlanId = p.id; }
+  return p || null;
+}
+// Belirli tarih için planlı öğünler: her gün + (haftalıksa) o günün kovası
+function planMealsForDate(dateKey) {
+  const p = activePlan(); if (!p) return [];
+  const out = (p.meals.all || []).slice();
+  if (p.weekly) out.push(...(p.meals[dayKeyOf(dateKey)] || []));
+  return out;
+}
+let _planEditDay = 'all';
+function selectPlanEditDay(k) { _planEditDay = k; renderPlanEditor(); }
+function switchPlan(id) { ensureDiet(); data.diet.activePlanId = id; _planEditDay = 'all'; save(); renderDiet(); }
+function togglePlanWeekly(on) { const p = activePlan(); if (!p) return; p.weekly = !!on; if (!on) _planEditDay = 'all'; save(); renderDiet(); }
+function newPlan() {
+  aidanPrompt('Yeni plan', 'Plan adı (örn. Cut, Bulk)', '', false).then(name => {
+    name = (name || '').trim(); if (!name) return;
+    ensureDiet();
+    const pl = { id: Date.now(), name, weekly: false, meals: emptyPlanMeals() };
+    data.diet.plans.push(pl); data.diet.activePlanId = pl.id; _planEditDay = 'all';
+    save(); renderDiet();
+  });
+}
+function renamePlan() {
+  const p = activePlan(); if (!p) return;
+  aidanPrompt('Planı yeniden adlandır', 'Ad', p.name, false).then(name => {
+    name = (name || '').trim(); if (!name) return; p.name = name; save(); renderDiet();
+  });
+}
+function deletePlan() {
+  ensureDiet(); const d = data.diet;
+  if ((d.plans || []).length <= 1) { showToast('En az bir plan kalmalı', 'info'); return; }
+  const p = activePlan(); if (!p) return;
+  d.plans = d.plans.filter(x => x.id !== p.id); d.activePlanId = d.plans[0].id; _planEditDay = 'all';
+  save(); renderDiet(); showToast('Plan silindi', 'success');
+}
+function renderPlanEditor() {
+  const host = document.getElementById('planEditor'); if (!host) return;
+  ensureDiet();
+  const d = data.diet, p = activePlan();
+  let h = '<div class="plan-picker">';
+  (d.plans || []).forEach(pl => { h += `<button class="plan-pick-chip${pl.id === d.activePlanId ? ' active' : ''}" onclick="switchPlan(${pl.id})">${escapeHtml(pl.name)}</button>`; });
+  h += `<button class="plan-pick-add" onclick="newPlan()" title="Yeni plan" aria-label="Yeni plan">＋</button></div>`;
+  if (p) {
+    h += `<div class="plan-tools"><label class="plan-weekly"><input type="checkbox" ${p.weekly ? 'checked' : ''} onchange="togglePlanWeekly(this.checked)"> Haftalık (güne göre)</label>`;
+    h += `<button class="small ghost" onclick="renamePlan()">Ad</button>`;
+    if ((d.plans || []).length > 1) h += `<button class="small ghost" onclick="deletePlan()">Sil</button>`;
+    h += `</div>`;
+    if (p.weekly) {
+      h += '<div class="plan-day-chips">' + PLAN_DAYS.map(dd => `<button class="day-chip${_planEditDay === dd.k ? ' active' : ''}" onclick="selectPlanEditDay('${dd.k}')">${dd.t}</button>`).join('') + '</div>';
+    } else { _planEditDay = 'all'; }
+    const bucket = p.meals[_planEditDay] || [];
+    let bl = '';
+    Object.keys(MEAL_SLOTS).forEach(slot => {
+      const items = bucket.filter(x => x.slot === slot); if (!items.length) return;
+      bl += `<div class="meal-group"><div class="meal-group-head">${MEAL_SLOTS[slot]}</div>`;
+      items.forEach(it => {
+        const mt = (it.protein != null || it.carb != null || it.fat != null) ? ` · P${it.protein || 0} K${it.carb || 0} Y${it.fat || 0}` : '';
+        bl += `<div class="plan-item"><span class="plan-name">${escapeHtml(it.name)}</span><span class="meal-kcal-tag">${it.kcal != null ? it.kcal + ' kcal' : ''}${mt}</span><button class="meal-del" onclick="removePlanMeal(${it.id})" title="Sil" aria-label="Sil">✕</button></div>`;
+      });
+      bl += '</div>';
+    });
+    h += `<div class="plan-bucket">${bl || '<div class="diet-empty">Bu güne öğün eklenmedi.</div>'}</div>`;
+  }
+  host.innerHTML = h;
+}
+
 function renderDietPlan() {
   ensureDiet();
-  const plan = data.diet.plan || [];
+  renderPlanEditor();
+  const p = activePlan();
   const el = document.getElementById('planList'), meta = document.getElementById('planMeta');
-  if (!plan.length) {
-    el.innerHTML = '<div class="diet-empty">Henüz plan yok. "Planı düzenle" ile ekle veya diyetisyen kağıdının fotoğrafını oku.</div>';
-    if (meta) meta.textContent = '';
-    return;
+  if (!el) return;
+  if (!p) { el.innerHTML = '<div class="diet-empty">Henüz plan yok.</div>'; if (meta) meta.textContent = ''; return; }
+  const planned = planMealsForDate(dietKey());
+  if (!planned.length) {
+    el.innerHTML = '<div class="diet-empty">Bugün için planlı öğün yok. "Planı düzenle" ile ekle ya da diyetisyen kağıdını okut.</div>';
+    if (meta) meta.textContent = p.name; return;
   }
   const day = dietDay(false);
-  const eatenIds = new Set(day.meals.filter(m => m.planId != null).map(m => m.planId));
-  const totalK = plan.reduce((s, p) => s + (Number(p.kcal) || 0), 0);
-  if (meta) meta.textContent = `${eatenIds.size}/${plan.length} yendi${totalK ? ` · ${totalK} kcal` : ''}`;
+  const eatenIds = new Set((day.meals || []).filter(m => m.planId != null).map(m => m.planId));
+  const eatenN = planned.filter(x => eatenIds.has(x.id)).length;
+  const totalK = planned.reduce((s, x) => s + (Number(x.kcal) || 0), 0);
+  if (meta) meta.textContent = `${p.name} · ${eatenN}/${planned.length} yendi${totalK ? ` · ${totalK} kcal` : ''}`;
   let html = '';
   Object.keys(MEAL_SLOTS).forEach(slot => {
-    const items = plan.filter(p => p.slot === slot);
+    const items = planned.filter(x => x.slot === slot);
     if (!items.length) return;
     html += `<div class="meal-group"><div class="meal-group-head">${MEAL_SLOTS[slot]}</div>`;
-    items.forEach(p => {
-      const eaten = eatenIds.has(p.id);
+    items.forEach(it => {
+      const eaten = eatenIds.has(it.id);
+      const mt = (it.protein != null || it.carb != null || it.fat != null) ? ` · P${it.protein || 0} K${it.carb || 0} Y${it.fat || 0}` : '';
       html += `<div class="plan-item${eaten ? ' eaten' : ''}">` +
-        `<button class="plan-check${eaten ? ' on' : ''}" onclick="togglePlanEaten(${p.id})" title="${eaten ? 'işareti kaldır' : 'yedim'}" aria-label="yedim">${eaten ? '✓' : ''}</button>` +
-        `<span class="plan-name">${escapeHtml(p.name)}</span>` +
-        `<span class="meal-kcal-tag">${p.kcal != null ? p.kcal + ' kcal' : ''}</span>` +
-        `<button class="meal-del" onclick="removePlanMeal(${p.id})" title="Sil" aria-label="Sil">✕</button>` +
+        `<button class="plan-check${eaten ? ' on' : ''}" onclick="togglePlanEaten(${it.id})" title="${eaten ? 'işareti kaldır' : 'yedim'}" aria-label="yedim">${eaten ? '✓' : ''}</button>` +
+        `<span class="plan-name">${escapeHtml(it.name)}</span>` +
+        `<span class="meal-kcal-tag">${it.kcal != null ? it.kcal + ' kcal' : ''}${mt}</span>` +
         `</div>`;
     });
     html += '</div>';
@@ -448,29 +542,31 @@ function addPlanMeal() {
   const name = (nameEl.value || '').trim();
   if (!name) { showToast('Yemek yaz', 'info'); nameEl.focus(); return; }
   const kcal = kcalEl.value !== '' ? Math.max(0, parseInt(kcalEl.value, 10) || 0) : null;
-  ensureDiet();
-  data.diet.plan.push({ id: Date.now(), slot: _planSlot, name, kcal });
+  ensureDiet(); const p = activePlan(); if (!p) return;
+  const bucket = p.weekly ? _planEditDay : 'all';
+  p.meals[bucket] = p.meals[bucket] || [];
+  p.meals[bucket].push({ id: Date.now() + Math.floor(Math.random() * 1000), slot: _planSlot, name, kcal, protein: _optMacro('planP'), carb: _optMacro('planC'), fat: _optMacro('planF') });
   nameEl.value = ''; kcalEl.value = '';
+  ['planP', 'planC', 'planF'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
   save(); renderDiet(); nameEl.focus();
 }
 
 function removePlanMeal(id) {
-  ensureDiet();
-  data.diet.plan = data.diet.plan.filter(p => p.id !== id);
-  const day = dietDay();
-  day.meals = day.meals.filter(m => m.planId !== id);   // bugünün logundan bağlı kaydı da temizle
+  ensureDiet(); const p = activePlan(); if (!p) return;
+  Object.keys(p.meals).forEach(k => { p.meals[k] = (p.meals[k] || []).filter(x => x.id !== id); });
+  const day = dietDay(); day.meals = (day.meals || []).filter(m => m.planId !== id);
   save(); renderDiet();
 }
 
 // 'yedim' işareti: planlı yemeği bugünün öğün loguna ekle/çıkar
 function togglePlanEaten(planId) {
   ensureDiet();
-  const p = (data.diet.plan || []).find(x => x.id === planId);
+  const p = planMealsForDate(dietKey()).find(x => x.id === planId);
   if (!p) return;
   const day = dietDay();
   const idx = day.meals.findIndex(m => m.planId === planId);
   if (idx >= 0) day.meals.splice(idx, 1);
-  else day.meals.push({ id: Date.now(), slot: p.slot, name: p.name, kcal: p.kcal, planId });
+  else day.meals.push({ id: Date.now(), slot: p.slot, name: p.name, kcal: p.kcal, protein: p.protein != null ? p.protein : null, carb: p.carb != null ? p.carb : null, fat: p.fat != null ? p.fat : null, planId });
   save(); renderDiet();
 }
 
@@ -566,16 +662,15 @@ function removeDpImport(i) {
   renderDpImportList();
 }
 function confirmDietPlanImport() {
-  ensureDiet();
+  ensureDiet(); const p = activePlan(); if (!p) { closeDietPlanImport(); return; }
+  const bucket = p.weekly ? _planEditDay : 'all'; p.meals[bucket] = p.meals[bucket] || [];
   let added = 0;
   for (const it of _dpImportItems) {
-    const name = (it.name || '').trim();
-    if (!name) continue;
-    data.diet.plan.push({ id: Date.now() + Math.floor(Math.random() * 100000), slot: it.slot || 'atistirma', name, kcal: (it.kcal != null ? it.kcal : null) });
+    const name = (it.name || '').trim(); if (!name) continue;
+    p.meals[bucket].push({ id: Date.now() + Math.floor(Math.random() * 100000), slot: it.slot || 'atistirma', name, kcal: (it.kcal != null ? it.kcal : null), protein: null, carb: null, fat: null });
     added++;
   }
-  closeDietPlanImport();
-  save(); renderDiet();
+  closeDietPlanImport(); save(); renderDiet();
   showToast(added + ' yemek plana eklendi', 'success');
 }
 
