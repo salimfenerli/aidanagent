@@ -3300,6 +3300,157 @@ async function usdaLookup(env, enName, grams) {
   return { name: food.description || enName, kcal: sc(kcal), protein: sc(protein), carb: sc(carb), fat: sc(fat) };
 }
 
+// Curated yaygın Türk/temel besinler — PER 100g. USDA bunların çoğunu (simit, tavuk
+// göğsü, beyaz peynir, pilav...) yanlış eşler; bunlar için USDA'dan ÖNCE buna bakılır.
+// k=anahtar adlar (AI'nın döndürdüğü Türkçe ada göre eşleşir), per-100g: kcal/p/c/f.
+const TR_FOOD_DB = [
+  { k: ['tavuk göğsü', 'tavuk gögsü', 'tavuk göğüs', 'ızgara tavuk', 'tavuk ızgara'], kcal: 165, p: 31, c: 0, f: 4 },
+  { k: ['tavuk but', 'tavuk baget', 'tavuk pirzola'], kcal: 209, p: 26, c: 0, f: 11 },
+  { k: ['tavuk şiş', 'tavuk şinitzel', 'tavuk şnitzel'], kcal: 190, p: 28, c: 4, f: 7 },
+  { k: ['tavuk döner'], kcal: 200, p: 22, c: 4, f: 10 },
+  { k: ['tavuk çorbası'], kcal: 55, p: 4, c: 6, f: 2 },
+  { k: ['hindi'], kcal: 189, p: 29, c: 0, f: 7 },
+  { k: ['dana bonfile', 'bonfile', 'biftek', 'dana rosto'], kcal: 200, p: 28, c: 0, f: 9 },
+  { k: ['dana kıyma', 'kıyma'], kcal: 250, p: 26, c: 0, f: 16 },
+  { k: ['kuzu pirzola', 'kuzu'], kcal: 282, p: 25, c: 0, f: 20 },
+  { k: ['kavurma'], kcal: 280, p: 28, c: 1, f: 19 },
+  { k: ['köfte', 'izgara köfte', 'ızgara köfte'], kcal: 240, p: 18, c: 5, f: 16 },
+  { k: ['et döner', 'döner'], kcal: 290, p: 20, c: 3, f: 22 },
+  { k: ['adana kebap', 'urfa kebap', 'kebap'], kcal: 270, p: 18, c: 3, f: 21 },
+  { k: ['şiş kebap', 'şiş'], kcal: 210, p: 27, c: 2, f: 11 },
+  { k: ['sucuk'], kcal: 320, p: 18, c: 2, f: 26 },
+  { k: ['sosis'], kcal: 290, p: 12, c: 3, f: 25 },
+  { k: ['salam'], kcal: 250, p: 14, c: 2, f: 20 },
+  { k: ['pastırma'], kcal: 240, p: 35, c: 1, f: 10 },
+  { k: ['somon'], kcal: 208, p: 20, c: 0, f: 13 },
+  { k: ['levrek', 'çupra', 'çipura'], kcal: 110, p: 20, c: 0, f: 3 },
+  { k: ['hamsi'], kcal: 130, p: 20, c: 0, f: 5 },
+  { k: ['ton balığı', 'ton balik'], kcal: 116, p: 26, c: 0, f: 1 },
+  { k: ['simit'], kcal: 320, p: 9, c: 56, f: 5 },
+  { k: ['poğaça'], kcal: 350, p: 7, c: 40, f: 18 },
+  { k: ['açma'], kcal: 330, p: 8, c: 44, f: 14 },
+  { k: ['börek', 'su böreği', 'sigara böreği'], kcal: 290, p: 8, c: 28, f: 16 },
+  { k: ['gözleme'], kcal: 270, p: 9, c: 35, f: 11 },
+  { k: ['tost'], kcal: 290, p: 13, c: 30, f: 13 },
+  { k: ['menemen'], kcal: 130, p: 7, c: 5, f: 9 },
+  { k: ['ekmek', 'beyaz ekmek'], kcal: 265, p: 9, c: 49, f: 3 },
+  { k: ['tam buğday ekmek', 'kepekli ekmek', 'tam tahıl ekmek'], kcal: 247, p: 13, c: 41, f: 3 },
+  { k: ['pilav', 'pişmiş pirinç', 'pirinç pilavı'], kcal: 165, p: 3, c: 32, f: 3 },
+  { k: ['bulgur pilavı', 'bulgur', 'pişmiş bulgur'], kcal: 145, p: 4, c: 29, f: 2 },
+  { k: ['pirinç', 'çiğ pirinç'], kcal: 360, p: 7, c: 80, f: 1 },
+  { k: ['makarna', 'pişmiş makarna', 'spagetti'], kcal: 158, p: 6, c: 31, f: 1 },
+  { k: ['kremalı makarna'], kcal: 230, p: 7, c: 28, f: 10 },
+  { k: ['mantı'], kcal: 215, p: 9, c: 30, f: 7 },
+  { k: ['erişte'], kcal: 200, p: 7, c: 36, f: 3 },
+  { k: ['mercimek çorbası', 'mercimek çorba'], kcal: 60, p: 3, c: 9, f: 2 },
+  { k: ['ezogelin çorbası', 'ezogelin'], kcal: 65, p: 3, c: 10, f: 2 },
+  { k: ['domates çorbası'], kcal: 55, p: 2, c: 8, f: 2 },
+  { k: ['yayla çorbası', 'yayla çorba'], kcal: 60, p: 3, c: 7, f: 3 },
+  { k: ['çorba'], kcal: 50, p: 2, c: 7, f: 2 },
+  { k: ['nohut', 'etli nohut', 'nohut yemeği'], kcal: 160, p: 9, c: 25, f: 3 },
+  { k: ['kuru fasulye', 'etli kuru fasulye'], kcal: 140, p: 8, c: 22, f: 3 },
+  { k: ['mercimek yemeği', 'mercimek'], kcal: 116, p: 9, c: 20, f: 0 },
+  { k: ['zeytinyağlı fasulye', 'taze fasulye'], kcal: 90, p: 2, c: 9, f: 5 },
+  { k: ['karnıyarık', 'patlıcan musakka', 'musakka'], kcal: 130, p: 5, c: 9, f: 8 },
+  { k: ['imambayıldı', 'i̇mambayıldı'], kcal: 120, p: 2, c: 11, f: 8 },
+  { k: ['yaprak sarma', 'sarma', 'dolma', 'biber dolması'], kcal: 150, p: 3, c: 20, f: 6 },
+  { k: ['yumurta', 'haşlanmış yumurta', 'omlet'], kcal: 150, p: 13, c: 1, f: 10 },
+  { k: ['sucuklu yumurta'], kcal: 220, p: 14, c: 2, f: 17 },
+  { k: ['beyaz peynir', 'peynir'], kcal: 265, p: 14, c: 4, f: 21 },
+  { k: ['kaşar peyniri', 'kaşar', 'kasar'], kcal: 380, p: 25, c: 2, f: 30 },
+  { k: ['lor peyniri', 'lor'], kcal: 100, p: 14, c: 4, f: 3 },
+  { k: ['labne'], kcal: 250, p: 6, c: 4, f: 23 },
+  { k: ['yoğurt', 'yogurt'], kcal: 61, p: 4, c: 5, f: 3 },
+  { k: ['süzme yoğurt'], kcal: 130, p: 10, c: 4, f: 8 },
+  { k: ['ayran'], kcal: 38, p: 2, c: 3, f: 2 },
+  { k: ['süt'], kcal: 64, p: 3, c: 5, f: 4 },
+  { k: ['tereyağı', 'tereyağ'], kcal: 717, p: 1, c: 0, f: 81 },
+  { k: ['zeytinyağı', 'zeytinyağ'], kcal: 884, p: 0, c: 0, f: 100 },
+  { k: ['ayçiçek yağı', 'sıvı yağ'], kcal: 884, p: 0, c: 0, f: 100 },
+  { k: ['bal'], kcal: 304, p: 0, c: 82, f: 0 },
+  { k: ['reçel'], kcal: 250, p: 0, c: 65, f: 0 },
+  { k: ['pekmez'], kcal: 290, p: 1, c: 73, f: 0 },
+  { k: ['tahin'], kcal: 595, p: 17, c: 21, f: 54 },
+  { k: ['zeytin', 'siyah zeytin', 'yeşil zeytin'], kcal: 150, p: 1, c: 4, f: 15 },
+  { k: ['patates kızartması'], kcal: 312, p: 3, c: 41, f: 15 },
+  { k: ['haşlanmış patates', 'patates'], kcal: 87, p: 2, c: 20, f: 0 },
+  { k: ['avokado'], kcal: 160, p: 2, c: 9, f: 15 },
+  { k: ['muz'], kcal: 89, p: 1, c: 23, f: 0 },
+  { k: ['elma'], kcal: 52, p: 0, c: 14, f: 0 },
+  { k: ['portakal'], kcal: 47, p: 1, c: 12, f: 0 },
+  { k: ['mandalina'], kcal: 53, p: 1, c: 13, f: 0 },
+  { k: ['armut'], kcal: 57, p: 0, c: 15, f: 0 },
+  { k: ['üzüm'], kcal: 69, p: 1, c: 18, f: 0 },
+  { k: ['çilek'], kcal: 32, p: 1, c: 8, f: 0 },
+  { k: ['karpuz'], kcal: 30, p: 1, c: 8, f: 0 },
+  { k: ['kavun'], kcal: 34, p: 1, c: 8, f: 0 },
+  { k: ['kiraz'], kcal: 63, p: 1, c: 16, f: 0 },
+  { k: ['şeftali'], kcal: 39, p: 1, c: 10, f: 0 },
+  { k: ['nar'], kcal: 83, p: 2, c: 19, f: 1 },
+  { k: ['kivi'], kcal: 61, p: 1, c: 15, f: 1 },
+  { k: ['fındık'], kcal: 628, p: 15, c: 17, f: 61 },
+  { k: ['badem'], kcal: 579, p: 21, c: 22, f: 50 },
+  { k: ['ceviz'], kcal: 654, p: 15, c: 14, f: 65 },
+  { k: ['antep fıstığı', 'fıstık'], kcal: 562, p: 20, c: 28, f: 45 },
+  { k: ['yer fıstığı'], kcal: 567, p: 26, c: 16, f: 49 },
+  { k: ['leblebi'], kcal: 364, p: 21, c: 61, f: 6 },
+  { k: ['kuru üzüm'], kcal: 299, p: 3, c: 79, f: 0 },
+  { k: ['kuru kayısı'], kcal: 241, p: 3, c: 63, f: 0 },
+  { k: ['hurma'], kcal: 282, p: 2, c: 75, f: 0 },
+  { k: ['baklava'], kcal: 430, p: 6, c: 50, f: 24 },
+  { k: ['künefe'], kcal: 320, p: 7, c: 38, f: 16 },
+  { k: ['sütlaç'], kcal: 140, p: 4, c: 25, f: 3 },
+  { k: ['kazandibi'], kcal: 160, p: 4, c: 28, f: 4 },
+  { k: ['dondurma'], kcal: 207, p: 4, c: 24, f: 11 },
+  { k: ['kek'], kcal: 350, p: 5, c: 50, f: 14 },
+  { k: ['kurabiye', 'bisküvi'], kcal: 480, p: 6, c: 64, f: 22 },
+  { k: ['lokum'], kcal: 330, p: 0, c: 83, f: 0 },
+  { k: ['helva', 'tahin helva'], kcal: 520, p: 12, c: 50, f: 30 },
+  { k: ['çikolata'], kcal: 535, p: 8, c: 59, f: 30 },
+  { k: ['cips'], kcal: 536, p: 7, c: 53, f: 34 },
+  { k: ['patlamış mısır'], kcal: 387, p: 12, c: 78, f: 4 },
+  { k: ['lahmacun'], kcal: 230, p: 10, c: 30, f: 8 },
+  { k: ['pizza'], kcal: 266, p: 11, c: 33, f: 10 },
+  { k: ['hamburger'], kcal: 295, p: 17, c: 24, f: 14 },
+  { k: ['kıymalı pide', 'pide'], kcal: 270, p: 12, c: 32, f: 11 },
+  { k: ['kumpir'], kcal: 200, p: 5, c: 26, f: 9 },
+  { k: ['tantuni'], kcal: 220, p: 14, c: 22, f: 8 },
+  { k: ['çiğ köfte'], kcal: 170, p: 5, c: 33, f: 2 },
+  { k: ['kola'], kcal: 42, p: 0, c: 11, f: 0 },
+  { k: ['meyve suyu'], kcal: 45, p: 0, c: 11, f: 0 },
+  { k: ['limonata'], kcal: 40, p: 0, c: 10, f: 0 },
+  { k: ['çay'], kcal: 1, p: 0, c: 0, f: 0 },
+  { k: ['türk kahvesi', 'filtre kahve', 'kahve'], kcal: 2, p: 0, c: 0, f: 0 },
+  { k: ['latte', 'sütlü kahve'], kcal: 55, p: 3, c: 5, f: 3 },
+  { k: ['bira'], kcal: 43, p: 0, c: 4, f: 0 },
+  { k: ['şarap'], kcal: 83, p: 0, c: 3, f: 0 },
+  { k: ['yulaf', 'yulaf ezmesi'], kcal: 370, p: 13, c: 60, f: 7 },
+  { k: ['granola', 'müsli'], kcal: 450, p: 10, c: 60, f: 18 },
+];
+function normTr(s) { return String(s || '').toLocaleLowerCase('tr').replace(/[.,;:!?()]/g, ' ').replace(/\s+/g, ' ').trim(); }
+// AI'nın döndürdüğü Türkçe ada göre curated tablo eşleşmesi (per-100g → grama ölçekli).
+function trFoodLookup(name, grams) {
+  const q = normTr(name);
+  if (q.length < 2) return null;
+  let best = null, bestScore = 0, bestLen = 0;
+  for (const e of TR_FOOD_DB) {
+    for (const key of e.k) {
+      let score = 0;
+      if (q === key) score = 4;
+      else if (q.startsWith(key + ' ')) score = 3;
+      else if (q.endsWith(' ' + key)) score = 2;
+      else if (key.length >= 4 && q.includes(key)) score = 1;
+      if (score > bestScore || (score === bestScore && key.length > bestLen)) {
+        best = e; bestScore = score; bestLen = key.length;
+      }
+    }
+  }
+  if (!best || bestScore === 0) return null;
+  const f = (grams || 100) / 100;
+  const r = v => Math.round(v * f);
+  return { kcal: r(best.kcal), protein: r(best.p), carb: r(best.c), fat: r(best.f) };
+}
+
 async function handleFoodMacrosApi(request, env) {
   const cors = {
     'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
@@ -3344,11 +3495,16 @@ SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
     const raw = typeof r.response === 'string' ? r.response : JSON.stringify(r.response || '');
     const items = parseMealItemsJson(raw);
     if (!items.length) return jsonCors({ error: 'parse', raw: String(raw).slice(0, 200) }, 200, cors);
-    // Her bileşeni USDA'dan bul (gramına ölçekli), bulunamazsa AI tahminine düş — sonra topla
-    const usdaResults = await Promise.all(items.map(it => (it.en ? usdaLookup(env, it.en, it.grams).catch(() => null) : Promise.resolve(null))));
+    // Her bilesen: once curated Turk besin tablosu, yoksa USDA, o da yoksa AI tahmini — sonra topla
+    const resolved = await Promise.all(items.map(it => {
+      const cur = trFoodLookup(it.name, it.grams);
+      if (cur && cur.kcal != null) return Promise.resolve({ ...cur, _src: 'curated' });
+      if (!it.en) return Promise.resolve(null);
+      return usdaLookup(env, it.en, it.grams).then(u => (u && u.kcal != null) ? { ...u, _src: 'usda' } : null).catch(() => null);
+    }));
     const merged = items.map((it, idx) => {
-      const u = usdaResults[idx];
-      if (u && u.kcal != null) return { name: it.name, grams: it.grams, kcal: Math.round(u.kcal), protein: Math.round(u.protein || 0), carb: Math.round(u.carb || 0), fat: Math.round(u.fat || 0), source: 'usda' };
+      const u = resolved[idx];
+      if (u && u.kcal != null) return { name: it.name, grams: it.grams, kcal: Math.round(u.kcal), protein: Math.round(u.protein || 0), carb: Math.round(u.carb || 0), fat: Math.round(u.fat || 0), source: u._src };
       return { name: it.name, grams: it.grams, kcal: Math.round(it.kcal || 0), protein: Math.round(it.protein || 0), carb: Math.round(it.carb || 0), fat: Math.round(it.fat || 0), source: 'ai' };
     });
     const sum = merged.reduce((a, it) => ({
@@ -3356,8 +3512,9 @@ SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
       carb: a.carb + (it.carb || 0), fat: a.fat + (it.fat || 0), grams: a.grams + (it.grams || 0),
     }), { kcal: 0, protein: 0, carb: 0, fat: 0, grams: 0 });
     const ai = { kcal: Math.round(sum.kcal), protein: Math.round(sum.protein), carb: Math.round(sum.carb), fat: Math.round(sum.fat) };
-    const anyUsda = merged.some(m => m.source === 'usda');
-    const allUsda = merged.every(m => m.source === 'usda');
+    const isDb = m => m.source === 'usda' || m.source === 'curated';
+    const anyUsda = merged.some(isDb);
+    const allUsda = merged.every(isDb);
     const source = allUsda ? 'usda' : (anyUsda ? 'mixed' : 'ai');
     return jsonCors({ name: query, grams: Math.round(sum.grams), ai, items: merged, multi: items.length > 1, source }, 200, cors);
   } catch (e) {

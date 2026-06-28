@@ -4,7 +4,7 @@ function showTab(name, btn) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(name).classList.add('active');
   if (btn) btn.classList.add('active');
-  else document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+  else { const _dt = document.querySelector(`[data-tab="${name}"]`); if (_dt) _dt.classList.add('active'); }
   // Borsa modu: borsa sekmesi açıkken body.stocks-mode → tam ekran terminal hissi
   document.body.classList.toggle('stocks-mode', name === 'stocks');
   if (name === 'stocks') tickStocksModeHeader();

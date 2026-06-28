@@ -2982,6 +2982,8 @@
   .diet-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px; margin-bottom:14px; }
   .diet-card-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
   .diet-card-title { font-weight:700; color:var(--text-strong); }
+  .recipe-save-btn { background:transparent; border:1px solid var(--border); color:var(--accent); font-size:0.8em; font-weight:600; cursor:pointer; padding:5px 10px; border-radius:var(--radius-sm); box-shadow:none; }
+  .recipe-save-btn:hover { border-color:var(--accent); }
   .diet-card-meta { font-size:0.82em; color:var(--text-muted); }
 
   .water-bar { height:8px; background:var(--border); border-radius:99px; overflow:hidden; margin-bottom:10px; }
@@ -2996,6 +2998,12 @@
   .meal-add { display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
   .meal-add input, .meal-add select { width:100%; }
   .meal-add-row2 { display:flex; gap:8px; }
+  .meal-macro-row { display:flex; gap:6px; margin-top:6px; }
+  .meal-macro-row input { flex:1; min-width:0; }
+  .custom-save-btn { margin-top:8px; width:100%; }
+  .custom-foods { margin-top:12px; border-top:1px solid var(--border); padding-top:10px; }
+  .custom-foods summary { cursor:pointer; font-size:0.85em; font-weight:600; color:var(--text-muted); padding:4px 0; }
+  .custom-foods #customFoodList { margin-top:6px; }
   .slot-chips { display:flex; gap:6px; flex-wrap:wrap; }
   .slot-chip { flex:1; min-width:62px; padding:8px 6px; font-size:0.82em; font-weight:600; background:var(--surface-hover); color:var(--text-muted); border:1px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; box-shadow:none; transition:background .15s ease, color .15s ease, border-color .15s ease; }
   .slot-chip.active { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
@@ -3033,6 +3041,7 @@
   .macro-src { font-weight:700; color:var(--text-strong); font-size:0.85em; }
   .macro-vals { font-size:0.82em; color:var(--text-muted); }
   .macro-note { font-size:0.74em; color:var(--text-muted); }
+  .macro-gap-note { font-size:0.74em; color:var(--text-muted); margin-top:8px; padding:8px 10px; border-radius:10px; background:rgba(245,165,36,0.08); line-height:1.4; }
   .macro-tot { font-size:0.82em; color:var(--text-muted); }
   .macro-tot b { color:var(--accent); }
 
@@ -3054,6 +3063,18 @@
   .diet-goals { display:flex; flex-direction:column; gap:10px; padding:6px 0 12px; }
   .diet-goals label { display:flex; flex-direction:column; gap:4px; font-size:0.85em; color:var(--text-muted); }
   .diet-goals input { width:140px; }
+  .diet-calc { padding:10px 0 14px; border-bottom:1px solid var(--border); margin-bottom:12px; display:flex; flex-direction:column; gap:10px; }
+  .diet-calc-title { font-weight:700; color:var(--text-strong); font-size:0.92em; }
+  .calc-grid { display:flex; gap:8px; }
+  .calc-grid label { flex:1; display:flex; flex-direction:column; gap:4px; font-size:0.8em; color:var(--text-muted); }
+  .calc-grid input { width:100%; min-width:0; }
+  .calc-full { display:flex; flex-direction:column; gap:4px; font-size:0.8em; color:var(--text-muted); }
+  .calc-btn { align-self:flex-start; }
+  .calc-result:empty { display:none; }
+  .calc-result { display:flex; flex-direction:column; gap:8px; padding:10px 12px; border-radius:12px; background:rgba(245,165,36,0.08); }
+  .calc-out b { color:var(--text-strong); font-size:1.05em; }
+  .calc-sub { font-size:0.78em; color:var(--text-muted); }
+  .calc-out-macros { font-size:0.85em; color:var(--text); }
   .diet-hint { font-size:0.82em; color:var(--text-muted); margin:6px 0; }
   .meal-rem-btns { display:flex; flex-wrap:wrap; gap:8px; padding-bottom:10px; }
 
@@ -3089,6 +3110,7 @@
   .portion-row label { font-size:0.85em; color:var(--text-muted); }
   .portion-row input { width:120px; }
   .portion-preview { font-size:0.9em; color:var(--accent); font-weight:600; margin-bottom:12px; }
+  .portion-note { font-size:0.8em; color:var(--text-muted); margin-bottom:10px; padding:8px 10px; border-radius:10px; background:rgba(245,165,36,0.08); line-height:1.4; }
   .portion-add { width:100%; padding:11px; font-weight:700; background:var(--accent); color:var(--on-accent); border:none; border-radius:var(--radius); cursor:pointer; box-shadow:none; }
   .barcode-reader { width:100%; border-radius:var(--radius); overflow:hidden; background:#000; margin-bottom:10px; }
   .barcode-reader:empty { background:transparent; margin-bottom:0; }

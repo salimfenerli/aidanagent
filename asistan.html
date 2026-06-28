@@ -85,7 +85,6 @@
     <button class="tab active" data-tab="tasks" onclick="showTab('tasks', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 17 5 19 9 15"/><polyline points="3 7 5 9 9 5"/><line x1="13" y1="6" x2="21" y2="6"/><line x1="13" y1="12" x2="21" y2="12"/><line x1="13" y1="18" x2="21" y2="18"/></svg>Görevler</button>
     <button class="tab" data-tab="plan" onclick="showTab('plan', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Plan</button>
     <button class="tab" data-tab="focus" onclick="showTab('focus', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>Odak</button>
-    <button class="tab" data-tab="stocks" onclick="showTab('stocks', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Borsa</button>
     <button class="tab" data-tab="diet" onclick="showTab('diet', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"/><path d="M10 2c1 .5 2 2 2 5"/></svg>Diyet</button>
     <button class="tab" data-tab="settings" onclick="showTab('settings', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ayarlar</button>
   </div>
@@ -262,6 +261,7 @@
       <button type="button" onclick="exitStocksTo('plan')"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="13" y2="18"/></svg>Plan</button>
       <button type="button" onclick="exitStocksTo('focus')"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>Odak</button>
       <button type="button" class="active" onclick="toggleStocksMenu(false)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Borsa</button>
+      <button type="button" onclick="exitStocksTo('diet')"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"/><path d="M10 2c1 .5 2 2 2 5"/></svg>Diyet</button>
       <button type="button" onclick="exitStocksTo('settings')"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ayarlar</button>
       <div class="stocks-menu-note">Borsa tam ekran modundasın — bir sekme seçince normal görünüme dönersin.</div>
     </nav>
@@ -388,6 +388,15 @@
     </div>
     <div id="diaryList"></div>
 
+    <!-- Tariflerim / öğün paketleri -->
+    <div class="diet-card">
+      <div class="diet-card-head">
+        <span class="diet-card-title">Tariflerim</span>
+        <button class="recipe-save-btn" type="button" onclick="saveRecipeFromDay()" title="Seçili günün öğünlerini tek pakete kaydet">＋ Bu günü kaydet</button>
+      </div>
+      <div id="recipeList"></div>
+    </div>
+
     <!-- Kilo takibi -->
     <div class="diet-card">
       <div class="diet-card-head">
@@ -419,6 +428,34 @@
     <!-- Öğün hatırlatıcı + hedefler -->
     <details class="diet-extra">
       <summary>Hedefler & öğün hatırlatıcıları</summary>
+      <div class="diet-calc">
+        <div class="diet-calc-title">Hedef hesaplayıcı</div>
+        <div class="slot-chips" id="calcSexChips">
+          <button type="button" class="slot-chip active" data-sex="male" onclick="selectCalcSex('male',this)">Erkek</button>
+          <button type="button" class="slot-chip" data-sex="female" onclick="selectCalcSex('female',this)">Kadın</button>
+        </div>
+        <div class="calc-grid">
+          <label>Yaş<input id="calcAge" type="number" inputmode="numeric" min="10" max="100"></label>
+          <label>Boy (cm)<input id="calcHeight" type="number" inputmode="numeric" min="120" max="230"></label>
+          <label>Kilo (kg)<input id="calcWeight" type="number" inputmode="decimal" min="30" max="300"></label>
+        </div>
+        <label class="calc-full">Aktivite
+          <select id="calcActivity">
+            <option value="1.2">Hareketsiz (masa başı)</option>
+            <option value="1.375">Hafif (haftada 1-3 gün)</option>
+            <option value="1.55">Orta (haftada 3-5 gün)</option>
+            <option value="1.725">Yüksek (haftada 6-7 gün)</option>
+            <option value="1.9">Çok yüksek (ağır iş / 2x antrenman)</option>
+          </select>
+        </label>
+        <div class="slot-chips" id="calcGoalChips">
+          <button type="button" class="slot-chip" data-goal="lose" onclick="selectCalcGoal('lose',this)">Kilo ver</button>
+          <button type="button" class="slot-chip active" data-goal="keep" onclick="selectCalcGoal('keep',this)">Koru</button>
+          <button type="button" class="slot-chip" data-goal="gain" onclick="selectCalcGoal('gain',this)">Kilo al</button>
+        </div>
+        <button class="small primary calc-btn" type="button" onclick="calcGoals()">Hesapla</button>
+        <div id="calcResult" class="calc-result"></div>
+      </div>
       <div class="diet-goals">
         <label>Günlük kalori hedefi
           <input id="goalKcal" type="number" inputmode="numeric" min="0" onchange="setDietGoals()">
@@ -762,7 +799,17 @@
           <input id="mealKcal" type="number" inputmode="numeric" min="0" placeholder="kcal (ops.)" class="meal-kcal">
           <button class="small primary" onclick="addMeal()">Ekle</button>
         </div>
+        <div class="meal-macro-row">
+          <input id="mealP" type="number" inputmode="decimal" min="0" placeholder="protein g" title="Protein (gram, opsiyonel)">
+          <input id="mealC" type="number" inputmode="decimal" min="0" placeholder="karb g" title="Karbonhidrat (gram, opsiyonel)">
+          <input id="mealF" type="number" inputmode="decimal" min="0" placeholder="yağ g" title="Yağ (gram, opsiyonel)">
+        </div>
+        <button class="small ghost custom-save-btn" type="button" onclick="saveCustomFood()" title="Bu besni kalıcı kaydet — sonra aramada çıkar">★ Besinime kaydet</button>
       </div>
+      <details class="custom-foods">
+        <summary>Kendi besinlerim</summary>
+        <div id="customFoodList"></div>
+      </details>
     </div>
 
     <button class="modal-close" onclick="closeFoodModal()">Kapat</button>
@@ -784,6 +831,11 @@
       <div class="meal-add-row2">
         <input id="editMealKcal" type="number" inputmode="numeric" min="0" placeholder="kcal" class="meal-kcal">
         <button class="small primary" onclick="saveMealEdit()">Kaydet</button>
+      </div>
+      <div class="meal-macro-row">
+        <input id="editMealP" type="number" inputmode="decimal" min="0" placeholder="protein g" title="Protein (gram, opsiyonel)">
+        <input id="editMealC" type="number" inputmode="decimal" min="0" placeholder="karb g" title="Karbonhidrat (gram, opsiyonel)">
+        <input id="editMealF" type="number" inputmode="decimal" min="0" placeholder="yağ g" title="Yağ (gram, opsiyonel)">
       </div>
     </div>
     <div class="modal-actions" style="margin-top:12px;">

@@ -62,6 +62,8 @@ function ensureDiet() {
   d.freqHidden = d.freqHidden || [];
   d.freqPinned = d.freqPinned || [];
   d.recentFoods = d.recentFoods || [];
+  d.customFoods = d.customFoods || [];  // kendi besinlerim: [{id,name,unit,kcal,protein,carb,fat}]
+  d.recipes = d.recipes || [];          // öğün paketi/tarif: [{id,name,slot,items:[{name,kcal,protein,carb,fat}]}]
 }
 // Seçili diyet günü (varsayılan bugün). _dietDate ile geçmiş günlere gezilir.
 let _dietDate = null;
@@ -128,6 +130,7 @@ function renderDiet() {
   renderDietPlan();
   renderWater();
   renderDiary();
+  renderRecipes();
   renderFrequentMeals();
   renderWeightTrend();
   renderSupplements();
@@ -138,6 +141,7 @@ function renderDiet() {
   const gp = document.getElementById('goalProtein'); if (gp) gp.value = d.proteinGoal;
   const gc = document.getElementById('goalCarb'); if (gc) gc.value = d.carbGoal;
   const gf = document.getElementById('goalFat'); if (gf) gf.value = d.fatGoal;
+  renderCalcInputs();
 }
 
 // --- Su ---
@@ -165,6 +169,13 @@ function selectMealSlot(slot, btn) {
   btn.parentElement.querySelectorAll('.slot-chip').forEach(c => c.classList.remove('active'));
   btn.classList.add('active');
 }
+// Opsiyonel makro inputu oku (boş→null, virgül ondalık kabul).
+function _optMacro(id) {
+  const el = document.getElementById(id);
+  if (!el || el.value === '') return null;
+  const v = parseFloat(String(el.value).replace(',', '.'));
+  return (isFinite(v) && v >= 0) ? Math.round(v) : null;
+}
 function addMeal() {
   const nameEl = document.getElementById('mealName'), kcalEl = document.getElementById('mealKcal');
   const name = (nameEl.value || '').trim();
@@ -172,11 +183,18 @@ function addMeal() {
   const kcal = kcalEl.value !== '' ? Math.max(0, parseInt(kcalEl.value, 10) || 0) : null;
   const day = dietDay();
   const pm = _pendingMacros || {};
-  day.meals.push({ id: Date.now(), slot: _mealSlot, name, kcal, protein: pm.protein != null ? pm.protein : null, carb: pm.carb != null ? pm.carb : null, fat: pm.fat != null ? pm.fat : null });
+  // Elle girilen makro (P/K/Y) varsa AI/öneri makrosunu geçersiz kılar
+  const mP = _optMacro('mealP'), mC = _optMacro('mealC'), mF = _optMacro('mealF');
+  const anyManual = mP != null || mC != null || mF != null;
+  const protein = anyManual ? mP : (pm.protein != null ? pm.protein : null);
+  const carb = anyManual ? mC : (pm.carb != null ? pm.carb : null);
+  const fat = anyManual ? mF : (pm.fat != null ? pm.fat : null);
+  day.meals.push({ id: Date.now(), slot: _mealSlot, name, kcal, protein, carb, fat });
   _pendingMacros = null;
   const _mp = document.getElementById('macroPending'); if (_mp) _mp.textContent = '';
   const _mr = document.getElementById('macroResult'); if (_mr) _mr.innerHTML = '';
   nameEl.value = ''; kcalEl.value = '';
+  ['mealP', 'mealC', 'mealF'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
   save(); renderDiet(); closeFoodModal(); nameEl.focus();
 }
 function removeMeal(id) { const day = dietDay(); day.meals = day.meals.filter(m => m.id !== id); save(); renderDiet(); }
@@ -318,6 +336,59 @@ function setDietGoals() {
   if (isFinite(gc) && gc >= 0) data.diet.carbGoal = gc;
   if (isFinite(gf) && gf >= 0) data.diet.fatGoal = gf;
   save(); renderDiet();
+}
+
+// --- Hedef hesaplayıcı (Mifflin-St Jeor BMR → TDEE → amaç + makro) ---
+let _calcSex = 'male', _calcGoal = 'keep';
+function selectCalcSex(s, btn) { _calcSex = s; btn.parentElement.querySelectorAll('.slot-chip').forEach(c => c.classList.remove('active')); btn.classList.add('active'); }
+function selectCalcGoal(g, btn) { _calcGoal = g; btn.parentElement.querySelectorAll('.slot-chip').forEach(c => c.classList.remove('active')); btn.classList.add('active'); }
+// Calc inputlarını kayıttan/son kilodan doldur (renderDiet çağırır)
+function renderCalcInputs() {
+  ensureDiet();
+  const c = data.diet.calc || {};
+  if (c.sex) { _calcSex = c.sex; document.querySelectorAll('#calcSexChips .slot-chip').forEach(b => b.classList.toggle('active', b.dataset.sex === c.sex)); }
+  if (c.goal) { _calcGoal = c.goal; document.querySelectorAll('#calcGoalChips .slot-chip').forEach(b => b.classList.toggle('active', b.dataset.goal === c.goal)); }
+  const setv = (id, v) => { const e = document.getElementById(id); if (e && v != null && e.value === '') e.value = v; };
+  setv('calcAge', c.age); setv('calcHeight', c.height);
+  const lastKg = (data.diet.weights || []).slice(-1)[0];
+  setv('calcWeight', c.weight != null ? c.weight : (lastKg ? lastKg.kg : null));
+  const act = document.getElementById('calcActivity');
+  if (act && c.activity) act.value = c.activity;
+  else if (act && !act.value) act.value = '1.55';
+}
+function calcGoals() {
+  ensureDiet();
+  const age = parseInt(document.getElementById('calcAge').value, 10);
+  const cm = parseFloat((document.getElementById('calcHeight').value || '').replace(',', '.'));
+  const kg = parseFloat((document.getElementById('calcWeight').value || '').replace(',', '.'));
+  const act = parseFloat(document.getElementById('calcActivity').value) || 1.55;
+  if (!(age >= 10 && age <= 100) || !(cm >= 120 && cm <= 230) || !(kg >= 30 && kg <= 300)) {
+    showToast('Yaş, boy ve kiloyu doğru gir', 'info'); return;
+  }
+  // Mifflin-St Jeor
+  const bmr = Math.round(10 * kg + 6.25 * cm - 5 * age + (_calcSex === 'male' ? 5 : -161));
+  const tdee = Math.round(bmr * act);
+  let kcal = tdee;
+  if (_calcGoal === 'lose') kcal = Math.max(Math.round(bmr * 1.1), tdee - 500);   // BMR'nin çok altına inme
+  else if (_calcGoal === 'gain') kcal = tdee + 350;
+  // Makro: protein 1.8 g/kg, yağ kcal'in %25'i, kalan karbonhidrat
+  const protein = Math.round(1.8 * kg);
+  const fat = Math.round(kcal * 0.25 / 9);
+  const carb = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
+  data.diet.calc = { sex: _calcSex, age, height: cm, weight: kg, activity: String(act), goal: _calcGoal };
+  save();
+  const goalLbl = _calcGoal === 'lose' ? 'kilo ver' : (_calcGoal === 'gain' ? 'kilo al' : 'koru');
+  const el = document.getElementById('calcResult');
+  if (el) el.innerHTML =
+    `<div class="calc-out"><b>${kcal} kcal/gün</b> <span class="calc-sub">(${goalLbl} · BMR ${bmr}, TDEE ${tdee})</span></div>` +
+    `<div class="calc-out-macros">Protein ${protein}g · Karb ${carb}g · Yağ ${fat}g</div>` +
+    `<button class="small primary" onclick="applyCalcGoals(${kcal},${protein},${carb},${fat})">Bu hedefleri uygula</button>`;
+}
+function applyCalcGoals(kcal, protein, carb, fat) {
+  ensureDiet();
+  data.diet.kcalGoal = kcal; data.diet.proteinGoal = protein; data.diet.carbGoal = carb; data.diet.fatGoal = fat;
+  save(); renderDiet();
+  showToast('Hedefler güncellendi', 'success');
 }
 
 // --- Öğün hatırlatıcısı: mevcut sabit hatırlatıcı sistemine ekler (Worker 15dk cron push'lar) ---
@@ -546,7 +617,7 @@ function renderMacroResult(j) {
   if (j.db) rows.push(`<button class="macro-opt" onclick='applyMacro(${JSON.stringify(mk(j.db))})'><span class="macro-src">Veritabanı</span><span class="macro-vals">${_macroLine(j.db)}</span></button>`);
   if (j.ai) rows.push(`<button class="macro-opt" onclick='applyMacro(${JSON.stringify(mk(j.ai))})'><span class="macro-src">${srcLabel}</span><span class="macro-vals">${_macroLine(j.ai)}</span></button>`);
   if (!rows.length) { out.innerHTML = '<div class="diet-empty">Sonuç yok, kaloriyi elle gir.</div>'; return; }
-  const bd = multi ? `<div class="macro-note">${j.items.map(it => `${escapeHtml(it.name)} · ${it.kcal} kcal${it.source === 'usda' ? '' : ' (tahmin)'}`).join('  +  ')}</div>` : '';
+  const bd = multi ? `<div class="macro-note">${j.items.map(it => `${escapeHtml(it.name)} · ${it.kcal} kcal${(it.source === 'usda' || it.source === 'curated') ? '' : ' (tahmin)'}`).join('  +  ')}</div>` : '';
   const note = j.grams ? `<div class="macro-note">≈ ${j.grams} g · birine dokun → otomatik dolar</div>` : '';
   out.innerHTML = rows.join('') + bd + note;
 }
@@ -604,6 +675,7 @@ function openFoodModal(slot, tab) {
   m.classList.add('active');
   renderFrequentMeals();
   renderRecentFoods();
+  renderCustomManage();
   foodModalTab(tab || 'ara');
 }
 function closeFoodModal() {
@@ -757,7 +829,15 @@ async function lookupBarcode(code) {
   if (st) st.textContent = 'Ürün aranıyor… (' + code + ')';
   try {
     const p = await offBarcode(code);
-    if (!p) { if (st) st.textContent = 'Bu barkod veritabanında yok (' + code + '). "Elle" sekmesinden ekleyebilirsin.'; return; }
+    if (!p) {
+      // OFF'ta yoksa akış kopmasın: doğrudan "Elle" sekmesine geç, ada odaklan
+      if (st) st.textContent = 'Bu barkod veritabanında yok (' + code + ').';
+      foodModalTab('elle');
+      const nm = document.getElementById('mealName');
+      if (nm) { nm.value = ''; setTimeout(() => nm.focus(), 80); }
+      showToast('Barkod bulunamadı — elle ekleyebilirsin', 'info');
+      return;
+    }
     if (st) st.textContent = 'Bulundu: ' + p.name;
     foodModalTab('ara');
     const sr = document.getElementById('foodSearchResults'); if (sr) sr.innerHTML = '';
@@ -809,18 +889,23 @@ function renderAiFood(q, j) {
     multi: !!(j.items && j.items.length > 1), items: j.items || [], source: j.source
   };
   const srcLbl = j.source === 'usda' ? 'Veritabanı' : (j.source === 'mixed' ? 'Veritabanı + AI' : (_aiFood.multi ? 'Toplam' : 'AI tahmini'));
-  const bd = _aiFood.multi ? `<div class="macro-note">${_aiFood.items.map(it => `${escapeHtml(it.name)} · ${it.kcal} kcal${it.source === 'usda' ? '' : ' (tahmin)'}`).join('  +  ')}</div>` : '';
+  const bd = _aiFood.multi ? `<div class="macro-note">${_aiFood.items.map(it => `${escapeHtml(it.name)} · ${it.kcal} kcal${(it.source === 'usda' || it.source === 'curated') ? '' : ' (tahmin)'}`).join('  +  ')}</div>` : '';
   showAiPortion(q, srcLbl, bd);
 }
 // Ortak porsiyon/adet arayüzü (AI sonucu + kişisel hafıza ikisi de kullanır)
+// Çoklu yemek (zaten miktarlı, ör "4 yumurta 2 ekmek") → adet çarpanı GİZLENİR (çift sayım önlenir),
+// tek jenerik besinde (ör "yumurta") adet çarpanı kalır.
 function showAiPortion(q, srcLbl, bd) {
   const out = document.getElementById('foodSearchResults'); if (out) out.innerHTML = '';
   const fl = document.getElementById('foodLocal'); if (fl) fl.innerHTML = '';
   const fp = document.getElementById('foodPortion');
   fp.style.display = 'block';
+  const multi = !!(_aiFood && _aiFood.multi);
+  const qtyRow = multi
+    ? '<div class="portion-note">Yazdığın miktarlar zaten hesaba katıldı — aşağıdaki toplam eklenir.</div>'
+    : `<div class="portion-row"><label>Adet / porsiyon</label><input id="aiQty" type="number" inputmode="decimal" value="1" min="0.25" step="0.25" oninput="updateAiPreview()"></div>`;
   fp.innerHTML = `<div class="portion-pick">${escapeHtml(q)} <span class="ai-src">${srcLbl}</span></div>` +
-    (bd || '') +
-    `<div class="portion-row"><label>Adet / porsiyon</label><input id="aiQty" type="number" inputmode="decimal" value="1" min="0.25" step="0.25" oninput="updateAiPreview()"></div>` +
+    (bd || '') + qtyRow +
     `<div class="portion-preview" id="aiPreview"></div>` +
     `<button class="portion-add" onclick="addAiFood()">${MEAL_SLOTS[_mealSlot] || 'Öğün'}'e ekle</button>`;
   updateAiPreview();
@@ -848,15 +933,22 @@ function foodMemoryMatches(q, limit) {
   }
   return [...map.values()].filter(e => e.kcal != null).sort((a, b) => b.count - a.count).slice(0, limit || 6);
 }
-let _foodInputTimer = null, _localMatches = [], _seedMatches = [];
+let _foodInputTimer = null, _localMatches = [], _seedMatches = [], _customMatches = [];
 function onFoodSearchInput() { clearTimeout(_foodInputTimer); _foodInputTimer = setTimeout(renderLocalMatches, 180); }
 function renderLocalMatches() {
   const el = document.getElementById('foodLocal'); if (!el) return;
   const q = (document.getElementById('foodSearchInput').value || '').trim();
-  _localMatches = foodMemoryMatches(q, 6);
-  const personalNames = new Set(_localMatches.map(m => m.name.toLocaleLowerCase('tr')));
+  _customMatches = customFoodMatches(q, 6);
+  const customNames = new Set(_customMatches.map(m => m.name.toLocaleLowerCase('tr')));
+  _localMatches = foodMemoryMatches(q, 6).filter(m => !customNames.has(m.name.toLocaleLowerCase('tr')));
+  const personalNames = new Set([...customNames, ..._localMatches.map(m => m.name.toLocaleLowerCase('tr'))]);
   _seedMatches = seedFoodMatches(q, 8).filter(sf => !personalNames.has(sf.n.toLocaleLowerCase('tr')));
   let html = '';
+  if (_customMatches.length) {
+    html += '<div class="freq-head">Kendi besinlerim</div><div class="food-results">' +
+      _customMatches.map((m, i) => `<button class="food-result" onclick="pickCustomFood(${i})"><span class="food-result-name">${escapeHtml(m.name)}${m.unit ? ` <span class="food-result-brand">${escapeHtml(m.unit)}</span>` : ''}</span><span class="food-result-kcal">${m.kcal} kcal</span></button>`).join('') +
+      '</div>';
+  }
   if (_localMatches.length) {
     html += '<div class="freq-head">Daha önce yedin</div><div class="food-results">' +
       _localMatches.map((m, i) => `<button class="food-result" onclick="pickPersonalFood(${i})"><span class="food-result-name">${escapeHtml(m.name)}</span><span class="food-result-kcal">${m.kcal} kcal</span></button>`).join('') +
@@ -869,6 +961,111 @@ function renderLocalMatches() {
   }
   el.innerHTML = html;
 }
+
+// ===== Kendi besinlerim (özel besin kaydı) =====
+function customFoodMatches(q, limit) {
+  ensureDiet();
+  q = (q || '').trim().toLocaleLowerCase('tr');
+  const list = data.diet.customFoods || [];
+  const arr = q.length < 2 ? list.slice() : list.filter(c => String(c.name || '').toLocaleLowerCase('tr').includes(q));
+  return arr.slice(0, limit || 6);
+}
+function pickCustomFood(i) {
+  const m = _customMatches[i]; if (!m) return;
+  _aiFood = { name: m.name, kcal: m.kcal, protein: m.protein, carb: m.carb, fat: m.fat, multi: false, items: [], source: 'custom' };
+  showAiPortion(m.name, 'Kendi besinim' + (m.unit ? ' · ' + m.unit : ''), '');
+}
+// Elle formundaki ad/kcal/makroları kalıcı "kendi besinim" olarak kaydet (bugüne EKLEMEZ)
+function saveCustomFood() {
+  ensureDiet();
+  const name = (document.getElementById('mealName').value || '').trim();
+  if (!name) { showToast('Önce besin adını yaz', 'info'); document.getElementById('mealName').focus(); return; }
+  const kcalEl = document.getElementById('mealKcal');
+  const kcal = kcalEl.value !== '' ? Math.max(0, parseInt(kcalEl.value, 10) || 0) : null;
+  if (kcal == null) { showToast('Kalori gir (1 porsiyon için)', 'info'); kcalEl.focus(); return; }
+  const rec = { id: Date.now(), name, unit: 'porsiyon', kcal, protein: _optMacro('mealP'), carb: _optMacro('mealC'), fat: _optMacro('mealF') };
+  const low = name.toLocaleLowerCase('tr');
+  const ex = data.diet.customFoods.find(c => String(c.name || '').toLocaleLowerCase('tr') === low);
+  if (ex) { ex.kcal = rec.kcal; ex.protein = rec.protein; ex.carb = rec.carb; ex.fat = rec.fat; }
+  else data.diet.customFoods.push(rec);
+  save();
+  renderCustomManage();
+  showToast(name + ' besinlerine kaydedildi', 'success');
+}
+function deleteCustomFood(id) {
+  ensureDiet();
+  data.diet.customFoods = data.diet.customFoods.filter(c => c.id !== id);
+  save(); renderCustomManage(); renderLocalMatches();
+}
+function renderCustomManage() {
+  const el = document.getElementById('customFoodList'); if (!el) return;
+  ensureDiet();
+  const list = data.diet.customFoods || [];
+  if (!list.length) { el.innerHTML = '<div class="diet-empty">Henüz özel besin yok. Yukarıya ad + kcal (+makro) yazıp "Besinime kaydet" de.</div>'; return; }
+  el.innerHTML = list.map(c => {
+    const macro = (c.protein != null || c.carb != null || c.fat != null) ? ` · P${c.protein || 0} K${c.carb || 0} Y${c.fat || 0}` : '';
+    return `<div class="meal-item"><span class="meal-name">${escapeHtml(c.name)}</span><span class="meal-kcal-tag">${c.kcal} kcal${macro}</span><button class="meal-del" onclick="deleteCustomFood(${c.id})" title="Sil" aria-label="Sil">✕</button></div>`;
+  }).join('');
+}
+
+// ===== Tariflerim / öğün paketleri (bir günün öğünlerini tek pakete kaydet, tek tıkla ekle) =====
+let _recipeEdit = false;
+function toggleRecipeEdit() { _recipeEdit = !_recipeEdit; renderRecipes(); }
+async function saveRecipeFromDay() {
+  ensureDiet();
+  const day = dietDay(false);
+  if (!day.meals.length) { showToast('Önce bu güne öğün ekle, sonra paket olarak kaydet', 'info'); return; }
+  const name = await aidanPrompt('Tarif / öğün paketi', 'İsim (örn. Kahvaltım)', '');
+  if (!name || !name.trim()) return;
+  const items = day.meals.map(m => ({
+    slot: m.slot, name: m.name,
+    kcal: m.kcal != null ? m.kcal : null,
+    protein: m.protein != null ? m.protein : null,
+    carb: m.carb != null ? m.carb : null,
+    fat: m.fat != null ? m.fat : null,
+  }));
+  data.diet.recipes.push({ id: Date.now(), name: name.trim(), items });
+  save(); renderRecipes();
+  showToast(name.trim() + ' kaydedildi (' + items.length + ' öğün)', 'success');
+}
+function addRecipe(id) {
+  ensureDiet();
+  const rec = data.diet.recipes.find(r => r.id === id);
+  if (!rec) return;
+  const day = dietDay(true);
+  const base = Date.now();
+  rec.items.forEach((it, k) => {
+    day.meals.push({
+      id: base + k, slot: it.slot || 'atistirma', name: it.name,
+      kcal: it.kcal != null ? it.kcal : null,
+      protein: it.protein != null ? it.protein : null,
+      carb: it.carb != null ? it.carb : null,
+      fat: it.fat != null ? it.fat : null,
+    });
+  });
+  save(); renderDiet();
+  showToast(rec.name + ' eklendi (' + rec.items.length + ' öğün)', 'success');
+}
+function deleteRecipe(id) {
+  ensureDiet();
+  data.diet.recipes = data.diet.recipes.filter(r => r.id !== id);
+  save(); renderRecipes();
+}
+function renderRecipes() {
+  const el = document.getElementById('recipeList'); if (!el) return;
+  ensureDiet();
+  const list = data.diet.recipes || [];
+  if (!list.length) { el.innerHTML = '<div class="diet-empty">Henüz paket yok. Bir güne öğünlerini ekle, sonra "Bu günü kaydet" ile tek pakette topla — ertesi gün tek dokunuşla eklersin.</div>'; _recipeEdit = false; return; }
+  const head = `<div class="freq-head">Dokun → bugüne ekle <button class="freq-editbtn" onclick="toggleRecipeEdit()">${_recipeEdit ? 'bitti' : 'düzenle'}</button></div>`;
+  const chips = list.map(r => {
+    const kcal = r.items.reduce((s, it) => s + (Number(it.kcal) || 0), 0);
+    if (_recipeEdit) {
+      return `<span class="freq-chip-edit"><span class="freq-chip-name">${escapeHtml(r.name)} · ${r.items.length} öğün</span><button class="freq-hide" onclick="deleteRecipe(${r.id})" title="Sil">✕</button></span>`;
+    }
+    return `<button class="freq-chip" onclick="addRecipe(${r.id})" title="Bugüne ekle">${escapeHtml(r.name)}${kcal ? ` · ${kcal} kcal` : ''}</button>`;
+  }).join('');
+  el.innerHTML = head + '<div class="freq-chips">' + chips + '</div>';
+}
 function pickPersonalFood(i) {
   const m = _localMatches[i]; if (!m) return;
   _aiFood = { name: m.name, kcal: m.kcal, protein: m.protein, carb: m.carb, fat: m.fat, multi: false, items: [], source: 'memory' };
@@ -876,60 +1073,181 @@ function pickPersonalFood(i) {
 }
 // ===== Temel Türk besinleri tohumu (birim başına yaklaşık değerler; n=ad, u=birim, k=kcal, p/c/f=makro) =====
 const TURK_FOODS = [
+  // --- Kahvaltı / süt ürünleri / yağlar ---
   { n: 'Yumurta', u: 'adet', k: 72, p: 6, c: 0, f: 5 },
+  { n: 'Haşlanmış yumurta', u: 'adet', k: 72, p: 6, c: 0, f: 5 },
+  { n: 'Omlet', u: '2 yumurta', k: 220, p: 13, c: 2, f: 17 },
+  { n: 'Menemen', u: 'porsiyon', k: 220, p: 12, c: 10, f: 15 },
+  { n: 'Sucuklu yumurta', u: 'porsiyon', k: 320, p: 18, c: 2, f: 26 },
   { n: 'Beyaz peynir', u: 'dilim', k: 75, p: 5, c: 1, f: 6 },
   { n: 'Kaşar peyniri', u: 'dilim', k: 110, p: 7, c: 1, f: 9 },
+  { n: 'Lor peyniri', u: 'kaşık', k: 30, p: 4, c: 1, f: 1 },
+  { n: 'Labne', u: 'kaşık', k: 60, p: 2, c: 1, f: 6 },
+  { n: 'Krem peynir', u: 'kaşık', k: 50, p: 1, c: 1, f: 5 },
   { n: 'Yoğurt', u: 'kase', k: 120, p: 11, c: 9, f: 4 },
+  { n: 'Süzme yoğurt', u: 'kase', k: 150, p: 16, c: 8, f: 6 },
   { n: 'Süt', u: 'bardak', k: 122, p: 6, c: 9, f: 7 },
   { n: 'Ayran', u: 'bardak', k: 76, p: 6, c: 5, f: 3 },
   { n: 'Tereyağı', u: 'kaşık', k: 72, p: 0, c: 0, f: 8 },
+  { n: 'Zeytinyağı', u: 'kaşık', k: 119, p: 0, c: 0, f: 14 },
+  { n: 'Bal', u: 'kaşık', k: 64, p: 0, c: 17, f: 0 },
+  { n: 'Reçel', u: 'kaşık', k: 50, p: 0, c: 13, f: 0 },
+  { n: 'Pekmez', u: 'kaşık', k: 50, p: 0, c: 13, f: 0 },
+  { n: 'Tahin', u: 'kaşık', k: 90, p: 3, c: 3, f: 8 },
+  { n: 'Kaymak', u: 'kaşık', k: 90, p: 1, c: 1, f: 9 },
+  { n: 'Zeytin', u: '5 adet', k: 25, p: 0, c: 0, f: 3 },
   { n: 'Ekmek', u: 'dilim', k: 66, p: 2, c: 13, f: 1 },
   { n: 'Tam buğday ekmek', u: 'dilim', k: 69, p: 3, c: 12, f: 1 },
-  { n: 'Pilav', u: 'porsiyon', k: 200, p: 4, c: 44, f: 1 },
-  { n: 'Bulgur pilavı', u: 'porsiyon', k: 170, p: 5, c: 34, f: 1 },
-  { n: 'Makarna', u: 'porsiyon', k: 260, p: 9, c: 52, f: 2 },
   { n: 'Simit', u: 'adet', k: 280, p: 9, c: 52, f: 4 },
   { n: 'Poğaça', u: 'adet', k: 250, p: 5, c: 28, f: 13 },
+  { n: 'Açma', u: 'adet', k: 270, p: 6, c: 35, f: 12 },
+  { n: 'Su böreği', u: 'dilim', k: 250, p: 8, c: 24, f: 13 },
+  { n: 'Sigara böreği', u: 'adet', k: 90, p: 3, c: 8, f: 5 },
+  { n: 'Gözleme', u: 'adet', k: 300, p: 10, c: 38, f: 12 },
+  { n: 'Tost', u: 'adet', k: 300, p: 13, c: 30, f: 14 },
   { n: 'Yulaf ezmesi', u: 'porsiyon', k: 150, p: 5, c: 27, f: 3 },
+  { n: 'Mısır gevreği', u: 'kase', k: 150, p: 3, c: 33, f: 1 },
+  { n: 'Granola', u: 'porsiyon', k: 200, p: 5, c: 30, f: 7 },
+  // --- Çorbalar ---
+  { n: 'Mercimek çorbası', u: 'kase', k: 150, p: 8, c: 22, f: 3 },
+  { n: 'Ezogelin çorbası', u: 'kase', k: 160, p: 7, c: 24, f: 4 },
+  { n: 'Tavuk çorbası', u: 'kase', k: 120, p: 8, c: 12, f: 4 },
+  { n: 'Domates çorbası', u: 'kase', k: 130, p: 4, c: 18, f: 5 },
+  { n: 'Yayla çorbası', u: 'kase', k: 140, p: 6, c: 16, f: 6 },
+  { n: 'İşkembe çorbası', u: 'kase', k: 180, p: 12, c: 8, f: 11 },
+  { n: 'Çorba', u: 'kase', k: 120, p: 5, c: 15, f: 4 },
+  // --- Et / tavuk / balık ---
   { n: 'Tavuk göğsü', u: 'porsiyon', k: 250, p: 47, c: 0, f: 6 },
-  { n: 'Dana bonfile', u: 'porsiyon', k: 290, p: 40, c: 0, f: 13 },
+  { n: 'Tavuk but', u: 'porsiyon', k: 290, p: 38, c: 0, f: 15 },
+  { n: 'Tavuk şiş', u: 'porsiyon', k: 260, p: 40, c: 4, f: 9 },
+  { n: 'Tavuk döner', u: 'porsiyon', k: 240, p: 28, c: 6, f: 11 },
+  { n: 'Et döner', u: 'porsiyon', k: 320, p: 26, c: 4, f: 22 },
+  { n: 'İskender', u: 'porsiyon', k: 650, p: 35, c: 45, f: 36 },
+  { n: 'Adana kebap', u: 'porsiyon', k: 480, p: 32, c: 6, f: 36 },
+  { n: 'Urfa kebap', u: 'porsiyon', k: 430, p: 33, c: 6, f: 30 },
+  { n: 'Şiş kebap', u: 'porsiyon', k: 350, p: 38, c: 4, f: 20 },
   { n: 'Köfte', u: 'adet', k: 70, p: 5, c: 1, f: 5 },
+  { n: 'İzgara köfte', u: 'porsiyon', k: 320, p: 26, c: 6, f: 21 },
+  { n: 'Dana bonfile', u: 'porsiyon', k: 290, p: 40, c: 0, f: 13 },
+  { n: 'Dana kıyma', u: 'porsiyon', k: 280, p: 26, c: 0, f: 19 },
+  { n: 'Kuzu pirzola', u: 'porsiyon', k: 350, p: 30, c: 0, f: 25 },
+  { n: 'Kavurma', u: 'porsiyon', k: 320, p: 28, c: 1, f: 23 },
   { n: 'Somon', u: 'porsiyon', k: 280, p: 40, c: 0, f: 13 },
+  { n: 'Levrek', u: 'porsiyon', k: 200, p: 38, c: 0, f: 5 },
+  { n: 'Çupra', u: 'porsiyon', k: 220, p: 38, c: 0, f: 7 },
+  { n: 'Hamsi tava', u: 'porsiyon', k: 300, p: 28, c: 8, f: 17 },
+  { n: 'Ton balığı', u: 'kutu', k: 90, p: 20, c: 0, f: 1 },
   { n: 'Hindi eti', u: 'porsiyon', k: 220, p: 40, c: 0, f: 6 },
+  { n: 'Sosis', u: 'adet', k: 110, p: 5, c: 2, f: 9 },
   { n: 'Sucuk', u: 'dilim', k: 35, p: 2, c: 0, f: 3 },
   { n: 'Salam', u: 'dilim', k: 35, p: 2, c: 0, f: 3 },
-  { n: 'Ton balığı', u: 'kutu', k: 90, p: 20, c: 0, f: 1 },
-  { n: 'Mercimek çorbası', u: 'kase', k: 150, p: 8, c: 22, f: 3 },
+  { n: 'Tavuk nugget', u: 'adet', k: 50, p: 3, c: 3, f: 3 },
+  { n: 'Schnitzel', u: 'porsiyon', k: 380, p: 30, c: 22, f: 19 },
+  // --- Tahıl / baklagil / makarna ---
+  { n: 'Pilav', u: 'porsiyon', k: 200, p: 4, c: 44, f: 1 },
+  { n: 'Bulgur pilavı', u: 'porsiyon', k: 170, p: 5, c: 34, f: 1 },
+  { n: 'Sebzeli bulgur', u: 'porsiyon', k: 180, p: 5, c: 33, f: 3 },
+  { n: 'Makarna', u: 'porsiyon', k: 260, p: 9, c: 52, f: 2 },
+  { n: 'Kremalı makarna', u: 'porsiyon', k: 380, p: 11, c: 50, f: 15 },
+  { n: 'Mantı', u: 'porsiyon', k: 330, p: 14, c: 45, f: 10 },
+  { n: 'Erişte', u: 'porsiyon', k: 250, p: 8, c: 45, f: 4 },
   { n: 'Nohut', u: 'porsiyon', k: 230, p: 12, c: 38, f: 4 },
+  { n: 'Etli nohut', u: 'porsiyon', k: 280, p: 16, c: 35, f: 9 },
   { n: 'Kuru fasulye', u: 'porsiyon', k: 250, p: 14, c: 40, f: 3 },
-  { n: 'Muz', u: 'adet', k: 105, p: 1, c: 27, f: 0 },
-  { n: 'Elma', u: 'adet', k: 78, p: 0, c: 21, f: 0 },
-  { n: 'Portakal', u: 'adet', k: 62, p: 1, c: 15, f: 0 },
+  { n: 'Etli kuru fasulye', u: 'porsiyon', k: 300, p: 18, c: 38, f: 9 },
+  { n: 'Mercimek yemeği', u: 'porsiyon', k: 200, p: 12, c: 32, f: 3 },
+  // --- Sebze yemekleri ---
+  { n: 'Zeytinyağlı fasulye', u: 'porsiyon', k: 150, p: 4, c: 18, f: 8 },
+  { n: 'Türlü', u: 'porsiyon', k: 160, p: 5, c: 20, f: 7 },
+  { n: 'İmambayıldı', u: 'porsiyon', k: 180, p: 3, c: 16, f: 12 },
+  { n: 'Karnıyarık', u: 'porsiyon', k: 280, p: 12, c: 18, f: 18 },
+  { n: 'Yaprak sarma', u: 'adet', k: 40, p: 1, c: 6, f: 2 },
+  { n: 'Biber dolması', u: 'adet', k: 120, p: 4, c: 16, f: 5 },
+  { n: 'Ispanak yemeği', u: 'porsiyon', k: 130, p: 6, c: 12, f: 6 },
+  { n: 'Mücver', u: 'adet', k: 80, p: 2, c: 6, f: 5 },
+  { n: 'Musakka', u: 'porsiyon', k: 250, p: 12, c: 16, f: 15 },
+  // --- Salata / patates ---
+  { n: 'Çoban salata', u: 'porsiyon', k: 60, p: 2, c: 8, f: 3 },
+  { n: 'Mevsim salata', u: 'porsiyon', k: 50, p: 2, c: 7, f: 2 },
   { n: 'Domates', u: 'adet', k: 22, p: 1, c: 5, f: 0 },
   { n: 'Salatalık', u: 'adet', k: 15, p: 1, c: 3, f: 0 },
   { n: 'Haşlanmış patates', u: 'adet', k: 130, p: 3, c: 30, f: 0 },
+  { n: 'Patates kızartması', u: 'porsiyon', k: 320, p: 4, c: 40, f: 16 },
   { n: 'Avokado', u: 'yarım', k: 110, p: 1, c: 6, f: 10 },
-  { n: 'Çikolata', u: 'parça', k: 55, p: 1, c: 6, f: 3 },
-  { n: 'Bisküvi', u: 'adet', k: 40, p: 1, c: 6, f: 2 },
+  // --- Meyveler ---
+  { n: 'Muz', u: 'adet', k: 105, p: 1, c: 27, f: 0 },
+  { n: 'Elma', u: 'adet', k: 78, p: 0, c: 21, f: 0 },
+  { n: 'Portakal', u: 'adet', k: 62, p: 1, c: 15, f: 0 },
+  { n: 'Mandalina', u: 'adet', k: 40, p: 1, c: 10, f: 0 },
+  { n: 'Armut', u: 'adet', k: 100, p: 1, c: 27, f: 0 },
+  { n: 'Üzüm', u: 'kase', k: 100, p: 1, c: 26, f: 0 },
+  { n: 'Çilek', u: 'kase', k: 50, p: 1, c: 12, f: 0 },
+  { n: 'Karpuz', u: 'dilim', k: 85, p: 2, c: 21, f: 0 },
+  { n: 'Kavun', u: 'dilim', k: 60, p: 1, c: 14, f: 0 },
+  { n: 'Kiraz', u: 'kase', k: 90, p: 2, c: 22, f: 0 },
+  { n: 'Şeftali', u: 'adet', k: 60, p: 1, c: 15, f: 0 },
+  { n: 'Kayısı', u: 'adet', k: 17, p: 0, c: 4, f: 0 },
+  { n: 'İncir', u: 'adet', k: 40, p: 0, c: 10, f: 0 },
+  { n: 'Nar', u: 'adet', k: 105, p: 2, c: 26, f: 0 },
+  { n: 'Kivi', u: 'adet', k: 45, p: 1, c: 11, f: 0 },
+  // --- Kuruyemiş / atıştırma ---
   { n: 'Fındık', u: '10 adet', k: 95, p: 2, c: 3, f: 9 },
   { n: 'Badem', u: '10 adet', k: 70, p: 3, c: 2, f: 6 },
   { n: 'Ceviz', u: '2 yarım', k: 52, p: 1, c: 1, f: 5 },
-  { n: 'Bal', u: 'kaşık', k: 64, p: 0, c: 17, f: 0 },
-  { n: 'Reçel', u: 'kaşık', k: 50, p: 0, c: 13, f: 0 },
-  { n: 'Zeytin', u: '5 adet', k: 25, p: 0, c: 0, f: 3 },
+  { n: 'Antep fıstığı', u: 'avuç', k: 160, p: 6, c: 8, f: 13 },
+  { n: 'Yer fıstığı', u: 'avuç', k: 170, p: 7, c: 5, f: 14 },
+  { n: 'Leblebi', u: 'avuç', k: 120, p: 7, c: 20, f: 2 },
+  { n: 'Kuru üzüm', u: 'avuç', k: 85, p: 1, c: 22, f: 0 },
+  { n: 'Kuru kayısı', u: 'adet', k: 20, p: 0, c: 5, f: 0 },
+  { n: 'Hurma', u: 'adet', k: 20, p: 0, c: 5, f: 0 },
+  // --- Tatlılar / atıştırmalık ---
+  { n: 'Baklava', u: 'dilim', k: 330, p: 5, c: 40, f: 17 },
+  { n: 'Künefe', u: 'porsiyon', k: 400, p: 9, c: 45, f: 20 },
+  { n: 'Sütlaç', u: 'kase', k: 220, p: 6, c: 38, f: 5 },
+  { n: 'Kazandibi', u: 'porsiyon', k: 230, p: 6, c: 40, f: 5 },
+  { n: 'Dondurma', u: 'top', k: 90, p: 2, c: 12, f: 4 },
+  { n: 'Kek', u: 'dilim', k: 240, p: 4, c: 35, f: 10 },
+  { n: 'Kurabiye', u: 'adet', k: 70, p: 1, c: 9, f: 4 },
+  { n: 'Lokum', u: 'adet', k: 50, p: 0, c: 13, f: 0 },
+  { n: 'Tahin helva', u: 'dilim', k: 250, p: 6, c: 25, f: 15 },
+  { n: 'Profiterol', u: 'porsiyon', k: 350, p: 6, c: 38, f: 19 },
+  { n: 'Çikolata', u: 'parça', k: 55, p: 1, c: 6, f: 3 },
+  { n: 'Çikolatalı gofret', u: 'adet', k: 120, p: 2, c: 14, f: 7 },
+  { n: 'Bisküvi', u: 'adet', k: 40, p: 1, c: 6, f: 2 },
+  { n: 'Kraker', u: 'adet', k: 15, p: 0, c: 2, f: 1 },
+  { n: 'Patlamış mısır', u: 'kase', k: 120, p: 3, c: 20, f: 4 },
   { n: 'Cips', u: 'paket', k: 160, p: 2, c: 15, f: 10 },
-  { n: 'Çay', u: 'bardak', k: 2, p: 0, c: 0, f: 0 },
-  { n: 'Türk kahvesi', u: 'fincan', k: 5, p: 0, c: 1, f: 0 },
-  { n: 'Kola', u: 'kutu', k: 139, p: 0, c: 35, f: 0 },
-  { n: 'Meyve suyu', u: 'bardak', k: 90, p: 0, c: 22, f: 0 },
-  { n: 'Şeker', u: 'küp', k: 12, p: 0, c: 3, f: 0 },
-  { n: 'Menemen', u: 'porsiyon', k: 220, p: 12, c: 10, f: 15 },
-  { n: 'Tost', u: 'adet', k: 300, p: 13, c: 30, f: 14 },
-  { n: 'Lahmacun', u: 'adet', k: 250, p: 11, c: 30, f: 9 },
+  // --- Fast food / sokak ---
   { n: 'Döner (ekmek arası)', u: 'adet', k: 450, p: 25, c: 45, f: 20 },
+  { n: 'Tavuk dürüm', u: 'adet', k: 400, p: 26, c: 42, f: 14 },
   { n: 'Pizza', u: 'dilim', k: 285, p: 12, c: 36, f: 10 },
   { n: 'Hamburger', u: 'adet', k: 350, p: 17, c: 30, f: 18 },
-  { n: 'Çorba', u: 'kase', k: 120, p: 5, c: 15, f: 4 }
+  { n: 'Lahmacun', u: 'adet', k: 250, p: 11, c: 30, f: 9 },
+  { n: 'Kıymalı pide', u: 'porsiyon', k: 600, p: 26, c: 70, f: 24 },
+  { n: 'Kumpir', u: 'adet', k: 550, p: 14, c: 70, f: 24 },
+  { n: 'Tantuni', u: 'porsiyon', k: 380, p: 24, c: 38, f: 14 },
+  { n: 'Çiğ köfte dürüm', u: 'adet', k: 250, p: 7, c: 48, f: 3 },
+  { n: 'Midye dolma', u: 'adet', k: 25, p: 1, c: 4, f: 1 },
+  { n: 'Tavuk kanat', u: 'adet', k: 90, p: 8, c: 1, f: 6 },
+  // --- İçecekler ---
+  { n: 'Çay', u: 'bardak', k: 2, p: 0, c: 0, f: 0 },
+  { n: 'Türk kahvesi', u: 'fincan', k: 5, p: 0, c: 1, f: 0 },
+  { n: 'Filtre kahve', u: 'fincan', k: 5, p: 0, c: 1, f: 0 },
+  { n: 'Latte', u: 'bardak', k: 120, p: 6, c: 10, f: 6 },
+  { n: 'Cappuccino', u: 'bardak', k: 80, p: 4, c: 8, f: 4 },
+  { n: 'Kola', u: 'kutu', k: 139, p: 0, c: 35, f: 0 },
+  { n: 'Kola (light)', u: 'kutu', k: 1, p: 0, c: 0, f: 0 },
+  { n: 'Meyve suyu', u: 'bardak', k: 90, p: 0, c: 22, f: 0 },
+  { n: 'Limonata', u: 'bardak', k: 100, p: 0, c: 25, f: 0 },
+  { n: 'Soda', u: 'şişe', k: 0, p: 0, c: 0, f: 0 },
+  { n: 'Su', u: 'bardak', k: 0, p: 0, c: 0, f: 0 },
+  { n: 'Şalgam', u: 'bardak', k: 20, p: 1, c: 4, f: 0 },
+  { n: 'Milkshake', u: 'bardak', k: 280, p: 8, c: 42, f: 9 },
+  { n: 'Enerji içeceği', u: 'kutu', k: 110, p: 0, c: 28, f: 0 },
+  { n: 'Bira', u: 'şişe', k: 150, p: 1, c: 13, f: 0 },
+  { n: 'Şarap', u: 'kadeh', k: 120, p: 0, c: 4, f: 0 },
+  { n: 'Rakı', u: 'kadeh', k: 130, p: 0, c: 0, f: 0 },
+  { n: 'Şeker', u: 'küp', k: 12, p: 0, c: 3, f: 0 }
 ];
 function seedFoodMatches(q, limit) {
   q = (q || '').trim().toLocaleLowerCase('tr');
@@ -941,7 +1259,7 @@ function pickSeedFood(i) {
   _aiFood = { name: sf.n, kcal: sf.k, protein: sf.p, carb: sf.c, fat: sf.f, multi: false, items: [], source: 'seed' };
   showAiPortion(sf.n, 'Temel · ' + sf.u, '');
 }
-function _aiQtyVal() { const v = Number((document.getElementById('aiQty') || {}).value); return (isFinite(v) && v > 0) ? v : 0; }
+function _aiQtyVal() { const el = document.getElementById('aiQty'); if (!el) return 1; const v = Number(el.value); return (isFinite(v) && v > 0) ? v : 0; }
 function updateAiPreview() {
   if (!_aiFood) return;
   const m = _aiQtyVal();
@@ -1015,6 +1333,9 @@ function editMeal(id) {
   _editMealId = id; _editMealSlot = m.slot || 'kahvalti';
   document.getElementById('editMealName').value = m.name || '';
   document.getElementById('editMealKcal').value = (m.kcal != null ? m.kcal : '');
+  document.getElementById('editMealP').value = (m.protein != null ? m.protein : '');
+  document.getElementById('editMealC').value = (m.carb != null ? m.carb : '');
+  document.getElementById('editMealF').value = (m.fat != null ? m.fat : '');
   document.querySelectorAll('#editMealSlotChips .slot-chip').forEach(c => c.classList.toggle('active', c.getAttribute('data-slot') === _editMealSlot));
   document.getElementById('mealEditModal').classList.add('active');
   setTimeout(() => document.getElementById('editMealName').focus(), 50);
@@ -1028,6 +1349,7 @@ function saveMealEdit() {
   if (!name) { showToast('İsim boş olamaz', 'info'); return; }
   const kv = document.getElementById('editMealKcal').value;
   m.name = name; m.kcal = (kv !== '' ? Math.max(0, parseInt(kv, 10) || 0) : null); m.slot = _editMealSlot;
+  m.protein = _optMacro('editMealP'); m.carb = _optMacro('editMealC'); m.fat = _optMacro('editMealF');
   save(); renderDiet(); closeMealEdit();
 }
 function deleteMealFromEdit() { if (_editMealId != null) removeMeal(_editMealId); closeMealEdit(); }
@@ -1073,8 +1395,11 @@ function recentFoodSearch(q) { const i = document.getElementById('foodSearchInpu
 
 function renderMacroBars() {
   const d = data.diet, day = dietDay(false);
-  let p = 0, c = 0, f = 0;
-  day.meals.forEach(m => { p += Number(m.protein) || 0; c += Number(m.carb) || 0; f += Number(m.fat) || 0; });
+  let p = 0, c = 0, f = 0, noMacroKcal = 0;
+  day.meals.forEach(m => {
+    p += Number(m.protein) || 0; c += Number(m.carb) || 0; f += Number(m.fat) || 0;
+    if (m.protein == null && m.carb == null && m.fat == null) noMacroKcal += Number(m.kcal) || 0;
+  });
   const rows = [
     ['Protein', Math.round(p), d.proteinGoal || 0, '#5aa2ff'],
     ['Karbonhidrat', Math.round(c), d.carbGoal || 0, '#f5a524'],
@@ -1082,6 +1407,9 @@ function renderMacroBars() {
   ];
   const el = document.getElementById('macroBars');
   if (!el) return;
+  const gap = noMacroKcal > 0
+    ? `<div class="macro-gap-note">≈${noMacroKcal} kcal makro bilgisi olmadan girildi — çubuklar eksik olabilir. Yemeği "Ara" sekmesinden seçersen makrolar da gelir.</div>`
+    : '';
   el.innerHTML = rows.map(([name, val, gl, col]) => {
     const pct = gl ? Math.min(100, Math.round(val / gl * 100)) : 0;
     const over = gl && val > gl;
@@ -1089,7 +1417,7 @@ function renderMacroBars() {
       <div class="macro-bar-top"><span class="macro-bar-name">${name}</span><span class="macro-bar-val${over ? ' over' : ''}">${val} / ${gl} g</span></div>
       <div class="macro-bar-track"><span class="macro-bar-fill" style="width:${pct}%; background:${col}"></span></div>
     </div>`;
-  }).join('');
+  }).join('') + gap;
 }
 function timeStr() { return new Date().toLocaleString('tr-TR'); }
 
