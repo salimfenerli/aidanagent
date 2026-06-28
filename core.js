@@ -914,13 +914,13 @@ function showAiPortion(q, srcLbl, bd) {
 // ===== Kişisel öğrenen besin DB — geçmişte loglanan yemeklerden anlık lokal eşleşme =====
 function foodMemoryMatches(q, limit) {
   ensureDiet();
-  q = (q || '').trim().toLocaleLowerCase('tr');
-  if (q.length < 2) return [];
+  const nq = trNorm(q);
+  if (nq.length < 2) return [];
   const days = data.diet.days || {}, map = new Map();
   for (const dk of Object.keys(days).sort()) {
     for (const m of (days[dk].meals || [])) {
       const name = String(m.name || '').trim();
-      if (!name || !name.toLocaleLowerCase('tr').includes(q)) continue;
+      if (!name || !trNorm(name).includes(nq)) continue;
       const key = name.toLocaleLowerCase('tr');
       const e = map.get(key) || { name, count: 0, kcal: null, protein: null, carb: null, fat: null };
       e.count++; e.name = name;
@@ -942,7 +942,7 @@ function renderLocalMatches() {
   const customNames = new Set(_customMatches.map(m => m.name.toLocaleLowerCase('tr')));
   _localMatches = foodMemoryMatches(q, 6).filter(m => !customNames.has(m.name.toLocaleLowerCase('tr')));
   const personalNames = new Set([...customNames, ..._localMatches.map(m => m.name.toLocaleLowerCase('tr'))]);
-  _seedMatches = seedFoodMatches(q, 8).filter(sf => !personalNames.has(sf.n.toLocaleLowerCase('tr')));
+  _seedMatches = seedFoodMatches(q, 10).filter(sf => !personalNames.has(sf.n.toLocaleLowerCase('tr')));
   let html = '';
   if (_customMatches.length) {
     html += '<div class="freq-head">Kendi besinlerim</div><div class="food-results">' +
@@ -967,7 +967,8 @@ function customFoodMatches(q, limit) {
   ensureDiet();
   q = (q || '').trim().toLocaleLowerCase('tr');
   const list = data.diet.customFoods || [];
-  const arr = q.length < 2 ? list.slice() : list.filter(c => String(c.name || '').toLocaleLowerCase('tr').includes(q));
+  const nq = trNorm(q);
+  const arr = nq.length < 2 ? list.slice() : list.filter(c => trNorm(c.name).includes(nq));
   return arr.slice(0, limit || 6);
 }
 function pickCustomFood(i) {
@@ -1247,12 +1248,153 @@ const TURK_FOODS = [
   { n: 'Bira', u: 'şişe', k: 150, p: 1, c: 13, f: 0 },
   { n: 'Şarap', u: 'kadeh', k: 120, p: 0, c: 4, f: 0 },
   { n: 'Rakı', u: 'kadeh', k: 130, p: 0, c: 0, f: 0 },
-  { n: 'Şeker', u: 'küp', k: 12, p: 0, c: 3, f: 0 }
+  { n: 'Şeker', u: 'küp', k: 12, p: 0, c: 3, f: 0 },
+  { n: 'Sahanda yumurta', u: 'adet', k: 110, p: 7, c: 1, f: 9 },
+  { n: 'Çılbır', u: 'porsiyon', k: 260, p: 14, c: 8, f: 18 },
+  { n: 'Tulum peyniri', u: 'dilim', k: 90, p: 6, c: 1, f: 7 },
+  { n: 'Dil peyniri', u: 'dilim', k: 80, p: 6, c: 1, f: 6 },
+  { n: 'Çökelek', u: 'porsiyon', k: 70, p: 10, c: 3, f: 2 },
+  { n: 'Kefir', u: 'bardak', k: 100, p: 6, c: 9, f: 4 },
+  { n: 'Bazlama', u: 'dilim', k: 150, p: 4, c: 30, f: 2 },
+  { n: 'Krep', u: 'adet', k: 130, p: 4, c: 18, f: 5 },
+  { n: 'Pankek', u: 'adet', k: 90, p: 3, c: 15, f: 2 },
+  { n: 'Waffle', u: 'adet', k: 220, p: 5, c: 30, f: 9 },
+  { n: 'Yumurta akı', u: 'adet', k: 17, p: 4, c: 0, f: 0 },
+  { n: 'Chia puding', u: 'kase', k: 200, p: 6, c: 22, f: 9 },
+  { n: 'Müsli', u: 'kase', k: 210, p: 6, c: 38, f: 5 },
+  { n: 'Kahvaltı tabağı', u: 'porsiyon', k: 450, p: 18, c: 30, f: 28 },
+  { n: 'Peynirli börek', u: 'dilim', k: 250, p: 8, c: 24, f: 13 },
+  { n: 'Tarhana çorbası', u: 'kase', k: 120, p: 5, c: 20, f: 2 },
+  { n: 'Mantar çorbası', u: 'kase', k: 110, p: 3, c: 12, f: 6 },
+  { n: 'Düğün çorbası', u: 'kase', k: 150, p: 6, c: 12, f: 8 },
+  { n: 'Brokoli çorbası', u: 'kase', k: 100, p: 4, c: 11, f: 5 },
+  { n: 'Şehriye çorbası', u: 'kase', k: 110, p: 4, c: 20, f: 2 },
+  { n: 'Tavuk pirzola', u: 'porsiyon', k: 220, p: 28, c: 2, f: 11 },
+  { n: 'Tavuk sote', u: 'porsiyon', k: 240, p: 26, c: 8, f: 11 },
+  { n: 'Et sote', u: 'porsiyon', k: 300, p: 28, c: 8, f: 17 },
+  { n: 'Ciğer tava', u: 'porsiyon', k: 250, p: 24, c: 10, f: 12 },
+  { n: 'Kokoreç', u: 'porsiyon', k: 330, p: 18, c: 6, f: 26 },
+  { n: 'Köri tavuk', u: 'porsiyon', k: 320, p: 27, c: 12, f: 18 },
+  { n: 'Kuzu tandır', u: 'porsiyon', k: 380, p: 30, c: 2, f: 28 },
+  { n: 'Beyti kebap', u: 'porsiyon', k: 420, p: 28, c: 18, f: 26 },
+  { n: 'Çöp şiş', u: 'şiş', k: 70, p: 7, c: 1, f: 4 },
+  { n: 'Etli ekmek', u: 'dilim', k: 230, p: 11, c: 26, f: 9 },
+  { n: 'Karides', u: 'porsiyon', k: 150, p: 25, c: 3, f: 4 },
+  { n: 'Kalamar tava', u: 'porsiyon', k: 230, p: 18, c: 16, f: 11 },
+  { n: 'Midye tava', u: 'porsiyon', k: 260, p: 12, c: 24, f: 13 },
+  { n: 'Balık ızgara', u: 'porsiyon', k: 200, p: 26, c: 0, f: 10 },
+  { n: 'Uskumru', u: 'porsiyon', k: 260, p: 24, c: 0, f: 18 },
+  { n: 'Palamut', u: 'porsiyon', k: 230, p: 25, c: 0, f: 14 },
+  { n: 'Tavuk haşlama', u: 'porsiyon', k: 180, p: 30, c: 0, f: 6 },
+  { n: 'Kinoa', u: 'porsiyon', k: 180, p: 6, c: 32, f: 3 },
+  { n: 'Kahverengi pilav', u: 'porsiyon', k: 215, p: 5, c: 45, f: 2 },
+  { n: 'Tam buğday makarna', u: 'porsiyon', k: 200, p: 8, c: 40, f: 2 },
+  { n: 'Kuskus', u: 'porsiyon', k: 180, p: 6, c: 36, f: 1 },
+  { n: 'Fırın makarna', u: 'porsiyon', k: 330, p: 14, c: 38, f: 13 },
+  { n: 'Lazanya', u: 'porsiyon', k: 380, p: 18, c: 36, f: 18 },
+  { n: 'Mercimek köftesi', u: 'adet', k: 45, p: 2, c: 7, f: 1 },
+  { n: 'Falafel', u: 'adet', k: 55, p: 2, c: 6, f: 3 },
+  { n: 'Humus', u: 'porsiyon', k: 180, p: 6, c: 18, f: 10 },
+  { n: 'Kısır', u: 'porsiyon', k: 200, p: 5, c: 34, f: 5 },
+  { n: 'Noodle', u: 'porsiyon', k: 240, p: 7, c: 38, f: 7 },
+  { n: 'İçli köfte', u: 'adet', k: 120, p: 5, c: 14, f: 5 },
+  { n: 'Lahmacun dürüm', u: 'adet', k: 260, p: 12, c: 32, f: 9 },
+  { n: 'Brokoli', u: 'porsiyon', k: 55, p: 4, c: 8, f: 1 },
+  { n: 'Karnabahar', u: 'porsiyon', k: 50, p: 3, c: 8, f: 1 },
+  { n: 'Kabak yemeği', u: 'porsiyon', k: 120, p: 3, c: 12, f: 7 },
+  { n: 'Bezelye yemeği', u: 'porsiyon', k: 160, p: 7, c: 22, f: 5 },
+  { n: 'Enginar', u: 'porsiyon', k: 90, p: 3, c: 15, f: 2 },
+  { n: 'Pırasa yemeği', u: 'porsiyon', k: 110, p: 3, c: 14, f: 5 },
+  { n: 'Lahana sarma', u: 'adet', k: 45, p: 2, c: 7, f: 1 },
+  { n: 'Közlenmiş patlıcan', u: 'porsiyon', k: 90, p: 2, c: 10, f: 5 },
+  { n: 'Sebze sote', u: 'porsiyon', k: 130, p: 4, c: 16, f: 6 },
+  { n: 'Etli kabak', u: 'porsiyon', k: 180, p: 12, c: 12, f: 9 },
+  { n: 'Roka salata', u: 'porsiyon', k: 60, p: 2, c: 5, f: 4 },
+  { n: 'Sezar salata', u: 'porsiyon', k: 280, p: 12, c: 12, f: 20 },
+  { n: 'Ton balıklı salata', u: 'porsiyon', k: 220, p: 20, c: 10, f: 11 },
+  { n: 'Yeşil salata', u: 'porsiyon', k: 70, p: 2, c: 7, f: 4 },
+  { n: 'Patates püresi', u: 'porsiyon', k: 180, p: 3, c: 24, f: 8 },
+  { n: 'Fırın patates', u: 'porsiyon', k: 160, p: 3, c: 30, f: 3 },
+  { n: 'Tatlı patates', u: 'porsiyon', k: 150, p: 2, c: 32, f: 1 },
+  { n: 'Ananas', u: 'dilim', k: 50, p: 0, c: 13, f: 0 },
+  { n: 'Mango', u: 'adet', k: 100, p: 1, c: 25, f: 0 },
+  { n: 'Böğürtlen', u: 'kase', k: 45, p: 1, c: 10, f: 0 },
+  { n: 'Yaban mersini', u: 'kase', k: 60, p: 1, c: 14, f: 0 },
+  { n: 'Greyfurt', u: 'adet', k: 80, p: 1, c: 20, f: 0 },
+  { n: 'Erik', u: 'adet', k: 30, p: 0, c: 8, f: 0 },
+  { n: 'Vişne', u: 'kase', k: 60, p: 1, c: 15, f: 0 },
+  { n: 'Ahududu', u: 'kase', k: 55, p: 1, c: 12, f: 1 },
+  { n: 'Limon', u: 'adet', k: 17, p: 0, c: 5, f: 0 },
+  { n: 'Kaju', u: 'avuç', k: 160, p: 5, c: 9, f: 13 },
+  { n: 'Ay çekirdeği', u: 'avuç', k: 165, p: 6, c: 7, f: 14 },
+  { n: 'Kabak çekirdeği', u: 'avuç', k: 150, p: 9, c: 4, f: 13 },
+  { n: 'Karışık kuruyemiş', u: 'avuç', k: 170, p: 5, c: 8, f: 14 },
+  { n: 'Protein bar', u: 'adet', k: 200, p: 20, c: 20, f: 7 },
+  { n: 'Granola bar', u: 'adet', k: 120, p: 3, c: 20, f: 4 },
+  { n: 'Meyveli yoğurt', u: 'kase', k: 150, p: 6, c: 24, f: 4 },
+  { n: 'Protein tozu', u: 'ölçek', k: 120, p: 24, c: 3, f: 2 },
+  { n: 'Revani', u: 'dilim', k: 290, p: 4, c: 48, f: 9 },
+  { n: 'Şekerpare', u: 'adet', k: 150, p: 2, c: 26, f: 5 },
+  { n: 'Tulumba', u: 'adet', k: 120, p: 1, c: 20, f: 4 },
+  { n: 'Aşure', u: 'kase', k: 250, p: 5, c: 52, f: 4 },
+  { n: 'Güllaç', u: 'porsiyon', k: 200, p: 4, c: 38, f: 5 },
+  { n: 'Supangle', u: 'kase', k: 260, p: 5, c: 36, f: 11 },
+  { n: 'Trileçe', u: 'dilim', k: 320, p: 6, c: 42, f: 15 },
+  { n: 'Magnolia', u: 'kase', k: 280, p: 5, c: 40, f: 12 },
+  { n: 'Cheesecake', u: 'dilim', k: 350, p: 7, c: 32, f: 22 },
+  { n: 'Brownie', u: 'adet', k: 280, p: 4, c: 38, f: 14 },
+  { n: 'Tiramisu', u: 'porsiyon', k: 300, p: 6, c: 34, f: 16 },
+  { n: 'Muffin', u: 'adet', k: 260, p: 4, c: 36, f: 11 },
+  { n: 'Donut', u: 'adet', k: 260, p: 4, c: 34, f: 13 },
+  { n: 'İrmik helvası', u: 'porsiyon', k: 280, p: 4, c: 46, f: 10 },
+  { n: 'Ekmek kadayıfı', u: 'porsiyon', k: 320, p: 5, c: 58, f: 9 },
+  { n: 'Sushi', u: 'porsiyon', k: 250, p: 9, c: 38, f: 6 },
+  { n: 'Wrap', u: 'adet', k: 350, p: 18, c: 36, f: 15 },
+  { n: 'Club sandviç', u: 'porsiyon', k: 480, p: 24, c: 42, f: 24 },
+  { n: 'Sandviç', u: 'adet', k: 300, p: 12, c: 36, f: 12 },
+  { n: 'Sosisli sandviç', u: 'adet', k: 330, p: 12, c: 32, f: 18 },
+  { n: 'Kaşarlı pide', u: 'porsiyon', k: 520, p: 22, c: 60, f: 20 },
+  { n: 'Kuşbaşılı pide', u: 'porsiyon', k: 560, p: 28, c: 58, f: 24 },
+  { n: 'Sucuklu pide', u: 'porsiyon', k: 580, p: 24, c: 58, f: 28 },
+  { n: 'Cheeseburger', u: 'adet', k: 450, p: 24, c: 36, f: 24 },
+  { n: 'Tavuk burger', u: 'adet', k: 420, p: 24, c: 38, f: 19 },
+  { n: 'Balık ekmek', u: 'adet', k: 350, p: 20, c: 38, f: 13 },
+  { n: 'Çiğ köfte', u: 'porsiyon', k: 180, p: 5, c: 35, f: 2 },
+  { n: 'Smoothie', u: 'bardak', k: 180, p: 4, c: 38, f: 2 },
+  { n: 'Yeşil çay', u: 'bardak', k: 2, p: 0, c: 0, f: 0 },
+  { n: 'Bitki çayı', u: 'bardak', k: 2, p: 0, c: 0, f: 0 },
+  { n: 'Sıcak çikolata', u: 'bardak', k: 190, p: 6, c: 28, f: 7 },
+  { n: 'Salep', u: 'bardak', k: 180, p: 5, c: 32, f: 4 },
+  { n: 'Boza', u: 'bardak', k: 160, p: 2, c: 34, f: 1 },
+  { n: 'Soğuk kahve', u: 'bardak', k: 120, p: 4, c: 16, f: 5 },
+  { n: 'Americano', u: 'fincan', k: 10, p: 0, c: 2, f: 0 },
+  { n: 'Espresso', u: 'fincan', k: 5, p: 0, c: 1, f: 0 },
+  { n: 'Bubble tea', u: 'bardak', k: 250, p: 2, c: 50, f: 4 },
+  { n: 'Maden suyu', u: 'şişe', k: 0, p: 0, c: 0, f: 0 }
 ];
+// Türkçe diakritik-duyarsız normalize (kofte→kofte=köfte, doner→döner). Hızlı yazımda eşleşsin.
+function trNorm(str) {
+  return String(str || '').toLocaleLowerCase('tr')
+    .replace(/ş/g, 's').replace(/ı/g, 'i').replace(/ç/g, 'c')
+    .replace(/ö/g, 'o').replace(/ü/g, 'u').replace(/ğ/g, 'g')
+    .replace(/â/g, 'a').replace(/î/g, 'i').replace(/û/g, 'u').trim();
+}
+// Temel besin DB araması — diakritik-duyarsız + alaka sıralı (tam > baş > kelime-başı > içerir).
 function seedFoodMatches(q, limit) {
-  q = (q || '').trim().toLocaleLowerCase('tr');
-  if (q.length < 2) return [];
-  return TURK_FOODS.filter(f => f.n.toLocaleLowerCase('tr').includes(q)).slice(0, limit || 8);
+  const nq = trNorm(q);
+  if (nq.length < 2) return [];
+  const scored = [];
+  for (const f of TURK_FOODS) {
+    const nn = trNorm(f.n);
+    let score = -1;
+    if (nn === nq) score = 100;
+    else if (nn.startsWith(nq)) score = 80;
+    else if (nn.split(/\s+/).some(w => w.startsWith(nq))) score = 60;
+    else if (nn.includes(nq)) score = 40;
+    if (score >= 0) scored.push({ f, score });
+  }
+  scored.sort((a, b) => b.score - a.score || a.f.n.length - b.f.n.length);
+  return scored.slice(0, limit || 10).map(x => x.f);
 }
 function pickSeedFood(i) {
   const sf = _seedMatches[i]; if (!sf) return;
