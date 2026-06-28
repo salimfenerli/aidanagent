@@ -2634,7 +2634,7 @@ async function refreshInviteList() {
             <div class="countdown-row-meta">${created}</div>
             ${usedLine}
           </div>
-          ${!used ? `<button class="small secondary" onclick="copyInviteCode('${c.code}')" title="Kopyala">📋</button>` : ''}
+          ${!used ? `<button class="small secondary" onclick="copyInviteCode('${c.code}')" title="Kopyala"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>` : ''}
         </div>
       `;
     }).join('');
@@ -3326,3 +3326,99 @@ document.getElementById('pomoCount').textContent = data.pomoToday.count;
 updateTimerDisplay();
 restoreTimerState();
 renderCountdowns();
+
+// ============ AIDAN'A SOR — sohbet / düşünme ortağı ============
+const CHAT_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/chat';
+let _chatHistory = [];      // [{role:'user'|'assistant', content}]
+let _chatBusy = false;
+
+// Textarea otomatik büyüme (max ~5 satır)
+function chatAutoGrow(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+}
+
+function chatKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+}
+
+// Öneri chip'ine basınca input'a yaz + gönder
+function chatSuggest(text) {
+  const inp = document.getElementById('chatInput');
+  if (inp) inp.value = text;
+  sendChat();
+}
+
+function clearChat() {
+  _chatHistory = [];
+  renderChatMessages();
+}
+
+// HTML escape + basit markdown (kalın, satır sonu, madde) → güvenli render
+function chatFormat(text) {
+  let h = escapeHtml(text);
+  h = h.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  h = h.replace(/^[\s]*[-*•]\s+(.+)$/gm, '<span class="chat-li">• $1</span>');
+  h = h.replace(/\n/g, '<br>');
+  return h;
+}
+
+function renderChatMessages() {
+  const box = document.getElementById('chatMessages');
+  const empty = document.getElementById('chatEmpty');
+  if (!box) return;
+  if (!_chatHistory.length && !_chatBusy) {
+    if (empty) empty.style.display = 'flex';
+    box.querySelectorAll('.chat-msg, .chat-typing').forEach(n => n.remove());
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  box.querySelectorAll('.chat-msg, .chat-typing').forEach(n => n.remove());
+  _chatHistory.forEach(m => {
+    const div = document.createElement('div');
+    div.className = 'chat-msg ' + (m.role === 'user' ? 'me' : 'ai');
+    div.innerHTML = m.role === 'user' ? escapeHtml(m.content).replace(/\n/g, '<br>') : chatFormat(m.content);
+    box.appendChild(div);
+  });
+  if (_chatBusy) {
+    const t = document.createElement('div');
+    t.className = 'chat-typing';
+    t.innerHTML = '<span></span><span></span><span></span>';
+    box.appendChild(t);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+async function sendChat() {
+  if (_chatBusy) return;
+  const inp = document.getElementById('chatInput');
+  if (!inp) return;
+  const text = inp.value.trim();
+  if (!text) return;
+  const token = await getSupaToken();
+  if (!token) { showToast('Önce Ayarlar' + String.fromCharCode(39) + 'dan giriş yap', 'error'); return; }
+  inp.value = '';
+  chatAutoGrow(inp);
+  _chatHistory.push({ role: 'user', content: text });
+  _chatBusy = true;
+  renderChatMessages();
+  try {
+    const r = await fetch(CHAT_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ messages: _chatHistory.slice(-12) }),
+    });
+    const j = await r.json().catch(() => ({}));
+    _chatBusy = false;
+    if (!r.ok || !j.reply) {
+      _chatHistory.push({ role: 'assistant', content: 'Bir sorun oldu (' + (j.error || ('http ' + r.status)) + '). Tekrar dener misin?' });
+    } else {
+      _chatHistory.push({ role: 'assistant', content: j.reply });
+    }
+    renderChatMessages();
+  } catch (e) {
+    _chatBusy = false;
+    _chatHistory.push({ role: 'assistant', content: 'Bağlantı kurulamadı. İnternetini kontrol et.' });
+    renderChatMessages();
+  }
+}

@@ -1892,6 +1892,78 @@ ${text}
   }
 }
 
+// Aidan'a sor — sohbet endpoint'i (POST {messages:[...]} → AI sohbet cevabı, tool YOK).
+// Düşünme/planlama ortağı: görev EKLEMEZ, sadece konuşur. Llama 3.3 70B.
+async function handleChatApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  let msgs = Array.isArray(body.messages) ? body.messages : [];
+  // Sadece user/assistant rolleri, kısa tut (son 12 mesaj), her biri 2000 char sınırı
+  msgs = msgs
+    .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+    .map(m => ({ role: m.role, content: m.content.slice(0, 2000) }))
+    .slice(-12);
+  if (!msgs.length || msgs[msgs.length - 1].role !== 'user') {
+    return jsonCors({ error: 'empty' }, 400, cors);
+  }
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
+
+  try {
+    // Hafif görev context'i — Aidan kullanıcının gününü bilsin
+    const session = await fetchUserDataForApi(env, user);
+    const d = session.data || {};
+    const todayStr = trToday();
+    const tasks = d.tasks || [];
+    const openCount = tasks.filter(t => !t.done).length;
+    const doneToday = tasks.filter(t => t.doneDate === todayStr).length;
+    const mit = tasks.filter(t => t.mitDate === todayStr && !t.done).map(t => t.text).slice(0, 3);
+    const overdue = tasks.filter(t => !t.done && t.due && t.due < todayStr).length;
+    const name = getUserDisplayName(d, user.email);
+
+    const mitStr = mit.length ? ` Bugünün 3'ü (MIT): ${mit.join(', ')}.` : ` Bugünün 3'ü (MIT) henüz seçilmemiş.`;
+    const ctx = `[BAĞLAM — ${name} durumu] Açık görev: ${openCount}. Bugün biten: ${doneToday}.${overdue ? ` Gecikmiş: ${overdue}.` : ''}${mitStr}`;
+
+    const sysPrompt = `Sen Aidan'sın — ${name}'in ADHD asistanı ve düşünme ortağı. ${name} 16 yaşında, lise öğrencisi, satranç/strateji seviyor, borsada işlem yapıyor.
+
+ROLÜN: Sohbet et, düşündür, planlamaya yardım et. Bir akıl hocası gibi — net, somut, yargısız.
+
+KURALLAR:
+- TÜRKÇE konuş. Kısa ve net ol (ADHD beyni uzun duvarı okumaz). Gerekirse madde işareti kullan.
+- Görev EKLEYEMEZSİN/SİLEMEZSİN — sadece konuşursun. "Şunu ekledim" deme. İstese bile "bunu üst bardaki AI butonuyla ekleyebilirsin" de.
+- Boş klişe YOK ("harika soru", "yardımcı olmaktan mutluluk"). Direkt cevaba gir.
+- Borsa: betimleyici konuş, AMA "al/sat/tut" yatırım tavsiyesi VERME, fiyat tahmini yapma.
+- Emin değilsen "emin değilim" de, uydurma.
+- Gerektiğinde sor, ama tek soruyla; cevabı boğma.
+${ctx}`;
+
+    const r = await env.AI.run(AI_MODEL, {
+      messages: [{ role: 'system', content: sysPrompt }, ...msgs],
+      max_tokens: 700,
+      temperature: 0.5,
+    });
+    let reply = (r.response || '').trim();
+    if (!reply || /^i'?m sorry|^as an ai|your input is not/i.test(reply)) {
+      reply = 'Şu an net bir cevap üretemedim, biraz daha açar mısın?';
+    }
+    return jsonCors({ reply }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
 // AI cevabından adım dizisini çıkar (markdown/çer-çöp toleranslı)
 function extractStepsJson(raw) {
   if (!raw) return [];
@@ -3867,6 +3939,11 @@ export default {
     // Akşam günlüğü (POST gün özeti → AI sıcak yansıma, tool YOK)
     if (url.pathname === '/journal') {
       return handleJournalApi(request, env);
+    }
+
+    // Aidan'a sor — sohbet (POST {messages} → AI cevap, tool YOK)
+    if (url.pathname === '/chat') {
+      return handleChatApi(request, env);
     }
 
     // AI görev bölücü (POST {text} → AI küçük adımlar dizisi, tool YOK)

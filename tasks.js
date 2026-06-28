@@ -29,6 +29,7 @@ function showTab(name, btn) {
     }
   }
   if (name === 'tasks') renderCountdowns();
+  if (name === 'chat') { renderChatMessages(); setTimeout(() => { const ci = document.getElementById('chatInput'); if (ci) ci.focus(); }, 60); }
   if (name === 'plan') renderDayPlan();
   if (name === 'diet') { _dietDate = null; renderDiet(); }
   // Borsa sekmesinden çıkınca canlı güncellemeyi durdur (batarya/kota)
@@ -85,7 +86,7 @@ function exitStocksTo(name) {
 }
 
 // ===== Global app-bar (her sekme borsa gibi tam ekran) =====
-const APP_TAB_TITLES = { tasks: 'Görevler', plan: 'Plan', focus: 'Odak', stocks: 'Borsa', diet: 'Diyet', settings: 'Ayarlar' };
+const APP_TAB_TITLES = { tasks: 'Görevler', plan: 'Plan', focus: 'Odak', stocks: 'Borsa', diet: 'Diyet', chat: "Aidan'a sor", settings: 'Ayarlar' };
 // Global drawer'dan sekme seçimi
 function navTo(name) {
   toggleAppMenu(false);
@@ -253,7 +254,7 @@ function renderTemplateList() {
   const el = document.getElementById('templateList');
   el.innerHTML = getAllTemplates().map(tpl => {
     const delBtn = tpl.builtin ? '' :
-      `<button class="tpl-del" onclick="event.stopPropagation(); deleteTemplate('${tpl.id}')" title="Şablonu sil">🗑️</button>`;
+      `<button class="tpl-del" onclick="event.stopPropagation(); deleteTemplate('${tpl.id}')" title="Şablonu sil"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>`;
     return `
       <div class="tpl-card" onclick="applyTemplate('${tpl.id}')">
         <span class="tpl-emoji">${tpl.emoji || '📋'}</span>
@@ -501,9 +502,9 @@ function renderDayPlan() {
         <div class="pb-meta">${isNow ? '<span class="pb-now-tag">● şu an</span>' : ''}<span>${dur} dk</span>${linked ? '<span>🔗 görev</span>' : ''}</div>
       </div>
       <div class="pb-actions">
-        ${kind === 'task' && linked ? `<button onclick="focusPlanBlock(${b.taskId})" title="Bu göreve odaklan">🎧</button>` : ''}
-        <button onclick="editPlanBlock(${b.id})" title="Düzenle">✏️</button>
-        <button onclick="deletePlanBlock(${b.id})" title="Sil">🗑️</button>
+        ${kind === 'task' && linked ? `<button onclick="focusPlanBlock(${b.taskId})" title="Bu göreve odaklan"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5a9 9 0 0 1 18 0v5a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></button>` : ''}
+        <button onclick="editPlanBlock(${b.id})" title="Düzenle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
+        <button onclick="deletePlanBlock(${b.id})" title="Sil"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
       </div>
     </div>`;
   });

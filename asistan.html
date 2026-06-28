@@ -35,6 +35,7 @@
     <button type="button" data-nav="focus" onclick="navTo('focus')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>Odak</button>
     <button type="button" data-nav="stocks" onclick="navTo('stocks')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Borsa</button>
     <button type="button" data-nav="diet" onclick="navTo('diet')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"/><path d="M10 2c1 .5 2 2 2 5"/></svg>Diyet</button>
+    <button type="button" data-nav="chat" onclick="navTo('chat')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Aidan'a sor</button>
     <button type="button" data-nav="settings" onclick="navTo('settings')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ayarlar</button>
   </nav>
   <div class="brand-row">
@@ -591,6 +592,32 @@
         <button class="small secondary" onclick="loadBackupList()" style="margin-top:6px;">Yenile</button>
       </details>
       <div class="settings-help">Worker her Pazartesi 03:00 TR <code>aidan_backups</code> tablosuna otomatik snapshot atar (son 12 saklanır, ~3 ay). Aşağıdan istediğin yedeği JSON olarak indirebilirsin.</div>
+    </div>
+  </div>
+
+  <!-- AIDAN'A SOR — sohbet / düşünme ortağı -->
+  <div id="chat" class="panel">
+    <div class="chat-wrap">
+      <div class="chat-head">
+        <div class="chat-head-title">Aidan'a sor</div>
+        <button class="chat-clear" onclick="clearChat()" title="Sohbeti temizle" aria-label="Temizle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
+      </div>
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-empty" id="chatEmpty">
+          <div class="chat-empty-title">Düşünme ortağın hazır</div>
+          <div class="chat-empty-sub">Planla, kafan dağınıkken topla, stratejini konuş. Görev eklemem, sadece konuşuruz.</div>
+          <div class="chat-chips">
+            <button onclick="chatSuggest(this.textContent)">Bugünü nasıl planlayayım?</button>
+            <button onclick="chatSuggest(this.textContent)">Kafam çok dağınık, yardım et</button>
+            <button onclick="chatSuggest(this.textContent)">Sınav haftasına nasıl çalışırım?</button>
+          </div>
+        </div>
+      </div>
+      <div class="chat-input-row">
+        <textarea id="chatInput" rows="1" placeholder="Aidan'a yaz — Enter gönderir, Shift+Enter satır atlar" aria-label="Aidan'a mesaj" onkeydown="chatKey(event)" oninput="chatAutoGrow(this)"></textarea>
+        <button class="chat-send" id="chatSend" onclick="sendChat()" title="Gönder" aria-label="Gönder"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+      </div>
+      <div class="chat-foot">Aidan düşünme ortağın — görev eklemez, yatırım tavsiyesi vermez.</div>
     </div>
   </div>
 </div>

@@ -3163,3 +3163,42 @@
   .wd-row { display:flex; justify-content:space-between; font-size:0.85em; color:var(--text); padding:5px 8px; background:var(--surface-hover); border-radius:var(--radius-sm); }
   .wd-kg { font-weight:700; color:var(--text-strong); }
 
+
+/* ============ AIDAN'A SOR — sohbet ============ */
+.chat-wrap { display: flex; flex-direction: column; gap: 12px; }
+.chat-head { display: flex; align-items: center; justify-content: space-between; }
+.chat-head-title { font-size: 1.12rem; font-weight: 700; color: var(--text-strong); }
+.chat-clear { background: var(--surface-mid); border: 1px solid var(--border-soft); color: var(--text-muted); width: 34px; height: 34px; border-radius: var(--radius-sm); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background .18s cubic-bezier(.22,1,.36,1), color .18s; }
+.chat-clear:hover { background: var(--surface-high); color: var(--text); }
+.chat-clear .icon { width: 17px; height: 17px; }
+
+.chat-messages { display: flex; flex-direction: column; gap: 10px; min-height: 240px; max-height: 58vh; overflow-y: auto; padding: 4px 2px; }
+
+.chat-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 8px; margin: auto; padding: 24px 12px; }
+.chat-empty-title { font-size: 1.05rem; font-weight: 700; color: var(--text-strong); }
+.chat-empty-sub { font-size: 0.9rem; color: var(--text-muted); max-width: 320px; line-height: 1.5; }
+.chat-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
+.chat-chips button { background: var(--accent-soft); border: 1px solid var(--border-soft); color: var(--accent-tint); font-size: 0.82rem; padding: 7px 12px; border-radius: var(--radius-pill); cursor: pointer; transition: background .18s cubic-bezier(.22,1,.36,1); }
+.chat-chips button:hover { background: rgba(245,165,36,0.2); }
+
+.chat-msg { max-width: 86%; padding: 10px 13px; border-radius: 14px; font-size: 0.94rem; line-height: 1.5; white-space: normal; word-break: break-word; }
+.chat-msg.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); border-bottom-right-radius: 5px; font-weight: 500; }
+.chat-msg.ai { align-self: flex-start; background: var(--surface-mid); color: var(--text); border: 1px solid var(--border-soft); border-bottom-left-radius: 5px; }
+.chat-msg.ai b { color: var(--text-strong); }
+.chat-msg .chat-li { display: block; margin: 2px 0; }
+
+.chat-typing { align-self: flex-start; display: flex; gap: 4px; padding: 12px 14px; background: var(--surface-mid); border: 1px solid var(--border-soft); border-radius: 14px; border-bottom-left-radius: 5px; }
+.chat-typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); opacity: 0.5; animation: chatBlink 1.2s infinite ease-in-out; }
+.chat-typing span:nth-child(2) { animation-delay: 0.2s; }
+.chat-typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes chatBlink { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+
+.chat-input-row { display: flex; gap: 8px; align-items: flex-end; }
+.chat-input-row textarea { flex: 1; resize: none; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius-lg); padding: 11px 14px; font: inherit; font-size: 0.94rem; line-height: 1.4; max-height: 140px; transition: border-color .18s; }
+.chat-input-row textarea:focus { outline: none; border-color: var(--accent); }
+.chat-send { flex-shrink: 0; width: 44px; height: 44px; border-radius: var(--radius-lg); background: var(--accent); border: none; color: var(--on-accent); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background .18s cubic-bezier(.22,1,.36,1); }
+.chat-send:hover { background: var(--accent-hover); }
+.chat-send .icon { width: 19px; height: 19px; }
+.chat-foot { font-size: 0.74rem; color: var(--text-muted); text-align: center; opacity: 0.8; }
+
+@media (prefers-reduced-motion: reduce) { .chat-typing span { animation: none; } }
