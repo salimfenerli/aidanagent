@@ -330,7 +330,10 @@
       </div>
     </div>
 
-    <div class="macro-bars" id="macroBars"></div>
+    <div class="macro-card">
+      <div class="macro-donut-wrap" id="macroDonut" style="display:none;"></div>
+      <div class="macro-bars" id="macroBars"></div>
+    </div>
 
     <!-- Diyet programım (çoklu plan + haftalık + net porsiyon) -->
     <div class="diet-card">
@@ -393,6 +396,7 @@
       <button class="food-addbar-main" onclick="openFoodModal()"><span class="food-addbar-plus">＋</span> Yemek ekle</button>
       <button class="food-addbar-scan" onclick="openFoodModal('','barkod')" title="Barkod tara" aria-label="Barkod tara"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5v14"/><path d="M7 5v14"/><path d="M11 5v14"/><path d="M15 5v14"/><path d="M19 5v14"/></svg></button>
     </div>
+    <button class="small ghost copy-day-btn" onclick="copyPrevDay()" title="Önceki günün öğünlerini bu güne kopyala"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>Önceki günü kopyala</button>
     <div id="diaryList"></div>
 
     <!-- Tariflerim / öğün paketleri -->
@@ -872,6 +876,7 @@
       </div>
     </div>
     <div class="modal-actions" style="margin-top:12px;">
+      <button class="secondary" onclick="copyMealToNextDay()">Ertesi güne kopyala</button>
       <button class="secondary" onclick="deleteMealFromEdit()">Sil</button>
     </div>
     <button class="modal-close" onclick="closeMealEdit()">Kapat</button>

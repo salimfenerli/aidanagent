@@ -3219,3 +3219,23 @@
 .day-chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-tint); }
 .plan-bucket { margin-bottom: 10px; }
 .plan-bucket .meal-group { margin-bottom: 8px; }
+
+/* ============ Makro donut + kalan makro ============ */
+.macro-card { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); padding: 14px; margin-bottom: 14px; }
+.macro-donut-wrap { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-soft); }
+.macro-donut-svg { position: relative; width: 104px; height: 104px; flex-shrink: 0; }
+.macro-donut-svg .pf-donut { display: block; width: 104px; height: 104px; }
+.macro-donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+.mdc-num { font-size: 1.05rem; font-weight: 800; color: var(--text-strong); line-height: 1; }
+.mdc-lbl { font-size: 0.64rem; color: var(--text-muted); margin-top: 2px; }
+.macro-donut-legend { flex: 1; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.mdl-row { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; }
+.mdl-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.mdl-name { color: var(--text); font-weight: 600; }
+.mdl-pct { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.mdl-rem { margin-left: auto; color: var(--text-muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.macro-card .macro-bars { margin-bottom: 0; }
+
+/* Önceki günü kopyala */
+.copy-day-btn { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 14px; }
+.copy-day-btn .icon { width: 15px; height: 15px; }

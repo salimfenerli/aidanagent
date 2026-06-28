@@ -143,6 +143,7 @@ function renderDiet() {
   renderWeightTrend();
   renderSupplements();
   renderMacroBars();
+  renderMacroDonut();
   // Hedef inputları
   const gk = document.getElementById('goalKcal'); if (gk) gk.value = d.kcalGoal;
   const gw = document.getElementById('goalWater'); if (gw) gw.value = (d.waterGoalL || 2.5);
@@ -1674,3 +1675,53 @@ function markActivity() {
   document.addEventListener(ev, markActivity, { passive: true });
 });
 
+
+// ===== Makro donut + kalan makro (pro görsel) =====
+function renderMacroDonut() {
+  const host = document.getElementById('macroDonut'); if (!host) return;
+  ensureDiet();
+  const d = data.diet, day = dietDay(false);
+  let p = 0, c = 0, f = 0;
+  (day.meals || []).forEach(m => { p += Number(m.protein) || 0; c += Number(m.carb) || 0; f += Number(m.fat) || 0; });
+  p = Math.round(p); c = Math.round(c); f = Math.round(f);
+  const kP = p * 4, kC = c * 4, kF = f * 9, totalK = kP + kC + kF;
+  if (totalK <= 0) { host.style.display = 'none'; host.innerHTML = ''; return; }
+  host.style.display = 'flex';
+  const segs = [{ val: kP, color: '#5aa2ff' }, { val: kC, color: '#f5a524' }, { val: kF, color: '#e0726e' }].filter(x => x.val > 0);
+  const pc = v => Math.round(v / totalK * 100);
+  const rem = (goal, val) => { const r = (goal || 0) - val; return r >= 0 ? r + 'g kaldı' : (-r) + 'g fazla'; };
+  const donut = (typeof donutChart === 'function') ? donutChart(segs, 104) : '';
+  host.innerHTML =
+    `<div class="macro-donut-svg">${donut}<div class="macro-donut-center"><span class="mdc-num">${totalK}</span><span class="mdc-lbl">makro kcal</span></div></div>` +
+    `<div class="macro-donut-legend">` +
+      `<div class="mdl-row"><span class="mdl-dot" style="background:#5aa2ff"></span><span class="mdl-name">Protein</span><span class="mdl-pct">%${pc(kP)}</span><span class="mdl-rem">${rem(d.proteinGoal, p)}</span></div>` +
+      `<div class="mdl-row"><span class="mdl-dot" style="background:#f5a524"></span><span class="mdl-name">Karb</span><span class="mdl-pct">%${pc(kC)}</span><span class="mdl-rem">${rem(d.carbGoal, c)}</span></div>` +
+      `<div class="mdl-row"><span class="mdl-dot" style="background:#e0726e"></span><span class="mdl-name">Yağ</span><span class="mdl-pct">%${pc(kF)}</span><span class="mdl-rem">${rem(d.fatGoal, f)}</span></div>` +
+    `</div>`;
+}
+
+// ===== Gün/öğün kopyala (loglama friction'ını bitirir) =====
+function copyPrevDay() {
+  ensureDiet();
+  const prev = shiftDateStr(dietKey(), -1);
+  const src = (data.diet.days[prev] && data.diet.days[prev].meals) || [];
+  if (!src.length) { showToast('Önceki gün için kayıt yok', 'info'); return; }
+  const day = dietDay();
+  let n = 0;
+  src.forEach(m => {
+    day.meals.push({ id: Date.now() + Math.floor(Math.random() * 10000) + n, slot: m.slot, name: m.name, kcal: m.kcal, protein: m.protein != null ? m.protein : null, carb: m.carb != null ? m.carb : null, fat: m.fat != null ? m.fat : null });
+    n++;
+  });
+  save(); renderDiet(); showToast(n + ' öğün önceki günden kopyalandı', 'success');
+}
+function copyMealToNextDay() {
+  if (_editMealId == null) return;
+  ensureDiet();
+  const day = dietDay(false); const m = (day.meals || []).find(x => x.id === _editMealId);
+  if (!m) { closeMealEdit(); return; }
+  const nextKey = shiftDateStr(dietKey(), 1);
+  if (!data.diet.days[nextKey]) data.diet.days[nextKey] = { meals: [], water: 0 };
+  data.diet.days[nextKey].meals = data.diet.days[nextKey].meals || [];
+  data.diet.days[nextKey].meals.push({ id: Date.now() + Math.floor(Math.random() * 10000), slot: m.slot, name: m.name, kcal: m.kcal, protein: m.protein != null ? m.protein : null, carb: m.carb != null ? m.carb : null, fat: m.fat != null ? m.fat : null });
+  save(); closeMealEdit(); showToast('Ertesi güne kopyalandı', 'success');
+}
