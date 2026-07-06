@@ -884,7 +884,7 @@ function loadBarcodeLib() {
   if (_barcodeLibLoading) return _barcodeLibLoading;
   _barcodeLibLoading = new Promise((res, rej) => {
     const sc = document.createElement('script');
-    sc.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
+    sc.src = '/html5-qrcode.min.js';  // self-host (jsdelivr yerine, CSP tam kapali)
     sc.onload = () => res();
     sc.onerror = () => { _barcodeLibLoading = null; rej(new Error('tarayıcı kütüphanesi yüklenemedi')); };
     document.head.appendChild(sc);

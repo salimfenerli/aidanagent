@@ -26,6 +26,8 @@ ROOT = Path(__file__).parent
 # (local source filename, served path) — Pages .html strip için kritik
 INCLUDE = [
     ("asistan.html", "/index.html"),  # / için Pages default, .html strip yok
+    ("supabase.js", "/supabase.js"),  # self-host: jsdelivr tedarik-zinciri riski yok
+    ("html5-qrcode.min.js", "/html5-qrcode.min.js"),  # self-host: barkod tarayici
     ("core.js", "/core.js"),
     ("tasks.js", "/tasks.js"),
     ("stocks.js", "/stocks.js"),
