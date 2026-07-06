@@ -3041,8 +3041,7 @@ async function handleSignupApi(request, env) {
 // Kullanıcı aracı kurum uygulamasının portföy ekranının fotoğrafını atar,
 // vision modeli sembol + adet + ortalama maliyet + piyasayı okur, JSON döner.
 // ============================================================
-const VISION_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct';       // yeni: dogustan multimodal, daha iyi OCR + Turkce
-const VISION_FALLBACK = '@cf/meta/llama-3.2-11b-vision-instruct';     // eski: Llama 4 patlarsa geri dus (5016 lisansli)
+const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
 
 // base64 string → byte array (vision modeli image: number[] bekler)
 function base64ToBytes(b64) {
@@ -3595,56 +3594,17 @@ SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
   }
 }
 
-// Byte dizisi → base64 (Llama 4 image_url data URL için). base64ToBytes'in tersi.
-// Büyük görsellerde stack taşmasın diye parça parça (String.fromCharCode.apply sınırı).
-function bytesToBase64(bytes) {
-  const arr = bytes || [];
-  let bin = '';
-  const CH = 0x8000;
-  for (let i = 0; i < arr.length; i += CH) {
-    bin += String.fromCharCode.apply(null, arr.slice(i, i + CH));
-  }
-  return btoa(bin);
-}
-
-// Vision modeli çağır. ÖNCE Llama 4 Scout (doğuştan multimodal, messages+image_url
-// formatı, daha iyi OCR + Türkçe). Boş/hatalı dönerse eski Llama 3.2 Vision'a
-// (byte dizisi + Meta 5016 lisans akışı) OTOMATİK düşer — yani Llama 4 formatı
-// tutmasa bile mevcut pipeline bozulmaz. Çağıran arayüz aynı: { image, prompt, max_tokens }
+// Vision modeli çağır. Llama 3.2 Vision, Meta lisansı yüzünden ilk kullanımda
+// 5016 hatası verir ("you must submit the prompt 'agree'"). Bunu yakalayıp bir
+// kez 'agree' gönderir (lisans kabulü, hesap için kalıcı), sonra asıl isteği tekrarlar.
 async function visionRun(env, input) {
-  const prompt = (input && input.prompt) || '';
-  const maxTok = (input && input.max_tokens) || 1024;
-  const bytes = input && input.image;
-
-  // --- Önce Llama 4 Scout ---
-  if (bytes && bytes.length) {
-    try {
-      const b64 = bytesToBase64(bytes);
-      const r = await env.AI.run(VISION_MODEL, {
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + b64 } },
-          ],
-        }],
-        max_tokens: maxTok,
-        temperature: 0.1,
-      });
-      const rr = r && (r.response != null ? r.response : (r.text != null ? r.text : r.description));
-      if (rr != null && String(rr).trim()) return r; // Llama 4 okudu → dön
-    } catch (_) { /* Llama 4 patladı → fallback'e düş */ }
-  }
-
-  // --- Fallback: Llama 3.2 Vision (byte dizisi + 5016 lisans) ---
-  const legacy = { image: bytes, prompt, max_tokens: maxTok };
   try {
-    return await env.AI.run(VISION_FALLBACK, legacy);
+    return await env.AI.run(VISION_MODEL, input);
   } catch (e) {
     const msg = String(e && e.message || '');
     if (msg.includes('5016') || /submit the prompt .?agree/i.test(msg)) {
-      try { await env.AI.run(VISION_FALLBACK, { prompt: 'agree' }); } catch (_) {}
-      return await env.AI.run(VISION_FALLBACK, legacy); // lisans kabul edildi, tekrar dene
+      try { await env.AI.run(VISION_MODEL, { prompt: 'agree' }); } catch (_) {}
+      return await env.AI.run(VISION_MODEL, input); // lisans kabul edildi, tekrar dene
     }
     throw e;
   }
