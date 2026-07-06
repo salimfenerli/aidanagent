@@ -1,4 +1,4 @@
-const CACHE = 'aidan-v7-85';
+const CACHE = 'aidan-v7-86';
 const ASSETS = [
   '/',
   '/core.js',

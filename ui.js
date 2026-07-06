@@ -2374,6 +2374,81 @@ function deleteFixedReminder(id) {
   showToast('Hatırlatıcı silindi', 'info', 2500);
 }
 
+// ============ 📅 TAKVİM SENKRONU (ICS abonelik) ============
+// Görevleri (due) + geri sayımları iOS/Google takvimine tek yönlü abone feed.
+// Worker /calendar.ics?token= endpoint'i data.settings.calendarToken ile eşler.
+const CALENDAR_ICS_BASE = 'https://aidan-pusher.fenerlisalim04.workers.dev/calendar.ics';
+
+function genCalendarToken() {
+  const a = new Uint8Array(18);
+  (window.crypto || crypto).getRandomValues(a);
+  return Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function calendarUrl() {
+  const tok = data.settings && data.settings.calendarToken;
+  return tok ? CALENDAR_ICS_BASE + '?token=' + tok : '';
+}
+
+function renderCalendarSync() {
+  const el = document.getElementById('calendarSyncBox');
+  if (!el) return;
+  if (!window._user) {
+    el.innerHTML = '<div class="fixedrem-empty">Önce Supabase\'e giriş yap — bağlantı hesabına özel.</div>';
+    return;
+  }
+  const url = calendarUrl();
+  if (!url) {
+    el.innerHTML = '<button class="small" onclick="createCalendarLink()">🔗 Takvim bağlantısı oluştur</button>';
+    return;
+  }
+  el.innerHTML =
+    '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">' +
+      '<input type="text" id="calUrlField" readonly value="' + escapeHtml(url) + '" style="flex:1;font-size:12px;">' +
+      '<button class="small" onclick="copyCalendarUrl()">📋 Kopyala</button>' +
+    '</div>' +
+    '<details style="margin-bottom:8px;">' +
+      '<summary style="cursor:pointer;font-size:13px;">iPhone\'a nasıl eklerim?</summary>' +
+      '<ol style="margin:8px 0 0;padding-left:20px;font-size:13px;line-height:1.6;">' +
+        '<li>Yukarıdaki bağlantıyı <b>Kopyala</b>\'ya bas.</li>' +
+        '<li>iPhone → <b>Ayarlar</b> → <b>Takvim</b> → <b>Hesaplar</b>.</li>' +
+        '<li><b>Hesap Ekle</b> → <b>Diğer</b> → <b>Abone Olunan Takvim Ekle</b>.</li>' +
+        '<li>Bağlantıyı <b>yapıştır</b> → <b>İleri</b> → <b>Kaydet</b>.</li>' +
+        '<li>Görevlerin Takvim uygulamasında görünür.</li>' +
+      '</ol>' +
+      '<div class="settings-help">Google Takvim: calendar.google.com → Diğer takvimler → URL\'den → bağlantıyı yapıştır.</div>' +
+    '</details>' +
+    '<button class="small" onclick="resetCalendarLink()">Bağlantıyı sıfırla</button>';
+}
+
+function createCalendarLink() {
+  data.settings = data.settings || {};
+  if (!data.settings.calendarToken) data.settings.calendarToken = genCalendarToken();
+  save();
+  renderCalendarSync();
+  showToast('📅 Takvim bağlantın hazır — kopyala, iPhone Takvim\'e abone ol', 'success', 4000);
+}
+
+function resetCalendarLink() {
+  data.settings = data.settings || {};
+  data.settings.calendarToken = genCalendarToken();
+  save();
+  renderCalendarSync();
+  showToast('🔄 Yeni bağlantı üretildi — eski abonelik durur, yenisini ekle', 'info', 4000);
+}
+
+async function copyCalendarUrl() {
+  const url = calendarUrl();
+  if (!url) return;
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast('📋 Kopyalandı', 'success', 2000);
+  } catch (e) {
+    const f = document.getElementById('calUrlField');
+    if (f) { f.select(); document.execCommand('copy'); showToast('📋 Kopyalandı', 'success', 2000); }
+  }
+}
+
 // ============ GERİ SAYIMLAR (sınav/teslim) ============
 // data.countdowns[] = [{id, label, date:'YYYY-MM-DD'}]. Görevler tabında üst kart,
 // Ayarlar'da yönet. Zaman körlüğüne karşı: iri "X gün kaldı" rakamı.

@@ -21,6 +21,7 @@ function showTab(name, btn) {
     renderFixedReminders();
     renderCountdownManage();
     loadInviteSection();
+    renderCalendarSync();
     // Yedek details açıldığında otomatik yükle (bir kez bağlanır)
     const bd = document.getElementById('backupDetails');
     if (bd && !bd._hooked) {

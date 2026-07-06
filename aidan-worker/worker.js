@@ -3925,6 +3925,120 @@ function serveStatic(path) {
 }
 
 // ============================================================
+// 📅 Takvim (ICS) — görevleri iOS/Google takvimine abone feed
+// ============================================================
+// GET /calendar.ics?token=<calendarToken>
+// calendarToken PWA'da üretilir, data.settings.calendarToken'a yazılır.
+// Tek yönlü: Aidan → takvim. due olan görevler + countdown'lar event olur.
+function icsEscape(s) {
+  return String(s == null ? '' : s)
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r?\n/g, '\\n');
+}
+function icsUtcStamp(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return d.getUTCFullYear().toString()
+    + p(d.getUTCMonth() + 1) + p(d.getUTCDate())
+    + 'T' + p(d.getUTCHours()) + p(d.getUTCMinutes()) + p(d.getUTCSeconds()) + 'Z';
+}
+function icsDateOnly(y, m, d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${y}${p(m)}${p(d)}`;
+}
+function buildIcs(data) {
+  const CAT = { odev: '📚', ders: '📖', ev: '🏠', kisisel: '💜' };
+  const stamp = icsUtcStamp(new Date());
+  const L = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Aidan//ADHD Asistani//TR',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'X-WR-CALNAME:Aidan',
+    'X-WR-TIMEZONE:Europe/Istanbul',
+    'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
+    'X-PUBLISHED-TTL:PT1H',
+  ];
+  const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+  for (const t of tasks) {
+    if (!t || !t.due || t.done) continue;
+    const [y, m, d] = String(t.due).split('-').map(Number);
+    if (!y || !m || !d) continue;
+    let prefix = '';
+    if (t.priority === 'urgent') prefix += '🔥 ';
+    if (t.category && CAT[t.category]) prefix += CAT[t.category] + ' ';
+    L.push('BEGIN:VEVENT');
+    L.push(`UID:aidan-task-${t.id}@aidanapp.pages.dev`);
+    L.push(`DTSTAMP:${stamp}`);
+    if (t.reminderTime && /^\d{1,2}:\d{2}$/.test(t.reminderTime)) {
+      const [hh, mm] = t.reminderTime.split(':').map(Number);
+      // TR yerel saat → UTC (TR sabit UTC+3)
+      const start = new Date(Date.UTC(y, m - 1, d, hh - 3, mm, 0));
+      const dur = (t.estimateMin && t.estimateMin > 0) ? t.estimateMin : 30;
+      const end = new Date(start.getTime() + dur * 60000);
+      L.push(`DTSTART:${icsUtcStamp(start)}`);
+      L.push(`DTEND:${icsUtcStamp(end)}`);
+    } else {
+      const next = new Date(Date.UTC(y, m - 1, d + 1));
+      L.push(`DTSTART;VALUE=DATE:${icsDateOnly(y, m, d)}`);
+      L.push(`DTEND;VALUE=DATE:${icsDateOnly(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate())}`);
+    }
+    const desc = [];
+    if (t.estimateMin) desc.push(`Tahmini ${t.estimateMin} dk`);
+    if (t.notes) desc.push(t.notes);
+    desc.push('Aidan');
+    L.push(`SUMMARY:${icsEscape(prefix + (t.text || 'Görev'))}`);
+    L.push(`DESCRIPTION:${icsEscape(desc.join(' · '))}`);
+    L.push('END:VEVENT');
+  }
+  const cds = Array.isArray(data.countdowns) ? data.countdowns : [];
+  for (const c of cds) {
+    if (!c || !c.date) continue;
+    const [y, m, d] = String(c.date).split('-').map(Number);
+    if (!y || !m || !d) continue;
+    const next = new Date(Date.UTC(y, m - 1, d + 1));
+    L.push('BEGIN:VEVENT');
+    L.push(`UID:aidan-cd-${c.id}@aidanapp.pages.dev`);
+    L.push(`DTSTAMP:${stamp}`);
+    L.push(`DTSTART;VALUE=DATE:${icsDateOnly(y, m, d)}`);
+    L.push(`DTEND;VALUE=DATE:${icsDateOnly(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate())}`);
+    L.push(`SUMMARY:${icsEscape('⏳ ' + (c.label || 'Geri sayım'))}`);
+    L.push('DESCRIPTION:Aidan geri sayım');
+    L.push('END:VEVENT');
+  }
+  L.push('END:VCALENDAR');
+  return L.join('\r\n') + '\r\n';
+}
+async function handleCalendarApi(request, env) {
+  const url = new URL(request.url);
+  const token = url.searchParams.get('token');
+  if (!token || token.length < 8) return new Response('Not found', { status: 404 });
+  let data = null;
+  try {
+    if (hasServiceKey(env)) {
+      const users = await fetchAllUsers(env);
+      const match = users.find(u => u.data && u.data.settings && u.data.settings.calendarToken === token);
+      if (match) data = match.data;
+    } else {
+      const single = await fetchAidan(env);
+      if (single.data && single.data.settings && single.data.settings.calendarToken === token) data = single.data;
+    }
+  } catch (e) {
+    return new Response('Error', { status: 500 });
+  }
+  if (!data) return new Response('Not found', { status: 404 });
+  return new Response(buildIcs(data), {
+    headers: {
+      'Content-Type': 'text/calendar; charset=utf-8',
+      'Content-Disposition': 'inline; filename="aidan.ics"',
+      'Cache-Control': 'public, max-age=900',
+    },
+  });
+}
+
+// ============================================================
 // Main entry
 // ============================================================
 export default {
@@ -3984,6 +4098,11 @@ export default {
     // Besin makro arama (POST {query} → {db, ai} kalori+protein+karb+yağ)
     if (url.pathname === '/food-macros') {
       return handleFoodMacrosApi(request, env);
+    }
+
+    // 📅 Takvim ICS feed (GET ?token=, iOS/Google abonelik)
+    if (url.pathname === '/calendar.ics') {
+      return handleCalendarApi(request, env);
     }
 
     // PWA bootstrap config (Supabase URL + anon key)
