@@ -1,5 +1,23 @@
 # Aidan - ADHD Asistanı Projesi
 
+## 🔴 GÜNCEL DURUM (7 Temmuz 2026) — bu belgenin ALT bölümleri KISMEN ESKİ
+
+Aşağıdaki tarihçe/mimari bölümleri 14 Haziran'da kaldı. O günden bugüne (cache **v7-88**) olan büyük değişiklikler:
+
+- **Mimari refactor:** `asistan.html` artık tek dosya DEĞİL. Kod 5 modüle bölündü, asistan.html şu sırayla yüklüyor: `supabase.js` → `core.js` (diyet) → `tasks.js` (sekme yönetimi / gün planı / quick-capture / journal / dump) → `stocks.js` (borsa) → `ui.js` (görev render / timer / ayarlar / auth / takvim / chat). `app.js` = ESKİ birleşik bundle, artık YÜKLENMİYOR — dokunma/düzenleme, modülleri düzenle.
+- **⚠️ DÜZENLEME KURALI (bu seansta doğrulandı):** Büyük dosyalarda Edit aracı riskli + sandbox `rm` izni YOK (ama `mv` var). Düzenlemeleri **Python byte-replace + `node --check`** ile yap; **.bak dosyası OLUŞTURMA** (silinemiyor, `rm ... || mv bak orig` rollback bloğu ters tepip düzenlemeyi geri alıyor). Rollback gerekirse `git checkout <dosya>`.
+- **Diyet modülü dev büyüdü:** barkod tarayıcı (`html5-qrcode` self-host + Open Food Facts), Türk gömülü besin DB (`seedFoodMatches`), USDA+AI arama, özel besinler (`customFoods`), tarifler, takviye takibi, BMR/TDEE kalori hesaplayıcı (`calcGoals`), çoklu + haftalık program, makro donut/bar, gün kopyala. (OFF Türk yerel/market-markası ürünü ıskalayabilir → elle giriş + AI + Türk seed DB fallback var.)
+- **Borsa modülü dev büyüdü:** hisse haber akışı (`loadStockNews`) + 15 göstergeli tam teknik analiz (RSI/MACD/Bollinger/ADX/OBV/Stoch/ATR...) + mum grafik + Fibonacci + AI taktik analiz + BIST100 kıyas.
+- **Görev/Plan:** günü planla / zaman bloklama (`planMyDay`), takvim ICS sync (`createCalendarLink`), AI sohbet (`sendChat`), diyet karnesi.
+- **AI modeli:** Llama 3.3 70B → **Llama 4 Scout** (git commit: "llama 4 scout update").
+- **Cache:** `sw.js` = **aidan-v7-88**.
+
+### 7 Temmuz 2026 — elle eklenen besin otomatik "Kendi besinlerim"e kaydolsun
+Salim: barkod/OFF yerel Türk ürününü ıskalayınca paket arkasından elle makro giriyorum, bir daha sormasın. **`core.js` `addMeal()`:** kcal girildiyse öğün eklenirken besin otomatik `data.diet.customFoods`'a upsert edilir (ad ile dedupe — varsa makroları günceller, yoksa ekler), toast "eklendi · besinlerine kaydedildi". Elle sekmesinde protein/karb/yağ girişi (`mealP`/`mealC`/`mealF` inputları) zaten vardı. İkinci sefer arama kutusuna adı yazınca "Kendi besinlerim" altında tek tıkla gelir. Cache v7-87 → v7-88.
+
+---
+
+
 ## ⚙️ Oturum Kuralı
 - Aksi söylenmedikçe tüm dokümantasyon/dosya düzenleme işlemleri bu dosya (`CLAUDE.md`) üzerinden yürütülür.
 - **Gerekmedikçe bu dosyayı güncelleme komutu verilmez** — sadece önemli mimari/özellik/karar değişikliklerinde güncellenir, küçük/geçici detaylar için değil.
