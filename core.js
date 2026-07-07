@@ -199,12 +199,23 @@ function addMeal() {
   const carb = anyManual ? mC : (pm.carb != null ? pm.carb : null);
   const fat = anyManual ? mF : (pm.fat != null ? pm.fat : null);
   day.meals.push({ id: Date.now(), slot: _mealSlot, name, kcal, protein, carb, fat });
+  // Elle girilen besin bir daha sorulmasin diye 'kendi besinlerim'e otomatik kaydet (ad ile dedupe)
+  let _autoSaved = false;
+  if (kcal != null) {
+    if (!data.diet.customFoods) data.diet.customFoods = [];
+    const _low = name.toLocaleLowerCase('tr');
+    const _ex = data.diet.customFoods.find(c => String(c.name || '').toLocaleLowerCase('tr') === _low);
+    if (_ex) { _ex.kcal = kcal; _ex.protein = protein; _ex.carb = carb; _ex.fat = fat; }
+    else data.diet.customFoods.push({ id: Date.now() + 1, name, unit: 'porsiyon', kcal, protein, carb, fat });
+    _autoSaved = true;
+  }
   _pendingMacros = null;
   const _mp = document.getElementById('macroPending'); if (_mp) _mp.textContent = '';
   const _mr = document.getElementById('macroResult'); if (_mr) _mr.innerHTML = '';
   nameEl.value = ''; kcalEl.value = '';
   ['mealP', 'mealC', 'mealF'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
-  save(); renderDiet(); closeFoodModal(); nameEl.focus();
+  save(); renderDiet(); renderCustomManage(); closeFoodModal(); nameEl.focus();
+  showToast(_autoSaved ? (name + ' eklendi \u00b7 besinlerine kaydedildi') : (name + ' eklendi'), 'success');
 }
 function removeMeal(id) { const day = dietDay(); day.meals = day.meals.filter(m => m.id !== id); save(); renderDiet(); }
 function renderMealList() {
