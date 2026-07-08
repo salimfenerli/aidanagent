@@ -87,6 +87,7 @@
     <button class="tab active" data-tab="tasks" onclick="showTab('tasks', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 17 5 19 9 15"/><polyline points="3 7 5 9 9 5"/><line x1="13" y1="6" x2="21" y2="6"/><line x1="13" y1="12" x2="21" y2="12"/><line x1="13" y1="18" x2="21" y2="18"/></svg>Görevler</button>
     <button class="tab" data-tab="plan" onclick="showTab('plan', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Plan</button>
     <button class="tab" data-tab="focus" onclick="showTab('focus', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>Odak</button>
+    <button class="tab" data-tab="stocks" onclick="showTab('stocks', this)"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Borsa</button>
     <button class="tab" data-tab="diet" onclick="showTab('diet', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"/><path d="M10 2c1 .5 2 2 2 5"/></svg>Diyet</button>
     <button class="tab" data-tab="settings" onclick="showTab('settings', this)"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ayarlar</button>
   </div>
@@ -249,7 +250,7 @@
       <div class="timer-controls">
         <button onclick="startTimer()" id="startBtn">▶️ Başla</button>
         <button class="secondary" onclick="pauseTimer()">⏸️ Duraklat</button>
-        <button class="danger" onclick="resetTimer()">Sıfırla</button>
+        <button class="secondary" onclick="resetTimer()">Sıfırla</button>
       </div>
       <div class="timer-presets">
         <button class="secondary small" onclick="setTimer(5,2)" title="ADHD için altın kural — 5 dk başla, devamı kendiliğinden gelir">5dk (başla!)</button>
@@ -402,14 +403,14 @@
       </div>
       <div class="water-bar"><span class="water-fill" id="waterFill" style="width:0%"></span></div>
       <div class="water-btns">
-        <button class="small" onclick="addWaterL(0.25)">+0,25 L</button>
-        <button class="small" onclick="addWaterL(0.5)">+0,5 L</button>
+        <button class="small secondary" onclick="addWaterL(0.25)">+0,25 L</button>
+        <button class="small secondary" onclick="addWaterL(0.5)">+0,5 L</button>
         <button class="small primary" onclick="addWaterL(1)">+1 L</button>
-        <button class="small" onclick="addWaterL(-0.25)">−0,25 L</button>
+        <button class="small secondary" onclick="addWaterL(-0.25)">−0,25 L</button>
       </div>
       <div class="water-set">
         <input id="waterSet" type="number" step="0.1" inputmode="decimal" placeholder="toplam (L)" onkeydown="if(event.key==='Enter')setWaterL()">
-        <button class="small" onclick="setWaterL()">Ayarla</button>
+        <button class="small secondary" onclick="setWaterL()">Ayarla</button>
       </div>
     </div>
 

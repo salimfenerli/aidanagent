@@ -832,9 +832,10 @@ function parseQuickInput(raw) {
   // (?:^|[\s,.!?]) ... (?=[\s,.!?]|$) — açık delimiter ile her dilde çalışır.
   const word = (alts) => new RegExp(`(?:^|[\\s,.!?])(${alts})(?=[\\s,.!?]|$)`, 'i');
 
-  // --- ÖNCELİK (text'ten silmiyoruz, başlıkta kalabilir) ---
-  if (word('acil|acele|hemen|asap|ivedi').test(text)) {
-    priority = 'urgent'; detected.push('acil');
+  // --- ÖNCELİK (saf öncelik kelimeleri başlıktan silinir — ACİL rozeti zaten gösterir) ---
+  const priRe = word('acil|acele|hemen|asap|ivedi');
+  if (priRe.test(text)) {
+    priority = 'urgent'; text = text.replace(priRe, ' '); detected.push('acil');
   }
 
   // --- KATEGORİ (text'ten silmiyoruz — anahtar kelime başlığın anlamını taşıyor) ---

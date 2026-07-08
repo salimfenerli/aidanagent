@@ -1950,7 +1950,28 @@ async function handleChatApi(request, env) {
     const name = getUserDisplayName(d, user.email);
 
     const mitStr = mit.length ? ` Bugünün 3'ü (MIT): ${mit.join(', ')}.` : ` Bugünün 3'ü (MIT) henüz seçilmemiş.`;
-    const ctx = `[BAĞLAM — ${name} durumu] Açık görev: ${openCount}. Bugün biten: ${doneToday}.${overdue ? ` Gecikmiş: ${overdue}.` : ''}${mitStr}`;
+
+    // Portföy özeti — para birimine göre gruplu, cache'li fiyatlarla (yaklaşık)
+    let pfStr = '';
+    const wl = (d.watchlist || []).filter(w => w && w.qty > 0 && w.price);
+    if (wl.length) {
+      const byCur = {};
+      wl.forEach(w => {
+        const cur = w.currency || 'TRY';
+        (byCur[cur] = byCur[cur] || { val: 0, cost: 0, n: 0 });
+        byCur[cur].val += w.qty * w.price;
+        byCur[cur].cost += w.qty * (w.cost || 0);
+        byCur[cur].n++;
+      });
+      const parts = Object.entries(byCur).map(([cur, o]) => {
+        const pl = o.val - o.cost;
+        const plPct = o.cost ? (pl / o.cost * 100) : 0;
+        return `${o.n} pozisyon ${cur} — değer ~${Math.round(o.val)} ${cur}, toplam K/Z ${pl >= 0 ? '+' : ''}${Math.round(pl)} ${cur} (${plPct >= 0 ? '+' : ''}${plPct.toFixed(1)}%)`;
+      });
+      pfStr = ` Portföy (yaklaşık, son fiyatlarla): ${parts.join('; ')}.`;
+    }
+
+    const ctx = `[BAĞLAM — ${name} durumu] Açık görev: ${openCount}. Bugün biten: ${doneToday}.${overdue ? ` Gecikmiş: ${overdue}.` : ''}${mitStr}${pfStr}`;
 
     const sysPrompt = `Sen Aidan'sın — ${name}'in ADHD asistanı ve düşünme ortağı. ${name} 16 yaşında, lise öğrencisi, satranç/strateji seviyor, borsada işlem yapıyor.
 

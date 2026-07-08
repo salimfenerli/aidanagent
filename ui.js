@@ -1313,12 +1313,8 @@ function renderMit() {
     }
     const sugHtml = suggestions.map(t => {
       const extras = [];
-      if (t.due === todayStr) extras.push('bugün');
-      else if (t.due && t.due < todayStr) extras.push('gecikti');
-      else if (t.due) {
-        const d = new Date(t.due);
-        extras.push(d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }));
-      }
+      const dl = t.due ? dueLabel(t.due) : '';
+      if (dl && dl.text) extras.push(dl.text);
       if (t.priority === 'urgent') extras.push('🔴 acil');
       if (t.estimateMin) extras.push(`${t.estimateMin}dk`);
       const tail = extras.length ? `<span class="mit-sug-meta">${extras.join(' · ')}</span>` : '';
