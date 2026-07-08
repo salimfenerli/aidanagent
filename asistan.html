@@ -78,6 +78,7 @@
   </div>
   <!-- Quick Capture'a komşu — sık erişilen iki kısayol -->
   <div class="quick-actions">
+    <button onclick="openSearchModal()" title="Her şeyde ara"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Ara</button>
     <button onclick="openTemplateModal()" title="Hazır görev paketleri"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="4" x2="9" y2="20"/></svg>Şablonlar</button>
     <button onclick="openKarneModal()" title="Haftalık özet ve istatistik"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Karne</button>
   </div>
@@ -99,6 +100,27 @@
       <div class="now-next" id="nowNext" style="display:none;"></div>
     </div>
     <div id="countdownList"></div>
+    <details class="school-section" id="schoolSection">
+      <summary><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>Okul <span class="school-badge" id="schoolBadge"></span></summary>
+      <div class="school-inner">
+        <div class="school-today" id="schoolToday"></div>
+        <div class="school-prog-head">
+          <span>Haftalık program</span>
+          <button class="school-edit-btn" onclick="openTimetable()">Düzenle</button>
+        </div>
+        <div class="school-grid" id="schoolGrid"></div>
+        <div class="school-exam-head">Sınavlar</div>
+        <div id="schoolExams"></div>
+        <div class="school-exam-add">
+          <input type="text" id="examSubject" placeholder="Ders — örn. Matematik" maxlength="40">
+          <div class="school-exam-add-row">
+            <input type="date" id="examDate">
+            <input type="text" id="examTopics" placeholder="Konular (opsiyonel)" maxlength="120">
+          </div>
+          <button onclick="addExam()">＋ Sınav ekle</button>
+        </div>
+      </div>
+    </details>
     <h2>Bugün ne yapacağız?</h2>
     <div class="stats">
       <div class="stat"><div class="stat-num" id="statTotal">0</div><div class="stat-label">Toplam</div></div>
@@ -693,6 +715,44 @@
       <button class="danger small" id="seriesDeleteBtn" onclick="deleteSeriesFromModal()">Seriyi sil</button>
     </div>
     <button class="modal-close" onclick="closeSeriesModal()">Kapat</button>
+  </div>
+</div>
+
+<!-- Onboarding modal (ilk açılış) -->
+<div class="modal-overlay" id="onboardModal">
+  <div class="modal onboard-modal" style="max-width:420px;">
+    <div id="onboardBody"></div>
+    <div class="onboard-dots" id="onboardDots"></div>
+    <div class="onboard-actions" id="onboardActions"></div>
+  </div>
+</div>
+
+<!-- Global arama modal -->
+<div class="modal-overlay" id="searchModal" onclick="if(event.target.id==='searchModal')closeSearchModal()">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-title">Ara</div>
+    <input type="search" id="globalSearchInput" class="modal-input" placeholder="Görev, not, günlük, besin, hisse, sınav..." oninput="runGlobalSearch()" autocomplete="off">
+    <div id="globalSearchResults" class="gsearch-results"></div>
+    <button class="modal-close" onclick="closeSearchModal()">Kapat</button>
+  </div>
+</div>
+
+<!-- Ders programı modal -->
+<div class="modal-overlay" id="timetableModal" onclick="if(event.target.id==='timetableModal')closeTimetable()">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-title">Ders programı</div>
+    <p class="tt-hint">Her güne dersleri sırayla yaz, virgülle ayır (örn. Mat, Fizik, Türkçe).</p>
+    <div class="tt-editor">
+      <div class="tt-day-row"><label for="ttDay1">Pazartesi</label><input type="text" id="ttDay1" class="modal-input" placeholder="Mat, Fizik, Türkçe"></div>
+      <div class="tt-day-row"><label for="ttDay2">Salı</label><input type="text" id="ttDay2" class="modal-input" placeholder="Kimya, Biyoloji"></div>
+      <div class="tt-day-row"><label for="ttDay3">Çarşamba</label><input type="text" id="ttDay3" class="modal-input"></div>
+      <div class="tt-day-row"><label for="ttDay4">Perşembe</label><input type="text" id="ttDay4" class="modal-input"></div>
+      <div class="tt-day-row"><label for="ttDay5">Cuma</label><input type="text" id="ttDay5" class="modal-input"></div>
+    </div>
+    <div class="modal-actions">
+      <button onclick="saveTimetable()">Kaydet</button>
+      <button class="secondary" onclick="closeTimetable()">İptal</button>
+    </div>
   </div>
 </div>
 

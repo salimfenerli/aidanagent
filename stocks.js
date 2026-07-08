@@ -1895,6 +1895,8 @@ function toggleTask(id) {
     }
   }
 
+  if (justFinished && typeof recordDoneHour === 'function') recordDoneHour();
+
   save(); renderTasks();
 
   // Done dopamine — DOM güncellendikten sonra
@@ -1930,6 +1932,7 @@ function toggleSub(tid, idx) {
   const t = data.tasks.find(x => x.id === tid);
   t.subtasks[idx].done = !t.subtasks[idx].done;
   if (t.subtasks.every(s => s.done)) {
+    if (!t.done && typeof recordDoneHour === 'function') recordDoneHour();
     t.done = true;
     t.doneDate = today();
   }

@@ -849,6 +849,37 @@ function prevDayIso(iso) {
 }
 
 // weeksAgo: 0 = bu hafta, 1 = geçen hafta, 2 = önceki hafta...
+// Görev bitince o saatin sayacını artır — data.hourStats = {0..23: count}.
+// Zamanla dolan histogram; "en verimli saatin" analizini besler.
+function recordDoneHour() {
+  data.hourStats = data.hourStats || {};
+  const h = new Date().getHours();
+  data.hourStats[String(h)] = (data.hourStats[String(h)] || 0) + 1;
+}
+
+// En verimli saat aralığını hesapla. Yeterli veri yoksa (toplam < 6) null döner.
+function bestHourInfo() {
+  const hs = data.hourStats || {};
+  let total = 0;
+  const arr = new Array(24).fill(0);
+  for (let h = 0; h < 24; h++) { const c = hs[String(h)] || 0; arr[h] = c; total += c; }
+  if (total < 6) return { ready: false, total };
+  let bestStart = 0, bestSum = -1;
+  for (let h = 0; h < 24; h++) {
+    const sum = arr[h] + arr[(h + 1) % 24];
+    if (sum > bestSum) { bestSum = sum; bestStart = h; }
+  }
+  const end = (bestStart + 2) % 24;
+  const pad = n => String(n).padStart(2, '0');
+  const label = `${pad(bestStart)}:00–${pad(end)}:00`;
+  let part = '';
+  if (bestStart >= 5 && bestStart < 12) part = 'sabah';
+  else if (bestStart >= 12 && bestStart < 17) part = 'öğleden sonra';
+  else if (bestStart >= 17 && bestStart < 22) part = 'akşam';
+  else part = 'gece';
+  return { ready: true, total, label, part, count: bestSum };
+}
+
 function karneStats(weeksAgo) {
   const start = getMondayIso(weeksAgo * 7);
   // Haftanın sonu: bu hafta → bugün; geçmiş hafta → bir sonraki pazartesiden önceki gün (o haftanın pazarı)
@@ -966,9 +997,24 @@ function renderKarne() {
       ${catEntries[0] ? `<span class="krn-pill">${KARNE_CAT[catEntries[0][0]] || catEntries[0][0]}</span>` : ''}
     </div>
     ${catRows ? `<div class="krn-section-lbl">Kategori dağılımı</div><div class="krn-cats">${catRows}</div>` : ''}
+    ${bestHourBlock()}
     <div class="krn-note">${note}</div>
     ${footer}
   `;
+}
+
+// En verimli saat kartı (tüm zaman histogramından). Karnede kategori dağılımının altında.
+function bestHourBlock() {
+  const bh = bestHourInfo();
+  if (!bh.ready) {
+    const need = 6 - (bh.total || 0);
+    return `<div class="krn-besthour building">⏰ En verimli saatin: <b>${need} görev daha</b> bitince ortaya çıkar (veri birikiyor).</div>`;
+  }
+  return `<div class="krn-besthour">
+    <div class="krn-besthour-icon">⏰</div>
+    <div class="krn-besthour-txt">En çok <b>${bh.label}</b> arası (${bh.part}) iş bitiriyorsun.<br>
+      <span class="krn-besthour-sub">Zor görevleri bu saate koymayı dene.</span></div>
+  </div>`;
 }
 
 // ============ DİYET KARNESİ (haftalık / aylık özet) ============
@@ -2550,6 +2596,252 @@ function deleteCountdown(id) {
   showToast('Geri sayım silindi', 'info', 2500);
 }
 
+// ============ OKUL (ders programı + sınavlar) ============
+// data.school = { timetable:{'1'..'5':[dersler]}, exams:[{id,subject,date,topics}] }
+// Ödevler ayrı: mevcut görev sisteminde (Ödev/Özel Ders kategorileri) kalır.
+const SCHOOL_DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma'];
+const SCHOOL_DAYS_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum'];
+
+function ensureSchool() {
+  if (!data.school) data.school = { timetable: {}, exams: [] };
+  if (!data.school.timetable) data.school.timetable = {};
+  if (!data.school.exams) data.school.exams = [];
+  return data.school;
+}
+
+// JS getDay: 0=Paz..6=Cmt. Program anahtarı 1..5 (Pzt..Cuma). Hafta sonu → null.
+function todaySchoolKey() {
+  const d = new Date().getDay();
+  return (d >= 1 && d <= 5) ? String(d) : null;
+}
+
+function renderSchool() {
+  const s = ensureSchool();
+  const key = todaySchoolKey();
+  // Bugünün dersleri
+  const todayEl = document.getElementById('schoolToday');
+  if (todayEl) {
+    const lessons = key ? (s.timetable[key] || []) : [];
+    if (!key) todayEl.innerHTML = '<span class="school-today-empty">Bugün hafta sonu — ders yok.</span>';
+    else if (!lessons.length) todayEl.innerHTML = '<span class="school-today-empty">Bugüne ders girilmemiş — programı düzenle.</span>';
+    else todayEl.innerHTML = '<span class="school-today-lbl">Bugün:</span> ' +
+      lessons.map(l => `<span class="school-chip">${escapeHtml(l)}</span>`).join('');
+  }
+  // Haftalık program grid
+  const gridEl = document.getElementById('schoolGrid');
+  if (gridEl) {
+    gridEl.innerHTML = SCHOOL_DAYS.map((name, i) => {
+      const k = String(i + 1);
+      const lessons = s.timetable[k] || [];
+      const chips = lessons.length
+        ? lessons.map(l => `<span class="school-gchip">${escapeHtml(l)}</span>`).join('')
+        : '<span class="school-gempty">—</span>';
+      return `<div class="school-gcol ${k === key ? 'today' : ''}">
+        <div class="school-gday">${SCHOOL_DAYS_SHORT[i]}</div>
+        <div class="school-gchips">${chips}</div>
+      </div>`;
+    }).join('');
+  }
+  // Sınavlar
+  const examEl = document.getElementById('schoolExams');
+  if (examEl) {
+    const list = (s.exams || []).slice()
+      .map(e => ({ ...e, days: daysUntilCountdown(e.date) }))
+      .filter(e => e.days == null || e.days >= -3)
+      .sort((a, b) => (a.days ?? 999) - (b.days ?? 999));
+    if (!list.length) examEl.innerHTML = '<div class="school-exam-empty">Yaklaşan sınav yok.</div>';
+    else examEl.innerHTML = list.map(e => {
+      let cls = '';
+      if (e.days != null) { if (e.days < 0) cls = 'past'; else if (e.days <= 3) cls = 'urgent'; else if (e.days <= 10) cls = 'warn'; }
+      const dstr = e.days == null ? '' : (e.days < 0 ? 'geçti' : (e.days === 0 ? 'BUGÜN' : `${e.days} gün`));
+      return `<div class="school-exam ${cls}">
+        <div class="school-exam-days">${dstr}</div>
+        <div class="school-exam-info">
+          <div class="school-exam-subj">${escapeHtml(e.subject || 'Sınav')}</div>
+          <div class="school-exam-meta">${formatTrDate(e.date)}${e.topics ? ' · ' + escapeHtml(e.topics) : ''}</div>
+        </div>
+        <button class="del-btn" onclick="deleteExam(${e.id})" title="Sil">✕</button>
+      </div>`;
+    }).join('');
+  }
+  // Rozet: bugünün ders sayısı + yaklaşan sınav (7 gün)
+  const badge = document.getElementById('schoolBadge');
+  if (badge) {
+    const lc = key ? (s.timetable[key] || []).length : 0;
+    const soon = (s.exams || []).filter(e => { const d = daysUntilCountdown(e.date); return d != null && d >= 0 && d <= 7; }).length;
+    const bits = [];
+    if (lc) bits.push(`${lc} ders`);
+    if (soon) bits.push(`${soon} sınav`);
+    badge.textContent = bits.length ? bits.join(' · ') : '';
+  }
+}
+
+function openTimetable() {
+  const s = ensureSchool();
+  for (let i = 1; i <= 5; i++) {
+    const inp = document.getElementById('ttDay' + i);
+    if (inp) inp.value = (s.timetable[String(i)] || []).join(', ');
+  }
+  document.getElementById('timetableModal').classList.add('active');
+}
+function closeTimetable() {
+  document.getElementById('timetableModal').classList.remove('active');
+}
+function saveTimetable() {
+  const s = ensureSchool();
+  for (let i = 1; i <= 5; i++) {
+    const inp = document.getElementById('ttDay' + i);
+    if (!inp) continue;
+    const lessons = inp.value.split(',').map(x => x.trim()).filter(Boolean).slice(0, 12);
+    if (lessons.length) s.timetable[String(i)] = lessons;
+    else delete s.timetable[String(i)];
+  }
+  save();
+  renderSchool();
+  closeTimetable();
+  showToast('Ders programı kaydedildi', 'success', 2500);
+}
+
+function addExam() {
+  const s = ensureSchool();
+  const subj = document.getElementById('examSubject').value.trim();
+  const date = document.getElementById('examDate').value;
+  const topics = document.getElementById('examTopics').value.trim();
+  if (!subj) { showToast('Ders adı yaz — örn. "Matematik"', 'warning', 3000); return; }
+  if (!date) { showToast('Sınav tarihi seç', 'warning', 3000); return; }
+  s.exams.push({ id: Date.now(), subject: subj, date, topics });
+  document.getElementById('examSubject').value = '';
+  document.getElementById('examDate').value = '';
+  document.getElementById('examTopics').value = '';
+  save();
+  renderSchool();
+  showToast(`"${subj}" sınavı eklendi`, 'success', 2500);
+}
+function deleteExam(id) {
+  const s = ensureSchool();
+  s.exams = (s.exams || []).filter(x => x.id !== id);
+  save();
+  renderSchool();
+  showToast('Sınav silindi', 'info', 2000);
+}
+
+// ============ GLOBAL ARAMA ============
+function trLower(s) { return (s == null ? '' : String(s)).toLocaleLowerCase('tr-TR'); }
+
+function openSearchModal() {
+  const i = document.getElementById('globalSearchInput');
+  if (i) i.value = '';
+  runGlobalSearch();
+  document.getElementById('searchModal').classList.add('active');
+  setTimeout(() => { if (i) i.focus(); }, 60);
+}
+function closeSearchModal() {
+  document.getElementById('searchModal').classList.remove('active');
+}
+function gsMatch(q, ...fields) { return fields.some(f => f && trLower(f).includes(q)); }
+
+function runGlobalSearch() {
+  const el = document.getElementById('globalSearchResults');
+  if (!el) return;
+  const raw = (document.getElementById('globalSearchInput').value || '').trim();
+  const q = trLower(raw);
+  if (q.length < 2) { el.innerHTML = '<div class="gsearch-hint">En az 2 harf yaz…</div>'; return; }
+  const groups = [];
+  const tasks = (data.tasks || []).filter(t => gsMatch(q, t.text, t.notes)).slice(0, 8);
+  if (tasks.length) groups.push({ title: 'Görevler', items: tasks.map(t => ({ label: t.text, sub: t.done ? 'bitti' : (t.due ? ('son: ' + t.due) : ''), onclick: `gsGoTask(${t.id})` })) });
+  const dumps = (data.dumps || []).filter(d => gsMatch(q, d.text)).slice(0, 6);
+  if (dumps.length) groups.push({ title: 'Zihin boşalt', items: dumps.map(d => ({ label: d.text, sub: '', onclick: "gsGo('tasks')" })) });
+  const jr = (data.journal || []).filter(j => gsMatch(q, j.text, j.reflection)).slice(0, 5);
+  if (jr.length) groups.push({ title: 'Günlük', items: jr.map(j => ({ label: (j.text || j.reflection || '').slice(0, 70), sub: j.date || '', onclick: "gsGo('tasks')" })) });
+  const meals = [];
+  const dd = (data.diet && data.diet.days) || {};
+  Object.keys(dd).sort().reverse().forEach(dt => {
+    (dd[dt].meals || []).forEach(m => { if (gsMatch(q, m.name)) meals.push({ label: m.name, sub: dt + (m.kcal ? (' · ' + m.kcal + ' kcal') : ''), onclick: "gsGo('diet')" }); });
+  });
+  if (meals.length) groups.push({ title: 'Besin', items: meals.slice(0, 6) });
+  const stk = (data.watchlist || []).filter(w => gsMatch(q, w.symbol, w.name)).slice(0, 6);
+  if (stk.length) groups.push({ title: 'Borsa', items: stk.map(w => ({ label: w.symbol + (w.name ? (' · ' + w.name) : ''), sub: w.price != null ? String(w.price) : '', onclick: "gsGo('stocks')" })) });
+  const school = (data.school || {});
+  const exams = (school.exams || []).filter(e => gsMatch(q, e.subject, e.topics)).slice(0, 5);
+  if (exams.length) groups.push({ title: 'Sınavlar', items: exams.map(e => ({ label: e.subject, sub: (e.date || '') + (e.topics ? (' · ' + e.topics) : ''), onclick: "gsGoSchool()" })) });
+
+  if (!groups.length) { el.innerHTML = '<div class="gsearch-hint">Sonuç yok.</div>'; return; }
+  el.innerHTML = groups.map(g =>
+    `<div class="gsearch-group"><div class="gsearch-group-title">${g.title}</div>` +
+    g.items.map(it => `<div class="gsearch-item" onclick="${it.onclick}"><div class="gsearch-item-label">${escapeHtml(it.label || '')}</div>${it.sub ? `<div class="gsearch-item-sub">${escapeHtml(it.sub)}</div>` : ''}</div>`).join('') +
+    `</div>`
+  ).join('');
+}
+
+function gsGo(tab) { closeSearchModal(); showTab(tab, document.querySelector(`[data-tab="${tab}"]`)); }
+function gsGoTask(id) {
+  closeSearchModal();
+  showTab('tasks', document.querySelector('[data-tab="tasks"]'));
+  const t = (data.tasks || []).find(x => x.id === id);
+  const si = document.getElementById('taskSearch');
+  if (si && t) { si.value = (t.text || '').slice(0, 24); renderTasks(); }
+}
+function gsGoSchool() {
+  closeSearchModal();
+  showTab('tasks', document.querySelector('[data-tab="tasks"]'));
+  const ss = document.getElementById('schoolSection');
+  if (ss) { ss.open = true; renderSchool(); setTimeout(() => ss.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80); }
+}
+
+// ============ ONBOARDING (ilk açılış turu) ============
+const ONBOARD_STEPS = [
+  { icon: '👋', title: 'Aidan\'a hoş geldin', body: 'Görev, odak, okul, borsa ve diyet — hepsi tek yerde. ADHD beynine göre: sade, parçalı, baskısız.' },
+  { icon: '⭐', title: 'Bugünün 3\'ü', body: 'Günde en fazla 3 önemli iş seç. Gerisi listede bekler, seni dağıtmaz. Bittikçe üstünü çiz.' },
+  { icon: '🏫', title: 'Okul & sınavlar', body: 'Görevler sekmesindeki "Okul" panelinde ders programın ve sınav geri sayımların durur. Ödevleri görev olarak eklersin.' },
+  { icon: '🎧', title: 'Odak modu', body: 'Dağıldığında 25 dk odak sayacı başlat — telefon kilitliyken bile doğru sayar. İlk adımı at, gerisi gelir.' },
+];
+let _obStep = 0;
+
+function maybeShowOnboarding() {
+  try {
+    if (localStorage.getItem('aidan_onboarded')) return;
+    if ((data.tasks || []).length > 0) { localStorage.setItem('aidan_onboarded', '1'); return; }
+  } catch (e) { return; }
+  _obStep = 0;
+  renderOnboard();
+  const m = document.getElementById('onboardModal');
+  if (m) m.classList.add('active');
+}
+
+function renderOnboard() {
+  const last = _obStep === ONBOARD_STEPS.length - 1;
+  const st = ONBOARD_STEPS[_obStep];
+  const body = document.getElementById('onboardBody');
+  if (body) body.innerHTML = `<div class="onboard-icon">${st.icon}</div><div class="onboard-title">${st.title}</div><div class="onboard-text">${st.body}</div>`;
+  const dots = document.getElementById('onboardDots');
+  if (dots) dots.innerHTML = ONBOARD_STEPS.map((_, i) => `<span class="onboard-dot ${i === _obStep ? 'active' : ''}"></span>`).join('');
+  const act = document.getElementById('onboardActions');
+  if (act) {
+    if (!last) act.innerHTML = `<button class="secondary" onclick="finishOnboard(false)">Geç</button><button onclick="obNext()">Devam →</button>`;
+    else act.innerHTML = `<button class="secondary" onclick="finishOnboard(false)">Boş başla</button><button onclick="finishOnboard(true)">Örnek görevlerle başla</button>`;
+  }
+}
+function obNext() { if (_obStep < ONBOARD_STEPS.length - 1) { _obStep++; renderOnboard(); } }
+
+function finishOnboard(addSamples) {
+  try { localStorage.setItem('aidan_onboarded', '1'); } catch (e) {}
+  const m = document.getElementById('onboardModal');
+  if (m) m.classList.remove('active');
+  if (addSamples && typeof makeTask === 'function') {
+    const t1 = makeTask({ text: 'Matematik ödevini bitir', category: 'odev', priority: 'urgent', estimateMin: 30 });
+    t1.mitDate = today();
+    const t2 = makeTask({ text: 'Odayı topla', category: 'ev', estimateMin: 15 });
+    const t3 = makeTask({ text: '10 dakika kitap oku', category: 'kisisel', estimateMin: 10 });
+    data.tasks = data.tasks || [];
+    data.tasks.push(t1, t2, t3);
+    save();
+    renderTasks();
+    showToast('3 örnek görev eklendi — istediğini sil ya da düzenle', 'success', 4000);
+  } else {
+    showToast('Hazırsın — üstteki kutuya ilk görevini yaz', 'info', 3500);
+  }
+}
+
 function testNotif() {
   notify('Test bildirimi', 'Aidan hatırlatma sistemi çalışıyor.', { tag: 'aidan-test' });
 }
@@ -3401,6 +3693,8 @@ document.getElementById('pomoCount').textContent = data.pomoToday.count;
 updateTimerDisplay();
 restoreTimerState();
 renderCountdowns();
+renderSchool();
+maybeShowOnboarding();
 
 // ============ AIDAN'A SOR — sohbet / düşünme ortağı ============
 const CHAT_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/chat';

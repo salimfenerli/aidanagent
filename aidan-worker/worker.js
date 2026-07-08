@@ -647,6 +647,20 @@ async function buildWeekly(env, data) {
     estimateNote = `Tahmin ${Math.round(avgEst)}dk → gerçek ${Math.round(avgAct)}dk (${ratio}x)`;
   }
 
+  // En verimli saat (data.hourStats histogramı — PWA'da görev bitince dolar)
+  let bestHourNote = '';
+  {
+    const hs = data.hourStats || {};
+    let total = 0; const arr = new Array(24).fill(0);
+    for (let h = 0; h < 24; h++) { const c = hs[String(h)] || 0; arr[h] = c; total += c; }
+    if (total >= 8) {
+      let bs = 0, bsum = -1;
+      for (let h = 0; h < 24; h++) { const su = arr[h] + arr[(h + 1) % 24]; if (su > bsum) { bsum = su; bs = h; } }
+      const pad = n => String(n).padStart(2, '0');
+      bestHourNote = `${pad(bs)}:00-${pad((bs + 2) % 24)}:00`;
+    }
+  }
+
   const catLabels = { odev: 'Ödev', ders: 'Özel Ders', ev: 'Ev', kisisel: 'Kişisel' };
   const factsForAi = [
     `Bu hafta ${doneThisWeek.length} görev bitirdi.`,
@@ -655,6 +669,7 @@ async function buildWeekly(env, data) {
     pomoTotal ? `${pomoTotal} pomodoro yaptı.` : '',
     overdueNow.length ? `${overdueNow.length} gecikmiş görev hâlâ bekliyor.` : '',
     estimateNote ? `Tahmin doğruluğu: ${estimateNote}.` : '',
+    bestHourNote ? `En verimli olduğu saat aralığı ${bestHourNote}.` : '',
   ].filter(Boolean).join(' ');
 
   let aiComment = '';
@@ -684,6 +699,7 @@ async function buildWeekly(env, data) {
   if (pomoTotal) lines.push(`🎧 Pomodoro: ${pomoTotal}`);
   if (overdueNow.length) lines.push(`⚠️ Gecikmiş bekleyen: ${overdueNow.length}`);
   if (estimateNote) lines.push(`⏱️ ${estimateNote}`);
+  if (bestHourNote) lines.push(`⏰ En verimli saat: ${bestHourNote}`);
   if (aiComment) {
     lines.push('');
     lines.push(`💜 ${aiComment}`);

@@ -29,7 +29,7 @@ function showTab(name, btn) {
       bd.addEventListener('toggle', () => { if (bd.open) loadBackupList(); });
     }
   }
-  if (name === 'tasks') renderCountdowns();
+  if (name === 'tasks') { renderCountdowns(); renderSchool(); }
   if (name === 'chat') { renderChatMessages(); setTimeout(() => { const ci = document.getElementById('chatInput'); if (ci) ci.focus(); }, 60); }
   if (name === 'plan') renderDayPlan();
   if (name === 'diet') { _dietDate = null; renderDiet(); }
