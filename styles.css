@@ -555,6 +555,10 @@
   .stock-news-item:hover { border-color: var(--accent); }
   .stock-news-item .sn-title { color: var(--text); font-size:0.86em; font-weight:600; line-height:1.32; }
   .stock-news-item .sn-meta { color: var(--text-faint); font-size:0.72em; margin-top:3px; }
+  .sn-sent { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:7px; vertical-align:middle; background:var(--border); flex:none; }
+  .sn-sent-pos { background: var(--success); }
+  .sn-sent-neg { background: var(--danger); }
+  .sn-sent-neu { background: var(--text-faint); }
   .stock-chart-ranges { display:flex; gap:6px; margin-bottom:8px; }
   .stock-chart-ranges button {
     flex:1; background: transparent; border:1px solid var(--border-soft); color: var(--text-muted);
@@ -1608,6 +1612,7 @@
   /* Onboarding */
   .onboard-modal { text-align: center; }
   .onboard-icon { font-size: 2.6em; margin: 6px 0 10px; }
+  .onboard-icon svg { width: 46px; height: 46px; color: var(--accent); }
   .onboard-title { font-size: 1.15em; font-weight: 700; color: var(--text); margin-bottom: 8px; }
   .onboard-text { font-size: 0.9em; color: var(--text-muted); line-height: 1.6; margin-bottom: 18px; }
   .onboard-dots { display: flex; justify-content: center; gap: 7px; margin-bottom: 16px; }

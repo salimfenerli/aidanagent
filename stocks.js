@@ -71,7 +71,7 @@ function addStock() {
   data.watchlist.unshift({
     symbol: raw, ySymbol, market,
     name: raw, price: null, prevClose: null, changePct: null, currency: 'TRY',
-    alarmAbove: null, alarmBelow: null, lastAlertedAbove: false, lastAlertedBelow: false,
+    alarmAbove: null, alarmBelow: null, alarmPctDown: null, lastAlertedAbove: false, lastAlertedBelow: false, lastAlertedPct: false,
     qty: null, cost: null,
     fetchedAt: null, error: null
   });
@@ -95,6 +95,8 @@ async function setStockAlarm(sym) {
   if (above === null) return; // iptal
   const below = await aidanPrompt(`${sym} — alt alarm`, `Bu fiyatın ALTINA inince haber ver. Boş = alarm yok.`, w.alarmBelow != null ? String(w.alarmBelow) : '');
   if (below === null) return;
+  const pctDown = await aidanPrompt(`${sym} — günlük düşüş alarmı`, `Bugün yüzde kaç DÜŞERSE haber vereyim? Örn: 5 = %5 düşüş. Boş = kapalı.`, w.alarmPctDown != null ? String(w.alarmPctDown) : '');
+  if (pctDown === null) return;
   const parseNum = (s) => {
     s = (s || '').trim().replace(',', '.');
     if (!s) return null;
@@ -103,11 +105,13 @@ async function setStockAlarm(sym) {
   };
   w.alarmAbove = parseNum(above);
   w.alarmBelow = parseNum(below);
+  w.alarmPctDown = parseNum(pctDown);
   w.lastAlertedAbove = false;
   w.lastAlertedBelow = false;
+  w.lastAlertedPct = false;
   save();
   renderStocks();
-  if (w.alarmAbove != null || w.alarmBelow != null) {
+  if (w.alarmAbove != null || w.alarmBelow != null || w.alarmPctDown != null) {
     showToast(`${sym} alarmı kuruldu`, 'success', 2500);
   } else {
     showToast(`${sym} alarmı kapatıldı`, 'info', 2000);
@@ -268,6 +272,7 @@ function renderStocks() {
     const alarmBadges = [];
     if (w.alarmAbove != null) alarmBadges.push(`<span class="stock-alarm-badge">▲ ${formatStockPrice(w.alarmAbove)}</span>`);
     if (w.alarmBelow != null) alarmBadges.push(`<span class="stock-alarm-badge">▼ ${formatStockPrice(w.alarmBelow)}</span>`);
+    if (w.alarmPctDown != null) alarmBadges.push(`<span class="stock-alarm-badge">▼ %${w.alarmPctDown}</span>`);
 
     // Pozisyon (holding) — adet + ortalama maliyet
     let positionHtml = '';
@@ -694,17 +699,44 @@ async function loadStockNews() {
       listEl.innerHTML = '<div class="stock-chart-loading">Bu hisse için güncel haber bulunamadı. BIST hisselerinde haber az olabilir — ABD/kripto sembollerinde daha zengin.</div>';
       return;
     }
-    listEl.innerHTML = _stockNewsItems.map(n => {
+    listEl.innerHTML = _stockNewsItems.map((n, i) => {
       const when = n.time ? relTimeFromUnix(n.time) : '';
       return `<a class="stock-news-item" href="${escapeHtml(n.link)}" target="_blank" rel="noopener noreferrer">
-        <div class="sn-title">${escapeHtml(n.title)}</div>
+        <div class="sn-title"><span class="sn-sent" id="snSent${i}" title="analiz ediliyor…"></span>${escapeHtml(n.title)}</div>
         <div class="sn-meta">${escapeHtml(n.publisher || '')}${when ? ' · ' + when : ''}</div>
       </a>`;
     }).join('');
     aiBtn.disabled = false;
+    loadNewsSentiment();
   } catch (e) {
     listEl.innerHTML = `<div class="stock-chart-loading">${escapeHtml(e.message)}</div>`;
   }
+}
+
+async function loadNewsSentiment() {
+  const items = _stockNewsItems || [];
+  if (!items.length) return;
+  try {
+    const token = window._supa ? (await window._supa.auth.getSession()).data.session?.access_token : null;
+    if (!token) return;
+    const headlines = items.map(n => n.title).slice(0, 12);
+    const r = await fetch(STOCK_NEWS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ sentiment: true, headlines }),
+    });
+    if (!r.ok) return;
+    const j = await r.json().catch(() => ({}));
+    const sents = Array.isArray(j.sentiments) ? j.sentiments : [];
+    const MAP = { pos: { c: 'pos', t: 'Olumlu' }, neg: { c: 'neg', t: 'Olumsuz' }, neu: { c: 'neu', t: 'Nötr' } };
+    sents.forEach((s, i) => {
+      const el = document.getElementById('snSent' + i);
+      if (!el) return;
+      const m = MAP[s] || MAP.neu;
+      el.classList.add('sn-sent-' + m.c);
+      el.title = m.t;
+    });
+  } catch (e) { /* sessiz — nokta gri kalır */ }
 }
 
 async function aiStockNews() {
@@ -1780,7 +1812,7 @@ function confirmPortfolioImport() {
         name: sym,
         // AI son fiyatı okuduysa geçici göster (Yahoo yenileyene kadar kâr/zarar hemen çıksın)
         price: h.price != null ? h.price : null, prevClose: null, changePct: null, currency: 'TRY',
-        alarmAbove: null, alarmBelow: null, lastAlertedAbove: false, lastAlertedBelow: false,
+        alarmAbove: null, alarmBelow: null, alarmPctDown: null, lastAlertedAbove: false, lastAlertedBelow: false, lastAlertedPct: false,
         qty: h.qty != null ? h.qty : null, cost: h.cost != null ? h.cost : null,
         fetchedAt: null, error: null,
       });

@@ -248,8 +248,8 @@
         </div>
       </div>
       <div class="timer-controls">
-        <button onclick="startTimer()" id="startBtn">▶️ Başla</button>
-        <button class="secondary" onclick="pauseTimer()">⏸️ Duraklat</button>
+        <button onclick="startTimer()" id="startBtn"><svg class="icon fill" viewBox="0 0 24 24" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>Başla</button>
+        <button class="secondary" onclick="pauseTimer()"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>Duraklat</button>
         <button class="secondary" onclick="resetTimer()">Sıfırla</button>
       </div>
       <div class="timer-presets">
@@ -790,7 +790,7 @@
     <div class="modal-task" id="suggestTaskText">—</div>
     <div class="modal-meta" id="suggestMeta"></div>
     <div class="modal-actions">
-      <button onclick="acceptSuggestion(false)">▶️ Başla</button>
+      <button onclick="acceptSuggestion(false)"><svg class="icon fill" viewBox="0 0 24 24" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>Başla</button>
       <button class="secondary" onclick="aiSuggestTask()" id="aiSuggestBtn" title="AI ile öner — energy + saat context'iyle">AI'a sor</button>
     </div>
     <button class="modal-close" onclick="closeSuggestModal()">Kapat</button>

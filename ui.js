@@ -2786,10 +2786,10 @@ function gsGoSchool() {
 
 // ============ ONBOARDING (ilk açılış turu) ============
 const ONBOARD_STEPS = [
-  { icon: '👋', title: 'Aidan\'a hoş geldin', body: 'Görev, odak, okul, borsa ve diyet — hepsi tek yerde. ADHD beynine göre: sade, parçalı, baskısız.' },
-  { icon: '⭐', title: 'Bugünün 3\'ü', body: 'Günde en fazla 3 önemli iş seç. Gerisi listede bekler, seni dağıtmaz. Bittikçe üstünü çiz.' },
-  { icon: '🏫', title: 'Okul & sınavlar', body: 'Görevler sekmesindeki "Okul" panelinde ders programın ve sınav geri sayımların durur. Ödevleri görev olarak eklersin.' },
-  { icon: '🎧', title: 'Odak modu', body: 'Dağıldığında 25 dk odak sayacı başlat — telefon kilitliyken bile doğru sayar. İlk adımı at, gerisi gelir.' },
+  { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>', title: 'Aidan\'a hoş geldin', body: 'Görev, odak, okul, borsa ve diyet — hepsi tek yerde. ADHD beynine göre: sade, parçalı, baskısız.' },
+  { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>', title: 'Bugünün 3\'ü', body: 'Günde en fazla 3 önemli iş seç. Gerisi listede bekler, seni dağıtmaz. Bittikçe üstünü çiz.' },
+  { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>', title: 'Okul & sınavlar', body: 'Görevler sekmesindeki "Okul" panelinde ders programın ve sınav geri sayımların durur. Ödevleri görev olarak eklersin.' },
+  { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>', title: 'Odak modu', body: 'Dağıldığında 25 dk odak sayacı başlat — telefon kilitliyken bile doğru sayar. İlk adımı at, gerisi gelir.' },
 ];
 let _obStep = 0;
 

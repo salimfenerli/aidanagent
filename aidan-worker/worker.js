@@ -2482,6 +2482,33 @@ async function handleStockNewsApi(request, env) {
   if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
 
   // --- Mod 2: AI özet ---
+  if (body.sentiment) {
+    const headlines = Array.isArray(body.headlines)
+      ? body.headlines.map(h => String(h || '').trim()).filter(Boolean).slice(0, 12)
+      : [];
+    if (!headlines.length) return jsonCors({ error: 'no headlines' }, 400, cors);
+    const sysP = `Her haber başlığını bir hisse yatırımcısı gözünden duyguya göre sınıfla: "pos" (olumlu/iyi gelişme), "neg" (olumsuz/kötü gelişme), "neu" (nötr/belirsiz). SADECE bir JSON dizi döndür; her eleman {"i":sira,"s":"pos|neg|neu"}. Açıklama, metin, İngilizce cümle YOK.`;
+    const userM = headlines.map((h, i) => `${i + 1}. ${h}`).join('\n');
+    try {
+      const r = await env.AI.run(AI_MODEL, {
+        messages: [{ role: 'system', content: sysP }, { role: 'user', content: userM }],
+        max_tokens: 300, temperature: 0.1,
+      });
+      let raw = typeof r.response === 'string' ? r.response : JSON.stringify(r.response);
+      let arr = [];
+      const m = raw.match(/\[[\s\S]*\]/);
+      if (m) { try { arr = JSON.parse(m[0]); } catch {} }
+      const sentiments = headlines.map((_, i) => {
+        const found = Array.isArray(arr) ? arr.find(x => x && (x.i === i + 1 || x.i === i)) : null;
+        const s = found && found.s;
+        return (s === 'pos' || s === 'neg' || s === 'neu') ? s : 'neu';
+      });
+      return jsonCors({ sentiments }, 200, cors);
+    } catch (e) {
+      return jsonCors({ error: e.message }, 500, cors);
+    }
+  }
+
   if (body.summarize) {
     const symbol = String(body.symbol || '').trim().toUpperCase().slice(0, 20);
     const headlines = Array.isArray(body.headlines)
@@ -3727,6 +3754,15 @@ async function runStockCheckForUser(env, u) {
         w.lastAlertedBelow = true; dirty = true;
       }
     } else if (w.lastAlertedBelow) { w.lastAlertedBelow = false; dirty = true; }
+    if (w.alarmPctDown != null && q.prevClose) {
+      const chg = (q.price - q.prevClose) / q.prevClose * 100;
+      if (chg <= -Math.abs(w.alarmPctDown)) {
+        if (!w.lastAlertedPct) {
+          alerts.push(`📉 ${w.symbol} bugün %${chg.toFixed(1)} — %${Math.abs(w.alarmPctDown)} düşüş eşiğini aştı!`);
+          w.lastAlertedPct = true; dirty = true;
+        }
+      } else if (w.lastAlertedPct) { w.lastAlertedPct = false; dirty = true; }
+    }
   }
   if (alerts.length) {
     const payload = { title: '🔔 Borsa alarmı', message: alerts.join('\n') };
