@@ -491,6 +491,10 @@
   /* Görselden portföy onay modalı */
   .pf-import-status { font-size: 0.9em; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5; }
   .pf-import-status.error { color: var(--warning); }
+  .pf-import-sync { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; padding: 12px; border-radius: 12px; background: var(--bg-elev); cursor: pointer; }
+  .pf-import-sync input { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--secondary); flex: 0 0 auto; }
+  .pf-import-sync span { font-size: 0.92em; line-height: 1.4; }
+  .pf-import-sync small { color: var(--text-muted); }
   .pf-import-list { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; }
   .pf-import-row { display: flex; flex-direction: column; gap: 7px; background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: 10px; padding: 9px 11px; }
   .pf-import-row input { padding: 7px 8px; font-size: 0.88em; border-radius: 7px; min-width: 0; width: 100%; box-sizing: border-box; }

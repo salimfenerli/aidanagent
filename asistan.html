@@ -832,6 +832,10 @@
     <div class="modal-title">Görselden portföy</div>
     <div id="portfolioImportStatus" class="pf-import-status">Görsel okunuyor…</div>
     <div id="portfolioImportList" class="pf-import-list"></div>
+    <label id="pfImportSyncRow" class="pf-import-sync" style="display:none;">
+      <input type="checkbox" id="pfImportSync" onchange="togglePfImportSync(this.checked)">
+      <span><b>Portföyü bununla değiştir</b><br><small>Fotoğrafta olmayan pozisyonlar satılmış sayılır, kaldırılır. (Sadece izleme listendeki fiyat takipleri kalır.)</small></span>
+    </label>
     <div class="modal-actions" id="portfolioImportActions" style="margin-top:14px; display:none;">
       <button onclick="confirmPortfolioImport()" id="pfImportConfirmBtn">✅ Portföye ekle</button>
       <button class="secondary" onclick="closePortfolioImport()">İptal</button>

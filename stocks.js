@@ -1739,11 +1739,24 @@ function setPfImportStatus(msg, isError) {
   el.classList.toggle('error', !!isError);
 }
 
+let _pfImportSync = false; // "portfoyu fotografla degistir" modu (satilanlari kaldir)
+
 function openPortfolioImport() {
   _pfImportHoldings = [];
+  _pfImportSync = false;
   document.getElementById('portfolioImportList').innerHTML = '';
   document.getElementById('portfolioImportActions').style.display = 'none';
+  const syncRow = document.getElementById('pfImportSyncRow');
+  if (syncRow) syncRow.style.display = 'none';
+  const syncChk = document.getElementById('pfImportSync');
+  if (syncChk) syncChk.checked = false;
   document.getElementById('portfolioImportModal').classList.add('active');
+}
+
+function togglePfImportSync(on) {
+  _pfImportSync = !!on;
+  const btn = document.getElementById('pfImportConfirmBtn');
+  if (btn) btn.textContent = _pfImportSync ? '\ud83d\udd04 Portfoyu yenile' : '\u2705 Portfoye ekle';
 }
 
 function closePortfolioImport() {
@@ -1773,6 +1786,8 @@ function renderPfImportList() {
     </div>
   `).join('');
   document.getElementById('portfolioImportActions').style.display = 'flex';
+  const syncRow = document.getElementById('pfImportSyncRow');
+  if (syncRow) syncRow.style.display = 'flex';
 }
 
 function updatePfImport(i, field, val) {
@@ -1819,11 +1834,26 @@ function confirmPortfolioImport() {
       added++;
     }
   }
+  // "Yenile" modu: fotografta olmayan pozisyonlar satilmis sayilir -> pozisyonu kaldir (karti izleme olarak birak)
+  let removed = 0;
+  if (_pfImportSync) {
+    const importedSyms = new Set(_pfImportHoldings.map(h => (h.symbol || '').trim().toUpperCase()).filter(Boolean));
+    for (const w of data.watchlist) {
+      const isHolding = w.qty != null && w.qty > 0 && w.cost != null;
+      if (isHolding && !importedSyms.has(w.symbol)) {
+        w.qty = null; w.cost = null; // pozisyon kalkti, hisse izleme listesinde kalir
+        removed++;
+      }
+    }
+  }
   save();
   renderStocks();
   refreshStocks(); // fiyatları hemen çek
   closePortfolioImport();
-  showToast(`${added} eklendi${updated ? `, ${updated} güncellendi` : ''}`, 'success', 3500);
+  const msg = _pfImportSync
+    ? `Portfoy yenilendi · ${added} eklendi, ${updated} güncellendi${removed ? `, ${removed} satildi (kaldirildi)` : ''}`
+    : `${added} eklendi${updated ? `, ${updated} güncellendi` : ''}`;
+  showToast(msg, 'success', 3800);
 }
 
 function addTask() {
