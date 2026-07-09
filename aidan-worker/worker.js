@@ -3414,27 +3414,53 @@ function parseMealItemsJson(raw) {
 }
 
 // USDA FoodData Central — İngilizce besin adı → 100g makroları, porsiyona ölçekle. Key yoksa null.
+// Tek sonuç yerine ilk 10 adayı çeker; ada uyum + çiğ/pişmiş + kcal-makro tutarlılığına
+// göre en iyi adayı seçer (pageSize=1 yanlış eşleşmesini azaltır).
 async function usdaLookup(env, enName, grams) {
   const key = env.USDA_API_KEY;
   if (!key || !enName) return null;
-  const url = `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(key)}&query=${encodeURIComponent(enName)}&pageSize=1&dataType=Foundation,SR%20Legacy`;
+  const url = `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(key)}&query=${encodeURIComponent(enName)}&pageSize=10&dataType=Foundation,SR%20Legacy`;
   let r;
   try { r = await fetch(url, { cf: { cacheTtl: 86400, cacheEverything: true } }); } catch { return null; }
   if (!r.ok) return null;
   let j; try { j = await r.json(); } catch { return null; }
-  const food = j && j.foods && j.foods[0];
-  if (!food) return null;
-  const ns = food.foodNutrients || [];
-  const get = (num, nameRe) => {
-    let n = ns.find(x => String(x.nutrientNumber) === num);
-    if (!n && nameRe) n = ns.find(x => nameRe.test(String(x.nutrientName || '')));
-    return n && typeof n.value === 'number' ? n.value : null;
+  const foods = (j && j.foods) || [];
+  if (!foods.length) return null;
+  const macrosOf = food => {
+    const ns = food.foodNutrients || [];
+    const get = (num, nameRe) => {
+      let n = ns.find(x => String(x.nutrientNumber) === num);
+      if (!n && nameRe) n = ns.find(x => nameRe.test(String(x.nutrientName || '')));
+      return n && typeof n.value === 'number' ? n.value : null;
+    };
+    return { kcal: get('208', /energy/i), protein: get('203', /protein/i), fat: get('204', /total lipid|fat/i), carb: get('205', /carbohydrate/i) };
   };
+  const ql = String(enName).toLowerCase();
+  const qWords = ql.split(/[^a-z]+/).filter(w => w.length > 2);
+  const wantRaw = /(^|\s)raw(\s|$)/.test(ql);
+  const wantCooked = /(cooked|roasted|boiled|grilled|baked|fried)/.test(ql);
+  let best = null, bestScore = -Infinity;
+  foods.forEach((food, idx) => {
+    const m = macrosOf(food);
+    if (m.kcal == null && m.protein == null) return;
+    const desc = String(food.description || '').toLowerCase();
+    let score = 0;
+    for (const w of qWords) if (desc.includes(w)) score += 2;                 // ad kelime örtüşmesi
+    const descCooked = /(cooked|roasted|boiled|grilled|baked|fried)/.test(desc);
+    const descRaw = /(^|,|\s)raw(\s|,|$)/.test(desc);
+    if (wantRaw) score += descRaw ? 1.5 : (descCooked ? -1.5 : 0);            // çiğ istendiyse çiğ tercih
+    if (wantCooked) score += descCooked ? 1.5 : (descRaw ? -1.5 : 0);         // pişmiş istendiyse pişmiş tercih
+    if (m.kcal != null && m.kcal > 0) {                                       // Atwater tutarlılığı bonusu
+      const at = 4 * (m.protein || 0) + 4 * (m.carb || 0) + 9 * (m.fat || 0);
+      if (Math.abs(m.kcal - at) / m.kcal < 0.15) score += 1;
+    }
+    score += Math.max(0, 3 - idx) * 0.1;                                      // USDA alaka sırasına hafif ağırlık
+    if (score > bestScore) { bestScore = score; best = { food, m }; }
+  });
+  if (!best) return null;
   const f = (grams || 100) / 100;
   const sc = v => v == null ? null : Math.round(v * f);
-  const kcal = get('208', /energy/i), protein = get('203', /protein/i), fat = get('204', /total lipid|fat/i), carb = get('205', /carbohydrate/i);
-  if (kcal == null && protein == null) return null;
-  return { name: food.description || enName, kcal: sc(kcal), protein: sc(protein), carb: sc(carb), fat: sc(fat) };
+  return { name: best.food.description || enName, kcal: sc(best.m.kcal), protein: sc(best.m.protein), carb: sc(best.m.carb), fat: sc(best.m.fat) };
 }
 
 // Curated yaygın Türk/temel besinler — PER 100g. USDA bunların çoğunu (simit, tavuk
@@ -3447,7 +3473,7 @@ const TR_FOOD_DB = [
   { k: ['tavuk döner'], kcal: 200, p: 22, c: 4, f: 10 },
   { k: ['tavuk çorbası'], kcal: 55, p: 4, c: 6, f: 2 },
   { k: ['hindi'], kcal: 189, p: 29, c: 0, f: 7 },
-  { k: ['dana bonfile', 'bonfile', 'biftek', 'dana rosto'], kcal: 200, p: 28, c: 0, f: 9 },
+  { k: ['dana bonfile', 'bonfile', 'biftek', 'dana rosto'], kcal: 150, p: 25, c: 0, f: 6 },
   { k: ['dana kıyma', 'kıyma'], kcal: 250, p: 26, c: 0, f: 16 },
   { k: ['kuzu pirzola', 'kuzu'], kcal: 282, p: 25, c: 0, f: 20 },
   { k: ['kavurma'], kcal: 280, p: 28, c: 1, f: 19 },
@@ -3563,13 +3589,62 @@ const TR_FOOD_DB = [
   { k: ['şarap'], kcal: 83, p: 0, c: 3, f: 0 },
   { k: ['yulaf', 'yulaf ezmesi'], kcal: 370, p: 13, c: 60, f: 7 },
   { k: ['granola', 'müsli'], kcal: 450, p: 10, c: 60, f: 18 },
+  // === Genisletme (Tem 2026) — yaygin Turk yemekleri per-100g ===
+  { k: ['hünkar beğendi'], kcal: 140, p: 9, c: 7, f: 9 },
+  { k: ['tas kebabı'], kcal: 150, p: 11, c: 6, f: 9 },
+  { k: ['orman kebabı'], kcal: 150, p: 10, c: 7, f: 9 },
+  { k: ['saç kavurma'], kcal: 185, p: 15, c: 4, f: 12 },
+  { k: ['ali nazik'], kcal: 165, p: 9, c: 6, f: 12 },
+  { k: ['güveç', 'sebzeli güveç'], kcal: 120, p: 8, c: 7, f: 7 },
+  { k: ['kadınbudu köfte'], kcal: 210, p: 13, c: 9, f: 14 },
+  { k: ['izmir köfte', 'i̇zmir köfte'], kcal: 200, p: 12, c: 9, f: 12 },
+  { k: ['etli patates'], kcal: 110, p: 6, c: 9, f: 6 },
+  { k: ['etli bamya'], kcal: 95, p: 6, c: 7, f: 5 },
+  { k: ['kapuska'], kcal: 75, p: 4, c: 6, f: 4 },
+  { k: ['lahana yemeği', 'kıymalı lahana'], kcal: 80, p: 4, c: 7, f: 4 },
+  { k: ['tavuklu pilav'], kcal: 185, p: 11, c: 22, f: 5 },
+  { k: ['nohutlu pilav'], kcal: 175, p: 5, c: 27, f: 5 },
+  { k: ['iç pilav', 'i̇ç pilav'], kcal: 175, p: 3, c: 28, f: 6 },
+  { k: ['şehriyeli pilav'], kcal: 165, p: 3, c: 29, f: 4 },
+  { k: ['zeytinyağlı barbunya', 'barbunya pilaki'], kcal: 95, p: 4, c: 12, f: 4 },
+  { k: ['zeytinyağlı pırasa', 'pırasa'], kcal: 70, p: 2, c: 9, f: 4 },
+  { k: ['kuru bamya'], kcal: 90, p: 3, c: 11, f: 4 },
+  { k: ['semizotu yemeği', 'semizotu'], kcal: 70, p: 3, c: 7, f: 4 },
+  { k: ['bakla yemeği'], kcal: 85, p: 4, c: 11, f: 3 },
+  { k: ['şakşuka'], kcal: 95, p: 2, c: 7, f: 7 },
+  { k: ['patlıcan kızartması', 'kızarmış patlıcan'], kcal: 150, p: 2, c: 10, f: 12 },
+  { k: ['fırında sebze', 'sebze graten'], kcal: 90, p: 3, c: 11, f: 4 },
+  { k: ['börülce', 'börülce yemeği'], kcal: 90, p: 5, c: 13, f: 3 },
+  { k: ['fava'], kcal: 130, p: 6, c: 16, f: 4 },
+  { k: ['piyaz'], kcal: 120, p: 5, c: 13, f: 6 },
+  { k: ['haydari'], kcal: 130, p: 5, c: 4, f: 11 },
+  { k: ['acılı ezme', 'ezme salata'], kcal: 70, p: 2, c: 7, f: 4 },
+  { k: ['cacık'], kcal: 45, p: 2, c: 4, f: 2 },
+  { k: ['rus salatası', 'amerikan salatası'], kcal: 150, p: 2, c: 12, f: 10 },
+  { k: ['balık buğulama', 'buğulama'], kcal: 110, p: 15, c: 3, f: 5 },
+  { k: ['karides güveç'], kcal: 120, p: 12, c: 5, f: 6 },
+  { k: ['alabalık', 'sardalya', 'istavrit', 'i̇stavrit'], kcal: 185, p: 20, c: 0, f: 11 },
+  { k: ['kızarmış tavuk', 'çıtır tavuk', 'tavuk kızartma'], kcal: 250, p: 20, c: 12, f: 14 },
+  { k: ['et dürüm', 'adana dürüm', 'dürüm'], kcal: 230, p: 11, c: 22, f: 11 },
+  { k: ['kadayıf', 'tel kadayıf'], kcal: 290, p: 4, c: 42, f: 12 },
+  { k: ['şöbiyet'], kcal: 400, p: 7, c: 38, f: 25 },
+  { k: ['lokma'], kcal: 320, p: 4, c: 50, f: 12 },
+  { k: ['höşmerim'], kcal: 210, p: 6, c: 22, f: 11 },
+  { k: ['katmer'], kcal: 380, p: 8, c: 36, f: 23 },
+  { k: ['muhallebi', 'keşkül', 'sütlü tatlı'], kcal: 110, p: 3, c: 19, f: 3 },
+  { k: ['kabak tatlısı'], kcal: 120, p: 1, c: 26, f: 2 },
+  { k: ['ayva tatlısı', 'incir tatlısı'], kcal: 110, p: 1, c: 26, f: 1 },
+  { k: ['kemalpaşa tatlısı', 'revani'], kcal: 240, p: 4, c: 44, f: 6 },
+  { k: ['pişmaniye'], kcal: 440, p: 4, c: 78, f: 13 },
+  { k: ['kestane'], kcal: 200, p: 3, c: 44, f: 1 },
+  { k: ['fıstık ezmesi', 'fındık ezmesi'], kcal: 590, p: 25, c: 20, f: 50 },
 ];
 function normTr(s) { return String(s || '').toLocaleLowerCase('tr').replace(/[.,;:!?()]/g, ' ').replace(/\s+/g, ' ').trim(); }
 // AI'nın döndürdüğü Türkçe ada göre curated tablo eşleşmesi (per-100g → grama ölçekli).
 function trFoodLookup(name, grams) {
   const q = normTr(name);
   if (q.length < 2) return null;
-  let best = null, bestScore = 0, bestLen = 0;
+  let best = null, bestScore = 0, bestLen = 0, bestKey = '';
   for (const e of TR_FOOD_DB) {
     for (const key of e.k) {
       let score = 0;
@@ -3578,11 +3653,16 @@ function trFoodLookup(name, grams) {
       else if (q.endsWith(' ' + key)) score = 2;
       else if (key.length >= 4 && q.includes(key)) score = 1;
       if (score > bestScore || (score === bestScore && key.length > bestLen)) {
-        best = e; bestScore = score; bestLen = key.length;
+        best = e; bestScore = score; bestLen = key.length; bestKey = key;
       }
     }
   }
   if (!best || bestScore === 0) return null;
+  // Curated tablo PİŞMİŞ/hazır değerler tutar. Kullanıcı ÇİĞ istediyse (ve eşleşen
+  // anahtar çiğ değilse) tabloyu atla — USDA ham (raw) değeri versin.
+  const rawReq = /(^|\s)(çiğ|cig|raw)(\s|$)/.test(q);
+  const keyRaw = /(^|\s)(çiğ|cig|raw)(\s|$)/.test(bestKey);
+  if (rawReq && !keyRaw) return null;
   const f = (grams || 100) / 100;
   const r = v => Math.round(v * f);
   return { kcal: r(best.kcal), protein: r(best.p), carb: r(best.c), fat: r(best.f) };
@@ -3616,11 +3696,13 @@ SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
 {"items":[{"name":"<yemek adı, Türkçe>","en":"<sade İngilizce ad>","grams":<bu bileşenin toplam gram ağırlığı>,"kcal":<sayı>,"protein":<gram>,"carb":<gram>,"fat":<gram>}]}
 - Her ayrı yemek için bir nesne. "ve"/virgül/boşlukla ayrılan her yemek ayrı bileşendir.
 - grams + makrolar: o bileşenin BELİRTİLEN MİKTARI için (örn "4 yumurta" -> 4 yumurtanın toplamı, ~50g/yumurta).
-- ÇİĞ/PİŞMİŞ ayrımı, kullanıcının kelimesine sadık kal: "pirinç"=ÇİĞ (raw white rice), "pilav"=PİŞMİŞ (cooked white rice). "bulgur"/"un"/"yulaf"/"kuru makarna"=çiğ/kuru. Et/tavuk/balık yazılmamışsa pişmiş varsay.
-- en: USDA için sade İngilizce ad ("egg cooked", "white bread", "raw white rice", "cooked white rice", "beef tenderloin cooked"). Marka yazma.
+- ÇİĞ/PİŞMİŞ: kullanıcının kelimesine sadık kal. "pirinç"=ÇİĞ (raw white rice), "pilav"=PİŞMİŞ (cooked white rice). "bulgur"/"un"/"yulaf"/"kuru makarna"=çiğ/kuru.
+- BELİRTİLMEMİŞSE varsayılan ÇİĞ (raw): Türkçe adın başına "çiğ", en'e "raw" ekle (örn "tavuk"->"çiğ tavuk"/"chicken breast raw", "et"->"çiğ dana eti"/"beef raw", "somon"->"çiğ somon"/"salmon raw"). İSTİSNA: ad zaten pişmiş/hazır yemekse (pilav, köfte, kebap, döner, çorba, tost, menemen, sarma, dolma, yumurta...) pişmiş bırak.
+- en: USDA için sade İngilizce ad, çiğ/pişmiş dahil ("chicken breast raw", "white bread", "raw white rice", "cooked white rice", "beef raw", "egg cooked"). Marka yazma.
 - Miktar belirtilmemişse mantıklı 1 porsiyon varsay.
 Örnek: "4 yumurta 2 dilim ekmek 1 kase pilav" -> {"items":[{"name":"yumurta","en":"egg cooked","grams":200,"kcal":310,"protein":26,"carb":2,"fat":22},{"name":"ekmek","en":"white bread","grams":50,"kcal":133,"protein":4,"carb":25,"fat":1},{"name":"pilav","en":"cooked white rice","grams":150,"kcal":195,"protein":4,"carb":42,"fat":0}]}
-Örnek: "60 gram pirinç" -> {"items":[{"name":"pirinç","en":"raw white rice","grams":60,"kcal":216,"protein":4,"carb":47,"fat":1}]}`;
+Örnek: "60 gram pirinç" -> {"items":[{"name":"pirinç","en":"raw white rice","grams":60,"kcal":216,"protein":4,"carb":47,"fat":1}]}
+Örnek: "200 gram tavuk" -> {"items":[{"name":"çiğ tavuk","en":"chicken breast raw","grams":200,"kcal":240,"protein":46,"carb":0,"fat":5}]}`;
     const r = await env.AI.run(AI_MODEL, {
       messages: [
         { role: 'system', content: sys },

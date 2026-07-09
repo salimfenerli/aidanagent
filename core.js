@@ -1236,7 +1236,7 @@ const TURK_FOODS = [
   { n: 'Şiş kebap', u: 'porsiyon', k: 350, p: 38, c: 4, f: 20 },
   { n: 'Köfte', u: 'adet', k: 70, p: 5, c: 1, f: 5 },
   { n: 'İzgara köfte', u: 'porsiyon', k: 320, p: 26, c: 6, f: 21 },
-  { n: 'Dana bonfile', u: 'porsiyon', k: 290, p: 40, c: 0, f: 13 },
+  { n: 'Dana bonfile', u: 'porsiyon', k: 280, p: 46, c: 0, f: 10 },
   { n: 'Dana kıyma', u: 'porsiyon', k: 280, p: 26, c: 0, f: 19 },
   { n: 'Kuzu pirzola', u: 'porsiyon', k: 350, p: 30, c: 0, f: 25 },
   { n: 'Kavurma', u: 'porsiyon', k: 320, p: 28, c: 1, f: 23 },
@@ -1477,7 +1477,114 @@ const TURK_FOODS = [
   { n: 'Americano', u: 'fincan', k: 10, p: 0, c: 2, f: 0 },
   { n: 'Espresso', u: 'fincan', k: 5, p: 0, c: 1, f: 0 },
   { n: 'Bubble tea', u: 'bardak', k: 250, p: 2, c: 50, f: 4 },
-  { n: 'Maden suyu', u: 'şişe', k: 0, p: 0, c: 0, f: 0 }
+  { n: 'Maden suyu', u: 'şişe', k: 0, p: 0, c: 0, f: 0 },
+  // === Genisletme (Tem 2026) — yaygin Turk yemekleri, per-porsiyon ===
+  { n: 'Sahanda sucuk', u: 'porsiyon', k: 300, p: 14, c: 2, f: 26 },
+  { n: 'Peynirli omlet', u: 'porsiyon', k: 260, p: 16, c: 2, f: 20 },
+  { n: 'Kaygana', u: 'porsiyon', k: 200, p: 7, c: 16, f: 12 },
+  { n: 'Bal kaymak', u: 'porsiyon', k: 330, p: 4, c: 22, f: 25 },
+  { n: 'Sucuklu tost', u: 'adet', k: 350, p: 15, c: 30, f: 19 },
+  { n: 'Karışık tost', u: 'adet', k: 380, p: 17, c: 30, f: 22 },
+  { n: 'Yumurtalı ekmek', u: 'porsiyon', k: 240, p: 10, c: 22, f: 12 },
+  { n: 'Pişi', u: 'adet', k: 110, p: 3, c: 14, f: 5 },
+  { n: 'Lavaş', u: 'adet', k: 150, p: 5, c: 30, f: 2 },
+  { n: 'Yufka', u: 'adet', k: 100, p: 3, c: 20, f: 1 },
+  { n: 'Ramazan pidesi', u: 'dilim', k: 130, p: 4, c: 26, f: 2 },
+  { n: 'Mısır ekmeği', u: 'dilim', k: 90, p: 2, c: 18, f: 1 },
+  { n: 'Sebze çorbası', u: 'kase', k: 90, p: 3, c: 14, f: 3 },
+  { n: 'Paça çorbası', u: 'kase', k: 180, p: 14, c: 3, f: 12 },
+  { n: 'Analı kızlı', u: 'kase', k: 210, p: 9, c: 28, f: 7 },
+  { n: 'Balık çorbası', u: 'kase', k: 120, p: 12, c: 8, f: 5 },
+  { n: 'Hünkar beğendi', u: 'porsiyon', k: 380, p: 24, c: 18, f: 24 },
+  { n: 'Tas kebabı', u: 'porsiyon', k: 340, p: 26, c: 14, f: 20 },
+  { n: 'Orman kebabı', u: 'porsiyon', k: 350, p: 24, c: 18, f: 21 },
+  { n: 'Güveç', u: 'porsiyon', k: 300, p: 20, c: 16, f: 17 },
+  { n: 'Saç kavurma', u: 'porsiyon', k: 360, p: 28, c: 8, f: 24 },
+  { n: 'Ali nazik', u: 'porsiyon', k: 390, p: 22, c: 14, f: 27 },
+  { n: 'Çökertme kebabı', u: 'porsiyon', k: 520, p: 26, c: 40, f: 28 },
+  { n: 'Testi kebabı', u: 'porsiyon', k: 380, p: 26, c: 16, f: 24 },
+  { n: 'Cağ kebabı', u: 'porsiyon', k: 300, p: 24, c: 2, f: 22 },
+  { n: 'Patlıcan kebabı', u: 'porsiyon', k: 360, p: 20, c: 16, f: 24 },
+  { n: 'Yoğurtlu kebap', u: 'porsiyon', k: 480, p: 26, c: 35, f: 26 },
+  { n: 'Kadınbudu köfte', u: 'porsiyon', k: 330, p: 20, c: 14, f: 22 },
+  { n: 'İzmir köfte', u: 'porsiyon', k: 320, p: 20, c: 14, f: 20 },
+  { n: 'Terbiyeli köfte', u: 'porsiyon', k: 300, p: 18, c: 14, f: 18 },
+  { n: 'Etli patates', u: 'porsiyon', k: 280, p: 14, c: 22, f: 15 },
+  { n: 'Etli bamya', u: 'porsiyon', k: 190, p: 11, c: 14, f: 10 },
+  { n: 'Kapuska', u: 'porsiyon', k: 210, p: 11, c: 18, f: 11 },
+  { n: 'Lahana yemeği', u: 'porsiyon', k: 190, p: 10, c: 16, f: 10 },
+  { n: 'Köfte ekmek', u: 'porsiyon', k: 420, p: 20, c: 40, f: 20 },
+  { n: 'Tavuklu pilav', u: 'porsiyon', k: 420, p: 24, c: 50, f: 12 },
+  { n: 'Nohutlu pilav', u: 'porsiyon', k: 380, p: 10, c: 58, f: 11 },
+  { n: 'İç pilav', u: 'porsiyon', k: 340, p: 6, c: 54, f: 11 },
+  { n: 'Şehriyeli pilav', u: 'porsiyon', k: 320, p: 6, c: 56, f: 8 },
+  { n: 'Perde pilavı', u: 'porsiyon', k: 520, p: 16, c: 60, f: 24 },
+  { n: 'Zeytinyağlı barbunya', u: 'porsiyon', k: 180, p: 8, c: 22, f: 7 },
+  { n: 'Zeytinyağlı pırasa', u: 'porsiyon', k: 140, p: 3, c: 18, f: 7 },
+  { n: 'Kuru bamya', u: 'porsiyon', k: 150, p: 5, c: 18, f: 7 },
+  { n: 'Semizotu yemeği', u: 'porsiyon', k: 130, p: 5, c: 12, f: 7 },
+  { n: 'Kereviz yemeği', u: 'porsiyon', k: 120, p: 3, c: 16, f: 6 },
+  { n: 'Bakla yemeği', u: 'porsiyon', k: 160, p: 8, c: 20, f: 6 },
+  { n: 'Barbunya pilaki', u: 'porsiyon', k: 190, p: 9, c: 24, f: 7 },
+  { n: 'Şakşuka', u: 'porsiyon', k: 190, p: 3, c: 14, f: 14 },
+  { n: 'Patlıcan kızartması', u: 'porsiyon', k: 240, p: 3, c: 16, f: 19 },
+  { n: 'Kabak kızartması', u: 'porsiyon', k: 180, p: 3, c: 14, f: 13 },
+  { n: 'Biber kızartması', u: 'porsiyon', k: 160, p: 2, c: 10, f: 13 },
+  { n: 'Fırında sebze', u: 'porsiyon', k: 180, p: 5, c: 22, f: 8 },
+  { n: 'Karnabahar kızartma', u: 'porsiyon', k: 190, p: 5, c: 16, f: 12 },
+  { n: 'Börülce yemeği', u: 'porsiyon', k: 170, p: 9, c: 24, f: 5 },
+  { n: 'Fava', u: 'porsiyon', k: 180, p: 9, c: 22, f: 6 },
+  { n: 'Piyaz', u: 'porsiyon', k: 220, p: 8, c: 22, f: 12 },
+  { n: 'Haydari', u: 'porsiyon', k: 120, p: 4, c: 4, f: 10 },
+  { n: 'Acılı ezme', u: 'porsiyon', k: 80, p: 2, c: 8, f: 5 },
+  { n: 'Patlıcan salatası', u: 'porsiyon', k: 150, p: 2, c: 10, f: 11 },
+  { n: 'Rus salatası', u: 'porsiyon', k: 220, p: 3, c: 18, f: 15 },
+  { n: 'Cacık', u: 'kase', k: 80, p: 4, c: 6, f: 4 },
+  { n: 'Közlenmiş biber', u: 'porsiyon', k: 70, p: 2, c: 8, f: 3 },
+  { n: 'Balık buğulama', u: 'porsiyon', k: 200, p: 26, c: 4, f: 9 },
+  { n: 'Karides güveç', u: 'porsiyon', k: 240, p: 22, c: 10, f: 12 },
+  { n: 'Alabalık', u: 'porsiyon', k: 180, p: 24, c: 0, f: 9 },
+  { n: 'Sardalya', u: 'porsiyon', k: 200, p: 24, c: 0, f: 11 },
+  { n: 'İstavrit tava', u: 'porsiyon', k: 230, p: 22, c: 8, f: 12 },
+  { n: 'Lüfer', u: 'porsiyon', k: 180, p: 23, c: 0, f: 9 },
+  { n: 'Kızarmış tavuk', u: 'porsiyon', k: 320, p: 22, c: 14, f: 20 },
+  { n: 'Çıtır tavuk', u: 'porsiyon', k: 300, p: 20, c: 18, f: 16 },
+  { n: 'Et dürüm', u: 'dürüm', k: 480, p: 24, c: 44, f: 22 },
+  { n: 'Adana dürüm', u: 'dürüm', k: 520, p: 24, c: 44, f: 26 },
+  { n: 'Nachos', u: 'porsiyon', k: 350, p: 8, c: 38, f: 18 },
+  { n: 'Quesadilla', u: 'porsiyon', k: 400, p: 18, c: 34, f: 21 },
+  { n: 'Burrito', u: 'porsiyon', k: 450, p: 20, c: 50, f: 18 },
+  { n: 'Taco', u: 'adet', k: 200, p: 9, c: 18, f: 10 },
+  { n: 'Kadayıf', u: 'porsiyon', k: 400, p: 6, c: 50, f: 20 },
+  { n: 'Şöbiyet', u: 'porsiyon', k: 420, p: 7, c: 40, f: 27 },
+  { n: 'Kalburabastı', u: 'adet', k: 170, p: 2, c: 26, f: 7 },
+  { n: 'Lokma', u: 'porsiyon', k: 300, p: 4, c: 46, f: 11 },
+  { n: 'Höşmerim', u: 'porsiyon', k: 340, p: 10, c: 34, f: 18 },
+  { n: 'Katmer', u: 'porsiyon', k: 420, p: 9, c: 40, f: 26 },
+  { n: 'Cezerye', u: 'adet', k: 90, p: 1, c: 16, f: 3 },
+  { n: 'Pişmaniye', u: 'porsiyon', k: 230, p: 2, c: 40, f: 7 },
+  { n: 'Kabak tatlısı', u: 'porsiyon', k: 220, p: 2, c: 44, f: 4 },
+  { n: 'Ayva tatlısı', u: 'porsiyon', k: 200, p: 1, c: 48, f: 2 },
+  { n: 'İncir tatlısı', u: 'porsiyon', k: 240, p: 3, c: 48, f: 5 },
+  { n: 'Muhallebi', u: 'porsiyon', k: 180, p: 4, c: 32, f: 4 },
+  { n: 'Keşkül', u: 'porsiyon', k: 220, p: 5, c: 34, f: 7 },
+  { n: 'Tavuk göğsü tatlısı', u: 'porsiyon', k: 200, p: 6, c: 34, f: 4 },
+  { n: 'Kemalpaşa tatlısı', u: 'porsiyon', k: 280, p: 5, c: 50, f: 7 },
+  { n: 'Vezir parmağı', u: 'porsiyon', k: 320, p: 4, c: 48, f: 13 },
+  { n: 'Şıra', u: 'bardak', k: 120, p: 1, c: 30, f: 0 },
+  { n: 'Hoşaf', u: 'kase', k: 120, p: 1, c: 30, f: 0 },
+  { n: 'Komposto', u: 'kase', k: 110, p: 1, c: 28, f: 0 },
+  { n: 'Nescafe (sütlü)', u: 'fincan', k: 70, p: 3, c: 9, f: 2 },
+  { n: 'Kestane', u: 'porsiyon', k: 200, p: 3, c: 44, f: 1 },
+  { n: 'Grissini', u: 'porsiyon', k: 120, p: 4, c: 22, f: 2 },
+  { n: 'Fıstık ezmesi', u: 'kaşık', k: 95, p: 4, c: 3, f: 8 },
+  { n: 'Fındık kreması', u: 'kaşık', k: 100, p: 1, c: 11, f: 6 },
+  { n: 'Kuru incir', u: 'adet', k: 50, p: 0, c: 12, f: 0 },
+  { n: 'Kuru erik', u: 'adet', k: 20, p: 0, c: 5, f: 0 },
+  { n: 'Trabzon hurması', u: 'adet', k: 120, p: 1, c: 31, f: 0 },
+  { n: 'Ayva', u: 'adet', k: 60, p: 0, c: 15, f: 0 },
+  { n: 'Dut', u: 'porsiyon', k: 60, p: 1, c: 14, f: 0 },
+  { n: 'Kızılcık', u: 'porsiyon', k: 50, p: 1, c: 12, f: 0 },
 ];
 // Türkçe diakritik-duyarsız normalize (kofte→kofte=köfte, doner→döner). Hızlı yazımda eşleşsin.
 function trNorm(str) {
@@ -1692,22 +1799,38 @@ function renderMacroDonut() {
   const host = document.getElementById('macroDonut'); if (!host) return;
   ensureDiet();
   const d = data.diet, day = dietDay(false);
-  let p = 0, c = 0, f = 0;
-  (day.meals || []).forEach(m => { p += Number(m.protein) || 0; c += Number(m.carb) || 0; f += Number(m.fat) || 0; });
-  p = Math.round(p); c = Math.round(c); f = Math.round(f);
-  const kP = p * 4, kC = c * 4, kF = f * 9, totalK = kP + kC + kF;
-  if (totalK <= 0) { host.style.display = 'none'; host.innerHTML = ''; return; }
+  let p = 0, c = 0, f = 0, eatenK = 0;
+  (day.meals || []).forEach(m => {
+    p += Number(m.protein) || 0; c += Number(m.carb) || 0; f += Number(m.fat) || 0;
+    eatenK += Number(m.kcal) || 0;
+  });
+  p = Math.round(p); c = Math.round(c); f = Math.round(f); eatenK = Math.round(eatenK);
+  const kP = p * 4, kC = c * 4, kF = f * 9, macroK = kP + kC + kF;
+  if (macroK <= 0 && eatenK <= 0) { host.style.display = 'none'; host.innerHTML = ''; return; }
   host.style.display = 'flex';
-  const segs = [{ val: kP, color: '#5aa2ff' }, { val: kC, color: '#f5a524' }, { val: kF, color: '#e0726e' }].filter(x => x.val > 0);
-  const pc = v => Math.round(v / totalK * 100);
+  // Merkez sayı = kalori halkasındaki YENEN kcal (halka ile birebir tutar). Makro-kcal ile
+  // yenen arasındaki fark (lif/alkol veya makrosuz girilen öğün) "Diğer" dilimi olur.
+  const total = eatenK > 0 ? eatenK : macroK;
+  const other = Math.max(0, total - macroK);
+  const segs = [
+    { val: kP, color: '#5aa2ff' },
+    { val: kC, color: '#f5a524' },
+    { val: kF, color: '#e0726e' },
+    { val: other, color: '#3a3d46' },
+  ].filter(x => x.val > 0);
+  const pc = v => macroK ? Math.round(v / macroK * 100) : 0;
   const rem = (goal, val) => { const r = (goal || 0) - val; return r >= 0 ? r + 'g kaldı' : (-r) + 'g fazla'; };
   const donut = (typeof donutChart === 'function') ? donutChart(segs, 104) : '';
+  const otherRow = other > 0
+    ? `<div class="mdl-row"><span class="mdl-dot" style="background:#3a3d46"></span><span class="mdl-name">Diğer</span><span class="mdl-pct">${other} kcal</span><span class="mdl-rem">lif/makrosuz</span></div>`
+    : '';
   host.innerHTML =
-    `<div class="macro-donut-svg">${donut}<div class="macro-donut-center"><span class="mdc-num">${totalK}</span><span class="mdc-lbl">makro kcal</span></div></div>` +
+    `<div class="macro-donut-svg">${donut}<div class="macro-donut-center"><span class="mdc-num">${total}</span><span class="mdc-lbl">kcal</span></div></div>` +
     `<div class="macro-donut-legend">` +
       `<div class="mdl-row"><span class="mdl-dot" style="background:#5aa2ff"></span><span class="mdl-name">Protein</span><span class="mdl-pct">%${pc(kP)}</span><span class="mdl-rem">${rem(d.proteinGoal, p)}</span></div>` +
       `<div class="mdl-row"><span class="mdl-dot" style="background:#f5a524"></span><span class="mdl-name">Karb</span><span class="mdl-pct">%${pc(kC)}</span><span class="mdl-rem">${rem(d.carbGoal, c)}</span></div>` +
       `<div class="mdl-row"><span class="mdl-dot" style="background:#e0726e"></span><span class="mdl-name">Yağ</span><span class="mdl-pct">%${pc(kF)}</span><span class="mdl-rem">${rem(d.fatGoal, f)}</span></div>` +
+      otherRow +
     `</div>`;
 }
 
