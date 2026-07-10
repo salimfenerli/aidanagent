@@ -1,6 +1,7 @@
 /asistan.html / 301
 /asistan / 301
 /CLAUDE.md /404.html 404
+/CHANGELOG.md /404.html 404
 /aidan-mcp/* /404.html 404
 /aidan-worker/* /404.html 404
 /.env* /404.html 404
