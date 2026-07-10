@@ -18,6 +18,14 @@ Aşağıdaki tarihçe/mimari bölümleri 14 Haziran'da kaldı. O günden bugüne
 - **📊 Sabah push dün özeti:** Worker `buildDailySummaryLine` — "Dün: ✓ N görev · kcal · su" satırı morning payload sonuna eklenir (AI + fallback ikisinde de çalışır, odak dahil edilmedi — pomoToday dünü güvenilir tutmaz).
 - Cache v7-96 → **v7-97**.
 
+### 10 Temmuz 2026 — 3. seans: "Aidan'ın notu" (çapraz-modül tek dürtü)
+Salim "modülleri bağla" yönünü seçti. Skor kartı sayı gösteriyor ama yorumlamıyordu → skor kartının altına (`#aidanNote`) **tek satır akıllı dürtü**: tüm modülleri (görev/geri sayım/MIT/takviye/su/odak/erteleme) okuyup **en önemli tek sinyali** nazik dille söyler (ADHD: tek şeye indir). Salim bir şeyi halledince not sonrakine kayar (canlı).
+- **`aidanNoteLine()` (ui.js):** öncelik sırasıyla ilk eşleşen döner — (1) gecikmiş acil görev (2) geri sayım ≤2 gün (3) MIT seçili+öğleden sonra hiç bitmemiş (4) takviye 3+ gün atlandı (`suppMissedStreak` helper) (5) akşam+su yarının altında (6) öğleden sonra odak seansı yok+MIT bekliyor (7) 3+ ertelenen görev (8) akşam her şey tamam→pozitif. Saat-duyarlı, yerel/kural tabanlı (AI maliyeti YOK, anında).
+- **`renderAidanNote()`** `renderDailyScore()` başında çağrılır (skor boş dönse bile çalışır). **Impeccable:** renkli emoji YOK — tek tutarlı sparkles SVG + tona göre tam-kenar tint (urgent=danger / warn=amber / good=success / info=nötr), yan-şerit yok.
+- Veri modeli yeni alan YOK — mevcut task/countdown/reminder/diet/pomoToday'den türetilir.
+- Doğrulama: 14 senaryo node testi (öncelik sırası + saat filtreleri) + preview mobil 375px (urgent/warn/good tint görsel, konsol temiz).
+- Cache v7-98 → **v7-99**.
+
 ### 10 Temmuz 2026 — 2. seans: "Geçmiş hafızası" (takviye uyum şeridi + odak günlüğü)
 Tespit: skor kartı/sabah özetinin altındaki veri tek günlüktü — takviye `takenDate` üzerine yazılıyordu, odak `pomoToday` sadece bugünü tutuyordu. Paket:
 - **💊 Takviye geçmişi:** `markSuppTaken` artık `r.takenLog[]` tutar (son 30 gün, `takenDate` geriye uyumlu senkron). `suppTakenOn(r,d)` helper. Takviye satırında **son 7 gün nokta şeridi** (`suppLast7`): dolu=alındı, boş=alınmadı, soluk `na`=kapsam dışı (hafta içi takviyesinde hafta sonu + `r.id` epoch'undan türetilen oluşturma tarihi öncesi). Nötr gösterim — streak DEĞİL (streak stres kaynağıydı).

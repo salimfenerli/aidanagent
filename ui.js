@@ -2529,6 +2529,7 @@ function formatTrDate(dateStr) {
 // ============ 🧩 GÜNLÜK SKOR (modüller arası: MIT + kalori + su + odak) ============
 // Görevler tabının üstünde tek satır kart — dört modülün bugünkü durumu. Veri yoksa gizli.
 function renderDailyScore() {
+  if (typeof renderAidanNote === 'function') renderAidanNote();
   const el = document.getElementById('dailyScore');
   if (!el) return;
   const t = today();
@@ -2556,6 +2557,87 @@ function renderDailyScore() {
   el.innerHTML = `<div class="score-card">` + items.map(i =>
     `<div class="score-item${i.on ? ' on' : ''}"><span class="score-val">${i.val}</span><span class="score-label">${i.label}</span></div>`
   ).join('') + `</div>`;
+}
+
+// ============ 🔗 AIDAN'IN NOTU — çapraz-modül tek dürtü ============
+// Skor kartı SAYI verir; bu satır o sayıları OKUYUP en önemli tek şeyi söyler (ADHD: tek şeye indir).
+// Yerel + kural tabanlı (AI maliyeti yok, anında). Suçlamayan dil. Sen halledince not sonrakine kayar.
+// Öncelik sırasıyla ilk eşleşen döner — en kritik sinyal üste çıkar.
+function suppMissedStreak(r) {
+  // Dünden geriye: o güne planlıysa (gün filtresi + oluşturma sonrası) ve alınmadıysa ardışık say.
+  const created = r.id ? new Date(r.id).toISOString().slice(0, 10) : null;
+  let streak = 0;
+  for (let i = 1; i <= 10; i++) {
+    const d = shiftDateStr(today(), -i);
+    if (created && d < created) break;
+    const dow = new Date(d + 'T12:00:00').getDay();
+    if (r.days === 'weekdays' && (dow === 0 || dow === 6)) continue; // planlı değil
+    if (typeof suppTakenOn === 'function' ? suppTakenOn(r, d) : ((r.takenLog || []).includes(d) || r.takenDate === d)) break;
+    streak++;
+  }
+  return streak;
+}
+
+function aidanNoteLine() {
+  const t = today();
+  const hour = new Date().getHours();
+  const tasks = data.tasks || [];
+  const active = tasks.filter(x => !x.done);
+
+  // 1. Gecikmiş ACİL görev — en kritik
+  const overdue = active.filter(x => x.priority === 'urgent' && x.due && x.due < t);
+  if (overdue.length) return { tone: 'urgent', text: `${overdue.length} acil görev gecikti — birini seç, 2dk dene ya da ertele` };
+
+  // 2. Yaklaşan geri sayım (sınav/teslim) ≤ 2 gün
+  const cds = (data.countdowns || []).map(c => ({ label: c.label, d: daysUntilCountdown(c.date) }))
+    .filter(c => c.d != null && c.d >= 0 && c.d <= 2).sort((a, b) => a.d - b.d);
+  if (cds.length) {
+    const c = cds[0]; const when = c.d === 0 ? 'bugün' : (c.d === 1 ? 'yarın' : '2 gün sonra');
+    return { tone: 'warn', text: `${c.label || 'Yaklaşan tarih'} ${when} — hazırlık zamanı` };
+  }
+
+  // 3. MIT seçili ama öğleden sonra hâlâ hiç bitmemiş
+  const mit = tasks.filter(x => x.mitDate === t);
+  const mitDone = mit.filter(x => x.done).length;
+  if (mit.length && mitDone === 0 && hour >= 13 && hour < 20)
+    return { tone: 'info', text: `Bugünün 3'ü duruyor, henüz başlamadın — birini seç, 2dk dene` };
+
+  // 4. Takviye 3+ gündür atlanıyor
+  const supps = (data.reminders || []).filter(r => r.kind === 'supp' && r.enabled !== false);
+  for (const r of supps) {
+    if (suppMissedStreak(r) >= 3) return { tone: 'warn', text: `${r.label} son 3+ gündür işaretlenmedi — bugün almayı unutma` };
+  }
+
+  // 5. Akşam + su hedefinin yarısının altında
+  const day = ((data.diet || {}).days || {})[t] || {};
+  const waterL = day.waterL || 0, waterGoal = (data.diet || {}).waterGoalL || 2.5;
+  if (hour >= 18 && hour < 23 && waterL > 0 && waterL < waterGoal * 0.5)
+    return { tone: 'info', text: `Su hedefinin yarısındasın — akşam bitmeden birkaç bardak` };
+
+  // 6. Öğleden sonra + odak seansı yok ama bitmemiş MIT var
+  const pomo = (data.pomoToday && data.pomoToday.date === t) ? (data.pomoToday.count || 0) : 0;
+  if (hour >= 11 && hour < 20 && pomo === 0 && mit.length && mitDone < mit.length)
+    return { tone: 'info', text: `Bugün hiç odak seansı yok — 25 dk kur, MIT'e otur` };
+
+  // 7. Çok ertelenen görev
+  const stuck = active.filter(x => (x.postponeCount || 0) >= 3 && !x.nudgeDismissed);
+  if (stuck.length) return { tone: 'warn', text: `"${(stuck[0].text || '').slice(0, 30)}" çok ertelendi — küçük adımlara bölelim mi?` };
+
+  // 8. Her şey yolunda (akşam) — nadir pozitif
+  if (hour >= 18 && mit.length && mitDone >= mit.length && waterL >= waterGoal)
+    return { tone: 'good', text: `Bugünü topladın — 3'ü tamam, su tamam. İyi iş.` };
+
+  return null;
+}
+
+function renderAidanNote() {
+  const el = document.getElementById('aidanNote');
+  if (!el) return;
+  const note = aidanNoteLine();
+  if (!note) { el.innerHTML = ''; el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  el.className = 'aidan-note ' + note.tone;
+  el.innerHTML = `<span class="an-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg></span><span class="an-text">${escapeHtml(note.text)}</span>`;
 }
 
 function renderCountdowns() {

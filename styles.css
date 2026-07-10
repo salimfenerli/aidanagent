@@ -3344,3 +3344,16 @@
 .score-card:has(> :nth-child(5)) { gap: 6px; }
 .score-card:has(> :nth-child(5)) .score-val { font-size: 0.8rem; }
 .score-card:has(> :nth-child(5)) .score-label { font-size: 0.66rem; }
+
+/* 🔗 Aidan'ın notu — çapraz-modül tek dürtü satırı (tam kenar + ton tinti, yan-şerit YOK) */
+.aidan-note { display: flex; align-items: center; gap: 9px; margin: 0 0 12px; padding: 10px 13px; border-radius: 12px; border: 1px solid var(--border-soft); background: var(--surface); font-size: 0.86rem; line-height: 1.35; }
+.aidan-note .an-icon { flex: 0 0 auto; display: flex; opacity: 0.85; }
+.aidan-note .an-icon .icon { width: 17px; height: 17px; }
+.aidan-note .an-text { color: var(--text); }
+.aidan-note.urgent { background: rgba(239, 68, 68, 0.10); border-color: rgba(239, 68, 68, 0.32); }
+.aidan-note.urgent .an-icon { color: #ef4444; opacity: 1; }
+.aidan-note.warn { background: rgba(245, 165, 36, 0.10); border-color: rgba(245, 165, 36, 0.32); }
+.aidan-note.warn .an-icon { color: var(--secondary, #f5a524); opacity: 1; }
+.aidan-note.good { background: rgba(52, 199, 89, 0.10); border-color: rgba(52, 199, 89, 0.32); }
+.aidan-note.good .an-icon { color: #34c759; opacity: 1; }
+.aidan-note.info .an-icon { color: var(--secondary, #f5a524); }
