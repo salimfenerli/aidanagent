@@ -23,7 +23,8 @@ Aşağıdaki tarihçe/mimari bölümleri 14 Haziran'da kaldı. O günden bugüne
 - **Worker `/classroom-image`:** iki aşama (vision OCR transkript → 70B metin modeli yapılandırma). `extractClassroomJson` → `{title, due, course}`. Tarih çözümü: bugünün tarihi + gün adı prompt'a verilir, "Yarın/Cuma/12 Tem" → tam `YYYY-MM-DD` (geçersizse null). `verifyUser`+`allowUser`+CORS, `AI_MODEL`/`VISION_MODEL` mevcut sabitler.
 - **Frontend (ui.js):** Görevler→Okul bölümüne "Classroom ödevi ekle (ekran görüntüsü)" butonu + `handleClassroomPhoto` (resize→endpoint) + `classroomImportModal` düzenlenebilir onay (başlık/son tarih/ders). `confirmClassroomImport` → `makeTask({category:'odev'})`, ders→`notes`; **aynı başlık+tarih aktif görevde varsa atla** (tekrar görüntüde çift olmaz). 16 senaryo node testi.
 - **📷 Çoklu portföy görseli (stocks.js):** `portfolioPhotoInput`'a `multiple`; `handlePortfolioPhoto` artık dosya dizisini döngüyle okur, `mergePortfolioHoldings` sembol bazında birleştirir (ilk dolu alan korunur, sonrakiler eksikleri doldurur). 8 senaryo node testi.
-- Cache v7-99 → **v7-101**.
+- **📷 Çoklu Classroom görseli (v7-102):** sayfalarca ödev → `classroomPhotoInput`'a `multiple` + `handleClassroomPhoto` döngü + `mergeClassroomItems` (başlık+tarih anahtarıyla çakışan görselleri tekilleştirir; aynı başlık farklı tarih = ayrı ödev; eksik ders bilgisi doldurulur). 6 senaryo node testi.
+- Cache v7-99 → **v7-102**.
 
 ### 10 Temmuz 2026 — 3. seans: "Aidan'ın notu" (çapraz-modül tek dürtü)
 Salim "modülleri bağla" yönünü seçti. Skor kartı sayı gösteriyor ama yorumlamıyordu → skor kartının altına (`#aidanNote`) **tek satır akıllı dürtü**: tüm modülleri (görev/geri sayım/MIT/takviye/su/odak/erteleme) okuyup **en önemli tek sinyali** nazik dille söyler (ADHD: tek şeye indir). Salim bir şeyi halledince not sonrakine kayar (canlı).

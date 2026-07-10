@@ -2744,38 +2744,68 @@ const CLASSROOM_IMAGE_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.de
 let _clImportItems = [];
 
 async function handleClassroomPhoto(event) {
-  const file = event.target.files && event.target.files[0];
+  const files = Array.from(event.target.files || []);
   event.target.value = '';
-  if (!file) return;
+  if (!files.length) return;
   if (!window._supa || !window._user) { showToast('Önce Ayarlar → bulut girişi yap', 'warning', 4000); return; }
   openClassroomImport();
   setClImportStatus('Görsel hazırlanıyor…');
   try {
-    const dataUrl = await resizeImageToDataUrl(file);
-    setClImportStatus('Aidan ödevleri okuyor… 10-15 sn sürebilir, sabret');
     const { data: sess } = await window._supa.auth.getSession();
     const token = sess && sess.session && sess.session.access_token;
     if (!token) throw new Error('oturum yok');
-    const r = await fetch(CLASSROOM_IMAGE_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ image: dataUrl }),
-    });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error || ('hata ' + r.status));
-    const items = Array.isArray(j.items) ? j.items : [];
-    if (!items.length) {
+
+    // Sayfalarca ödev → birden fazla ekran görüntüsü; her birini oku, sonuçları birleştir
+    const all = [];
+    let firstEmpty = null;
+    for (let idx = 0; idx < files.length; idx++) {
+      setClImportStatus(files.length > 1
+        ? `Aidan ödevleri okuyor… (${idx + 1}/${files.length}) — 10-15 sn/görsel, sabret`
+        : 'Aidan ödevleri okuyor… 10-15 sn sürebilir, sabret');
+      const dataUrl = await resizeImageToDataUrl(files[idx]);
+      const r = await fetch(CLASSROOM_IMAGE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ image: dataUrl }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || ('hata ' + r.status));
+      const items = Array.isArray(j.items) ? j.items : [];
+      if (!items.length && !firstEmpty) firstEmpty = j;
+      all.push(...items);
+    }
+
+    // Çakışan ödevleri (aynı başlık+tarih) tek satıra indir — görseller üst üste binebilir
+    const merged = mergeClassroomItems(all);
+    if (!merged.length) {
       let dbg = '';
-      if (j.aiError) dbg = `\n\n(AI hatası: ${j.aiError})`;
-      else if (j.raw) dbg = `\n\n(AI cevabı: ${String(j.raw).slice(0, 200)})`;
-      setClImportStatus('Görselde ödev bulamadım. Ödev/yapılacaklar listesinin net bir görüntüsünü dene.' + dbg, true);
+      if (firstEmpty && firstEmpty.aiError) dbg = `\n\n(AI hatası: ${firstEmpty.aiError})`;
+      else if (firstEmpty && firstEmpty.raw) dbg = `\n\n(AI cevabı: ${String(firstEmpty.raw).slice(0, 200)})`;
+      setClImportStatus('Görsel(ler)de ödev bulamadım. Ödev/yapılacaklar listesinin net bir görüntüsünü dene.' + dbg, true);
       return;
     }
-    _clImportItems = items;
+    _clImportItems = merged;
     renderClImportList();
   } catch (e) {
     setClImportStatus('Okuma başarısız: ' + e.message, true);
   }
+}
+
+// Çoklu görsel: aynı ödev (başlık+tarih) birden çok görselde çıkarsa tek satıra indir.
+// Aynı başlık farklı tarihle iki kez varsa ikisi de kalır (farklı ödev sayılır).
+function mergeClassroomItems(list) {
+  const seen = new Map();
+  const norm = s => (s || '').trim().toLowerCase();
+  for (const it of list) {
+    const title = (it && it.title || '').trim();
+    if (!title) continue;
+    const due = /^\d{4}-\d{2}-\d{2}$/.test(it.due || '') ? it.due : null;
+    const key = norm(title) + '|' + (due || '');
+    if (!seen.has(key)) { seen.set(key, { title, due, course: (it.course || '').trim() || null }); continue; }
+    const cur = seen.get(key);
+    if (!cur.course && it.course) cur.course = (it.course || '').trim() || null; // eksik ders bilgisini doldur
+  }
+  return Array.from(seen.values());
 }
 
 function setClImportStatus(msg, isError) {
