@@ -1688,34 +1688,60 @@ function addAiFood() {
 // ===== TAKVİYELER (push hatırlatıcı — mevcut data.reminders + Worker 15dk cron) =====
 function renderSupplements() {
   const el = document.getElementById('suppList'); if (!el) return;
-  const supps = (data.reminders || []).filter(r => r.kind === 'supp').sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  const supps = (data.reminders || []).filter(r => r.kind === 'supp').sort((a, b) => (a.time || a.startTime || '').localeCompare(b.time || b.startTime || ''));
   const meta = document.getElementById('suppMeta');
   const t = today();
   if (meta) meta.textContent = supps.length ? `${supps.filter(r => r.takenDate === t).length}/${supps.length} alındı` : '';
   if (!supps.length) { el.innerHTML = '<div class="diet-empty">Henüz takviye yok. Aşağıdan ekle — saatinde bildirim gelir.</div>'; return; }
   el.innerHTML = supps.map(r => {
     const taken = r.takenDate === t;
+    const timeStr = r.mode === 'interval' ? `${r.startTime}–${r.endTime}` : (r.time || '–');
+    const daysStr = (r.days === 'weekdays' ? 'Hafta içi' : 'Her gün') + (r.mode === 'interval' ? ` · ${suppEveryLabel(+r.everyMin || 60)}` : '');
     return `<div class="supp-item${r.enabled === false ? ' off' : ''}${taken ? ' taken' : ''}">` +
       `<button class="supp-check${taken ? ' on' : ''}" onclick="markSuppTaken(${r.id})" title="${taken ? 'işareti kaldır' : 'aldım'}" aria-label="aldım">${taken ? '✓' : ''}</button>` +
-      `<span class="supp-time">${escapeHtml(r.time || '–')}</span>` +
+      `<span class="supp-time">${escapeHtml(timeStr)}</span>` +
       `<span class="supp-name">${escapeHtml(r.label || '')}</span>` +
-      `<span class="supp-days">${r.days === 'weekdays' ? 'Hafta içi' : 'Her gün'}</span>` +
+      `<span class="supp-days">${daysStr}</span>` +
       `<input type="checkbox" ${r.enabled !== false ? 'checked' : ''} onchange="toggleSupplement(${r.id})" aria-label="Aç/kapa">` +
       `<button class="supp-del" onclick="deleteSupplement(${r.id})" aria-label="Sil">✕</button></div>`;
   }).join('');
 }
+let _suppMode = 'single';
+function setSuppMode(m) {
+  _suppMode = m;
+  const bs = document.getElementById('suppModeSingle'), bi = document.getElementById('suppModeInterval');
+  if (bs) bs.classList.toggle('active', m === 'single');
+  if (bi) bi.classList.toggle('active', m === 'interval');
+  const rs = document.getElementById('suppSingleRow'), ri = document.getElementById('suppIntervalRow');
+  if (rs) rs.style.display = (m === 'single') ? '' : 'none';
+  if (ri) ri.style.display = (m === 'interval') ? '' : 'none';
+}
+function suppEveryLabel(m) { return m === 30 ? "30 dk'da bir" : m === 60 ? 'saatte bir' : `${Math.round(m / 60)} saatte bir`; }
 function addSupplement() {
   const name = (document.getElementById('suppName').value || '').trim();
-  const time = document.getElementById('suppTime').value;
   const days = document.getElementById('suppDays').value;
   if (!name) { showToast('Takviye adı yaz', 'info'); return; }
-  if (!time) { showToast('Saat seç', 'info'); return; }
   data.reminders = data.reminders || [];
-  data.reminders.push({ id: Date.now(), label: name, time, days, enabled: true, lastFired: null, kind: 'supp' });
-  document.getElementById('suppName').value = ''; document.getElementById('suppTime').value = '';
+  if (_suppMode === 'interval') {
+    // Aralıklı mod: uyku düzeni değişkenken tek saat yerine aralık + periyot
+    const start = document.getElementById('suppStart').value;
+    const end = document.getElementById('suppEnd').value;
+    const every = +document.getElementById('suppEvery').value || 60;
+    if (!start || !end) { showToast('Başlangıç ve bitiş saati seç', 'info'); return; }
+    if (start === end) { showToast('Başlangıç ve bitiş aynı olamaz', 'info'); return; }
+    data.reminders.push({ id: Date.now(), label: name, mode: 'interval', startTime: start, endTime: end, everyMin: every, days, enabled: true, lastFired: null, kind: 'supp' });
+    document.getElementById('suppStart').value = ''; document.getElementById('suppEnd').value = '';
+    showToast(`${start}–${end} arası ${suppEveryLabel(every)} — ${name} kuruldu`, 'success');
+  } else {
+    const time = document.getElementById('suppTime').value;
+    if (!time) { showToast('Saat seç', 'info'); return; }
+    data.reminders.push({ id: Date.now(), label: name, time, days, enabled: true, lastFired: null, kind: 'supp' });
+    document.getElementById('suppTime').value = '';
+    showToast(`${time} — ${name} kuruldu`, 'success');
+  }
+  document.getElementById('suppName').value = '';
   save(); renderSupplements();
   if (typeof renderFixedReminders === 'function') renderFixedReminders();
-  showToast(`${time} — ${name} kuruldu`, 'success');
 }
 function toggleSupplement(id) { const r = (data.reminders || []).find(x => x.id === id); if (!r) return; r.enabled = (r.enabled === false); save(); renderSupplements(); }
 function deleteSupplement(id) {

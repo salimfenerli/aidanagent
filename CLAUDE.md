@@ -12,6 +12,12 @@ Aşağıdaki tarihçe/mimari bölümleri 14 Haziran'da kaldı. O günden bugüne
 - **AI modeli:** Llama 3.3 70B → **Llama 4 Scout** (git commit: "llama 4 scout update").
 - **Cache:** `sw.js` = **aidan-v7-88**.
 
+### 10 Temmuz 2026 — aralıklı takviye hatırlatıcısı + günlük skor kartı (modüller arası bağ)
+- **⏰ Aralıklı hatırlatıcı:** Salim'in uyku düzeni değişken → takviye için tek saat yerine **aralık + periyot**. Takviye ekleme formunda "Tek saat / Aralıklı" chip'i; aralıklı: başlangıç–bitiş saati + sıklık (30dk/1sa/2sa/3sa). Veri: `data.reminders[i]` yeni alanlar `mode:'interval'`, `startTime`, `endTime`, `everyMin`. Worker `runFixedRemindersForUser`: slot mantığı (`lastFired='YYYY-MM-DD@slotDk'`, slot başına 1 push, >30dk eski slot atlanır, **gece yarısını aşan aralık desteklenir** örn. 22:00–02:00). 17 senaryo node testi geçti.
+- **🧩 Günlük skor kartı:** Görevler tabı üstünde `#dailyScore` (nowCard altı) — MIT x/y · kcal yenen/hedef · su L · odak seans. Hedef tutan hücre amber tint (`.score-item.on`). Veri yoksa gizli. `renderDailyScore()` ui.js'te, renderTasks başında + showTab('tasks')'ta çağrılır.
+- **📊 Sabah push dün özeti:** Worker `buildDailySummaryLine` — "Dün: ✓ N görev · kcal · su" satırı morning payload sonuna eklenir (AI + fallback ikisinde de çalışır, odak dahil edilmedi — pomoToday dünü güvenilir tutmaz).
+- Cache v7-96 → **v7-97**.
+
 ### 7 Temmuz 2026 — elle eklenen besin otomatik "Kendi besinlerim"e kaydolsun
 Salim: barkod/OFF yerel Türk ürününü ıskalayınca paket arkasından elle makro giriyorum, bir daha sormasın. **`core.js` `addMeal()`:** kcal girildiyse öğün eklenirken besin otomatik `data.diet.customFoods`'a upsert edilir (ad ile dedupe — varsa makroları günceller, yoksa ekler), toast "eklendi · besinlerine kaydedildi". Elle sekmesinde protein/karb/yağ girişi (`mealP`/`mealC`/`mealF` inputları) zaten vardı. İkinci sefer arama kutusuna adı yazınca "Kendi besinlerim" altında tek tıkla gelir. Cache v7-87 → v7-88.
 

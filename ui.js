@@ -559,6 +559,7 @@ function renderTaskItem(t) {
 }
 
 function renderTasks() {
+  if (typeof renderDailyScore === 'function') renderDailyScore();
   const list = document.getElementById('taskList');
   const sorted = sortTasks(filterTasks(data.tasks));
   const todayStr = today();
@@ -2511,6 +2512,33 @@ function formatTrDate(dateStr) {
   const days = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
   const months = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
   return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]}`;
+}
+
+// ============ 🧩 GÜNLÜK SKOR (modüller arası: MIT + kalori + su + odak) ============
+// Görevler tabının üstünde tek satır kart — dört modülün bugünkü durumu. Veri yoksa gizli.
+function renderDailyScore() {
+  const el = document.getElementById('dailyScore');
+  if (!el) return;
+  const t = today();
+  const mit = (data.tasks || []).filter(x => x.mitDate === t);
+  const mitDone = mit.filter(x => x.done).length;
+  const d = data.diet || {};
+  const day = (d.days || {})[t] || { meals: [], waterL: 0 };
+  const kcal = (day.meals || []).reduce((s, m) => s + (+m.kcal || 0), 0);
+  const kcalGoal = d.kcalGoal || 2000;
+  const waterL = day.waterL || 0;
+  const waterGoal = d.waterGoalL || 2.5;
+  const pomo = (data.pomoToday && data.pomoToday.date === t) ? (data.pomoToday.count || 0) : 0;
+  if (!mit.length && !kcal && !waterL && !pomo) { el.innerHTML = ''; return; }
+  const items = [
+    { label: 'MIT', val: mit.length ? `${mitDone}/${mit.length}` : '–', on: mit.length > 0 && mitDone >= mit.length },
+    { label: 'kcal', val: kcal ? `${kcal}/${kcalGoal}` : '–', on: kcal > 0 && kcal <= kcalGoal },
+    { label: 'su (L)', val: waterL ? String(Math.round(waterL * 100) / 100).replace('.', ',') : '–', on: waterL >= waterGoal },
+    { label: 'odak', val: pomo ? `${pomo} seans` : '–', on: pomo > 0 }
+  ];
+  el.innerHTML = `<div class="score-card">` + items.map(i =>
+    `<div class="score-item${i.on ? ' on' : ''}"><span class="score-val">${i.val}</span><span class="score-label">${i.label}</span></div>`
+  ).join('') + `</div>`;
 }
 
 function renderCountdowns() {

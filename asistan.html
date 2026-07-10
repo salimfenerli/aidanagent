@@ -100,6 +100,7 @@
       <div class="now-day-bar"><span class="now-day-fill" id="nowDayFill" style="width:0%"></span></div>
       <div class="now-next" id="nowNext" style="display:none;"></div>
     </div>
+    <div id="dailyScore"></div>
     <div id="countdownList"></div>
     <details class="school-section" id="schoolSection">
       <summary><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>Okul <span class="school-badge" id="schoolBadge"></span></summary>
@@ -450,13 +451,30 @@
       <div id="suppList"></div>
       <div class="supp-add">
         <input id="suppName" placeholder="takviye (örn. D Vitamini)" onkeydown="if(event.key==='Enter')addSupplement()">
-        <div class="supp-add-row2">
+        <div class="slot-chips supp-mode-chips">
+          <button type="button" class="slot-chip active" id="suppModeSingle" onclick="setSuppMode('single')">Tek saat</button>
+          <button type="button" class="slot-chip" id="suppModeInterval" onclick="setSuppMode('interval')">Aralıklı</button>
+        </div>
+        <div class="supp-add-row2" id="suppSingleRow">
           <input id="suppTime" type="time">
+        </div>
+        <div class="supp-add-row2" id="suppIntervalRow" style="display:none;">
+          <input id="suppStart" type="time">
+          <span class="supp-range-sep">–</span>
+          <input id="suppEnd" type="time">
+          <select id="suppEvery">
+            <option value="30">30 dk'da bir</option>
+            <option value="60" selected>saatte bir</option>
+            <option value="120">2 saatte bir</option>
+            <option value="180">3 saatte bir</option>
+          </select>
+        </div>
+        <div class="supp-add-row2">
           <select id="suppDays"><option value="daily">Her gün</option><option value="weekdays">Hafta içi</option></select>
           <button class="small primary" onclick="addSupplement()">Ekle</button>
         </div>
       </div>
-      <p class="diet-hint">Saati gelince telefonuna bildirim gelir (~15 dk hassasiyet). Günde 2 kez içiyorsan iki ayrı saat ekle.</p>
+      <p class="diet-hint">Tek saat: o saatte bir bildirim. Aralıklı: iki saat arasında seçtiğin sıklıkta bildirim — gece yarısını aşan aralık da olur (örn. 22:00–02:00). ~15 dk hassasiyet.</p>
     </div>
 
     <!-- Öğün hatırlatıcı + hedefler -->

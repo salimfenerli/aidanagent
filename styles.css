@@ -3319,3 +3319,14 @@
 /* Önceki günü kopyala */
 .copy-day-btn { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 14px; }
 .copy-day-btn .icon { width: 15px; height: 15px; }
+
+/* 🧩 Günlük skor kartı (modüller arası: MIT + kalori + su + odak) */
+.score-card { display: flex; gap: 8px; margin: 0 0 12px; }
+.score-item { flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border-soft); border-radius: 12px; padding: 8px 4px; text-align: center; display: flex; flex-direction: column; gap: 2px; }
+.score-item.on { background: rgba(245, 165, 36, 0.08); border-color: rgba(245, 165, 36, 0.35); }
+.score-val { font-weight: 700; font-size: 0.9rem; color: var(--text-strong); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.score-label { font-size: 0.7rem; color: var(--text-muted); }
+
+/* Takviye aralıklı mod */
+.supp-mode-chips { margin-top: 2px; }
+.supp-range-sep { align-self: center; color: var(--text-muted); flex: 0 0 auto; }

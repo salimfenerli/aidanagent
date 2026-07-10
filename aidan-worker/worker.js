@@ -869,6 +869,24 @@ async function sendPushToAll(env, data, payload, sessionInfo) {
   }
 }
 
+// 🧩 Modüller arası "dün özeti" — sabah brifingine eklenen tek satır (görev + kalori + su).
+// Odak push'a eklenmedi: pomoToday sadece günün sayacıdır, dünün verisi güvenilir değil.
+function buildDailySummaryLine(data) {
+  const y = trDate(-1);
+  const parts = [];
+  const doneY = (data.tasks || []).filter(t => t.doneDate === y).length;
+  if (doneY) parts.push(`✓ ${doneY} görev`);
+  const d = data.diet || {};
+  const day = (d.days || {})[y];
+  if (day) {
+    const kcal = (day.meals || []).reduce((s, m) => s + (+m.kcal || 0), 0);
+    if (kcal) parts.push(`${kcal}/${d.kcalGoal || 2000} kcal`);
+    if (day.waterL) parts.push(`${String(day.waterL).replace('.', ',')} L su`);
+  }
+  if (!parts.length) return '';
+  return `📊 Dün: ${parts.join(' · ')}`;
+}
+
 async function runCronJob(env, type) {
   const users = await fetchAllUsers(env);
   const results = [];
@@ -876,7 +894,12 @@ async function runCronJob(env, type) {
     try {
       let payload = null;
       switch (type) {
-        case 'morning':  payload = await buildMorningAi(env, u.data, autoSetMorningMit(u.data)); break;
+        case 'morning': {
+          payload = await buildMorningAi(env, u.data, autoSetMorningMit(u.data));
+          const dsl = buildDailySummaryLine(u.data);
+          if (payload && dsl) payload.message += `\n\n${dsl}`;
+          break;
+        }
         case 'noon':     payload = buildNoon(u.data); break;
         case 'evening':  payload = buildEvening(u.data); break;
         case 'deadline': payload = buildDeadlineAlerts(u.data); break;
@@ -3987,7 +4010,7 @@ async function runFixedReminders(env) {
 
 async function runFixedRemindersForUser(env, u) {
   const data = u.data;
-  const rems = (data.reminders || []).filter(r => r && r.enabled !== false && r.time);
+  const rems = (data.reminders || []).filter(r => r && r.enabled !== false && (r.time || (r.mode === 'interval' && r.startTime && r.endTime)));
   if (!rems.length) return { checked: 0, sent: 0 };
 
   const tr = new Date(Date.now() + TR_OFFSET_MS);
@@ -3997,6 +4020,34 @@ async function runFixedRemindersForUser(env, u) {
 
   const due = [];
   for (const r of rems) {
+    if (r.mode === 'interval') {
+      // Aralıklı hatırlatıcı (örn. takviye): startTime–endTime arasında everyMin dk'da bir.
+      // lastFired = 'YYYY-MM-DD@slotDk' — her slot en fazla 1 kez atılır.
+      const ms = /^(\d{1,2}):(\d{2})$/.exec(r.startTime || '');
+      const me = /^(\d{1,2}):(\d{2})$/.exec(r.endTime || '');
+      if (!ms || !me) continue;
+      const every = Math.max(30, +r.everyMin || 60);
+      const startM = (+ms[1]) * 60 + (+ms[2]);
+      let endM = (+me[1]) * 60 + (+me[2]);
+      if (endM <= startM) endM += 1440; // gece yarısını aşan aralık (örn. 22:00–02:00)
+      let nowM = nowMin, fireDay = todayStr, fireWeekday = isWeekday;
+      if (nowM < startM && nowM + 1440 <= endM) {
+        // gece yarısından sonraki kısımdayız — aralık dün başladı
+        nowM += 1440;
+        fireDay = trDate(-1);
+        const yd = new Date(Date.now() + TR_OFFSET_MS - 86400000).getUTCDay();
+        fireWeekday = yd >= 1 && yd <= 5;
+      }
+      if (nowM < startM || nowM > endM) continue;
+      if (r.days === 'weekdays' && !fireWeekday) continue;
+      const slotM = startM + Math.floor((nowM - startM) / every) * every;
+      if (nowM - slotM > 30) continue; // eski slot — cron kaçırdıysa spam yapma
+      const slotKey = fireDay + '@' + slotM;
+      if (r.lastFired === slotKey) continue;
+      r.lastFired = slotKey;
+      due.push(r);
+      continue;
+    }
     const m = /^(\d{1,2}):(\d{2})$/.exec(r.time);
     if (!m) continue;
     let diff = nowMin - ((+m[1]) * 60 + (+m[2]));
@@ -4016,7 +4067,12 @@ async function runFixedRemindersForUser(env, u) {
   if (!due.length) return { checked: rems.length, sent: 0 };
 
   for (const r of due) {
-    const payload = { title: `⏰ ${r.label || 'Hatırlatma'}`, message: `Saat ${r.time} — günün sabiti, hadi 💜` };
+    const payload = {
+      title: `⏰ ${r.label || 'Hatırlatma'}`,
+      message: r.mode === 'interval'
+        ? `${r.startTime}–${r.endTime} arası hatırlatma — hadi 💜`
+        : `Saat ${r.time} — günün sabiti, hadi 💜`
+    };
     await sendPushToAll(env, data, payload, { userId: u.userId });
     logPush(data, 'reminder', payload, ((data.settings && data.settings.pushSubs) || []).length);
   }
