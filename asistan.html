@@ -44,7 +44,7 @@
       <div class="brand-name">Aidan</div>
       <span id="syncDot" class="sync-dot offline" title="Bulut bağlantısı yok"></span>
     </div>
-    <button class="brand-action" title="Takvim" aria-label="Takvim" onclick="openCalendarModal()">📅</button>
+    <button class="brand-action" title="Takvim" aria-label="Takvim" onclick="openCalendarModal()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
   </div>
   <h1 id="dateHero">Bugün</h1>
   <p class="subtitle" id="appSubtitle">sakin bir gün</p>
@@ -145,8 +145,8 @@
         <div class="active-task-elapsed" id="activeTaskElapsed">⏱ 0 dk</div>
       </div>
       <div class="active-task-actions">
-        <button onclick="showTab('focus', document.querySelector('[data-tab=focus]'))" title="Odak ekranına geç">🎧</button>
-        <button onclick="completeFocusTask()" title="Bitir + sayacı kaydet">✅</button>
+        <button onclick="showTab('focus', document.querySelector('[data-tab=focus]'))" title="Odak ekranına geç"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></button>
+        <button onclick="completeFocusTask()" title="Bitir + sayacı kaydet"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></button>
         <button onclick="dropFocusTask()" title="Bırak — odağı temizle">✕</button>
       </div>
     </div>
@@ -239,7 +239,7 @@
         Günümü planla
       </button>
       <button class="secondary" onclick="addPlanBlock()">＋ Blok ekle</button>
-      <button class="secondary plan-clear" onclick="clearDayPlan()" title="Planı temizle">🗑️</button>
+      <button class="secondary plan-clear" onclick="clearDayPlan()" title="Planı temizle"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
     </div>
 
     <div id="planTimeline"></div>
@@ -266,7 +266,7 @@
         <button class="secondary small" onclick="setTimer(5,2)" title="ADHD için altın kural — 5 dk başla, devamı kendiliğinden gelir">5dk (başla!)</button>
         <button class="secondary small" onclick="setTimer(25,5)">25/5</button>
       </div>
-      <div class="session-count">Bugün: <span id="pomoCount">0</span> seans 🎧</div>
+      <div class="session-count">Bugün: <span id="pomoCount">0</span> seans</div>
     </div>
   </div>
 
@@ -308,7 +308,7 @@
     <div class="market-chips" id="marketChips">
       <button class="market-chip active" data-market="bist" onclick="selectMarket('bist')">🇹🇷 BIST</button>
       <button class="market-chip" data-market="abd" onclick="selectMarket('abd')">🇺🇸 ABD</button>
-      <button class="market-chip" data-market="fx" onclick="selectMarket('fx')">💱 Döviz</button>
+      <button class="market-chip" data-market="fx" onclick="selectMarket('fx')">Döviz</button>
       <button class="market-chip" data-market="crypto" onclick="selectMarket('crypto')">₿ Kripto</button>
     </div>
     <div class="stocks-add">
@@ -598,7 +598,7 @@
     </div>
 
     <div class="settings-row">
-      <label>📅 Takvimle senkronize et</label>
+      <label>Takvimle senkronize et</label>
       <div id="calendarSyncBox"></div>
       <div class="settings-help">Son tarihi olan görevlerini ve geri sayımlarını iPhone/Google takvimine abone et. Tek yönlü — Aidan'da planlarsın, takvimde görürsün. (~1 saat gecikmeyle güncellenir)</div>
     </div>
@@ -613,7 +613,7 @@
       <div id="supaSetupBox">
         <input type="text" id="supaUrl" placeholder="Supabase Project URL (https://xxxxx.supabase.co)" style="width:100%;max-width:500px;margin-bottom:6px;">
         <input type="text" id="supaKey" placeholder="Supabase anon public key (uzun bir JWT)" style="width:100%;max-width:500px;margin-bottom:6px;">
-        <button class="small" onclick="connectSupabase()">🔌 Bağlan</button>
+        <button class="small" onclick="connectSupabase()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg> Bağlan</button>
         <button class="small secondary" onclick="disconnectSupabase()">Kes</button>
       </div>
       <div id="supaAuthBox" style="margin-top:10px;"></div>
@@ -865,7 +865,7 @@
       <span><b>Portföyü bununla değiştir</b><br><small>Fotoğrafta olmayan pozisyonlar satılmış sayılır, kaldırılır. (Sadece izleme listendeki fiyat takipleri kalır.)</small></span>
     </label>
     <div class="modal-actions" id="portfolioImportActions" style="margin-top:14px; display:none;">
-      <button onclick="confirmPortfolioImport()" id="pfImportConfirmBtn">✅ Portföye ekle</button>
+      <button onclick="confirmPortfolioImport()" id="pfImportConfirmBtn"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Portföye ekle</button>
       <button class="secondary" onclick="closePortfolioImport()">İptal</button>
     </div>
     <button class="modal-close" onclick="closePortfolioImport()">Kapat</button>

@@ -207,7 +207,7 @@ function stocksUpdatedLabel() {
 
 // BIST dışı piyasalar için küçük bayrak/sembol rozeti (BIST için gösterilmez, varsayılan zaten o)
 function marketBadge(market) {
-  const map = { abd: '🇺🇸', fx: '💱', crypto: '₿' };
+  const map = { abd: '🇺🇸', fx: '$', crypto: '₿' };
   return map[market] ? `<span class="stock-market-badge">${map[market]}</span>` : '';
 }
 
@@ -262,7 +262,7 @@ function renderStocks() {
   const _tb = document.getElementById('pfTechBtn');
   if (_tb) _tb.style.display = _hasTaHoldings ? 'flex' : 'none';
   if (wl.length === 0) {
-    list.innerHTML = '<div class="stocks-empty">Henüz hisse yok.<br>Yukarıdan BIST kodu ekle (örn THYAO).<br>Fiyatını gör, pozisyon gir, alarm kur 🔔</div>';
+    list.innerHTML = '<div class="stocks-empty">Henüz hisse yok.<br>Yukarıdan BIST kodu ekle (örn THYAO).<br>Fiyatını gör, pozisyon gir, alarm kur</div>';
     return;
   }
   list.innerHTML = wl.map((w, idx) => {
@@ -589,7 +589,7 @@ async function renderBist100Compare() {
   }
   const diff = portfolioPct - xuPct;
   const verdict = diff >= 0
-    ? `Son ${spanLbl}'de portföyün endeksi <b class="up">${pctStr(diff)}</b> geçti 🎯`
+    ? `Son ${spanLbl}'de portföyün endeksi <b class="up">${pctStr(diff)}</b> geçti`
     : `Son ${spanLbl}'de portföyün endeksin <b class="down">${pctStr(Math.abs(diff))}</b> gerisinde`;
   el.innerHTML = `
     <div class="bist100-head">BIST100'e karşı <span class="bist100-span">son ${escapeHtml(spanLbl)}</span></div>
@@ -612,7 +612,7 @@ function openStockChart(idx) {
   _stockChartMode = 'line';
   _stockChartFib = false;
   const taOk = TA_MARKETS.has(w.market || 'bist');
-  document.getElementById('stockChartSym').textContent = w.symbol + (w.market && w.market !== 'bist' ? ` · ${({abd:'🇺🇸',fx:'💱',crypto:'₿'})[w.market]||''}` : '');
+  document.getElementById('stockChartSym').textContent = w.symbol + (w.market && w.market !== 'bist' ? ` · ${({abd:'🇺🇸',fx:'$',crypto:'₿'})[w.market]||''}` : '');
   document.getElementById('stockChartName').textContent = w.name || '';
   document.getElementById('stockChartPrice').innerHTML = w.price != null
     ? formatStockPrice(w.price) + ` <span style="font-size:0.72em;color:var(--text-faint);">${escapeHtml(w.currency||'')}</span>`
@@ -1479,7 +1479,7 @@ async function openPfTechModal() {
   if (_pfTechItems.length === 0) {
     statusEl.textContent = 'Hiçbir hisse için veri çekilemedi.';
   } else {
-    statusEl.textContent = `${_pfTechItems.length} hisse için teknik özet hazır. AI taktik yorumu için butona bas 👇`;
+    statusEl.textContent = `${_pfTechItems.length} hisse için teknik özet hazır. AI taktik yorumu için butona bas`;
     aiBtn.disabled = false;
   }
 }
@@ -1794,9 +1794,9 @@ function closePortfolioImport() {
 
 // AI sonuçlarını düzenlenebilir satırlar olarak göster (vision hata yapabilir → kullanıcı düzeltsin)
 function renderPfImportList() {
-  setPfImportStatus(`${_pfImportHoldings.length} varlık buldum. Kontrol et, düzelt, ekle 👇`);
+  setPfImportStatus(`${_pfImportHoldings.length} varlık buldum. Kontrol et, düzelt, ekle`);
   const list = document.getElementById('portfolioImportList');
-  const marketOpts = [['bist','🇹🇷'],['abd','🇺🇸'],['fx','💱'],['crypto','₿']];
+  const marketOpts = [['bist','🇹🇷'],['abd','🇺🇸'],['fx','$'],['crypto','₿']];
   list.innerHTML = _pfImportHoldings.map((h, i) => `
     <div class="pf-import-row">
       <div class="pf-imp-top">
@@ -1951,7 +1951,7 @@ async function splitTask() {
   document.getElementById('taskInput').value = '';
   document.getElementById('taskReminder').value = '';
   save(); renderTasks();
-  showToast(`Görev ${subs.length} adıma bölündü ✂️`, 'success');
+  showToast(`Görev ${subs.length} adıma bölündü`, 'success');
 }
 
 function toggleTask(id) {
@@ -1969,9 +1969,9 @@ function toggleTask(id) {
     t.actualMin = elapsed;
     const diff = elapsed - t.estimateMin;
     setTimeout(() => {
-      if (diff > 5) showToast(`Tahmin ${t.estimateMin}dk, gerçek ${elapsed}dk — ${diff}dk fazla 📊`, 'info', 4000);
+      if (diff > 5) showToast(`Tahmin ${t.estimateMin}dk, gerçek ${elapsed}dk — ${diff}dk fazla`, 'info', 4000);
       else if (diff < -5) showToast(`${elapsed}dk'da bitti — tahminden hızlı! `, 'success', 4000);
-      else showToast(`${elapsed}dk — tahmin neredeyse tam 🎯`, 'success', 4000);
+      else showToast(`${elapsed}dk — tahmin neredeyse tam`, 'success', 4000);
     }, 200);
   }
 
@@ -1994,7 +1994,7 @@ function toggleTask(id) {
     setTimeout(() => celebrateDone(id), 30);
     // Undo: yanlışlıkla bittiyse 5sn geri alma şansı
     const preview = (t.text || '').slice(0, 28);
-    showUndoToast(`✅ "${preview}" bitti`, () => {
+    showUndoToast(`"${preview}" bitti`, () => {
       const tt = data.tasks.find(x => x.id === id);
       if (!tt) return;
       tt.done = false;
@@ -2189,7 +2189,7 @@ function toggleMit(id) {
   } else {
     const currentMit = data.tasks.filter(x => x.mitDate === todayStr).length;
     if (currentMit >= 3) {
-      showToast('Bugünün 3\'ü dolu! Önce birinin ⭐\'ını kaldır. 3 sınırı kasıtlı — odak için.', 'warning', 5000);
+      showToast('Bugünün 3\'ü dolu! Önce birinin ★\'ını kaldır. 3 sınırı kasıtlı — odak için.', 'warning', 5000);
       return;
     }
     t.mitDate = todayStr;

@@ -258,7 +258,7 @@ function renderTemplateList() {
       `<button class="tpl-del" onclick="event.stopPropagation(); deleteTemplate('${tpl.id}')" title="Şablonu sil"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>`;
     return `
       <div class="tpl-card" onclick="applyTemplate('${tpl.id}')">
-        <span class="tpl-emoji">${tpl.emoji || '📋'}</span>
+        <span class="tpl-emoji">${tpl.emoji || ''}</span>
         <div class="tpl-info">
           <div class="tpl-name">${escapeHtml(tpl.name)}</div>
           <div class="tpl-sub">${tpl.tasks.length} görev${tpl.builtin ? '' : ' · senin şablonun'}</div>
@@ -288,10 +288,10 @@ async function createTemplate() {
   if (lines === null) return;
   const tasks = lines.split('\n').map(s => s.trim()).filter(Boolean).map(text => ({ text }));
   if (tasks.length === 0) { showToast('En az bir görev yaz', 'warning'); return; }
-  data.templates.push({ id: 'tpl-user-' + Date.now(), name: name.trim(), emoji: '⭐', builtin: false, tasks });
+  data.templates.push({ id: 'tpl-user-' + Date.now(), name: name.trim(), emoji: '', builtin: false, tasks });
   save();
   renderTemplateList();
-  showToast(`✅ "${name.trim()}" kaydedildi (${tasks.length} görev)`, 'success', 3000);
+  showToast(`"${name.trim()}" kaydedildi (${tasks.length} görev)`, 'success', 3000);
 }
 
 function deleteTemplate(tplId) {
@@ -483,7 +483,7 @@ function renderDayPlan() {
   if (!tl) return;
   const blocks = (data.dayPlan.blocks || []).slice().sort((a, b) => hmToMin(a.start) - hmToMin(b.start));
   if (!blocks.length) {
-    tl.innerHTML = '<div class="plan-empty"><span class="pe-emoji">📅</span>Günün henüz boş.<br>Görevlerin varsa <b>Günümü planla</b>\'ya bas — Aidan saat saat doldursun.<br>Ya da <b>＋ Blok ekle</b> ile elle kur.</div>';
+    tl.innerHTML = '<div class="plan-empty">Günün henüz boş.<br>Görevlerin varsa <b>Günümü planla</b>\'ya bas — Aidan saat saat doldursun.<br>Ya da <b>＋ Blok ekle</b> ile elle kur.</div>';
     return;
   }
   const nowM = hmToMin(nowHM());
@@ -500,7 +500,7 @@ function renderDayPlan() {
       <div class="pb-time"><span>${b.start}</span><span class="pb-end">${b.end}</span></div>
       <div class="pb-body">
         <div class="pb-label">${escapeHtml(b.label || '(boş)')}</div>
-        <div class="pb-meta">${isNow ? '<span class="pb-now-tag">● şu an</span>' : ''}<span>${dur} dk</span>${linked ? '<span>🔗 görev</span>' : ''}</div>
+        <div class="pb-meta">${isNow ? '<span class="pb-now-tag">● şu an</span>' : ''}<span>${dur} dk</span>${linked ? '<span>görev</span>' : ''}</div>
       </div>
       <div class="pb-actions">
         ${kind === 'task' && linked ? `<button onclick="focusPlanBlock(${b.taskId})" title="Bu göreve odaklan"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5a9 9 0 0 1 18 0v5a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></button>` : ''}
@@ -889,7 +889,7 @@ function quickCaptureSubmit() {
   inp.value = '';
   save();
   renderTasks();
-  const head = `✅ ${p.text.slice(0, 40)}${p.text.length > 40 ? '…' : ''}`;
+  const head = `${p.text.slice(0, 40)}${p.text.length > 40 ? '…' : ''}`;
   const suffix = p.detected.length ? `\n${p.detected.join(' · ')}` : '';
   showToast(head + suffix, 'success', p.detected.length ? 3500 : 2200);
 }
@@ -935,7 +935,7 @@ function dumpToTask(when) {
   save();
   renderTasks();
   const suffix = p.detected.length ? `\n${p.detected.join(' · ')}` : '';
-  showToast(`✅ Göreve çevrildi: ${p.text.slice(0, 30)}${suffix}`, 'success', 3000);
+  showToast(`Göreve çevrildi: ${p.text.slice(0, 30)}${suffix}`, 'success', 3000);
 }
 
 function dumpRelTime(when) {

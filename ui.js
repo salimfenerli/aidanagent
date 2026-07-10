@@ -566,7 +566,7 @@ function renderTasks() {
 
   if (sorted.length === 0) {
     const emptyMsg = _taskFilter === 'all'
-      ? 'Henüz görev yok. Yukarıdan ekle 👆'
+      ? 'Henüz görev yok. Yukarıdan ekle'
       : 'Bu filtreye uyan görev yok. <a href="#" onclick="setFilter(\'all\', null); return false;" style="color:var(--accent);">Hepsini göster</a>';
     list.innerHTML = '<div class="empty">' + emptyMsg + '</div>';
   } else if (_taskFilter === 'all') {
@@ -1182,7 +1182,7 @@ function renderEveningSummary() {
   document.getElementById('eveningTitle').textContent = title;
 
   const statsParts = [];
-  statsParts.push(`<span>✅ <b>${doneToday.length}</b> görev</span>`);
+  statsParts.push(`<span><b>${doneToday.length}</b> görev</span>`);
   if (mit.length > 0) statsParts.push(`<span><b>${mitDone}/${mit.length}</b> MIT</span>`);
   if (pomo > 0) statsParts.push(`<span><b>${pomo}</b> seans</span>`);
   if (totalActualMin > 0) {
@@ -1236,7 +1236,7 @@ function renderCapacity() {
   const noEstimate = todayTasks.length - withEstimate.length;
   let hint;
   if (pct >= 105) hint = 'Fazla yüklendin. Bir kısmını "Ertele" ile yarına atmayı düşün.';
-  else if (pct >= 80) hint = '🟠 Dolu bir gün. Önce MIT 3\'ünü bitir, diğerleri bonus.';
+  else if (pct >= 80) hint = 'Dolu bir gün. Önce MIT 3\'ünü bitir, diğerleri bonus.';
   else if (pct >= 40) hint = '🟢 Dengeli gün. Tek tek halledersin.';
   else if (totalMin === 0 && noEstimate > 0) hint = 'ℹ️ Tahmin yok — görevlere "dk" yaz, doluluk gözüksün.';
   else hint = 'Hafif gün. Bonus iş alabilirsin ya da dinlen.';
@@ -1321,21 +1321,21 @@ function renderMit() {
       const tail = extras.length ? `<span class="mit-sug-meta">${extras.join(' · ')}</span>` : '';
       return `
         <div class="mit-suggestion" onclick="acceptMitSuggestion(${t.id})">
-          <span class="mit-sug-icon">＋⭐</span>
+          <span class="mit-sug-icon">＋★</span>
           <span class="mit-sug-text">${escapeHtml(t.text)}</span>
           ${tail}
         </div>
       `;
     }).join('');
     listEl.innerHTML = `
-      <div class="mit-empty" style="margin-bottom:8px;">Bugünün önerisi (tıkla, ⭐'la):</div>
+      <div class="mit-empty" style="margin-bottom:8px;">Bugünün önerisi (tıkla, ★'la):</div>
       ${sugHtml}
     `;
     return;
   }
   listEl.innerHTML = mitTasks.map(t => `
     <div class="mit-item ${t.done ? 'done' : ''}" onclick="toggleTask(${t.id})" title="${t.done ? 'Geri aç' : 'Bitti olarak işaretle'}">
-      <span class="mit-check">${t.done ? '✅' : '⬜'}</span>
+      <span class="mit-check">${t.done ? '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>' : '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>'}</span>
       <span>${escapeHtml(t.text)}</span>
     </div>
   `).join('');
@@ -1488,7 +1488,7 @@ function updateTimerDisplay() {
   if (subEl) subEl.textContent = isBreak ? 'mola' : (running ? 'odak' : 'dakika');
   const pct = ((totalSec - timerSec) / totalSec) * 100;
   ring.style.setProperty('--p', pct + '%');
-  document.title = running ? `${txt} ${isBreak ? '' : '🎧'} Aidan` : 'Aidan - ADHD Asistanım';
+  document.title = running ? `${txt} Aidan` : 'Aidan - ADHD Asistanım';
 }
 
 function startTimer() {
@@ -1672,7 +1672,7 @@ function saveDisplayName() {
   const v = (document.getElementById('displayName').value || '').trim().slice(0, 24);
   data.settings.displayName = v;
   save();
-  if (v) showToast(`✅ Bundan sonra Aidan sana "${v}" diye sesleniyor`, 'success', 3500);
+  if (v) showToast(`Bundan sonra Aidan sana "${v}" diye sesleniyor`, 'success', 3500);
 }
 
 function loadSettings() {
@@ -1725,7 +1725,7 @@ function renderWelcome() {
   }
   ov.innerHTML = `
     <div class="welcome-card">
-      <div class="welcome-logo">☁️</div>
+      <div class="welcome-logo"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg></div>
       <h1 class="welcome-title">Aidan</h1>
       <div class="welcome-form">
         <input type="email" id="wEmail" placeholder="email@adres.com" autocomplete="email">
@@ -1739,7 +1739,7 @@ function renderWelcome() {
           <button class="welcome-btn ghost" onclick="welcomeToggleSignup()">Yeni Hesap</button>
         </div>
         <div id="wSignupRow" style="display:none; margin-top:8px;">
-          <button class="welcome-btn primary wide" onclick="welcomeSignup()">✅ Kayıt Ol (davet koduyla)</button>
+          <button class="welcome-btn primary wide" onclick="welcomeSignup()">Kayıt Ol (davet koduyla)</button>
         </div>
         <div id="wStatus" class="welcome-status"></div>
       </div>
@@ -1774,8 +1774,8 @@ async function welcomeLogin() {
   if (!email || !password) { welcomeStatus('Email ve şifre gerekli.', '#ffb86c'); return; }
   welcomeStatus('⏳ Giriş yapılıyor…', '#8be9fd');
   const { error } = await window._supa.auth.signInWithPassword({ email, password });
-  if (error) welcomeStatus('❌ ' + error.message, '#ff5555');
-  else welcomeStatus('✅ Giriş başarılı', '#50fa7b');
+  if (error) welcomeStatus('' + error.message, '#ff5555');
+  else welcomeStatus('Giriş başarılı', '#50fa7b');
   // onAuthStateChange handler hideWelcome çağırır
 }
 
@@ -1795,12 +1795,12 @@ async function welcomeSignup() {
       body: JSON.stringify({ email, password, code }),
     });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) { welcomeStatus('❌ ' + (j.error || `signup ${r.status}`), '#ff5555'); return; }
-    welcomeStatus('✅ Hesap oluştu, giriş yapılıyor…', '#50fa7b');
+    if (!r.ok) { welcomeStatus('' + (j.error || `signup ${r.status}`), '#ff5555'); return; }
+    welcomeStatus('Hesap oluştu, giriş yapılıyor…', '#50fa7b');
     const { error } = await window._supa.auth.signInWithPassword({ email, password });
     if (error) welcomeStatus('Kayıt OK ama giriş başarısız: ' + error.message, '#ffb86c');
   } catch (e) {
-    welcomeStatus('❌ ' + e.message, '#ff5555');
+    welcomeStatus('' + e.message, '#ff5555');
   }
 }
 
@@ -1814,20 +1814,20 @@ const TOUR_STEPS = [
   {
     emoji: '',
     title: 'Quick Capture',
-    body: 'Üst bardaki kutu. Aklına geleni 2 saniyede yaz, <code>Enter</code> bas.<br><br><b>AI butonu</b> tarih/saat de tanır: <code>"yarın 14:00 dişçi"</code> → otomatik görev. <b>🎙️</b> ile sesli de yazabilirsin.',
+    body: 'Üst bardaki kutu. Aklına geleni 2 saniyede yaz, <code>Enter</code> bas.<br><br><b>AI butonu</b> tarih/saat de tanır: <code>"yarın 14:00 dişçi"</code> → otomatik görev. <b>Mikrofon</b> ile sesli de yazabilirsin.',
   },
   {
-    emoji: '⭐',
+    emoji: '',
     title: 'Bugünün 3\'ü (MIT)',
     body: 'Günde <b>en fazla 3 öncelik</b>. Daha fazlası beynini dağıtır.<br><br>Görev kartındaki butonuna bas → üste sabit kutuya çıkar. Bittiğinde tıkla, konfeti patlar ',
   },
   {
-    emoji: '🎧',
+    emoji: '',
     title: 'Odak (Pomodoro)',
     body: '<b>Odak</b> sekmesi → 25 dk çalış, 5 dk mola. Telefonu kilitli bile olsa doğru sayar.<br><br>Bir görev seçersen geçen süre otomatik o göreve yazılır — sonra "tahmin vs gerçek" görürsün.',
   },
   {
-    emoji: '🔔',
+    emoji: '',
     title: 'Bildirim aç',
     body: '<b>Ayarlar → Bu cihazda bildirim al</b> bas. Sabah brifing, akşam özet, hatırlatma — telefonun kilitli ekranına düşer.<br><br>Hazırsın Hadi ilk görevini ekle!',
   },
@@ -2010,7 +2010,7 @@ function updateAppSubtitle() {
   else mood = 'akşam toparlanma';
   let parts = [mood];
   if (mit.length > 0) parts.push(`${mitDone}/${mit.length}`);
-  if (doneToday > 0) parts.push(`✅ ${doneToday} bitti`);
+  if (doneToday > 0) parts.push(`${doneToday} bitti`);
   if (active === 0 && doneToday === 0) parts = ['sakin bir gün'];
   sub.textContent = parts.join(' · ');
 }
@@ -2268,7 +2268,7 @@ function askNotif() {
     const banner = document.getElementById('notifBanner');
     if (p === 'granted') {
       if (banner) banner.style.display = 'none';
-      notify('✅ Aidan hazır!', 'Hatırlatmalar artık bildirim olarak gelecek.');
+      notify('Aidan hazır!', 'Hatırlatmalar artık bildirim olarak gelecek.');
       showToast('Bildirimler açıldı', 'success');
       // Telefon kapalıyken de bildirim için background push'a kaydol
       const ok = await subscribeToPush();
@@ -2320,7 +2320,7 @@ function renderNotifSettings() {
       : `<div style="color:var(--text-muted);font-size:0.85em;margin-top:4px;">Bu cihaz henüz arka plan bildirimine kayıtlı değil</div>
          <button class="small secondary" style="margin-top:6px;" onclick="enablePushHere()">Bu cihazı kaydet</button>`;
     el.innerHTML = `
-      <div style="color:var(--success);">✅ Bildirimler açık</div>
+      <div style="color:var(--success);">Bildirimler açık</div>
       ${pushLine}
       <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
         <button class="small" onclick="testNotif()">Test bildirimi gönder</button>
@@ -2330,7 +2330,7 @@ function renderNotifSettings() {
     `;
   } else if (perm === 'denied') {
     el.innerHTML = `
-      <div style="color:var(--danger);">❌ Bildirim reddedildi</div>
+      <div style="color:var(--danger);">Bildirim reddedildi</div>
       <div style="color:var(--text-muted);font-size:0.85em;margin-top:4px;">Telefonda Ayarlar → Safari → Bildirimler'den açabilirsin.</div>
     `;
   } else {
@@ -2454,13 +2454,13 @@ function renderCalendarSync() {
   }
   const url = calendarUrl();
   if (!url) {
-    el.innerHTML = '<button class="small" onclick="createCalendarLink()">🔗 Takvim bağlantısı oluştur</button>';
+    el.innerHTML = '<button class="small" onclick="createCalendarLink()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Takvim bağlantısı oluştur</button>';
     return;
   }
   el.innerHTML =
     '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">' +
       '<input type="text" id="calUrlField" readonly value="' + escapeHtml(url) + '" style="flex:1;font-size:12px;">' +
-      '<button class="small" onclick="copyCalendarUrl()">📋 Kopyala</button>' +
+      '<button class="small" onclick="copyCalendarUrl()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Kopyala</button>' +
     '</div>' +
     '<details style="margin-bottom:8px;">' +
       '<summary style="cursor:pointer;font-size:13px;">iPhone\'a nasıl eklerim?</summary>' +
@@ -2481,7 +2481,7 @@ function createCalendarLink() {
   if (!data.settings.calendarToken) data.settings.calendarToken = genCalendarToken();
   save();
   renderCalendarSync();
-  showToast('📅 Takvim bağlantın hazır — kopyala, iPhone Takvim\'e abone ol', 'success', 4000);
+  showToast('Takvim bağlantın hazır — kopyala, iPhone Takvim\'e abone ol', 'success', 4000);
 }
 
 function resetCalendarLink() {
@@ -2489,7 +2489,7 @@ function resetCalendarLink() {
   data.settings.calendarToken = genCalendarToken();
   save();
   renderCalendarSync();
-  showToast('🔄 Yeni bağlantı üretildi — eski abonelik durur, yenisini ekle', 'info', 4000);
+  showToast('Yeni bağlantı üretildi — eski abonelik durur, yenisini ekle', 'info', 4000);
 }
 
 async function copyCalendarUrl() {
@@ -2497,10 +2497,10 @@ async function copyCalendarUrl() {
   if (!url) return;
   try {
     await navigator.clipboard.writeText(url);
-    showToast('📋 Kopyalandı', 'success', 2000);
+    showToast('Kopyalandı', 'success', 2000);
   } catch (e) {
     const f = document.getElementById('calUrlField');
-    if (f) { f.select(); document.execCommand('copy'); showToast('📋 Kopyalandı', 'success', 2000); }
+    if (f) { f.select(); document.execCommand('copy'); showToast('Kopyalandı', 'success', 2000); }
   }
 }
 
@@ -2830,7 +2830,7 @@ function closeClassroomImport() {
 
 // AI sonuçları düzenlenebilir satır — başlık + son tarih (vision hata yapabilir, kullanıcı düzeltsin)
 function renderClImportList() {
-  setClImportStatus(`${_clImportItems.length} ödev buldum. Kontrol et, düzelt, ekle 👇`);
+  setClImportStatus(`${_clImportItems.length} ödev buldum. Kontrol et, düzelt, ekle`);
   const list = document.getElementById('classroomImportList');
   list.innerHTML = _clImportItems.map((it, i) => `
     <div class="cl-import-row">
@@ -3180,7 +3180,7 @@ function renderAuthBox() {
   if (window._user) {
     el.innerHTML = `
       <div style="background:#50fa7b;color:#1e1e2e;padding:12px;border-radius:8px;">
-        ✅ Giriş yapıldı: <b>${window._user.email}</b><br>
+        Giriş yapıldı: <b>${window._user.email}</b><br>
         <button class="small danger" style="margin-top:8px;" onclick="logoutUser()">Çıkış yap</button>
         <button class="small" style="margin-top:8px;background:#bd93f9;color:white;" onclick="manualPull()">Şimdi senkronize et</button>
       </div>
@@ -3188,7 +3188,7 @@ function renderAuthBox() {
   } else {
     el.innerHTML = `
       <div style="background:#2a2a3e;padding:12px;border-radius:8px;">
-        <b>📧 Email + Şifre:</b><br>
+        <b>Email + Şifre:</b><br>
         <input type="email" id="loginEmail" placeholder="email@adres.com" style="width:100%;max-width:300px;margin:6px 0;display:block;">
         <input type="password" id="loginPassword" placeholder="şifre (en az 8 karakter)" style="width:100%;max-width:300px;margin:6px 0;display:block;">
         <div id="inviteRow" style="display:none;">
@@ -3200,7 +3200,7 @@ function renderAuthBox() {
           <button class="small" onclick="toggleSignupForm()">Yeni Hesap</button>
         </div>
         <div id="signupRow" style="display:none;margin-top:6px;">
-          <button class="small" onclick="signUpUser()" style="width:100%;">✅ Kayıt Ol (davet koduyla)</button>
+          <button class="small" onclick="signUpUser()" style="width:100%;">Kayıt Ol (davet koduyla)</button>
         </div>
         <div style="font-size:0.85em;color:#888;margin-top:6px;">İlk kez: Davet kodun varsa "Yeni Hesap" bas.<br>Hesabın varsa: "Giriş Yap".<br>Aynı email/şifre tüm cihazlarda.</div>
       </div>
@@ -3296,7 +3296,7 @@ async function createInvite() {
       return;
     }
     document.getElementById('inviteNote').value = '';
-    showToast(`✅ ${j.code} — kopyalayıp arkadaşına yolla`, 'success', 4500);
+    showToast(`${j.code} — kopyalayıp arkadaşına yolla`, 'success', 4500);
     await refreshInviteList();
   } catch (e) { showToast('Hata: ' + e.message, 'warning', 3500); }
 }
@@ -3326,19 +3326,19 @@ async function signUpUser() {
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
-      showSupaStatus('❌ ' + (j.error || `signup ${r.status}`), '#ff5555');
+      showSupaStatus('' + (j.error || `signup ${r.status}`), '#ff5555');
       return;
     }
     // Confirm-email kapalıysa session geldi — direkt login. Açıksa email doğrula mesajı.
     if (j.session) {
-      showSupaStatus('✅ Hesap oluştu — giriş yapılıyor…', '#50fa7b');
+      showSupaStatus('Hesap oluştu — giriş yapılıyor…', '#50fa7b');
       const { error } = await window._supa.auth.signInWithPassword({ email, password });
       if (error) showSupaStatus('Kayıt OK ama otomatik giriş başarısız: ' + error.message, '#ffb86c');
     } else {
-      showSupaStatus('✅ Hesap oluştu. Email doğrulaması gerekiyorsa kutuna bak. Yoksa "Giriş Yap" bas.', '#50fa7b');
+      showSupaStatus('Hesap oluştu. Email doğrulaması gerekiyorsa kutuna bak. Yoksa "Giriş Yap" bas.', '#50fa7b');
     }
   } catch (e) {
-    showSupaStatus('❌ ' + e.message, '#ff5555');
+    showSupaStatus('' + e.message, '#ff5555');
   }
 }
 
@@ -3351,9 +3351,9 @@ async function signInUser() {
   showSupaStatus('⏳ Giriş yapılıyor...', '#8be9fd');
   const {error} = await window._supa.auth.signInWithPassword({email, password});
   if (error) {
-    showSupaStatus('❌ Hata: ' + error.message + '\n\nHesabın yok mu? "Hesap Oluştur" bas.', '#ff5555');
+    showSupaStatus('Hata: ' + error.message + '\n\nHesabın yok mu? "Hesap Oluştur" bas.', '#ff5555');
   } else {
-    showSupaStatus('✅ Giriş başarılı!', '#50fa7b');
+    showSupaStatus('Giriş başarılı!', '#50fa7b');
   }
 }
 
@@ -3387,23 +3387,23 @@ function disconnectSupabase() {
   window._supa = null;
   window._user = null;
   renderAuthBox();
-  showSupaStatus('🔌 Bağlantı kesildi.', '#6272a4');
+  showSupaStatus('Bağlantı kesildi.', '#6272a4');
 }
 
 function initSupabase() {
   const url = data.settings.supaUrl;
   const key = data.settings.supaKey;
   if (!url || !key) return;
-  if (!window.supabase) { showSupaStatus('❌ Supabase kütüphanesi yüklenemedi (internet?).', '#ff5555'); return; }
+  if (!window.supabase) { showSupaStatus('Supabase kütüphanesi yüklenemedi (internet?).', '#ff5555'); return; }
 
   try {
     window._supa = window.supabase.createClient(url, key);
   } catch(e) {
-    showSupaStatus('❌ Bağlantı hatası: ' + e.message, '#ff5555');
+    showSupaStatus('Bağlantı hatası: ' + e.message, '#ff5555');
     return;
   }
 
-  showSupaStatus('✅ Supabase\'e bağlandı. Email ile giriş yap.', '#50fa7b');
+  showSupaStatus('Supabase\'e bağlandı. Email ile giriş yap.', '#50fa7b');
 
   window._supa.auth.onAuthStateChange((event, session) => {
     if (session && session.user) {
@@ -3444,7 +3444,7 @@ async function onLoginSuccess() {
   //  kanali zaten abone oldugu icin 'after subscribe()' hatasi atiyordu.)
   if (_loginInitUserId === (window._user && window._user.id)) return;
   _loginInitUserId = window._user.id;
-  showSupaStatus('✅ Giriş başarılı: ' + window._user.email + '\n⏳ Veriler eşitleniyor...', '#50fa7b');
+  showSupaStatus('Giriş başarılı: ' + window._user.email + '\n⏳ Veriler eşitleniyor...', '#50fa7b');
   await pullFromCloud();
   subscribeToCloud();
   // Yeni user'a 5 adımlı tur — bir kez gösterilir
@@ -3486,14 +3486,14 @@ async function pullFromCloud() {
       if (document.getElementById('plan').classList.contains('active')) renderDayPlan();
       if (document.getElementById('diet').classList.contains('active')) renderDiet();
             document.getElementById('pomoCount').textContent = data.pomoToday.count;
-      showSupaStatus('✅ Buluttan veri çekildi.', '#50fa7b');
+      showSupaStatus('Buluttan veri çekildi.', '#50fa7b');
     } else {
       // Bulutta veri yok — yereli yükle
       await pushToCloudNow();
-      showSupaStatus('✅ İlk veri buluta yüklendi. Artık eşitleniyor.', '#50fa7b');
+      showSupaStatus('İlk veri buluta yüklendi. Artık eşitleniyor.', '#50fa7b');
     }
   } catch(e) {
-    showSupaStatus('❌ ' + e.message, '#ff5555');
+    showSupaStatus('' + e.message, '#ff5555');
   }
   _pulling = false;
 }
@@ -3687,7 +3687,7 @@ async function rebalanceSeriesFromModal() {
   save();
   renderTasks();
   showSeries(sid);
-  showToast(`✅ ${undone.length} parça yeniden dağıtıldı (${newDeadline})`, 'success');
+  showToast(`${undone.length} parça yeniden dağıtıldı (${newDeadline})`, 'success');
 }
 
 async function deleteSeriesFromModal() {
@@ -3835,7 +3835,7 @@ function renderCalDayPanel() {
   });
 
   listEl.innerHTML = dayTasks.map(t => {
-    const cat = t.category ? (catEmoji[t.category] || '🏷️') : '·';
+    const cat = t.category ? (catEmoji[t.category] || '·') : '·';
     const time = t.reminderTime ? ` <span style="color:var(--text-muted)">· ${t.reminderTime}</span>` : '';
     const urgent = t.priority === 'urgent' ? '' : '';
     return `<div class="cal-day-item ${t.done ? 'done' : ''}">
