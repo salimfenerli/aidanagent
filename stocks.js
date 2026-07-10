@@ -1335,6 +1335,41 @@ function taStopSuggestion(ta, w) {
   return out;
 }
 
+// Aynı para birimindeki portföy değeri (pozisyon boyutu için sermaye tabanı)
+function riskPortfolioValue(cur) {
+  let v = 0;
+  (data.watchlist || []).forEach(w => {
+    if ((w.currency || 'TRY') === cur && w.qty != null && w.qty > 0 && w.price != null) v += w.qty * w.price;
+  });
+  return v;
+}
+
+// Risk-tabanlı pozisyon boyutu: adet = (sermaye × risk%) ÷ (giriş − stop)
+function riskPositionSize(price, stop, cur) {
+  const capital = riskPortfolioValue(cur);
+  if (!(capital > 0) || price == null || stop == null || price <= stop) return { capital, none: true };
+  const riskPct = (data.settings && data.settings.riskPct) || 1.5;
+  const riskBudget = capital * riskPct / 100;
+  const perShare = price - stop;
+  const shares = Math.floor(riskBudget / perShare);
+  if (shares <= 0) return { capital, riskPct, riskBudget: Math.round(riskBudget * 100) / 100, shares: 0, tooSmall: true };
+  const posValue = shares * price;
+  return { capital, riskPct, riskBudget: Math.round(riskBudget * 100) / 100, shares,
+           posValue: Math.round(posValue * 100) / 100, weightPct: Math.round(posValue / capital * 1000) / 10 };
+}
+
+// Risk yüzdesini değiştir + paneli yeniden çiz
+function setRiskPct(pct) {
+  if (!data.settings) data.settings = {};
+  data.settings.riskPct = pct;
+  save();
+  if (_stockChartPayload && _stockChartIdx != null) {
+    const w = (data.watchlist || [])[_stockChartIdx];
+    const cur = _stockChartPayload.j.currency || (w && w.currency) || '';
+    renderStockRisk(_stockChartPayload.ta, w, cur);
+  }
+}
+
 function renderStockRisk(ta, w, cur) {
   const el = document.getElementById('stockRiskPanel');
   if (!el) return;
@@ -1362,6 +1397,22 @@ function renderStockRisk(ta, w, cur) {
   if (s.moneyRisk != null) {
     html += `<div class="rk-note">Bu pozisyonda riskin: <b>${f(s.moneyRisk)}${c}</b> (${formatLot(w.qty)} adet × stop mesafesi)</div>`;
   }
+  // Pozisyon boyutu önerisi (risk-tabanlı)
+  const ps = riskPositionSize(s.price, s.stop, cur);
+  const rp = (data.settings && data.settings.riskPct) || 1.5;
+  const chips = [1, 1.5, 2, 3].map(pp => `<button type="button" class="rk-chip${pp === rp ? ' on' : ''}" onclick="setRiskPct(${pp})">%${pp}</button>`).join('');
+  html += `<div class="rk-size"><div class="rk-size-head"><span>Önerilen pozisyon</span><span class="rk-chips">${chips}</span></div>`;
+  if (ps.shares > 0) {
+    html += `<div class="rk-size-main">${formatLot(ps.shares)} adet al</div>`;
+    html += `<div class="rk-size-sub">Riskin <b>${f(ps.riskBudget)}${c}</b> (sermayenin %${ps.riskPct}) · pozisyon ${f(ps.posValue)}${c} · portföyün %${ps.weightPct}'i</div>`;
+    if (ps.weightPct > 25) html += `<div class="rk-note warn" style="margin-top:6px;">Bu pozisyon portföyünün %${ps.weightPct}'i — tek hissede yoğunlaşma, dikkat.</div>`;
+    html += `<div class="rk-size-cap">Sermaye = ${escapeHtml(cur || '')} portföy değerin (${f(ps.capital)}${c}); nakit dahil değil.</div>`;
+  } else if (ps.tooSmall) {
+    html += `<div class="rk-size-sub">Risk bütçen (${f(ps.riskBudget)}${c}) 1 lotluk stop riskinden küçük — sermaye ya da risk % artmalı.</div>`;
+  } else {
+    html += `<div class="rk-size-sub">Pozisyon boyutu için ${escapeHtml(cur || 'bu para biriminde')} portföy değerin gerekiyor — o para biriminde açık pozisyonun yok.</div>`;
+  }
+  html += `</div>`;
   const alts = [];
   if (s.atrStop != null) alts.push(`ATR: ${f(s.atrStop)}`);
   if (s.supStop != null) alts.push(`destek: ${f(s.supStop)}`);

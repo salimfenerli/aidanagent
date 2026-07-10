@@ -3393,3 +3393,15 @@
 .rk-disc { margin-top: 8px; font-size: 0.68rem; color: var(--text-faint); }
 .rk-empty { font-size: 0.8rem; color: var(--text-muted); padding: 6px 0; }
 @media (prefers-reduced-motion: reduce) { .rk-alarm-btn { transition: none; } }
+     
+/* Pozisyon boyutu (risk-tabanlı) — risk paneli alt bloğu (Tem 11) */
+.rk-size { margin-top: 8px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.rk-size-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.72rem; color: var(--text-muted); font-weight: 600; }
+.rk-chips { display: flex; gap: 4px; }
+.rk-chip { background: transparent; border: 1px solid var(--border); color: var(--text-muted); border-radius: 8px; padding: 2px 7px; font-size: 0.72rem; font-weight: 600; cursor: pointer; transition: background 0.15s ease-out, color 0.15s ease-out; }
+.rk-chip:hover { border-color: var(--border-strong); }
+.rk-chip.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.rk-size-main { font-size: 1.05rem; font-weight: 800; color: var(--text-strong); margin-top: 6px; }
+.rk-size-sub { font-size: 0.76rem; color: var(--text-muted); margin-top: 3px; line-height: 1.4; }
+.rk-size-cap { font-size: 0.68rem; color: var(--text-faint); margin-top: 5px; }
+@media (prefers-reduced-motion: reduce) { .rk-chip { transition: none; } }
