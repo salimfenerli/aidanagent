@@ -3307,6 +3307,105 @@ function extractDietPlanJson(text) {
   return out;
 }
 
+// 🎓 Google Classroom ödev listesi görseli → ödev başlığı + son teslim tarihi çıkar.
+// İki aşama: (1) vision OCR transkript, (2) 70B metin modeli ödevleri + tarihleri yapılandırır.
+// Tarih çözümü: bugünün tarihi prompt'a verilir → "Yarın/Cuma/12 Tem" → tam YYYY-MM-DD.
+async function handleClassroomImageApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const image = body.image;
+  if (!image) return jsonCors({ error: 'image yok' }, 400, cors);
+  if (String(image).length > 8_000_000) return jsonCors({ error: 'görsel çok büyük' }, 413, cors);
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
+
+  let bytes;
+  try { bytes = base64ToBytes(image); } catch { return jsonCors({ error: 'görsel okunamadı' }, 400, cors); }
+  if (!bytes.length) return jsonCors({ error: 'boş görsel' }, 400, cors);
+
+  // Aşama 1: OCR transkript
+  const ocrPrompt = [
+    'Bu bir Google Classroom ekran görüntüsü (ödev/yapılacaklar listesi veya sınıf akışı).',
+    'Görseldeki TÜM yazıyı satır satır, gördüğün gibi AYNEN yaz.',
+    'Özellikle şunları koru: ödev/görev başlıkları, ders veya sınıf adları, son teslim ifadeleri',
+    "('Son teslim tarihi', 'Bugün', 'Yarın', gün adı, tarih, saat).",
+    'Hiçbir şey ekleme, yorumlama, özetleme. Sadece görünen metin.',
+  ].join('\n');
+
+  const today = trDate(0), todayName = trDayName(0);
+
+  let transcript = '', lastRaw = '', lastErr = '';
+  try {
+    const v = await visionRun(env, { image: bytes, prompt: ocrPrompt, max_tokens: 1500 });
+    const vr = v && (v.response != null ? v.response : (v.description != null ? v.description : v.text));
+    transcript = (typeof vr === 'string') ? vr : JSON.stringify(vr);
+  } catch (e) { lastErr = 'ocr: ' + e.message; }
+
+  // Aşama 2: ödevleri + tam tarihleri yapılandır
+  let items = [];
+  if (transcript && transcript.trim()) {
+    const sys = [
+      'Sana bir Google Classroom ekranının ham metin transkripti verilecek. İçindeki ÖDEVLERİ / verilen görevleri çıkar.',
+      'Her ödev için bir JSON nesnesi üret:',
+      '- title: ödevin adı, kısa ve temiz (örn "Tarih 5. ünite özet"). Zorunlu.',
+      "- due: son teslim tarihi 'YYYY-MM-DD' biçiminde. Transkriptte 'Bugün', 'Yarın', gün adı (Pazartesi..), '12 Tem', '12 Temmuz' gibi görebilirsin — AŞAĞIDAKİ bugünün tarihine göre TAM tarihe çevir. Tarih hiç yoksa null.",
+      '- course: ders/sınıf adı varsa yaz, yoksa null.',
+      'Duyuru, yorum, materyal gibi ödev OLMAYAN satırları ATLA — sadece teslim edilecek ödev/görevler.',
+      `Bugünün tarihi: ${today} (${todayName}).`,
+      'SADECE geçerli bir JSON dizisi döndür, başka metin yazma. Ödev yoksa [].',
+    ].join('\n');
+    try {
+      const r = await env.AI.run(AI_MODEL, {
+        messages: [{ role: 'system', content: sys }, { role: 'user', content: String(transcript).slice(0, 6000) }],
+        max_tokens: 1024, temperature: 0.1,
+      });
+      lastRaw = (typeof r.response === 'string') ? r.response : JSON.stringify(r.response || '');
+      items = extractClassroomJson(lastRaw);
+    } catch (e) { lastErr = (lastErr ? lastErr + ' | ' : '') + 'struct: ' + e.message; }
+  }
+
+  if (items.length) return jsonCors({ items, transcript: String(transcript).slice(0, 600) || undefined }, 200, cors);
+  return jsonCors({ items: [], transcript: String(transcript).slice(0, 600) || undefined, raw: String(lastRaw || '').slice(0, 400), aiError: lastErr || undefined }, 200, cors);
+}
+
+// Classroom ödev JSON ayıkla — {title, due, course}. due YYYY-MM-DD değilse null'a düşürülür.
+function extractClassroomJson(text) {
+  if (!text) return [];
+  let s = String(text).trim();
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) s = fence[1].trim();
+  const arr = s.match(/\[[\s\S]*\]/);
+  if (arr) s = arr[0];
+  let parsed;
+  try { parsed = JSON.parse(s); } catch { return []; }
+  if (!Array.isArray(parsed)) return [];
+  const out = [];
+  for (const it of parsed) {
+    if (!it || typeof it !== 'object') continue;
+    const title = String(it.title || it.ad || it.name || '').trim();
+    if (!title || title.length > 140) continue;
+    let due = String(it.due || it.date || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) due = null;
+    let course = String(it.course || it.ders || '').trim();
+    if (!course || course.length > 60) course = null;
+    out.push({ title, due, course });
+    if (out.length >= 40) break;
+  }
+  return out;
+}
+
 async function handleDietPlanImageApi(request, env) {
   const cors = {
     'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
@@ -4357,6 +4456,11 @@ export default {
     // Diyet programı görseli → AI vision (POST {image} → öğün/yemek/kcal JSON)
     if (url.pathname === '/diet-plan-image') {
       return handleDietPlanImageApi(request, env);
+    }
+
+    // 🎓 Classroom ekran görüntüsü → AI vision (POST {image} → ödev/son-tarih JSON)
+    if (url.pathname === '/classroom-image') {
+      return handleClassroomImageApi(request, env);
     }
 
     // Besin makro arama (POST {query} → {db, ai} kalori+protein+karb+yağ)

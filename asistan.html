@@ -107,6 +107,14 @@
       <summary><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>Okul <span class="school-badge" id="schoolBadge"></span></summary>
       <div class="school-inner">
         <div class="school-today" id="schoolToday"></div>
+        <div class="school-classroom">
+          <button class="school-classroom-btn" type="button" onclick="document.getElementById('classroomPhotoInput').click()">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+            Classroom ödevi ekle (ekran görüntüsü)
+          </button>
+          <input type="file" id="classroomPhotoInput" accept="image/*" style="display:none;" onchange="handleClassroomPhoto(event)">
+          <div class="school-classroom-hint">Classroom'da ödev/yapılacaklar ekranının görüntüsünü at — AI son tarihli görevlere çevirir.</div>
+        </div>
         <div class="school-prog-head">
           <span>Haftalık program</span>
           <button class="school-edit-btn" onclick="openTimetable()">Düzenle</button>
@@ -310,8 +318,9 @@
     <button class="stocks-photo-btn" id="stocksPhotoBtn" onclick="document.getElementById('portfolioPhotoInput').click()">
       <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/></svg>
       Ekran görüntüsünden portföy ekle
+      <span class="stocks-photo-multi">birden fazla seçebilirsin</span>
     </button>
-    <input type="file" id="portfolioPhotoInput" accept="image/*" style="display:none;" onchange="handlePortfolioPhoto(event)">
+    <input type="file" id="portfolioPhotoInput" accept="image/*" multiple style="display:none;" onchange="handlePortfolioPhoto(event)">
     <div class="stocks-toolbar">
       <div class="stocks-meta">
         <span class="mkt-status" id="marketStatus"></span>
@@ -860,6 +869,20 @@
       <button class="secondary" onclick="closePortfolioImport()">İptal</button>
     </div>
     <button class="modal-close" onclick="closePortfolioImport()">Kapat</button>
+  </div>
+</div>
+
+<!-- 🎓 Classroom görselinden ödev onay modalı -->
+<div class="modal-overlay" id="classroomImportModal" onclick="if(event.target.id==='classroomImportModal')closeClassroomImport()">
+  <div class="modal" style="max-width:540px;">
+    <div class="modal-title">Classroom ödevleri</div>
+    <div id="classroomImportStatus" class="pf-import-status">Görsel okunuyor…</div>
+    <div id="classroomImportList" class="cl-import-list"></div>
+    <div class="modal-actions" id="classroomImportActions" style="margin-top:14px; display:none;">
+      <button onclick="confirmClassroomImport()" id="clImportConfirmBtn">Görevlere ekle</button>
+      <button class="secondary" onclick="closeClassroomImport()">İptal</button>
+    </div>
+    <button class="modal-close" onclick="closeClassroomImport()">Kapat</button>
   </div>
 </div>
 

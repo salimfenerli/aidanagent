@@ -1689,9 +1689,9 @@ function resizeImageToDataUrl(file, maxSide = 1100, quality = 0.8) {
 }
 
 async function handlePortfolioPhoto(event) {
-  const file = event.target.files && event.target.files[0];
-  event.target.value = ''; // aynı dosya tekrar seçilebilsin
-  if (!file) return;
+  const files = Array.from(event.target.files || []);
+  event.target.value = ''; // aynı dosya(lar) tekrar seçilebilsin
+  if (!files.length) return;
 
   if (!window._supa || !window._user) {
     showToast('Önce Ayarlar → bulut girişi yap', 'warning', 4000);
@@ -1702,33 +1702,61 @@ async function handlePortfolioPhoto(event) {
   setPfImportStatus('Görsel hazırlanıyor…');
 
   try {
-    const dataUrl = await resizeImageToDataUrl(file);
-    setPfImportStatus('Aidan görseli okuyor… 10-15 sn sürebilir, sabret ');
     const { data: sess } = await window._supa.auth.getSession();
     const token = sess && sess.session && sess.session.access_token;
     if (!token) throw new Error('oturum yok');
 
-    const r = await fetch(PORTFOLIO_IMAGE_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ image: dataUrl }),
-    });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error || ('hata ' + r.status));
-    const holdings = Array.isArray(j.holdings) ? j.holdings : [];
-    if (!holdings.length) {
-      // Debug görünürlüğü: AI ne döndürdü / hata neydi
+    // Her görseli sırayla oku, sonuçları birleştir (birden fazla ekran görüntüsü seçilebilir)
+    const all = [];
+    let firstEmpty = null;
+    for (let idx = 0; idx < files.length; idx++) {
+      setPfImportStatus(files.length > 1
+        ? `Aidan görselleri okuyor… (${idx + 1}/${files.length}) — 10-15 sn/görsel, sabret`
+        : 'Aidan görseli okuyor… 10-15 sn sürebilir, sabret');
+      const dataUrl = await resizeImageToDataUrl(files[idx]);
+      const r = await fetch(PORTFOLIO_IMAGE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ image: dataUrl }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || ('hata ' + r.status));
+      const holdings = Array.isArray(j.holdings) ? j.holdings : [];
+      if (!holdings.length && !firstEmpty) firstEmpty = j; // ilk boş görselin debug'ı
+      all.push(...holdings);
+    }
+
+    // Aynı hisse birden çok görselde çıkarsa tek satırda birleştir (eksik alanları doldur)
+    const merged = mergePortfolioHoldings(all);
+    if (!merged.length) {
       let dbg = '';
-      if (j.aiError) dbg = `\n\n(AI hatası: ${j.aiError})`;
-      else if (j.raw) dbg = `\n\n(AI cevabı: ${String(j.raw).slice(0, 200)})`;
-      setPfImportStatus('Görselde hisse bulamadım Daha net bir portföy ekranı dene, ya da manuel ekle.' + dbg, true);
+      if (firstEmpty && firstEmpty.aiError) dbg = `\n\n(AI hatası: ${firstEmpty.aiError})`;
+      else if (firstEmpty && firstEmpty.raw) dbg = `\n\n(AI cevabı: ${String(firstEmpty.raw).slice(0, 200)})`;
+      setPfImportStatus('Görsel(ler)de hisse bulamadım Daha net bir portföy ekranı dene, ya da manuel ekle.' + dbg, true);
       return;
     }
-    _pfImportHoldings = holdings;
+    _pfImportHoldings = merged;
     renderPfImportList();
   } catch (e) {
     setPfImportStatus('Okuma başarısız: ' + e.message, true);
   }
+}
+
+// Çoklu görsel: aynı sembol birden çok kez gelirse tek satırda birleştir.
+// İlk görülen tutulur; sonrakiler yalnız EKSİK alanları (qty/cost/price/market) doldurur.
+function mergePortfolioHoldings(list) {
+  const bySym = new Map();
+  for (const h of list) {
+    const sym = (h.symbol || '').trim().toUpperCase();
+    if (!sym) continue;
+    if (!bySym.has(sym)) { bySym.set(sym, { ...h, symbol: sym }); continue; }
+    const cur = bySym.get(sym);
+    if (cur.qty == null && h.qty != null) cur.qty = h.qty;
+    if (cur.cost == null && h.cost != null) cur.cost = h.cost;
+    if (cur.price == null && h.price != null) cur.price = h.price;
+    if (!cur.market && h.market) cur.market = h.market;
+  }
+  return Array.from(bySym.values());
 }
 
 function setPfImportStatus(msg, isError) {

@@ -3357,3 +3357,21 @@
 .aidan-note.good { background: rgba(52, 199, 89, 0.10); border-color: rgba(52, 199, 89, 0.32); }
 .aidan-note.good .an-icon { color: #34c759; opacity: 1; }
 .aidan-note.info .an-icon { color: var(--secondary, #f5a524); }
+
+/* 🎓 Classroom görselinden ödev */
+.school-classroom { margin: 4px 0 12px; }
+.school-classroom-btn { display: inline-flex; align-items: center; gap: 7px; width: 100%; justify-content: center; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border-soft); background: var(--surface); color: var(--text-strong); font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: background .18s ease, border-color .18s ease; }
+.school-classroom-btn:hover { background: var(--surface-hover); border-color: var(--border); }
+.school-classroom-btn .icon { width: 17px; height: 17px; }
+.school-classroom-hint { font-size: 0.74rem; color: var(--text-muted); margin-top: 5px; line-height: 1.35; }
+.cl-import-list { display: flex; flex-direction: column; gap: 10px; max-height: 52vh; overflow-y: auto; margin-top: 6px; }
+.cl-import-row { background: var(--surface); border: 1px solid var(--border-soft); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.cl-imp-title { width: 100%; font-weight: 600; }
+.cl-imp-bot { display: flex; align-items: flex-end; gap: 8px; }
+.cl-imp-bot label { display: flex; flex-direction: column; gap: 3px; font-size: 0.72rem; color: var(--text-muted); flex: 0 0 auto; }
+.cl-imp-course { flex: 1; min-width: 0; }
+.cl-imp-del { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--border-soft); background: transparent; color: var(--text-muted); cursor: pointer; }
+.cl-imp-del:hover { border-color: rgba(239,68,68,0.4); color: #ef4444; }
+
+/* Portföy foto butonu — çoklu ipucu */
+.stocks-photo-multi { display: block; font-size: 0.72rem; color: var(--text-muted); font-weight: 400; margin-top: 2px; }

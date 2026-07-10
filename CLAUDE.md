@@ -18,6 +18,13 @@ Aşağıdaki tarihçe/mimari bölümleri 14 Haziran'da kaldı. O günden bugüne
 - **📊 Sabah push dün özeti:** Worker `buildDailySummaryLine` — "Dün: ✓ N görev · kcal · su" satırı morning payload sonuna eklenir (AI + fallback ikisinde de çalışır, odak dahil edilmedi — pomoToday dünü güvenilir tutmaz).
 - Cache v7-96 → **v7-97**.
 
+### 10 Temmuz 2026 — 4. seans: 🎓 Classroom görsel köprüsü + çoklu portföy görseli
+- **Classroom neden görsel:** Salim'in okul Google hesabı OAuth/API + takvim `.ics` beslemesine **yönetici düzeyinde kapalı** (OAuth Playground bile "kuruluş devre dışı bıraktı" dedi). Otomatik senkron imkânsız → borsa portföy-görsel deseniyle **ekran görüntüsü köprüsü**.
+- **Worker `/classroom-image`:** iki aşama (vision OCR transkript → 70B metin modeli yapılandırma). `extractClassroomJson` → `{title, due, course}`. Tarih çözümü: bugünün tarihi + gün adı prompt'a verilir, "Yarın/Cuma/12 Tem" → tam `YYYY-MM-DD` (geçersizse null). `verifyUser`+`allowUser`+CORS, `AI_MODEL`/`VISION_MODEL` mevcut sabitler.
+- **Frontend (ui.js):** Görevler→Okul bölümüne "Classroom ödevi ekle (ekran görüntüsü)" butonu + `handleClassroomPhoto` (resize→endpoint) + `classroomImportModal` düzenlenebilir onay (başlık/son tarih/ders). `confirmClassroomImport` → `makeTask({category:'odev'})`, ders→`notes`; **aynı başlık+tarih aktif görevde varsa atla** (tekrar görüntüde çift olmaz). 16 senaryo node testi.
+- **📷 Çoklu portföy görseli (stocks.js):** `portfolioPhotoInput`'a `multiple`; `handlePortfolioPhoto` artık dosya dizisini döngüyle okur, `mergePortfolioHoldings` sembol bazında birleştirir (ilk dolu alan korunur, sonrakiler eksikleri doldurur). 8 senaryo node testi.
+- Cache v7-99 → **v7-101**.
+
 ### 10 Temmuz 2026 — 3. seans: "Aidan'ın notu" (çapraz-modül tek dürtü)
 Salim "modülleri bağla" yönünü seçti. Skor kartı sayı gösteriyor ama yorumlamıyordu → skor kartının altına (`#aidanNote`) **tek satır akıllı dürtü**: tüm modülleri (görev/geri sayım/MIT/takviye/su/odak/erteleme) okuyup **en önemli tek sinyali** nazik dille söyler (ADHD: tek şeye indir). Salim bir şeyi halledince not sonrakine kayar (canlı).
 - **`aidanNoteLine()` (ui.js):** öncelik sırasıyla ilk eşleşen döner — (1) gecikmiş acil görev (2) geri sayım ≤2 gün (3) MIT seçili+öğleden sonra hiç bitmemiş (4) takviye 3+ gün atlandı (`suppMissedStreak` helper) (5) akşam+su yarının altında (6) öğleden sonra odak seansı yok+MIT bekliyor (7) 3+ ertelenen görev (8) akşam her şey tamam→pozitif. Saat-duyarlı, yerel/kural tabanlı (AI maliyeti YOK, anında).

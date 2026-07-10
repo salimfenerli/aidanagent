@@ -2738,6 +2738,123 @@ function todaySchoolKey() {
   return (d >= 1 && d <= 5) ? String(d) : null;
 }
 
+// ============ 🎓 CLASSROOM GÖRSELİNDEN ÖDEV — AI vision → son tarihli görev ============
+// Okul hesabı OAuth/takvim beslemesine kapalı → görsel köprüsü (borsa portföy-görsel deseni).
+const CLASSROOM_IMAGE_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/classroom-image';
+let _clImportItems = [];
+
+async function handleClassroomPhoto(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  if (!window._supa || !window._user) { showToast('Önce Ayarlar → bulut girişi yap', 'warning', 4000); return; }
+  openClassroomImport();
+  setClImportStatus('Görsel hazırlanıyor…');
+  try {
+    const dataUrl = await resizeImageToDataUrl(file);
+    setClImportStatus('Aidan ödevleri okuyor… 10-15 sn sürebilir, sabret');
+    const { data: sess } = await window._supa.auth.getSession();
+    const token = sess && sess.session && sess.session.access_token;
+    if (!token) throw new Error('oturum yok');
+    const r = await fetch(CLASSROOM_IMAGE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ image: dataUrl }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || ('hata ' + r.status));
+    const items = Array.isArray(j.items) ? j.items : [];
+    if (!items.length) {
+      let dbg = '';
+      if (j.aiError) dbg = `\n\n(AI hatası: ${j.aiError})`;
+      else if (j.raw) dbg = `\n\n(AI cevabı: ${String(j.raw).slice(0, 200)})`;
+      setClImportStatus('Görselde ödev bulamadım. Ödev/yapılacaklar listesinin net bir görüntüsünü dene.' + dbg, true);
+      return;
+    }
+    _clImportItems = items;
+    renderClImportList();
+  } catch (e) {
+    setClImportStatus('Okuma başarısız: ' + e.message, true);
+  }
+}
+
+function setClImportStatus(msg, isError) {
+  const el = document.getElementById('classroomImportStatus');
+  if (!el) return;
+  el.style.display = 'block';
+  el.textContent = msg;
+  el.classList.toggle('error', !!isError);
+}
+
+function openClassroomImport() {
+  _clImportItems = [];
+  document.getElementById('classroomImportList').innerHTML = '';
+  document.getElementById('classroomImportActions').style.display = 'none';
+  document.getElementById('classroomImportModal').classList.add('active');
+}
+
+function closeClassroomImport() {
+  document.getElementById('classroomImportModal').classList.remove('active');
+  _clImportItems = [];
+}
+
+// AI sonuçları düzenlenebilir satır — başlık + son tarih (vision hata yapabilir, kullanıcı düzeltsin)
+function renderClImportList() {
+  setClImportStatus(`${_clImportItems.length} ödev buldum. Kontrol et, düzelt, ekle 👇`);
+  const list = document.getElementById('classroomImportList');
+  list.innerHTML = _clImportItems.map((it, i) => `
+    <div class="cl-import-row">
+      <input class="cl-imp-title" value="${escapeHtml(it.title || '')}" oninput="updateClImport(${i},'title',this.value)" placeholder="Ödev adı">
+      <div class="cl-imp-bot">
+        <label>Son tarih<input class="cl-imp-due" type="date" value="${escapeHtml(it.due || '')}" onchange="updateClImport(${i},'due',this.value)"></label>
+        <input class="cl-imp-course" value="${escapeHtml(it.course || '')}" oninput="updateClImport(${i},'course',this.value)" placeholder="Ders (opsiyonel)">
+        <button class="cl-imp-del" onclick="removeClImport(${i})" title="Çıkar" aria-label="Çıkar">✕</button>
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('classroomImportActions').style.display = 'flex';
+}
+
+function updateClImport(i, field, val) {
+  if (!_clImportItems[i]) return;
+  if (field === 'due') _clImportItems[i].due = /^\d{4}-\d{2}-\d{2}$/.test(val) ? val : null;
+  else _clImportItems[i][field] = val;
+}
+
+function removeClImport(i) {
+  _clImportItems.splice(i, 1);
+  if (!_clImportItems.length) {
+    setClImportStatus('Liste boş. İptal et ya da yeni görsel dene.', true);
+    document.getElementById('classroomImportActions').style.display = 'none';
+    document.getElementById('classroomImportList').innerHTML = '';
+    return;
+  }
+  renderClImportList();
+}
+
+// Onaylanan ödevleri görev olarak ekle — aynı başlık+tarih varsa atla (tekrar görüntüde çift olmasın)
+function confirmClassroomImport() {
+  const norm = s => (s || '').trim().toLowerCase();
+  const active = (data.tasks || []).filter(x => !x.done);
+  let added = 0, dup = 0;
+  for (const it of _clImportItems) {
+    const title = (it.title || '').trim();
+    if (!title) continue;
+    const due = /^\d{4}-\d{2}-\d{2}$/.test(it.due || '') ? it.due : null;
+    const exists = active.some(x => norm(x.text) === norm(title) && (x.due || null) === due);
+    if (exists) { dup++; continue; }
+    const task = makeTask({ text: title, due, category: 'odev', priority: 'normal' });
+    const course = (it.course || '').trim();
+    if (course) task.notes = course;
+    data.tasks.push(task);
+    added++;
+  }
+  save(); renderTasks();
+  closeClassroomImport();
+  if (added) showToast(`${added} ödev görevlere eklendi${dup ? ` · ${dup} zaten vardı` : ''}`, 'success', 3800);
+  else showToast(dup ? `Hepsi zaten görevlerinde (${dup})` : 'Ödev eklenmedi', 'info', 3000);
+}
+
 function renderSchool() {
   const s = ensureSchool();
   const key = todaySchoolKey();
