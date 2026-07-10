@@ -3523,6 +3523,8 @@ const TR_FOOD_DB = [
   { k: ['kaşar peyniri', 'kaşar', 'kasar'], kcal: 380, p: 25, c: 2, f: 30 },
   { k: ['lor peyniri', 'lor'], kcal: 100, p: 14, c: 4, f: 3 },
   { k: ['labne'], kcal: 250, p: 6, c: 4, f: 23 },
+  { k: ['quark', 'sek quark', 'süzme quark'], kcal: 146, p: 13, c: 7, f: 7 },        // Sek Quark Sade
+  { k: ['protein quark', 'sek protein quark'], kcal: 139, p: 20, c: 7, f: 3 },        // Sek Protein Quark
   { k: ['yoğurt', 'yogurt'], kcal: 61, p: 4, c: 5, f: 3 },
   { k: ['süzme yoğurt'], kcal: 130, p: 10, c: 4, f: 8 },
   { k: ['ayran'], kcal: 38, p: 2, c: 3, f: 2 },

@@ -3138,6 +3138,7 @@ function initSupabase() {
       onLoginSuccess();
     } else {
       window._user = null;
+      _loginInitUserId = null;
       renderAuthBox();
       renderWelcome();
     }
@@ -3161,8 +3162,14 @@ async function logoutUser() {
   showSupaStatus('Çıkış yapıldı. Veriler bilgisayarında durmaya devam ediyor.', '#6272a4');
 }
 
+let _loginInitUserId = null, _syncChannel = null;
 async function onLoginSuccess() {
   renderAuthBox();
+  // Token yenileme / tekrar eden SIGNED_IN olaylarinda agir init'i TEKRARLAMA.
+  // (Aksi halde her ~dakika pullFromCloud + subscribeToCloud calisiyor; realtime
+  //  kanali zaten abone oldugu icin 'after subscribe()' hatasi atiyordu.)
+  if (_loginInitUserId === (window._user && window._user.id)) return;
+  _loginInitUserId = window._user.id;
   showSupaStatus('✅ Giriş başarılı: ' + window._user.email + '\n⏳ Veriler eşitleniyor...', '#50fa7b');
   await pullFromCloud();
   subscribeToCloud();
@@ -3244,7 +3251,9 @@ async function pushToCloudNow() {
 
 function subscribeToCloud() {
   if (!window._supa || !window._user) return;
-  window._supa.channel('aidan-sync-' + window._user.id)
+  // Ayni isimli kanal zaten aboneyse .on() 'after subscribe()' hatasi verir — once temizle.
+  try { if (_syncChannel) window._supa.removeChannel(_syncChannel); } catch (_) {}
+  _syncChannel = window._supa.channel('aidan-sync-' + window._user.id)
     .on('postgres_changes', {
       event: '*',
       schema: 'public',
