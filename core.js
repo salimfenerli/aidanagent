@@ -969,7 +969,9 @@ function aiFoodSearch() {
   if (!window._supa || !window._user) { out.innerHTML = '<div class="diet-empty">Önce Ayarlar → bulut girişi yap.</div>'; return; }
   out.innerHTML = '<div class="diet-empty">Aranıyor… birkaç sn.</div>';
   (async () => {
-    try {
+    // Marka/paket icin Open Food Facts + jenerik/coklu icin AI — PARALEL
+    const offProm = offSearch(q).catch(() => []);
+    const aiProm = (async () => {
       const { data: sess } = await window._supa.auth.getSession();
       const token = sess && sess.session && sess.session.access_token;
       if (!token) throw new Error('oturum yok');
@@ -980,12 +982,54 @@ function aiFoodSearch() {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || ('hata ' + r.status));
-      renderAiFood(q, j);
-      pushRecentFood(q);
-    } catch (e) {
-      out.innerHTML = '<div class="diet-empty">Bulamadım: ' + escapeHtml(e.message) + '</div>';
-    }
+      return j;
+    })().catch(e => ({ __err: e.message }));
+    const [offRes, aiJson] = await Promise.all([offProm, aiProm]);
+    renderSearchResults(q, offRes, aiJson);
+    pushRecentFood(q);
   })();
+}
+// OFF (marka/paket) + AI (jenerik/coklu) sonuclarini tek listede goster.
+// Marka urunleri ambalaj makrosuyla (per-100g, gram porsiyon) gelir; AI satiri adet/porsiyon.
+function renderSearchResults(q, offRes, aiJson) {
+  const out = document.getElementById('foodSearchResults');
+  const fp = document.getElementById('foodPortion'); if (fp) { fp.style.display = 'none'; fp.innerHTML = ''; }
+  const qn = (typeof trNorm === 'function') ? trNorm(q) : q.toLowerCase();
+  const qwords = qn.split(/\s+/).filter(w => w.length > 2);
+  // OFF: makrosu olan + sorguyla alakali (ad/marka sorgu kelimesini icersin) ilk 6
+  const off = (offRes || []).filter(p => {
+    if (!p || p.kcal100 == null) return false;
+    if (!qwords.length) return true;
+    const nm = (typeof trNorm === 'function') ? trNorm((p.name || '') + ' ' + (p.brand || '')) : ((p.name || '') + ' ' + (p.brand || '')).toLowerCase();
+    return qwords.some(w => nm.includes(w));
+  }).slice(0, 6);
+  _foodResults = off; // pickFood(i) bunu indeksler
+  let html = '';
+  if (off.length) {
+    html += '<div class="freq-head">Paket / marka</div><div class="food-results">' +
+      off.map((p, i) => `<button class="food-result" onclick="pickFood(${i})"><span class="food-result-name">${escapeHtml(p.name)}${p.brand ? ` <span class="food-result-brand">${escapeHtml(p.brand)}</span>` : ''}</span><span class="food-result-kcal">${Math.round(p.kcal100)} kcal/100g</span></button>`).join('') +
+      '</div>';
+  }
+  const base = aiJson && !aiJson.__err && (aiJson.ai || aiJson.db);
+  if (base && base.kcal != null) {
+    _aiFood = {
+      name: q, kcal: base.kcal, protein: base.protein, carb: base.carb, fat: base.fat,
+      multi: !!(aiJson.items && aiJson.items.length > 1), items: aiJson.items || [], source: aiJson.source
+    };
+    _aiFood._srcLbl = aiJson.source === 'usda' ? 'Veritabanı' : (aiJson.source === 'mixed' ? 'Veritabanı + AI' : (_aiFood.multi ? 'Toplam' : 'AI tahmini'));
+    _aiFood._bd = _aiFood.multi ? `<div class="macro-note">${_aiFood.items.map(it => `${escapeHtml(it.name)} · ${it.kcal} kcal${(it.source === 'usda' || it.source === 'curated') ? '' : ' (tahmin)'}`).join('  +  ')}</div>` : '';
+    html += '<div class="freq-head">Jenerik / hesap</div><div class="food-results">' +
+      `<button class="food-result" onclick="pickAiRow()"><span class="food-result-name">${escapeHtml(q)} <span class="food-result-brand">${_aiFood._srcLbl}</span></span><span class="food-result-kcal">${base.kcal} kcal</span></button>` +
+      '</div>';
+  }
+  if (!html) { out.innerHTML = '<div class="diet-empty">Sonuç yok. "Elle" sekmesinden kalori girebilirsin.</div>'; return; }
+  out.innerHTML = html;
+  // Marka eslesme yoksa tek AI sonucunu otomatik ac (hizli ekleme)
+  if (!off.length && base && base.kcal != null) pickAiRow();
+}
+function pickAiRow() {
+  if (!_aiFood) return;
+  showAiPortion(_aiFood.name, _aiFood._srcLbl || '', _aiFood._bd || '');
 }
 function renderAiFood(q, j) {
   const out = document.getElementById('foodSearchResults');

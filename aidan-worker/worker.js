@@ -3444,8 +3444,9 @@ async function usdaLookup(env, enName, grams) {
     const m = macrosOf(food);
     if (m.kcal == null && m.protein == null) return;
     const desc = String(food.description || '').toLowerCase();
-    let score = 0;
-    for (const w of qWords) if (desc.includes(w)) score += 2;                 // ad kelime örtüşmesi
+    let wordHits = 0;
+    for (const w of qWords) if (desc.includes(w)) wordHits++;                 // ad kelime örtüşmesi
+    let score = wordHits * 2;
     const descCooked = /(cooked|roasted|boiled|grilled|baked|fried)/.test(desc);
     const descRaw = /(^|,|\s)raw(\s|,|$)/.test(desc);
     if (wantRaw) score += descRaw ? 1.5 : (descCooked ? -1.5 : 0);            // çiğ istendiyse çiğ tercih
@@ -3455,9 +3456,13 @@ async function usdaLookup(env, enName, grams) {
       if (Math.abs(m.kcal - at) / m.kcal < 0.15) score += 1;
     }
     score += Math.max(0, 3 - idx) * 0.1;                                      // USDA alaka sırasına hafif ağırlık
-    if (score > bestScore) { bestScore = score; best = { food, m }; }
+    if (score > bestScore) { bestScore = score; best = { food, m, wordHits }; }
   });
   if (!best) return null;
+  // KALKAN: kazanan aday sorgu kelimelerinden HİÇBİRİNİ içermiyorsa (yalnız sıra
+  // tiebreak'iyle kazandıysa) güvenilmez eşleşme — reddet, çağıran AI/OFF'a düşsün.
+  // (örn 'quark' USDA'da yoksa yağlı peynir dönmez.)
+  if (qWords.length && best.wordHits === 0) return null;
   const f = (grams || 100) / 100;
   const sc = v => v == null ? null : Math.round(v * f);
   return { name: best.food.description || enName, kcal: sc(best.m.kcal), protein: sc(best.m.protein), carb: sc(best.m.carb), fat: sc(best.m.fat) };
