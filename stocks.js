@@ -833,6 +833,7 @@ async function loadStockHistory(range) {
     const taOk = TA_MARKETS.has(w.market || 'bist');
     if (taOk) {
       renderStockTA(ta, cur);
+      renderStockRisk(ta, w, cur);
       taPanel.style.display = 'block';
       document.getElementById('stockTaAiBtn').disabled = false;
     } else {
@@ -1294,6 +1295,92 @@ function renderStockTA(ta, cur) {
       : /Hacim ortalamanın|üst banda|Direnç/i.test(s) ? 'warn' : '';
     return `<span class="stock-ta-sig ${cls}">${escapeHtml(s)}</span>`;
   }).join('') || '<span class="stock-ta-sig">Yeterli veri yok — 3 ay veya 6 ay dene</span>';
+}
+
+// ——— Risk / stop-loss önerisi (Tem 11) ———
+// Mevcut TA'dan (ATR + destek/direnç) stop + hedef + R:R türetir. Kural tabanlı, AI yok.
+function taStopSuggestion(ta, w) {
+  const price = ta && ta.current;
+  if (price == null || price <= 0) return null;
+  const out = { price };
+  // ATR tabanlı stop — 2×ATR volatilite payı
+  if (ta.atrPct != null && ta.atrPct > 0) {
+    const atrAbs = price * ta.atrPct / 100;
+    const v = price - 2 * atrAbs;
+    if (v > 0) out.atrStop = Math.round(v * 100) / 100;
+  }
+  // Destek tabanlı stop — 20 periyot desteğin %1 altı
+  const sup = ta.sr && ta.sr.support;
+  if (sup != null && sup > 0 && sup < price) out.supStop = Math.round(sup * 0.99 * 100) / 100;
+  // Öneri seçimi: destek makul mesafedeyse yapı-tabanlı, değilse ATR, o da yoksa sabit %8
+  const supRisk = out.supStop != null ? (price - out.supStop) / price : null;
+  let stop, reason;
+  if (out.supStop != null && supRisk > 0 && supRisk <= 0.12) { stop = out.supStop; reason = '20 periyot desteğin %1 altı'; }
+  else if (out.atrStop != null && out.atrStop < price) { stop = out.atrStop; reason = '2×ATR volatilite payı'; }
+  else if (out.supStop != null) { stop = out.supStop; reason = 'destek altı (geniş)'; }
+  else { stop = Math.round(price * 0.92 * 100) / 100; reason = 'sabit %8 (veri az)'; }
+  out.stop = stop;
+  out.reason = reason;
+  out.riskPct = Math.round((price - stop) / price * 10000) / 100;
+  // Hedef: 2:1 R:R
+  out.target = Math.round((price + 2 * (price - stop)) * 100) / 100;
+  // En yakın dirence göre gerçekçilik kontrolü
+  const res = ta.sr && ta.sr.resistance;
+  if (res != null && res > price && (price - stop) > 0) {
+    out.resTarget = res;
+    out.resRR = Math.round((res - price) / (price - stop) * 100) / 100;
+  }
+  // Pozisyon varsa para cinsinden risk
+  if (w && w.qty != null && w.qty > 0) out.moneyRisk = Math.round(w.qty * (price - stop) * 100) / 100;
+  return out;
+}
+
+function renderStockRisk(ta, w, cur) {
+  const el = document.getElementById('stockRiskPanel');
+  if (!el) return;
+  const s = taStopSuggestion(ta, w);
+  if (!s) { el.innerHTML = '<div class="rk-empty">Stop önerisi için yeterli veri yok.</div>'; return; }
+  const c = cur ? ' ' + escapeHtml(cur) : '';
+  const f = v => formatStockPrice(v);
+  let html = `
+    <div class="rk-grid">
+      <div class="rk-box stop">
+        <div class="rk-lbl">Önerilen stop</div>
+        <div class="rk-val">${f(s.stop)}${c}</div>
+        <div class="rk-sub">▼ %${s.riskPct} · ${escapeHtml(s.reason)}</div>
+      </div>
+      <div class="rk-box target">
+        <div class="rk-lbl">Hedef (2:1)</div>
+        <div class="rk-val">${f(s.target)}${c}</div>
+        <div class="rk-sub">risk-ödül 1:2</div>
+      </div>
+    </div>`;
+  if (s.resTarget != null) {
+    const dar = s.resRR < 1.5;
+    html += `<div class="rk-note${dar ? ' warn' : ''}">En yakın direnç <b>${f(s.resTarget)}${c}</b> — oraya kadar R:R <b>${s.resRR}</b>${dar ? ' · dar, dikkat' : ''}</div>`;
+  }
+  if (s.moneyRisk != null) {
+    html += `<div class="rk-note">Bu pozisyonda riskin: <b>${f(s.moneyRisk)}${c}</b> (${formatLot(w.qty)} adet × stop mesafesi)</div>`;
+  }
+  const alts = [];
+  if (s.atrStop != null) alts.push(`ATR: ${f(s.atrStop)}`);
+  if (s.supStop != null) alts.push(`destek: ${f(s.supStop)}`);
+  if (alts.length) html += `<div class="rk-alts">Alternatif stop → ${alts.join(' · ')}</div>`;
+  html += `<button type="button" class="rk-alarm-btn" onclick="setStopAlarm(${s.stop})">Bu stop'u alt alarm yap</button>`;
+  html += `<p class="rk-disc">Öneri; yatırım tavsiyesi değildir. Stop'u kendi planına göre ayarla.</p>`;
+  el.innerHTML = html;
+}
+
+// Önerilen stop'u mevcut alarm altyapısına bağla — alt eşiği geç, cron push kırılınca haber verir
+function setStopAlarm(stop) {
+  if (_stockChartIdx == null) return;
+  const w = (data.watchlist || [])[_stockChartIdx];
+  if (!w) return;
+  w.alarmBelow = stop;
+  w.lastAlertedBelow = false;
+  save();
+  renderStocks();
+  showToast(`${w.symbol}: ${formatStockPrice(stop)} altına inince bildirim gelecek`, 'success', 3000);
 }
 
 function buildStockAnalysisFacts(ta, j) {
