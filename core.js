@@ -1691,16 +1691,16 @@ function renderSupplements() {
   const supps = (data.reminders || []).filter(r => r.kind === 'supp').sort((a, b) => (a.time || a.startTime || '').localeCompare(b.time || b.startTime || ''));
   const meta = document.getElementById('suppMeta');
   const t = today();
-  if (meta) meta.textContent = supps.length ? `${supps.filter(r => r.takenDate === t).length}/${supps.length} alındı` : '';
+  if (meta) meta.textContent = supps.length ? `${supps.filter(r => suppTakenOn(r, t)).length}/${supps.length} alındı` : '';
   if (!supps.length) { el.innerHTML = '<div class="diet-empty">Henüz takviye yok. Aşağıdan ekle — saatinde bildirim gelir.</div>'; return; }
   el.innerHTML = supps.map(r => {
-    const taken = r.takenDate === t;
+    const taken = suppTakenOn(r, t);
     const timeStr = r.mode === 'interval' ? `${r.startTime}–${r.endTime}` : (r.time || '–');
     const daysStr = (r.days === 'weekdays' ? 'Hafta içi' : 'Her gün') + (r.mode === 'interval' ? ` · ${suppEveryLabel(+r.everyMin || 60)}` : '');
     return `<div class="supp-item${r.enabled === false ? ' off' : ''}${taken ? ' taken' : ''}">` +
       `<button class="supp-check${taken ? ' on' : ''}" onclick="markSuppTaken(${r.id})" title="${taken ? 'işareti kaldır' : 'aldım'}" aria-label="aldım">${taken ? '✓' : ''}</button>` +
       `<span class="supp-time">${escapeHtml(timeStr)}</span>` +
-      `<span class="supp-name">${escapeHtml(r.label || '')}</span>` +
+      `<span class="supp-name">${escapeHtml(r.label || '')}${suppLast7(r)}</span>` +
       `<span class="supp-days">${daysStr}</span>` +
       `<input type="checkbox" ${r.enabled !== false ? 'checked' : ''} onchange="toggleSupplement(${r.id})" aria-label="Aç/kapa">` +
       `<button class="supp-del" onclick="deleteSupplement(${r.id})" aria-label="Sil">✕</button></div>`;
@@ -1750,7 +1750,33 @@ function deleteSupplement(id) {
   if (typeof renderFixedReminders === 'function') renderFixedReminders();
   showToast('Takviye silindi', 'info');
 }
-function markSuppTaken(id) { const r = (data.reminders || []).find(x => x.id === id); if (!r) return; const t = today(); r.takenDate = (r.takenDate === t) ? null : t; save(); renderSupplements(); }
+// "Aldım" artık geçmiş tutar: takenLog[] son 30 gün — uyum şeridi + sabah "dün özeti" bundan okur.
+// takenDate eski tek-günlük alan, geriye uyumluluk için senkron tutulur.
+function suppTakenOn(r, d) { return (r.takenLog || []).includes(d) || r.takenDate === d; }
+function markSuppTaken(id) {
+  const r = (data.reminders || []).find(x => x.id === id); if (!r) return;
+  const t = today();
+  r.takenLog = r.takenLog || [];
+  if (r.takenDate && !r.takenLog.includes(r.takenDate)) r.takenLog.push(r.takenDate);
+  if (r.takenLog.includes(t)) { r.takenLog = r.takenLog.filter(d => d !== t); r.takenDate = null; }
+  else { r.takenLog.push(t); r.takenDate = t; }
+  r.takenLog.sort();
+  if (r.takenLog.length > 30) r.takenLog = r.takenLog.slice(-30);
+  save(); renderSupplements();
+}
+// Son 7 gün uyum şeridi — nötr gösterim (streak DEĞİL): dolu=alındı, boş=alınmadı, soluk=kapsam dışı
+// (hafta içi takviyesinde hafta sonu + takviye eklenmeden önceki günler sayılmaz)
+function suppLast7(r) {
+  const created = r.id ? new Date(r.id).toISOString().slice(0, 10) : null;
+  let out = '';
+  for (let i = 6; i >= 0; i--) {
+    const d = shiftDateStr(today(), -i);
+    const dow = new Date(d + 'T12:00:00').getDay();
+    const na = (created && d < created) || (r.days === 'weekdays' && (dow === 0 || dow === 6));
+    out += `<span class="supp-dot${na ? ' na' : (suppTakenOn(r, d) ? ' on' : '')}"${i === 0 ? ' data-today="1"' : ''}></span>`;
+  }
+  return `<span class="supp-dots" title="son 7 gün">${out}</span>`;
+}
 
 // ===== Loglanan öğünü düzenle =====
 let _editMealId = null, _editMealSlot = 'kahvalti';

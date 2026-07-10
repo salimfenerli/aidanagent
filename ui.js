@@ -1434,6 +1434,7 @@ function restoreTimerState() {
       data.pomoToday = data.pomoToday || { date: today(), count: 0 };
       if (data.pomoToday.date !== today()) data.pomoToday = { date: today(), count: 0 };
       data.pomoToday.count++;
+      logFocusDay();
       if (currentFocusTaskId) {
         const ft = (data.tasks || []).find(x => x.id === currentFocusTaskId);
         if (ft) ft.actualMin = (ft.actualMin || 0) + workMin;
@@ -1457,6 +1458,16 @@ function restoreTimerState() {
     running = false;
     updateTimerDisplay();
   }
+}
+
+// 🎧 Odak seansı günlük logu — data.focusDays{'YYYY-MM-DD':n}, son 60 gün.
+// pomoToday sadece bugünü tutar; sabah "dün özeti" dünü buradan okur.
+function logFocusDay() {
+  data.focusDays = data.focusDays || {};
+  const t = today();
+  data.focusDays[t] = (data.focusDays[t] || 0) + 1;
+  const keys = Object.keys(data.focusDays).sort();
+  for (const k of keys.slice(0, Math.max(0, keys.length - 60))) delete data.focusDays[k];
 }
 
 function updateTimerDisplay() {
@@ -1501,6 +1512,7 @@ function tickTimer() {
     timerSec = 0;
     if (!isBreak) {
       data.pomoToday.count++;
+      logFocusDay();
       // Aktif görev varsa, pomodoro süresini actualMin'e ekle
       if (currentFocusTaskId) {
         const ft = data.tasks.find(x => x.id === currentFocusTaskId);
@@ -2529,13 +2541,18 @@ function renderDailyScore() {
   const waterL = day.waterL || 0;
   const waterGoal = d.waterGoalL || 2.5;
   const pomo = (data.pomoToday && data.pomoToday.date === t) ? (data.pomoToday.count || 0) : 0;
-  if (!mit.length && !kcal && !waterL && !pomo) { el.innerHTML = ''; return; }
+  // Takviye: bugüne uyan aktifler (hafta içi olanlar hafta sonu sayılmaz)
+  const dow = new Date(t + 'T12:00:00').getDay();
+  const supps = (data.reminders || []).filter(r => r.kind === 'supp' && r.enabled !== false && !(r.days === 'weekdays' && (dow === 0 || dow === 6)));
+  const suppTaken = supps.filter(r => (r.takenLog || []).includes(t) || r.takenDate === t).length;
+  if (!mit.length && !kcal && !waterL && !pomo && !supps.length) { el.innerHTML = ''; return; }
   const items = [
     { label: 'MIT', val: mit.length ? `${mitDone}/${mit.length}` : '–', on: mit.length > 0 && mitDone >= mit.length },
-    { label: 'kcal', val: kcal ? `${kcal}/${kcalGoal}` : '–', on: kcal > 0 && kcal <= kcalGoal },
+    { label: kcal ? `/${kcalGoal} kcal` : 'kcal', val: kcal ? String(kcal) : '–', on: kcal > 0 && kcal <= kcalGoal },
     { label: 'su (L)', val: waterL ? String(Math.round(waterL * 100) / 100).replace('.', ',') : '–', on: waterL >= waterGoal },
     { label: 'odak', val: pomo ? `${pomo} seans` : '–', on: pomo > 0 }
   ];
+  if (supps.length) items.push({ label: 'takviye', val: `${suppTaken}/${supps.length}`, on: suppTaken >= supps.length });
   el.innerHTML = `<div class="score-card">` + items.map(i =>
     `<div class="score-item${i.on ? ' on' : ''}"><span class="score-val">${i.val}</span><span class="score-label">${i.label}</span></div>`
   ).join('') + `</div>`;

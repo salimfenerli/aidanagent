@@ -18,6 +18,16 @@ Aşağıdaki tarihçe/mimari bölümleri 14 Haziran'da kaldı. O günden bugüne
 - **📊 Sabah push dün özeti:** Worker `buildDailySummaryLine` — "Dün: ✓ N görev · kcal · su" satırı morning payload sonuna eklenir (AI + fallback ikisinde de çalışır, odak dahil edilmedi — pomoToday dünü güvenilir tutmaz).
 - Cache v7-96 → **v7-97**.
 
+### 10 Temmuz 2026 — 2. seans: "Geçmiş hafızası" (takviye uyum şeridi + odak günlüğü)
+Tespit: skor kartı/sabah özetinin altındaki veri tek günlüktü — takviye `takenDate` üzerine yazılıyordu, odak `pomoToday` sadece bugünü tutuyordu. Paket:
+- **💊 Takviye geçmişi:** `markSuppTaken` artık `r.takenLog[]` tutar (son 30 gün, `takenDate` geriye uyumlu senkron). `suppTakenOn(r,d)` helper. Takviye satırında **son 7 gün nokta şeridi** (`suppLast7`): dolu=alındı, boş=alınmadı, soluk `na`=kapsam dışı (hafta içi takviyesinde hafta sonu + `r.id` epoch'undan türetilen oluşturma tarihi öncesi). Nötr gösterim — streak DEĞİL (streak stres kaynağıydı).
+- **🎧 Odak günlüğü:** `data.focusDays{'YYYY-MM-DD':n}` (son 60 gün) — `logFocusDay()` ui.js'te, pomodoro bitişinin 2 noktasında (tickTimer + restoreTimerState "uzakta bitti").
+- **🧩 Skor kartına 5. hücre:** takviye x/y (bugüne uyan aktifler; hafta içi olanlar hafta sonu sayılmaz). kcal hücresi format değişti: değer=yenen, etiket=`/hedef kcal` (5 hücrede taşıyordu). CSS: `:has(> :nth-child(5))` daraltma + kcal `flex:1.6`.
+- **📊 Sabah push "Dün" satırına** odak seansı + `💊 x/y takviye` eklendi (worker `buildDailySummaryLine`, focusDays+takenLog'dan; sıfır değerler yazılmaz — utanç değil bilgi).
+- **Veri modeli yeni:** `data.focusDays{}`, `reminders[i].takenLog[]`.
+- Doğrulama: 25 senaryo node testi + preview'da mobil 375px görsel test (şerit, toggle, 5 hücre, konsol temiz). ⚠️ Preview'da SW cache'i taze modülü gizleyebilir — `serviceWorker.getRegistrations()→unregister + caches.delete` sonrası reload ile test et.
+- Cache v7-97 → **v7-98**.
+
 ### 7 Temmuz 2026 — elle eklenen besin otomatik "Kendi besinlerim"e kaydolsun
 Salim: barkod/OFF yerel Türk ürününü ıskalayınca paket arkasından elle makro giriyorum, bir daha sormasın. **`core.js` `addMeal()`:** kcal girildiyse öğün eklenirken besin otomatik `data.diet.customFoods`'a upsert edilir (ad ile dedupe — varsa makroları günceller, yoksa ekler), toast "eklendi · besinlerine kaydedildi". Elle sekmesinde protein/karb/yağ girişi (`mealP`/`mealC`/`mealF` inputları) zaten vardı. İkinci sefer arama kutusuna adı yazınca "Kendi besinlerim" altında tek tıkla gelir. Cache v7-87 → v7-88.
 
@@ -27,6 +37,15 @@ Salim: barkod/OFF yerel Türk ürününü ıskalayınca paket arkasından elle m
 ## ⚙️ Oturum Kuralı
 - Aksi söylenmedikçe tüm dokümantasyon/dosya düzenleme işlemleri bu dosya (`CLAUDE.md`) üzerinden yürütülür.
 - **Gerekmedikçe bu dosyayı güncelleme komutu verilmez** — sadece önemli mimari/özellik/karar değişikliklerinde güncellenir, küçük/geçici detaylar için değil.
+
+## 🤖 Orkestratör Kuralı (10 Temmuz 2026 — KALICI)
+Her görevde şu akış uygulanır:
+1. **Önce karmaşıklığı değerlendir.**
+2. **Basit iş** (boilerplate yazımı, küçük düzenlemeler, test, dokümantasyon) → Agent tool ile **claude-sonnet-5** subagent'a devret (`model: "sonnet"`).
+3. **Derin akıl yürütme, mimari karar, karmaşık debug** gerektiren iş → ana model (Fable) kendisi tam güçle yapar.
+4. Ucuz modelin halledebileceği işe asla full Fable reasoning harcanmaz.
+5. **Her seferinde hangi modelin seçildiği ve nedeni tek satırla açıklanır.**
+- ⚠️ İstisna: iş o kadar küçükse ki subagent'a bağlam aktarmak işin kendisinden pahalıysa (tek satır düzenleme, cache bump gibi), inline yapılır — yine tek satır gerekçeyle.
 
 ## 🎨 Tasarım Standardı — "Impeccable" (KALICI / ZORUNLU)
 Salim'in talebi (Haz 13): **Tüm UI/arayüz işlerinde Impeccable framework standardında çalış.** Tam framework `C:\Users\Salim\Downloads\impeccable-main\` içinde açılı (OpenAI-format skill: `.agents/skills/impeccable/SKILL.md` + `reference/*.md`). Yeni bir UI işine başlamadan önce `SKILL.md` + register referansı `reference/product.md` (Aidan app UI = "product register") okunmalı. Aşağıdaki kurallar her arayüz kodunda İSTİSNASIZ uygulanır:

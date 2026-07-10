@@ -3330,3 +3330,17 @@
 /* Takviye aralıklı mod */
 .supp-mode-chips { margin-top: 2px; }
 .supp-range-sep { align-self: center; color: var(--text-muted); flex: 0 0 auto; }
+
+/* Takviye uyum şeridi — son 7 gün, nötr noktalar (streak değil) */
+.supp-dots { display: flex; gap: 3px; margin-top: 3px; }
+.supp-dot { width: 6px; height: 6px; border-radius: 50%; background: transparent; border: 1px solid var(--border); flex: 0 0 auto; }
+.supp-dot.on { background: #34c759; border-color: #34c759; }
+.supp-dot.na { border-color: transparent; background: var(--border-soft); opacity: 0.4; }
+.supp-dot[data-today="1"]:not(.on) { border-color: var(--text-muted); }
+
+/* kcal hucresi (2.) en uzun deger — esneme payi fazla */
+.score-card .score-item:nth-child(2) { flex: 1.6; }
+/* Skor kartinda 5. hucre (takviye) varken degerler kesilmesin */
+.score-card:has(> :nth-child(5)) { gap: 6px; }
+.score-card:has(> :nth-child(5)) .score-val { font-size: 0.8rem; }
+.score-card:has(> :nth-child(5)) .score-label { font-size: 0.66rem; }

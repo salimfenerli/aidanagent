@@ -869,8 +869,9 @@ async function sendPushToAll(env, data, payload, sessionInfo) {
   }
 }
 
-// 🧩 Modüller arası "dün özeti" — sabah brifingine eklenen tek satır (görev + kalori + su).
-// Odak push'a eklenmedi: pomoToday sadece günün sayacıdır, dünün verisi güvenilir değil.
+// 🧩 Modüller arası "dün özeti" — sabah brifingine eklenen tek satır (görev + kalori + su + odak + takviye).
+// Odak: data.focusDays günlüğünden (pomoToday sadece bugünü tutar). Takviye: reminders[].takenLog.
+// Sıfır değerler yazılmaz — utanç değil bilgi.
 function buildDailySummaryLine(data) {
   const y = trDate(-1);
   const parts = [];
@@ -883,6 +884,11 @@ function buildDailySummaryLine(data) {
     if (kcal) parts.push(`${kcal}/${d.kcalGoal || 2000} kcal`);
     if (day.waterL) parts.push(`${String(day.waterL).replace('.', ',')} L su`);
   }
+  const focusY = (data.focusDays || {})[y];
+  if (focusY) parts.push(`${focusY} odak seansı`);
+  const supps = (data.reminders || []).filter(r => r.kind === 'supp');
+  const takenY = supps.filter(r => (r.takenLog || []).includes(y)).length;
+  if (takenY) parts.push(`💊 ${takenY}/${supps.length} takviye`);
   if (!parts.length) return '';
   return `📊 Dün: ${parts.join(' · ')}`;
 }

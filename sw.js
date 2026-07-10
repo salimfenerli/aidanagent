@@ -1,4 +1,4 @@
-const CACHE = 'aidan-v7-97';
+const CACHE = 'aidan-v7-98';
 const ASSETS = [
   '/',
   '/supabase.js',
