@@ -3405,3 +3405,17 @@
 .rk-size-sub { font-size: 0.76rem; color: var(--text-muted); margin-top: 3px; line-height: 1.4; }
 .rk-size-cap { font-size: 0.68rem; color: var(--text-faint); margin-top: 5px; }
 @media (prefers-reduced-motion: reduce) { .rk-chip { transition: none; } }
+
+
+/* Portföy geneli risk paneli (Tem 11) */
+.portfolio-risk-panel { margin-top: 8px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.pfr-title { font-size: 0.74rem; color: var(--text-muted); font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
+.pfr-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.pfr-lbl { font-size: 0.8rem; color: var(--text); }
+.pfr-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.pfr-chip { font-size: 0.8rem; color: var(--text-strong); }
+.pfr-chip .down { color: var(--danger); }
+.pfr-mut { color: var(--text-muted); font-size: 0.72rem; }
+.pfr-note { margin-top: 7px; font-size: 0.8rem; color: var(--text); line-height: 1.4; }
+.pfr-note.warn { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 8px; padding: 6px 9px; color: var(--text-strong); }
+.pfr-disc { margin-top: 8px; font-size: 0.68rem; color: var(--text-faint); }

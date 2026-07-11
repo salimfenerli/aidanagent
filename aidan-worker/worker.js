@@ -2488,6 +2488,83 @@ async function handleStockHistoryApi(request, env) {
 }
 
 // ============================================================
+// 📊 Temel analiz verileri — Yahoo quoteSummary proxy (crumb + cookie akışı)
+// ============================================================
+let _yahooCrumb = null; // { crumb, cookie, at } — isolate ömrü boyunca cache
+async function getYahooCrumb() {
+  if (_yahooCrumb && Date.now() - _yahooCrumb.at < 30 * 60 * 1000) return _yahooCrumb;
+  const UA = 'Mozilla/5.0';
+  const c = await fetch('https://fc.yahoo.com/', { headers: { 'User-Agent': UA } });
+  let cookies = [];
+  if (typeof c.headers.getSetCookie === 'function') cookies = c.headers.getSetCookie();
+  else { const sc = c.headers.get('set-cookie'); if (sc) cookies = [sc]; }
+  const cookie = cookies.map(s => s.split(';')[0]).filter(Boolean).join('; ');
+  const cr = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+    headers: { 'User-Agent': UA, 'Accept': 'text/plain', 'Cookie': cookie },
+  });
+  const crumb = (await cr.text()).trim();
+  if (!crumb || crumb.length > 40 || crumb.includes('<')) throw new Error('crumb alınamadı');
+  _yahooCrumb = { crumb, cookie, at: Date.now() };
+  return _yahooCrumb;
+}
+
+async function handleStockFundamentalsApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const yahoo = String(body.ySymbol || '').trim().toUpperCase();
+  if (!yahoo || !/^[A-Z0-9.=-]{1,20}$/.test(yahoo)) return jsonCors({ error: 'bad symbol' }, 400, cors);
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  try {
+    const { crumb, cookie } = await getYahooCrumb();
+    const modules = 'summaryDetail,defaultKeyStatistics,financialData,price';
+    const r = await fetch(
+      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahoo)}?modules=${modules}&crumb=${encodeURIComponent(crumb)}`,
+      { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json', 'Cookie': cookie }, cf: { cacheTtl: 600, cacheEverything: true } }
+    );
+    if (r.status === 401 || r.status === 403) { _yahooCrumb = null; return jsonCors({ error: 'yahoo yetki — tekrar dene' }, 502, cors); }
+    if (!r.ok) return jsonCors({ error: `yahoo http ${r.status}` }, 502, cors);
+    const j = await r.json();
+    const res = j && j.quoteSummary && j.quoteSummary.result && j.quoteSummary.result[0];
+    if (!res) return jsonCors({ error: 'veri yok' }, 404, cors);
+    const sd = res.summaryDetail || {}, ks = res.defaultKeyStatistics || {}, fd = res.financialData || {}, pr = res.price || {};
+    const raw = o => (o && typeof o === 'object' && 'raw' in o) ? o.raw : (typeof o === 'number' ? o : null);
+    const pick = (a, b) => { const x = raw(a); return x != null ? x : raw(b); };
+    return jsonCors({
+      ySymbol: yahoo,
+      name: pr.longName || pr.shortName || yahoo,
+      currency: pr.currency || sd.currency || 'TRY',
+      marketCap: pick(pr.marketCap, sd.marketCap),
+      trailingPE: pick(sd.trailingPE, ks.trailingPE),
+      forwardPE: raw(sd.forwardPE),
+      priceToBook: raw(ks.priceToBook),
+      dividendYield: pick(sd.dividendYield, sd.trailingAnnualDividendYield),
+      eps: raw(ks.trailingEps),
+      profitMargins: pick(fd.profitMargins, ks.profitMargins),
+      returnOnEquity: raw(fd.returnOnEquity),
+      debtToEquity: raw(fd.debtToEquity),
+      revenueGrowth: raw(fd.revenueGrowth),
+      earningsGrowth: raw(fd.earningsGrowth),
+      targetMean: raw(fd.targetMeanPrice),
+      numAnalysts: raw(fd.numberOfAnalystOpinions),
+      recommendation: fd.recommendationKey || null,
+      at: Date.now(),
+    }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
+// ============================================================
 // 📰 Hisse haberleri — Yahoo Finance search news proxy + opsiyonel AI özet
 // İki mod: (1) default → haber listesi döner, (2) {summarize:true, headlines:[...]} → Türkçe AI özet.
 // PWA önce listeyi çeker (hızlı), kullanıcı "AI özetle" derse aynı endpoint'e başlıkları yollar.
@@ -4494,6 +4571,9 @@ export default {
     }
 
     // 📰 Hisse haberleri — Yahoo news proxy + opsiyonel AI özet
+    if (url.pathname === '/stock-fundamentals') {
+      return handleStockFundamentalsApi(request, env);
+    }
     if (url.pathname === '/stock-news') {
       return handleStockNewsApi(request, env);
     }

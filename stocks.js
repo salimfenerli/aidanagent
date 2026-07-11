@@ -6,6 +6,7 @@ const STOCK_HISTORY_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/
 const STOCK_ANALYSIS_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/stock-analysis';
 const PF_TECHNICAL_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/portfolio-technical';
 const STOCK_NEWS_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/stock-news';
+const STOCK_FUND_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/stock-fundamentals';
 let _stockChartIdx = null;
 let _stockChartRange = '1mo';
 let _stockChartPayload = null;
@@ -13,6 +14,8 @@ let _stockChartMode = 'line';   // 'line' | 'candle' — modal grafik tipi
 let _stockChartFib = false;     // Fibonacci overlay açık mı
 let _stockNewsLoaded = false;   // haber sekmesi bu açılışta çekildi mi
 let _stockNewsItems = [];       // [{title,publisher,link,time}] — AI özet için
+let _stockFundLoaded = false;   // temel veri bu açılışta çekildi mi
+let _stockFundData = null;      // {trailingPE, priceToBook, ...}
 // Teknik analiz sadece hisselerde (BIST + ABD) anlamlı — döviz/kripto'da panel gizli
 const TA_MARKETS = new Set(['bist', 'abd']);
 
@@ -252,6 +255,7 @@ function renderStocks() {
   renderPortfolioSummary();
   renderPortfolioPie();
   renderPortfolioHistory();
+  renderPortfolioRisk();
   renderBist100Compare();
   const _hasHoldings = (data.watchlist || []).some(w => w.qty != null && w.qty > 0 && w.cost != null);
   const _hasTaHoldings = (data.watchlist || []).some(w =>
@@ -358,6 +362,50 @@ async function setPosition(sym) {
 
 // Toplam portföy özeti — sadece pozisyonu olan + fiyatı gelmiş hisseler
 // ABD/döviz/kripto eklendiğinden beri portföy birden çok para biriminde olabilir → para birimine göre grupla
+function renderPortfolioRisk() {
+  const el = document.getElementById('portfolioRiskPanel');
+  if (!el) return;
+  const holdings = (data.watchlist || []).filter(w => w.qty != null && w.qty > 0 && w.price != null);
+  if (holdings.length === 0) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  // mutasyonsuz satır listesi
+  const rows = holdings.map(w => {
+    const cur = w.currency || 'TRY';
+    const value = w.qty * w.price;
+    const stop = (w.alarmBelow != null && w.alarmBelow < w.price) ? w.alarmBelow : w.price * 0.92;
+    return { sym: w.symbol, cur, value, risk: w.qty * (w.price - stop), market: w.market || 'bist' };
+  });
+  const byCur = {};
+  const markets = new Set();
+  rows.forEach(r => {
+    if (!byCur[r.cur]) byCur[r.cur] = { value: 0, risk: 0 };
+    byCur[r.cur].value += r.value; byCur[r.cur].risk += r.risk;
+    markets.add(r.market);
+  });
+  let topW = null, topRisk = null;
+  rows.forEach(r => {
+    const wt = byCur[r.cur].value > 0 ? r.value / byCur[r.cur].value * 100 : 0;
+    if (!topW || wt > topW.wt) topW = { sym: r.sym, wt: Math.round(wt * 10) / 10 };
+    if (!topRisk || r.risk > topRisk.risk) topRisk = { sym: r.sym, risk: r.risk, cur: r.cur };
+  });
+  el.style.display = 'block';
+  const curLabel = c => c === 'TRY' ? 'TL' : c;
+  const f = v => formatStockPrice(v);
+  const chips = Object.keys(byCur).map(cur => {
+    const g = byCur[cur];
+    const pct = g.value > 0 ? Math.round(g.risk / g.value * 1000) / 10 : 0;
+    return `<span class="pfr-chip">${escapeHtml(curLabel(cur))}: <b class="down">−${f(g.risk)}</b> <span class="pfr-mut">%${pct.toLocaleString('tr-TR')}</span></span>`;
+  }).join('');
+  const concWarn = topW && topW.wt > 25;
+  const divWarn = holdings.length < 3;
+  let html = `<div class="pfr-title">Portföy riski</div>`;
+  html += `<div class="pfr-row"><span class="pfr-lbl">Tüm stop'lar tetiklenirse</span><span class="pfr-chips">${chips}</span></div>`;
+  if (topW) html += `<div class="pfr-note${concWarn ? ' warn' : ''}">En yoğun: <b>${escapeHtml(topW.sym)}</b> · portföyün %${topW.wt.toLocaleString('tr-TR')}'i${concWarn ? ' — yoğunlaşma riski' : ''}</div>`;
+  if (topRisk) html += `<div class="pfr-note">En çok riske açık: <b>${escapeHtml(topRisk.sym)}</b> · ${f(topRisk.risk)} ${escapeHtml(curLabel(topRisk.cur))}</div>`;
+  html += `<div class="pfr-note${divWarn ? ' warn' : ''}">${holdings.length} pozisyon · ${markets.size} piyasa${divWarn ? ' — az çeşitlendirme' : ''}</div>`;
+  html += `<p class="pfr-disc">Stop = kurduğun alt alarm; yoksa varsayılan %8. Para birimleri ayrı (kur farkı karıştırılmaz).</p>`;
+  el.innerHTML = html;
+}
+
 function renderPortfolioSummary() {
   const el = document.getElementById('portfolioSummary');
   if (!el) return;
@@ -645,6 +693,8 @@ function openStockChart(idx) {
   // Haber sekmesini sıfırla, varsayılan Grafik görünümü
   _stockNewsLoaded = false;
   _stockNewsItems = [];
+  _stockFundLoaded = false;
+  _stockFundData = null;
   setStockView('chart');
   document.getElementById('stockChartModal').classList.add('active');
   loadStockHistory('1mo');
@@ -656,6 +706,8 @@ function closeStockChart() {
   _stockChartPayload = null;
   _stockNewsLoaded = false;
   _stockNewsItems = [];
+  _stockFundLoaded = false;
+  _stockFundData = null;
 }
 
 // Grafik ↔ Haberler görünüm geçişi
@@ -665,7 +717,76 @@ function setStockView(view) {
   });
   document.getElementById('stockChartView').style.display = view === 'chart' ? 'block' : 'none';
   document.getElementById('stockNewsView').style.display = view === 'news' ? 'block' : 'none';
+  document.getElementById('stockFundView').style.display = view === 'fund' ? 'block' : 'none';
   if (view === 'news' && !_stockNewsLoaded) loadStockNews();
+  if (view === 'fund' && !_stockFundLoaded) loadStockFundamentals();
+}
+
+async function loadStockFundamentals() {
+  if (_stockChartIdx == null) return;
+  const w = (data.watchlist || [])[_stockChartIdx];
+  if (!w) return;
+  _stockFundLoaded = true;
+  const grid = document.getElementById('stockFundGrid');
+  grid.innerHTML = '<div class="stock-chart-loading">Yükleniyor…</div>';
+  try {
+    const ySymbol = w.ySymbol || legacyYSymbol(w);
+    const token = window._supa ? (await window._supa.auth.getSession()).data.session?.access_token : null;
+    if (!token) throw new Error('giriş yapılmamış');
+    const r = await fetch(STOCK_FUND_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ ySymbol, symbol: w.symbol }),
+    });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `http ${r.status}`); }
+    _stockFundData = await r.json();
+    renderStockFundamentals(_stockFundData, w);
+  } catch (e) {
+    _stockFundLoaded = false; // tekrar denenebilsin
+    grid.innerHTML = `<div class="stock-chart-loading">Temel veri alınamadı: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderStockFundamentals(d, w) {
+  const grid = document.getElementById('stockFundGrid');
+  if (!grid) return;
+  if (!d) { grid.innerHTML = '<div class="stock-chart-loading">Veri yok.</div>'; return; }
+  const cur = d.currency || w.currency || '';
+  const c = cur ? ' ' + cur : '';
+  const tr = n => n.toLocaleString('tr-TR');
+  const num = (v, dec = 2) => (v == null || !isFinite(v)) ? '—' : tr(Math.round(v * Math.pow(10, dec)) / Math.pow(10, dec));
+  const pct = v => (v == null || !isFinite(v)) ? '—' : tr(Math.round(v * 1000) / 10) + '%';
+  const big = v => {
+    if (v == null || !isFinite(v)) return '—';
+    if (Math.abs(v) >= 1e9) return tr(Math.round(v / 1e8) / 10) + ' Mr';
+    if (Math.abs(v) >= 1e6) return tr(Math.round(v / 1e5) / 10) + ' Mn';
+    return tr(Math.round(v));
+  };
+  const gcls = v => v == null ? '' : (v > 0 ? 'up' : (v < 0 ? 'down' : ''));
+  // analist hedef → potansiyel %
+  let tSub = 'analist hedefi';
+  if (d.targetMean != null && w.price != null && w.price > 0) {
+    const up = Math.round((d.targetMean - w.price) / w.price * 1000) / 10;
+    tSub = `${up > 0 ? '+' : ''}${tr(up)}% potansiyel`;
+  }
+  const recMap = { strong_buy: 'Güçlü Al', buy: 'Al', outperform: 'Endeks üstü', hold: 'Tut', underperform: 'Endeks altı', sell: 'Sat', strong_sell: 'Güçlü Sat' };
+  const recCls = { strong_buy: 'up', buy: 'up', outperform: 'up', hold: '', underperform: 'down', sell: 'down', strong_sell: 'down' };
+  const cells = [
+    { lbl: 'F/K', val: num(d.trailingPE), sub: 'fiyat/kazanç', cls: '' },
+    { lbl: 'İleri F/K', val: num(d.forwardPE), sub: 'beklenen', cls: '' },
+    { lbl: 'PD/DD', val: num(d.priceToBook), sub: 'piyasa/defter', cls: '' },
+    { lbl: 'Temettü verimi', val: pct(d.dividendYield), sub: 'yıllık', cls: d.dividendYield ? 'up' : '' },
+    { lbl: 'Piyasa değeri', val: big(d.marketCap), sub: cur, cls: '' },
+    { lbl: 'HBK (EPS)', val: num(d.eps), sub: 'hisse başı kâr', cls: '' },
+    { lbl: 'Net kâr marjı', val: pct(d.profitMargins), sub: 'kârlılık', cls: gcls(d.profitMargins) },
+    { lbl: 'Özsermaye kârlılığı', val: pct(d.returnOnEquity), sub: 'ROE', cls: gcls(d.returnOnEquity) },
+    { lbl: 'Borç/Özsermaye', val: num(d.debtToEquity, 0), sub: 'kaldıraç', cls: (d.debtToEquity != null && d.debtToEquity > 150) ? 'warn' : '' },
+    { lbl: 'Ciro büyümesi', val: pct(d.revenueGrowth), sub: 'yıllık', cls: gcls(d.revenueGrowth) },
+    { lbl: 'Kâr büyümesi', val: pct(d.earningsGrowth), sub: 'yıllık', cls: gcls(d.earningsGrowth) },
+    { lbl: 'Analist hedefi', val: d.targetMean != null ? num(d.targetMean) + c : '—', sub: tSub, cls: '' },
+    { lbl: 'Analist görüşü', val: d.recommendation ? (recMap[d.recommendation] || d.recommendation) : '—', sub: d.numAnalysts ? d.numAnalysts + ' analist' : '', cls: d.recommendation ? (recCls[d.recommendation] || '') : '' },
+  ];
+  grid.innerHTML = cells.map(ce => `<div class="stock-ta-cell ${ce.cls}"><div class="lbl">${ce.lbl}</div><div class="val">${escapeHtml(String(ce.val))}</div><div class="sub">${escapeHtml(String(ce.sub || ''))}</div></div>`).join('');
 }
 
 async function loadStockNews() {
@@ -746,7 +867,7 @@ async function aiStockNews() {
   const resEl = document.getElementById('stockNewsAiResult');
   btn.disabled = true;
   resEl.style.display = 'block';
-  resEl.textContent = '⏳ AI haber özeti hazırlanıyor…';
+  resEl.textContent = 'AI haber özeti hazırlanıyor…';
   try {
     const token = window._supa ? (await window._supa.auth.getSession()).data.session?.access_token : null;
     if (!token) throw new Error('giriş yapılmamış');
@@ -831,6 +952,8 @@ async function loadStockHistory(range) {
     `;
     // TA paneli: sadece hisselerde (BIST/ABD) göster — döviz/kripto'da boş bırak
     const taOk = TA_MARKETS.has(w.market || 'bist');
+    const _ftb = document.getElementById('stockFundTabBtn');
+    if (_ftb) _ftb.style.display = taOk ? '' : 'none';
     if (taOk) {
       renderStockTA(ta, cur);
       renderStockRisk(ta, w, cur);
@@ -1483,7 +1606,7 @@ async function aiStockAnalysis() {
   const resEl = document.getElementById('stockTaAiResult');
   btn.disabled = true;
   resEl.style.display = 'block';
-  resEl.textContent = '⏳ AI teknik yorum hazırlanıyor…';
+  resEl.textContent = 'AI teknik yorum hazırlanıyor…';
   try {
     const token = window._supa ? (await window._supa.auth.getSession()).data.session?.access_token : null;
     if (!token) throw new Error('giriş yapılmamış');
@@ -1628,7 +1751,7 @@ async function aiPortfolioTechnical() {
   const resEl = document.getElementById('pfTechAiResult');
   btn.disabled = true;
   resEl.style.display = 'block';
-  resEl.textContent = '⏳ Aidan portföyünün teknik durumuna bakıyor…';
+  resEl.textContent = 'Aidan portföyünün teknik durumuna bakıyor…';
   try {
     const token = window._supa ? (await window._supa.auth.getSession()).data.session?.access_token : null;
     if (!token) throw new Error('giriş yapılmamış');

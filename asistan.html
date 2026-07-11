@@ -300,6 +300,7 @@
       <div class="stocks-menu-note">Borsa tam ekran modundasın — bir sekme seçince normal görünüme dönersin.</div>
     </nav>
     <div class="portfolio-summary" id="portfolioSummary" style="display:none;"></div>
+    <div class="portfolio-risk-panel" id="portfolioRiskPanel" style="display:none;"></div>
     <div class="portfolio-pie" id="portfolioPie" style="display:none;"></div>
     <div class="portfolio-history" id="portfolioHistory" style="display:none;"></div>
     <div class="bist100-compare" id="bist100Compare" style="display:none;"></div>
@@ -1065,6 +1066,7 @@
     <div class="stock-chart-views" id="stockChartViews">
       <button data-view="chart" class="active" onclick="setStockView('chart')">Grafik</button>
       <button data-view="news" onclick="setStockView('news')">Haberler</button>
+      <button data-view="fund" id="stockFundTabBtn" onclick="setStockView('fund')">Temel</button>
     </div>
     <div id="stockChartView">
     <div class="stock-chart-ranges" id="stockChartRanges">
@@ -1108,6 +1110,10 @@
       <div class="stock-ta-ai-result" id="stockNewsAiResult" style="display:none;"></div>
       <div class="stock-news-list" id="stockNewsList"><div class="stock-chart-loading">Yükleniyor…</div></div>
       <p class="stock-ta-disclaimer">Haberler Yahoo Finance kaynaklıdır — yatırım tavsiyesi değildir.</p>
+    </div>
+    <div id="stockFundView" style="display:none;">
+      <div class="stock-ta-grid" id="stockFundGrid"><div class="stock-chart-loading">Yükleniyor…</div></div>
+      <p class="stock-ta-disclaimer">Temel veriler Yahoo Finance kaynaklıdır — BIST'te bazı alanlar boş gelebilir. Yatırım tavsiyesi değildir.</p>
     </div>
     <button class="modal-close" onclick="closeStockChart()">Kapat</button>
   </div>
