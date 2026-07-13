@@ -1084,11 +1084,15 @@ function foodMemoryMatches(q, limit) {
   }
   return [...map.values()].filter(e => e.kcal != null).sort((a, b) => b.count - a.count).slice(0, limit || 6);
 }
-let _foodInputTimer = null, _localMatches = [], _seedMatches = [], _customMatches = [];
+let _foodInputTimer = null, _localMatches = [], _seedMatches = [], _customMatches = [], _pickQty = null;
 function onFoodSearchInput() { clearTimeout(_foodInputTimer); _foodInputTimer = setTimeout(renderLocalMatches, 180); }
 function renderLocalMatches() {
   const el = document.getElementById('foodLocal'); if (!el) return;
-  const q = (document.getElementById('foodSearchInput').value || '').trim();
+  const raw = (document.getElementById('foodSearchInput').value || '').trim();
+  // '2 dilim ekmek' → miktar 2 + çekirdek 'ekmek'; miktar seçilen besinin adedine önyüklenir
+  const parsed = parseFoodQuery(raw);
+  _pickQty = parsed.qty;
+  const q = (parsed.core && parsed.core.length >= 2) ? parsed.core : raw;
   _customMatches = customFoodMatches(q, 6);
   const customNames = new Set(_customMatches.map(m => m.name.toLocaleLowerCase('tr')));
   _localMatches = foodMemoryMatches(q, 6).filter(m => !customNames.has(m.name.toLocaleLowerCase('tr')));
@@ -1126,6 +1130,7 @@ function pickCustomFood(i) {
   const m = _customMatches[i]; if (!m) return;
   _aiFood = { name: m.name, kcal: m.kcal, protein: m.protein, carb: m.carb, fat: m.fat, multi: false, items: [], source: 'custom' };
   showAiPortion(m.name, 'Kendi besinim' + (m.unit ? ' · ' + m.unit : ''), '');
+  applyPickQty();
 }
 // Elle formundaki ad/kcal/makroları kalıcı "kendi besinim" olarak kaydet (bugüne EKLEMEZ)
 function saveCustomFood() {
@@ -1222,6 +1227,7 @@ function pickPersonalFood(i) {
   const m = _localMatches[i]; if (!m) return;
   _aiFood = { name: m.name, kcal: m.kcal, protein: m.protein, carb: m.carb, fat: m.fat, multi: false, items: [], source: 'memory' };
   showAiPortion(m.name, 'Hafızandan', '');
+  applyPickQty();
 }
 // ===== Temel Türk besinleri tohumu (birim başına yaklaşık değerler; n=ad, u=birim, k=kcal, p/c/f=makro) =====
 const TURK_FOODS = [
@@ -1629,6 +1635,25 @@ const TURK_FOODS = [
   { n: 'Ayva', u: 'adet', k: 60, p: 0, c: 15, f: 0 },
   { n: 'Dut', u: 'porsiyon', k: 60, p: 1, c: 14, f: 0 },
   { n: 'Kızılcık', u: 'porsiyon', k: 50, p: 1, c: 12, f: 0 },
+  // === Genisletme (Tem 2026, 2) — ekmek cesitleri + yaygin kahvaltilik ===
+  { n: 'Kepekli ekmek', u: 'dilim', k: 65, p: 3, c: 12, f: 1 },
+  { n: 'Çavdar ekmeği', u: 'dilim', k: 65, p: 2, c: 12, f: 1 },
+  { n: 'Tost ekmeği', u: 'dilim', k: 75, p: 2, c: 14, f: 1 },
+  { n: 'Sandviç ekmeği', u: 'adet', k: 200, p: 7, c: 38, f: 2 },
+  { n: 'Hamburger ekmeği', u: 'adet', k: 160, p: 5, c: 28, f: 3 },
+  { n: 'Baget ekmek', u: 'dilim', k: 70, p: 2, c: 14, f: 1 },
+  { n: 'Pita ekmeği', u: 'adet', k: 165, p: 5, c: 33, f: 1 },
+  { n: 'Kruvasan', u: 'adet', k: 230, p: 5, c: 26, f: 12 },
+  { n: 'Glutensiz ekmek', u: 'dilim', k: 70, p: 1, c: 13, f: 2 },
+  { n: 'Ekşi mayalı ekmek', u: 'dilim', k: 70, p: 3, c: 13, f: 1 },
+  { n: 'Kakaolu fındık kreması', u: 'kaşık', k: 100, p: 1, c: 11, f: 6 },
+  { n: 'Yulaf sütü', u: 'bardak', k: 90, p: 2, c: 16, f: 2 },
+  { n: 'Badem sütü', u: 'bardak', k: 40, p: 1, c: 3, f: 3 },
+  { n: 'Çiğ köfte (bol)', u: 'porsiyon', k: 250, p: 7, c: 48, f: 3 },
+  { n: 'Peynirli poğaça', u: 'adet', k: 260, p: 7, c: 28, f: 13 },
+  { n: 'Zeytinli poğaça', u: 'adet', k: 250, p: 5, c: 30, f: 12 },
+  { n: 'Çikolatalı kek', u: 'dilim', k: 280, p: 4, c: 38, f: 13 },
+  { n: 'Yumurtalı sandviç', u: 'adet', k: 320, p: 15, c: 34, f: 13 },
 ];
 // Türkçe diakritik-duyarsız normalize (kofte→kofte=köfte, doner→döner). Hızlı yazımda eşleşsin.
 function trNorm(str) {
@@ -1637,9 +1662,26 @@ function trNorm(str) {
     .replace(/ö/g, 'o').replace(/ü/g, 'u').replace(/ğ/g, 'g')
     .replace(/â/g, 'a').replace(/î/g, 'i').replace(/û/g, 'u').trim();
 }
+// Miktar+birim kelimeleri (trNorm edilmiş halleriyle) — arama sorgusundan ayıklamak için
+const _FOOD_UNITS = ['dilim', 'adet', 'tane', 'bardak', 'kase', 'kasik', 'porsiyon', 'avuc', 'tabak', 'top', 'kutu', 'sise', 'fincan', 'durum', 'parca', 'kup', 'paket', 'olcek', 'kadeh', 'dal', 'yaprak', 'lokma', 'kasede'];
+const _FOOD_WORDNUM = { yarim: 0.5, ceyrek: 0.25, bucuk: 1.5, bir: 1, iki: 2, uc: 3, dort: 4, bes: 5, alti: 6, yedi: 7, sekiz: 8, dokuz: 9, on: 10, yirmi: 20 };
+// Sorgudan baştaki miktar (rakam veya 'yarım/iki/üç'...) + birim kelimelerini ayıkla: '2 dilim ekmek' -> {qty:2, core:'ekmek'}
+function parseFoodQuery(q) {
+  let words = trNorm(q).split(/\s+/).filter(Boolean);
+  let qty = null;
+  // sadece baştaki kelime miktar olabilir (yemek adındaki sayıları bozmasın)
+  if (words.length > 1) {
+    const w0 = words[0];
+    if (/^[0-9]+([.,][0-9]+)?$/.test(w0)) { qty = Number(w0.replace(',', '.')); words = words.slice(1); }
+    else if (_FOOD_WORDNUM[w0] != null) { qty = _FOOD_WORDNUM[w0]; words = words.slice(1); }
+  }
+  // birim kelimelerini çıkar (kalan çekirdek terim)
+  const kept = words.filter(w => !_FOOD_UNITS.includes(w));
+  return { qty: (qty && qty > 0) ? qty : null, core: kept.join(' ').trim() };
+}
 // Temel besin DB araması — diakritik-duyarsız + alaka sıralı (tam > baş > kelime-başı > içerir).
 function seedFoodMatches(q, limit) {
-  const nq = trNorm(q);
+  const nq = parseFoodQuery(q).core;
   if (nq.length < 2) return [];
   const scored = [];
   for (const f of TURK_FOODS) {
@@ -1658,6 +1700,13 @@ function pickSeedFood(i) {
   const sf = _seedMatches[i]; if (!sf) return;
   _aiFood = { name: sf.n, kcal: sf.k, protein: sf.p, carb: sf.c, fat: sf.f, multi: false, items: [], source: 'seed' };
   showAiPortion(sf.n, 'Temel · ' + sf.u, '');
+  applyPickQty();
+}
+// Aramada yazılan miktarı ('2 dilim ekmek' → 2) seçilen besinin adet kutusuna önyükle
+function applyPickQty() {
+  if (!_pickQty || _pickQty <= 0) return;
+  const el = document.getElementById('aiQty');
+  if (el) { el.value = _pickQty; updateAiPreview(); }
 }
 function _aiQtyVal() { const el = document.getElementById('aiQty'); if (!el) return 1; const v = Number(el.value); return (isFinite(v) && v > 0) ? v : 0; }
 function updateAiPreview() {
