@@ -3419,3 +3419,267 @@
 .pfr-note { margin-top: 7px; font-size: 0.8rem; color: var(--text); line-height: 1.4; }
 .pfr-note.warn { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 8px; padding: 6px 9px; color: var(--text-strong); }
 .pfr-disc { margin-top: 8px; font-size: 0.68rem; color: var(--text-faint); }
+
+/* Ayarlar — onay kutulu satir (otomatik gun plani). Tek satir, 8pt ritim. */
+.settings-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+}
+.settings-check input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  accent-color: var(--accent);
+  cursor: pointer;
+  margin: 0;
+}
+.settings-check span { line-height: 1.35; }
+
+/* ============ AYARLAR: satır içi seçim (otomatik plan zamanı) ============ */
+.settings-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0 4px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.settings-inline select {
+  flex: 1;
+  min-width: 200px;
+  max-width: 320px;
+}
+
+/* ============ HAFTALIK SABİT PROGRAM ============ */
+.fixedsch-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+.fixedsch-add input[type="text"] { flex: 1 1 150px; min-width: 130px; }
+.fsch-times { display: flex; align-items: center; gap: 6px; }
+.fsch-times span { color: var(--text-faint); }
+.fsch-days { display: flex; flex-wrap: wrap; gap: 4px; flex: 1 1 100%; }
+.fsch-day {
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-mid);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background .18s cubic-bezier(.22,1,.36,1), color .18s cubic-bezier(.22,1,.36,1), border-color .18s cubic-bezier(.22,1,.36,1);
+}
+.fsch-day.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.fsch-empty {
+  padding: 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+  background: var(--surface-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.fsch-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  background: var(--surface-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.fsch-item.off { opacity: .5; }
+.fsch-body { flex: 1; min-width: 0; }
+.fsch-label { font-size: 14px; font-weight: 600; color: var(--text-strong); }
+.fsch-meta { display: flex; gap: 10px; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.fsch-toggle, .fsch-del {
+  flex: none;
+  padding: 6px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.fsch-toggle:hover, .fsch-del:hover { background: var(--surface-hover); color: var(--text-strong); }
+.fsch-del:hover { color: var(--danger); }
+
+/* ============ PLAN: gecikme uyarısı + toparlama ============ */
+/* Impeccable: yan şerit YOK — tam kenar + arka plan tinti + ikon */
+.plan-late {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
+  background: color-mix(in srgb, var(--warning) 10%, var(--surface));
+  border-radius: var(--radius);
+}
+.plan-late > .icon { flex: none; width: 20px; height: 20px; color: var(--warning); }
+.plan-late .pl-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.plan-late .pl-body b { font-size: 14px; color: var(--text-strong); }
+.plan-late .pl-body span { font-size: 12.5px; color: var(--text-muted); line-height: 1.35; }
+.plan-late .pl-btn {
+  flex: none;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.plan-late .pl-btn:hover { background: var(--accent-hover); }
+
+.plan-block.late { border-color: color-mix(in srgb, var(--warning) 45%, transparent); }
+.pb-late-tag {
+  font-weight: 600;
+  color: var(--warning);
+}
+.plan-block.flash {
+  animation: pbFlash 2s cubic-bezier(.22,1,.36,1);
+}
+@keyframes pbFlash {
+  0%, 40% { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); }
+  100% { background: var(--surface); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-block.flash { animation: none; outline: 2px solid var(--accent); }
+  .fsch-day { transition: none; }
+}
+
+/* ============ PLAN: öğrenme şeffaflık satırı ============ */
+.plan-insight {
+  margin: 10px 0 4px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.plan-insight .pi-on,
+.plan-insight .pi-learn {
+  display: inline-block;
+  padding: 7px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-mid);
+}
+.plan-insight .pi-on {
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  color: var(--text);
+}
+
+/* ============ 💪 HEVY — bağlantı + gelişim paneli ============ */
+.hevy-connect {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0 6px;
+}
+.hevy-connect input[type="password"] { flex: 1 1 200px; min-width: 160px; }
+.hevy-status { margin-top: 4px; }
+.hevy-st {
+  display: inline-block;
+  padding: 7px 11px;
+  font-size: 12.5px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-mid);
+  color: var(--text-muted);
+}
+.hevy-st.on {
+  border-color: color-mix(in srgb, var(--success) 38%, transparent);
+  background: color-mix(in srgb, var(--success) 10%, var(--surface));
+  color: var(--text);
+}
+.hevy-st.err {
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  color: var(--text);
+}
+
+.hevy-wrap {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-mid);
+}
+.hevy-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.hevy-head h3 { margin: 0; font-size: 16px; font-weight: 700; color: var(--text-strong); }
+.hevy-refresh {
+  padding: 6px; background: none; border: none; color: var(--text-muted);
+  cursor: pointer; border-radius: var(--radius-sm);
+}
+.hevy-refresh:hover { background: var(--surface-hover); color: var(--text-strong); }
+.hevy-empty { font-size: 13px; color: var(--text-muted); line-height: 1.45; }
+
+.hevy-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+.hevy-stat {
+  flex: 1 1 70px;
+  min-width: 70px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.hevy-stat .hs-val { font-size: 19px; font-weight: 700; color: var(--text-strong); line-height: 1.1; }
+.hevy-stat .hs-val small { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.hevy-stat .hs-lbl { font-size: 11px; color: var(--text-muted); }
+.hevy-stat.up { border-color: color-mix(in srgb, var(--success) 38%, transparent); }
+.hevy-stat.up .hs-val { color: var(--success); }
+.hevy-stat.down { border-color: color-mix(in srgb, var(--warning) 38%, transparent); }
+.hevy-stat.down .hs-val { color: var(--warning); }
+
+.hevy-last {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.hevy-last b { font-size: 14px; color: var(--text-strong); }
+.hevy-last span { font-size: 12px; color: var(--text-muted); }
+
+.hevy-ex-head { margin: 16px 0 8px; font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.hevy-ex-list { display: flex; flex-direction: column; gap: 6px; }
+.hevy-ex {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.hx-name { font-size: 13.5px; font-weight: 600; color: var(--text-strong); }
+.hx-vals { display: flex; align-items: baseline; gap: 10px; margin-top: 3px; flex-wrap: wrap; }
+.hx-now { font-size: 15px; font-weight: 700; color: var(--text); }
+.hx-now small { font-size: 11px; font-weight: 500; color: var(--text-muted); margin-left: 3px; }
+.hx-diff { font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+.hx-diff.up { color: var(--success); }
+.hx-diff.down { color: var(--warning); }
+.hx-diff.muted { font-weight: 500; }
+.hx-pr { margin-top: 4px; font-size: 11.5px; color: var(--text-muted); }
+.hevy-note { margin-top: 12px; font-size: 11px; line-height: 1.45; color: var(--text-faint); }

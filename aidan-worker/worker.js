@@ -843,8 +843,13 @@ async function sendPushToAll(env, data, payload, sessionInfo) {
   const payloadStr = JSON.stringify({
     title: payload.title || '🔔 Aidan',
     body: payload.message || '',
-    tag: 'aidan-cron',
-    data: { url: '/' },
+    // tag: aynı tag'li bildirim öncekini değiştirir. Blok bildirimlerinde blok
+    // başına ayrı tag → arka arkaya gelen bloklar birbirini ezmez.
+    tag: payload.tag || 'aidan-cron',
+    // actions: Android/masaüstü Chrome gösterir. iOS PWA desteklemez —
+    // orada bildirime tıklama fallback'i devreye girer (sw.js notificationclick).
+    actions: payload.actions || undefined,
+    data: { url: payload.url || '/', blockId: payload.blockId || null },
   });
   const dead = [];
   for (const sub of subs) {
@@ -2162,6 +2167,8 @@ async function handlePlanApi(request, env) {
   const from = (body.from || '08:00').toString();
   const to = (body.to || '22:00').toString();
   const now = (body.now || '').toString();
+  // busy = sabit program blokları (okul/ders) — AI bu aralıklara blok koymaz
+  const busy = Array.isArray(body.busy) ? body.busy.slice(0, 12) : [];
   if (!tasks.length) return jsonCors({ error: 'no-tasks' }, 400, cors);
 
   const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
@@ -2169,9 +2176,20 @@ async function handlePlanApi(request, env) {
   if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
   if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
 
+  try {
+    const blocks = await generatePlanBlocks(env, { tasks, from, to, now, busy, insight: body.insight || '' });
+    return jsonCors({ blocks }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
+// Plan uretimi — /plan endpoint'i ve sabah otomatik plan cron'u ORTAK kullanir.
+// Girdi tasks: [{i,text,min,pri,mit,due,cat}] → Cikti: [{start,end,label,task,kind}]
+async function generatePlanBlocks(env, { tasks, from, to, now, busy, insight }) {
   const taskLines = tasks.map(t => {
     const bits = [`[${t.i}] ${t.text}`];
-    if (t.min) bits.push(`~${t.min}dk`);
+    if (t.min) bits.push(t.full ? `bugün ~${t.min}dk (toplam ${t.full}dk, son tarihe bölündü)` : `~${t.min}dk`);
     if (t.pri === 'acil') bits.push('ACİL');
     if (t.mit) bits.push('⭐bugünün-3ü');
     if (t.due) bits.push(`son-tarih:${t.due}`);
@@ -2187,9 +2205,13 @@ async function handlePlanApi(request, env) {
 - Her görevin ~süresi verildiyse o kadar zaman ayır. Süre yoksa 30-45 dk varsay.
 - 🔥 ACİL ve ⭐bugünün-3ü görevleri güne ÖNCE / yüksek-enerji saatlerine koy (öğleden önce ya da ilk bloklar).
 - Bloklar ÇAKIŞMASIN, ardışık olsun (biri biter, diğeri başlar).
+- MEŞGUL saatler verilmişse o aralıklara ASLA blok koyma (okul, özel ders, antrenman gibi sabitler). Planı bu aralıkların ÖNCESİNE, ARASINA ya da SONRASINA kur. Meşgul aralıkları çıktına da EKLEME — onlar zaten plana ayrıca eklenecek.
 - Uzun çalışma blokları (45 dk+) arasına 5-10 dk "break" (mola) koy. ADHD beyni molasız çalışamaz.
 - Öğle/akşam yemeği için makul bir "fixed" blok bırak (saat uygunsa).
 - Bütün görevleri sığdıramıyorsan en önemlilerini koy, gerisini bırak — günü tıka basa doldurma.
+- Bir görevde "bugün ~X dk (toplam Y dk, son tarihe bölündü)" yazıyorsa BUGÜN sadece X dk ayır — işi güne yayıyoruz, tek oturuşta bitirmeye çalışma.
+- GEÇMİŞ VERİSİ verilmişse ona MUTLAKA uy: verilen tamamlama oranları, blok sayısı sınırı ve kategori uyarısı bu kişinin ölçülmüş gerçeğidir, tahmin değil.
+- Günün sonuna 20-30 dk boş tampon bırak — plan kayarsa çökmesin.
 - Etiketler (label) Türkçe, kısa ve net olsun.
 
 📦 ÇIKTI: Yalnızca JSON dizisi. Her eleman:
@@ -2203,7 +2225,10 @@ async function handlePlanApi(request, env) {
 📝 ÖRNEK (pencere 15:00-19:00, görevler [0] Matematik ~60dk ACİL, [1] Tarih oku ~30dk):
 [{"start":"15:00","end":"16:00","label":"Matematik ödevi","task":0,"kind":"task"},{"start":"16:00","end":"16:10","label":"Kısa mola","task":null,"kind":"break"},{"start":"16:10","end":"16:40","label":"Tarih oku","task":1,"kind":"task"}]`;
 
-    const userMsg = `Uyanık pencere: ${from} - ${to}.${now ? ` Şu an saat: ${now}.` : ''}\n\nGörevler (indeks · metin · süre · etiketler):\n${taskLines}\n\nGünü saat saat planla. Sadece JSON dizisi döndür.`;
+    const busyLine = (busy && busy.length)
+    ? `\n\nMEŞGUL saatler (bu aralıklar DOLU, buralara blok KOYMA):\n${busy.map(x => `${x.start}-${x.end} ${x.label}`).join('\n')}`
+    : '';
+  const userMsg = `Uyanık pencere: ${from} - ${to}.${now ? ` Şu an saat: ${now}.` : ''}${busyLine}${insight || ''}\n\nGörevler (indeks · metin · süre · etiketler):\n${taskLines}\n\nGünü saat saat planla. Sadece JSON dizisi döndür.`;
 
     const r = await env.AI.run(AI_MODEL, {
       messages: [
@@ -2214,11 +2239,9 @@ async function handlePlanApi(request, env) {
       temperature: 0.4,
     });
     const raw = typeof r.response === 'string' ? r.response : JSON.stringify(r.response || '');
-    const blocks = extractPlanJson(raw);
-    if (!blocks.length) return jsonCors({ blocks: [] }, 200, cors);
-    return jsonCors({ blocks }, 200, cors);
+    return extractPlanJson(raw);
   } catch (e) {
-    return jsonCors({ error: e.message }, 500, cors);
+    throw new Error(e.message || 'plan-uretilemedi');
   }
 }
 
@@ -4263,6 +4286,678 @@ async function runFixedRemindersForUser(env, u) {
 }
 
 // ============================================================
+// 🗓️ Sabah otomatik gün planı (morning cron — 08:00 TR)
+// ============================================================
+// Salim "Günü planla" butonuna basmayı unutuyor → worker açık görevlere bakıp
+// günü kendi planlar, data.dayPlan'a yazar, tek kısa push atar.
+// data.settings.autoPlan === false ise atlanır.
+// Bugün için ELLE yapılmış plan varsa (dp.auto !== true) üzerine YAZILMAZ.
+
+// 'HH:MM' → dakika (worker tarafı; frontend'deki hmToMin'in eşi)
+function hmMin(hm) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hm || '');
+  return m ? (+m[1]) * 60 + (+m[2]) : -1;
+}
+
+// ratio = gecmisten olculen sure sapma katsayisi (null ise duzeltme yok).
+// forDate'e gore son tarihi olan cok gunluk isler gune bolunur.
+function planTasksForAi(data, forDate, ratio) {
+  const open = (data.tasks || []).filter(t => t && !t.done);
+  return open.slice(0, 20).map((t, i) => {
+    // Gercekci sure: tahmini olculen sapmayla carp, 5 dk'ya yuvarla
+    let min = t.estimateMin || null;
+    if (min && ratio) min = Math.max(10, Math.round((min * ratio) / 5) * 5);
+    // Cok gunluk is: son tarihe kalan gune bol → "bugun ne kadar calismali"
+    let today = null;
+    if (min && t.due) {
+      const dl = daysBetweenDates(forDate, t.due);
+      if (dl !== null && dl > 0) {
+        const share = Math.max(20, Math.round(min / (dl + 1) / 5) * 5);
+        if (share < min) today = share;
+      }
+    }
+    return {
+      i,
+      text: String(t.text || '').slice(0, 80),
+      min: today || min,
+      full: today ? min : null,   // bolunduyse toplam is yuku
+      pri: t.priority === 'urgent' ? 'acil' : 'normal',
+      mit: t.mitDate === trToday(),
+      due: t.due || null,
+      cat: t.category || null,
+      _id: t.id,
+    };
+  });
+}
+
+// Bir tarihe ait sabit program bloklari (okul/ders/antrenman).
+// data.fixedSchedule = [{id, label, days:[0..6 JS getDay], start, end, enabled}]
+function fixedBlocksFor(data, dateStr) {
+  const dayIdx = new Date(dateStr + 'T12:00:00Z').getUTCDay();
+  return (data.fixedSchedule || [])
+    .filter(f => f && f.enabled !== false && Array.isArray(f.days) && f.days.includes(dayIdx)
+      && hmMin(f.start) >= 0 && hmMin(f.end) > hmMin(f.start))
+    .map((f, k) => ({
+      id: Date.now() + 900000 + k,
+      label: String(f.label || 'Sabit').slice(0, 100),
+      start: f.start, end: f.end,
+      kind: 'fixed', taskId: null, done: false,
+      fixedId: f.id,
+    }))
+    .sort((a, b) => hmMin(a.start) - hmMin(b.start));
+}
+
+function blocksOverlap(a, b) {
+  return hmMin(a.start) < hmMin(b.end) && hmMin(b.start) < hmMin(a.end);
+}
+
+// ============================================================
+// 🧠 PLANLAMA ZEKASI — geçmişten öğrenme + deadline farkındalığı
+// ============================================================
+// Sorun: planlayıcı her gün sıfırdan başlıyordu. Salim'in gerçek hızını,
+// hangi saatte blok tutturduğunu, neyi sürekli ertelediğini bilmiyordu.
+// Çözüm: dayPlan üzerine yazılmadan ARŞİVLENİR (data.planHistory), sonraki
+// planlar bu veriyle kurulur.
+
+// İki tarih arası gün farkı (öğlen demirli — toISOString UTC kayması bug'ı)
+function daysBetweenDates(a, b) {
+  const da = Date.parse(a + 'T12:00:00Z'), db = Date.parse(b + 'T12:00:00Z');
+  if (isNaN(da) || isNaN(db)) return null;
+  return Math.round((db - da) / 86400000);
+}
+
+// Gün planını geçmişe yaz — son 21 gün, kompakt format.
+// s=start, e=end, k=kind, d=done, c=kategori (kaçan kategoriyi öğrenmek için)
+function archivePlanDay(data, dp) {
+  if (!dp || !dp.date || !(dp.blocks || []).length) return;
+  data.planHistory = data.planHistory || [];
+  if (data.planHistory.some(h => h.date === dp.date)) return; // zaten arşivlenmiş
+  const tasks = data.tasks || [];
+  const trained = ((data.hevy && data.hevy.workouts) || []).some(w => w.date === dp.date);
+  data.planHistory.push({
+    date: dp.date,
+    w: trained || undefined,   // antrenman gunu mu — planlayici bunu ogrenir
+    blocks: dp.blocks.map(b => {
+      const t = b.taskId ? tasks.find(x => x.id === b.taskId) : null;
+      return { s: b.start, e: b.end, k: b.kind || 'task', d: !!b.done, c: (t && t.category) || null };
+    }),
+  });
+  data.planHistory = data.planHistory.slice(-21);
+}
+
+// Salim'in gerçek verisinden planlama profili çıkar.
+// Yeterli veri yoksa (3 günden az) null alanlar döner — prompt'a uydurma bilgi girmez.
+function planProfile(data) {
+  const hist = (data.planHistory || []).slice(-14);
+  const buckets = { sabah: { t: 0, d: 0 }, ogle: { t: 0, d: 0 }, aksam: { t: 0, d: 0 } };
+  const catMiss = {};
+  const perDay = [];
+
+  const gym = { t: 0, d: 0 }, rest = { t: 0, d: 0 };   // antrenman gunu vs normal gun
+  for (const h of hist) {
+    let dn = 0;
+    for (const b of (h.blocks || [])) {
+      if (b.k === 'break' || b.k === 'fixed') continue; // mola/sabit "tutturma" sayılmaz
+      const hm = hmMin(b.s);
+      if (hm < 0) continue;
+      const key = hm < 720 ? 'sabah' : hm < 1020 ? 'ogle' : 'aksam';
+      buckets[key].t++;
+      const bucket2 = h.w ? gym : rest;
+      bucket2.t++;
+      if (b.d) { buckets[key].d++; bucket2.d++; dn++; }
+      else if (b.c) catMiss[b.c] = (catMiss[b.c] || 0) + 1;
+    }
+    perDay.push(dn);
+  }
+
+  // Süre tahmini sapması: gerçek/tahmin MEDYANI (ortalama tek uç değerle bozulur)
+  const finished = (data.tasks || [])
+    .filter(t => t && t.done && t.estimateMin > 0 && t.actualMin > 0)
+    .slice(-30);
+  let ratio = null;
+  if (finished.length >= 3) {
+    const rs = finished.map(t => t.actualMin / t.estimateMin).sort((a, b) => a - b);
+    const mid = Math.floor(rs.length / 2);
+    ratio = rs.length % 2 ? rs[mid] : (rs[mid - 1] + rs[mid]) / 2;
+    ratio = Math.min(3, Math.max(0.5, ratio)); // uç değerleri kırp
+  }
+
+  const avgDone = perDay.length ? perDay.reduce((a, b) => a + b, 0) / perDay.length : null;
+  return { days: hist.length, buckets, catMiss, ratio, avgDone, gym, rest };
+}
+
+const CAT_TR = { odev: 'ödev', ders: 'özel ders', ev: 'ev işi', kisisel: 'kişisel' };
+
+// Profili AI prompt'una girecek Türkçe satırlara çevir. Veri zayıfsa boş döner.
+function profileLines(prof) {
+  if (!prof || prof.days < 3) return '';
+  const out = [];
+
+  const rate = b => (b.t >= 3 ? Math.round((b.d / b.t) * 100) : null);
+  const parts = [];
+  const rs = rate(prof.buckets.sabah), ro = rate(prof.buckets.ogle), ra = rate(prof.buckets.aksam);
+  if (rs !== null) parts.push(`sabah %${rs}`);
+  if (ro !== null) parts.push(`öğleden sonra %${ro}`);
+  if (ra !== null) parts.push(`akşam %${ra}`);
+  if (parts.length) {
+    out.push(`- Blok tamamlama oranı: ${parts.join(' · ')}. DÜŞÜK oranlı saat dilimine ağır/uzun iş KOYMA, oraya kısa ya da kolay iş koy.`);
+  }
+
+  if (prof.ratio && Math.abs(prof.ratio - 1) > 0.15) {
+    out.push(prof.ratio > 1
+      ? `- Süre tahminleri gerçekte ~${prof.ratio.toFixed(1)} kat uzuyor. Görev süreleri BU KATSAYIYLA ZATEN DÜZELTİLDİ — verilen süreleri olduğu gibi kullan, tekrar uzatma.`
+      : `- Bu kişi işleri tahmininden hızlı bitiriyor (~${prof.ratio.toFixed(1)} kat). Süreler zaten düzeltildi.`);
+  }
+
+  if (prof.avgDone !== null && prof.avgDone > 0) {
+    const cap = Math.max(2, Math.round(prof.avgDone) + 1);
+    out.push(`- Günde ortalama ${prof.avgDone.toFixed(1)} çalışma bloğu bitiriyor. En fazla ${cap} çalışma bloğu koy — fazlası her gün çöpe gidiyor, günü tıka basa doldurma.`);
+  }
+
+  const worst = Object.entries(prof.catMiss).sort((a, b) => b[1] - a[1])[0];
+  if (worst && worst[1] >= 3) {
+    out.push(`- En çok kaçırdığı kategori: "${CAT_TR[worst[0]] || worst[0]}" (${worst[1]} blok). Bu kategoriyi günün EN İYİ saatine ve KISA bloklar halinde koy.`);
+  }
+
+  // Antrenman gunu etkisi — sadece iki tarafta da yeterli veri varsa ve fark anlamliysa
+  const g = prof.gym, rr = prof.rest;
+  if (g && rr && g.t >= 4 && rr.t >= 4) {
+    const gr = g.d / g.t, rrr = rr.d / rr.t;
+    if (rrr - gr >= 0.15) {
+      out.push(`- Antrenman yaptığı günlerde tamamlama oranı düşüyor (%${Math.round(gr * 100)} vs %${Math.round(rrr * 100)}). BUGÜN ANTRENMAN GÜNÜ ise daha AZ ve daha KISA blok koy.`);
+    }
+  }
+
+  return out.length ? `\n\n📊 GEÇMİŞ VERİSİ (son ${prof.days} gün — uydurma değil, ölçüldü):\n${out.join('\n')}` : '';
+}
+
+// Planlanan gun antrenman gunu mu? (Hevy gecmisinden haftalik desen)
+// Hevy sadece GECMISI verir — gelecek programi bilmez. Bu yuzden "aynı haftanın
+// aynı gününde son 3 haftada antrenman var mı" desenine bakiyoruz.
+function gymDayLine(data, forDate) {
+  const ws = (data.hevy && data.hevy.workouts) || [];
+  if (ws.length < 4) return '';
+  const dayIdx = new Date(forDate + 'T12:00:00Z').getUTCDay();
+  let hits = 0, weeks = 0;
+  for (let k = 1; k <= 3; k++) {
+    const d = new Date(Date.parse(forDate + 'T12:00:00Z') - k * 7 * 86400000).toISOString().slice(0, 10);
+    weeks++;
+    if (ws.some(w => w.date === d)) hits++;
+  }
+  if (weeks < 3 || hits < 2) return '';
+  const names = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+  return `
+
+💪 Bu kişi son 3 haftanın ${hits}'inde ${names[dayIdx]} günü antrenman yaptı — bugün büyük ihtimalle ANTRENMAN GÜNÜ. Günü buna göre hafiflet ve antrenman için ~90 dk boşluk bırak.`;
+}
+
+// Yaklaşan sınav/teslim geri sayımları — plana bağlam
+function deadlineLines(data, forDate) {
+  const cds = (data.countdowns || [])
+    .map(c => ({ label: c.label, d: daysBetweenDates(forDate, c.date) }))
+    .filter(x => x.d !== null && x.d >= 0 && x.d <= 14)
+    .sort((a, b) => a.d - b.d)
+    .slice(0, 5);
+  if (!cds.length) return '';
+  const lines = cds.map(c => `- ${c.label}: ${c.d === 0 ? 'BUGÜN' : c.d === 1 ? 'YARIN' : c.d + ' gün kaldı'}`);
+  return `\n\n⏳ YAKLAŞAN SINAV / TESLİM:\n${lines.join('\n')}\nBu tarihlere hazırlık gerektiren görevleri güne ÖNCE ve yüksek-enerji saatine koy.`;
+}
+
+async function runAutoPlan(env, opts = {}) {
+  const users = await fetchAllUsers(env);
+  const results = [];
+  for (const u of users) {
+    try { results.push({ userId: u.userId, ...(await runAutoPlanForUser(env, u, opts)) }); }
+    catch (e) { results.push({ userId: u.userId, error: e.message }); }
+  }
+  return { type: 'autoplan', trigger: opts.trigger || 'manual', users: users.length, results, multiUser: hasServiceKey(env) };
+}
+
+// opts.forDate = 'YYYY-MM-DD' (varsayilan bugun), opts.trigger = 'morning'|'evening'|'manual'
+async function runAutoPlanForUser(env, u, opts = {}) {
+  const data = u.data;
+  const st = data.settings || {};
+  if (st.autoPlan === false) return { skipped: 'kapali' };
+
+  const forDate = opts.forDate || trToday();
+  // planWhen varsayilan 'evening' — aksam 21:00'de YARIN planlanir, sabah sadece guvenlik agi.
+  const planWhen = st.planWhen === 'morning' ? 'morning' : 'evening';
+  if (opts.trigger === 'evening' && planWhen !== 'evening') return { skipped: 'sabah-modunda' };
+
+  const dp = data.dayPlan || {};
+  // O tarih icin plan zaten varsa (aksam yapilmis ya da Salim elle kurmus) DOKUNMA
+  if (dp.date === forDate && (dp.blocks || []).length) return { skipped: 'plan-zaten-var' };
+
+  // Uzerine yazmadan ONCE eski gunu arsivle — ogrenmenin veri kaynagi
+  if (dp.date && dp.date !== forDate) archivePlanDay(data, dp);
+
+  const prof = planProfile(data);
+  const tasks = planTasksForAi(data, forDate, prof.ratio);
+  const fixed = fixedBlocksFor(data, forDate);
+  if (!tasks.length) {
+    // Gorev yok ama sabit program varsa yine de gunu kur (okul/ders gorunsun)
+    if (!fixed.length) return { skipped: 'gorev-yok' };
+    // (arsivleme yukarida yapildi)
+    data.dayPlan = { date: forDate, blocks: fixed, windowFrom: st.planFrom || null, windowTo: st.planTo || null, auto: true };
+    try { await saveUserData(env, u.userId, data); } catch (e) { console.error('autoplan save fail', e.message); }
+    return { blocks: fixed.length, onlyFixed: true };
+  }
+
+  // Uyanik pencere: ayarlarda kalici → yoksa dunun planindan → yoksa varsayilan.
+  // Varsayilan okul-duyarli: hafta ici 16:00 (okuldan sonra), hafta sonu 10:00.
+  const dayIdx = new Date(forDate + 'T12:00:00Z').getUTCDay();
+  const defFrom = (dayIdx >= 1 && dayIdx <= 5) ? '16:00' : '10:00';
+  const from = st.planFrom || dp.windowFrom || defFrom;
+  const to = st.planTo || dp.windowTo || '22:00';
+
+  const raw = await generatePlanBlocks(env, {
+    tasks, from, to,
+    now: '', // ileri tarih planlanabilir — "su an" kisiti yok
+    busy: fixed.map(f => ({ label: f.label, start: f.start, end: f.end })),
+    insight: profileLines(prof) + deadlineLines(data, forDate) + gymDayLine(data, forDate),
+  });
+
+  let blocks = (raw || []).map(b => {
+    const ti = (b.task === 0 || b.task) ? Number(b.task) : null;
+    const linked = (ti !== null && tasks[ti]) ? tasks[ti] : null;
+    return {
+      id: Date.now() + Math.floor(Math.random() * 100000),
+      label: String(b.label || '').slice(0, 100) || (linked ? linked.text : 'Blok'),
+      start: b.start, end: b.end,
+      kind: b.kind || (linked ? 'task' : 'custom'),
+      taskId: linked ? linked._id : null,
+      done: false,
+    };
+  }).filter(b => hmMin(b.start) >= 0 && hmMin(b.end) > hmMin(b.start));
+
+  // AI talimata ragmen sabit saatlere blok koyduysa AT — sabit program her zaman kazanir
+  if (fixed.length) blocks = blocks.filter(b => !fixed.some(f => blocksOverlap(b, f)));
+
+  const all = fixed.concat(blocks).sort((a, b) => hmMin(a.start) - hmMin(b.start));
+  if (!all.length) return { skipped: 'ai-plan-uretemedi' };
+
+  data.dayPlan = { date: forDate, blocks: all, windowFrom: from, windowTo: to, auto: true };
+
+  const first = all[0];
+  const isTomorrow = forDate !== trToday();
+  const payload = {
+    title: isTomorrow ? '🗓️ Yarının planı hazır' : '🗓️ Günün hazır',
+    message: `${all.length} blok · ilk: ${first.start} ${first.label}`,
+    tag: 'aidan-autoplan',
+    url: '/?tab=tasks',
+  };
+  await sendPushToAll(env, data, payload, { userId: u.userId });
+  logPush(data, 'autoplan', payload, ((data.settings && data.settings.pushSubs) || []).length);
+  try { await saveUserData(env, u.userId, data); } catch (e) { console.error('autoplan save fail', e.message); }
+  return { blocks: all.length, fixed: fixed.length, first: first.start, forDate, profileDays: prof.days, ratio: prof.ratio };
+}
+
+// ============================================================
+// ⏱️ Gün planı blok bildirimleri (5 dk'lık cron)
+// ============================================================
+// Blok saati geldiğinde "Şimdi: X" push'u — geçişi tetikleyen dürtü.
+// b.pinged bayrağı → blok başına tek push. Tolerans 10 dk: cron kaçırırsa
+// yine yakalar ama çok eski bloğu geç saatte patlatmaz.
+// data.settings.planPings === false ise kapalı.
+// 🔁 Plan kaydirma cekirdegi — kural tabanli, AI YOK.
+// Biten + sabit + SU AN CALISILAN blok yerinde kalir; kalanlar cursor'dan
+// itibaren bosluk doldurmali yeniden dizilir. Sigmayanlar duser.
+function shiftPlanBlocks(dp, nowMin, winToStr) {
+  const all = (dp.blocks || []).slice().sort((a, b) => hmMin(a.start) - hmMin(b.start));
+  const fixedList = all.filter(b => b.kind === 'fixed');
+  // Su an calisilan blogu YERINDE birak — kullanici tam ustunde calisiyor olabilir
+  const inProg = all.find(b => b.kind !== 'fixed' && !b.done
+    && hmMin(b.start) <= nowMin && nowMin < hmMin(b.end));
+  const keep = all.filter(b => b.kind === 'fixed' || b.done || b === inProg);
+  const movable = all.filter(b => keep.indexOf(b) === -1);
+  if (!movable.length) return { placed: 0, dropped: 0, changed: false };
+
+  const winEnd = hmMin(winToStr || '22:00');
+  const dur = x => Math.max(5, hmMin(x.end) - hmMin(x.start));
+  let cursor = Math.ceil(Math.max(nowMin, inProg ? hmMin(inProg.end) : nowMin) / 5) * 5;
+
+  const remaining = movable.slice();
+  const placed = [];
+  let guard = 0, changed = false;
+  while (remaining.length && guard++ < 300) {
+    if (cursor >= winEnd) break;
+    const nextFixed = fixedList.find(f => hmMin(f.start) >= cursor);
+    const gapEnd = nextFixed ? Math.min(hmMin(nextFixed.start), winEnd) : winEnd;
+    const idx = remaining.findIndex(x => cursor + dur(x) <= gapEnd);
+    if (idx === -1) {
+      if (!nextFixed) break;
+      cursor = hmMin(nextFixed.end);
+      continue;
+    }
+    const b = remaining.splice(idx, 1)[0];
+    const d = dur(b);
+    const ns = minHM(cursor), ne = minHM(cursor + d);
+    if (b.start !== ns || b.end !== ne) { changed = true; b.pinged = false; }
+    b.start = ns; b.end = ne;
+    placed.push(b);
+    cursor += d;
+  }
+  if (remaining.length) changed = true;
+  dp.blocks = keep.concat(placed).sort((a, b) => hmMin(a.start) - hmMin(b.start));
+  return { placed: placed.length, dropped: remaining.length, changed };
+}
+
+// dakika → 'HH:MM' (worker tarafi)
+function minHM(min) {
+  min = ((Math.round(min) % 1440) + 1440) % 1440;
+  return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0');
+}
+
+async function runPlanBlockPings(env) {
+  const users = await fetchAllUsers(env);
+  const results = [];
+  for (const u of users) {
+    try { results.push({ userId: u.userId, ...(await runPlanBlockPingsForUser(env, u)) }); }
+    catch (e) { results.push({ userId: u.userId, error: e.message }); }
+  }
+  return { type: 'planpings', users: users.length, results };
+}
+
+async function runPlanBlockPingsForUser(env, u) {
+  const data = u.data;
+  const st = data.settings || {};
+  if (st.planPings === false) return { sent: 0 };
+  const dp = data.dayPlan;
+  if (!dp || dp.date !== trToday() || !(dp.blocks || []).length) return { sent: 0 };
+
+  const tr = new Date(Date.now() + TR_OFFSET_MS);
+  const nowMin = tr.getUTCHours() * 60 + tr.getUTCMinutes();
+
+  // 🔁 OTOMATIK TOPARLAMA — 20+ dk gecikmis blok varsa butona basmadan yeniden diz.
+  // ADHD'de plan "bir blok kacti" diye terk ediliyor; toparlanma manuel olmamali.
+  // Gunde en fazla 3 kez (plan surekli oynamasin), settings.autoShift === false ile kapatilir.
+  // Ping'lerden ONCE calisir — yoksa az sonra kayacak bir blok icin "simdi bunu yap" denir.
+  if (st.autoShift !== false && (dp.autoShifts || 0) < 3) {
+    const lateBlocks = dp.blocks.filter(b => b && !b.done && b.kind !== 'fixed'
+      && hmMin(b.end) >= 0 && hmMin(b.end) <= nowMin - 20);
+    if (lateBlocks.length) {
+      const res = shiftPlanBlocks(dp, nowMin, st.planTo || dp.windowTo || '22:00');
+      if (res.changed) {
+        dp.autoShifts = (dp.autoShifts || 0) + 1;
+        const nxt = dp.blocks.find(b => !b.done && b.kind !== 'fixed' && hmMin(b.start) >= nowMin);
+        const payload = {
+          title: '🔁 Plan yeniden dizildi',
+          message: (nxt ? `Sıradaki: ${nxt.start} ${nxt.label}` : 'Kalan işler kaydırıldı')
+            + (res.dropped ? ` · ${res.dropped} iş güne sığmadı` : ''),
+          tag: 'aidan-autoshift',
+          url: '/?tab=plan',
+        };
+        await sendPushToAll(env, data, payload, { userId: u.userId });
+        logPush(data, 'autoshift', payload, ((data.settings && data.settings.pushSubs) || []).length);
+        try { await saveUserData(env, u.userId, data); } catch (e) { console.error('autoshift save fail', e.message); }
+        // Bu turda ping ATMA — yeni yerlesen blok 5 dk sonraki cron'da zaten yakalanir.
+        // Ayni anda iki bildirim gonderip kafa karistirmaktansa tek net mesaj.
+        return { sent: 0, shifted: res };
+      }
+    }
+  }
+
+  const due = [];
+  for (const b of dp.blocks) {
+    if (!b || b.done || b.pinged) continue;
+    const sm = hmMin(b.start);
+    if (sm < 0) continue;
+    const diff = nowMin - sm;
+    if (diff < 0 || diff > 10) continue;
+    b.pinged = true;
+    due.push(b);
+  }
+  if (!due.length) return { sent: 0 };
+
+  for (const b of due) {
+    const len = Math.max(0, hmMin(b.end) - hmMin(b.start));
+    const icon = b.kind === 'break' ? '☕' : b.kind === 'fixed' ? '📌' : '▶️';
+    // Aksiyon butonlari sadece calisma bloklarinda anlamli (mola/sabit blokta "baslat" sacma).
+    // iOS PWA actions'i GOSTERMEZ — orada bildirime tiklama /?blk=..&act=.. fallback'i calisir.
+    const isWork = b.kind !== 'break' && b.kind !== 'fixed';
+    const payload = {
+      title: `${icon} Şimdi: ${b.label}`,
+      message: `${b.start}–${b.end}${len ? ` · ${len} dk` : ''}`,
+      tag: 'aidan-block-' + b.id,
+      url: '/?blk=' + b.id,
+      blockId: b.id,
+      actions: isWork ? [
+        { action: 'start', title: 'Başlat' },
+        { action: 'done', title: 'Bitti' },
+        { action: 'snooze', title: '15dk ertele' },
+      ] : undefined,
+    };
+    await sendPushToAll(env, data, payload, { userId: u.userId });
+    logPush(data, 'planblock', payload, ((data.settings && data.settings.pushSubs) || []).length);
+  }
+  try { await saveUserData(env, u.userId, data); } catch (e) { console.error('planping save fail', e.message); }
+  return { sent: due.length };
+}
+
+// ============================================================
+// 💪 HEVY ENTEGRASYONU — antrenman verisi + gelişim takibi
+// ============================================================
+// API: https://api.hevyapp.com/v1  ·  Auth: "api-key" header
+// ⚠️ SADECE Hevy Pro aboneleri anahtar uretebilir (ucretsiz hesapta 401/403).
+// Sema (Hevy'nin kendi hevy-gpt reposundaki OpenAPI spec'inden dogrulandi):
+//   workout: { id, title, description, start_time, end_time, updated_at, created_at,
+//              exercises: [{ index, title, notes, exercise_template_id, supersets_id,
+//                sets: [{ index, type, weight_kg, reps, distance_meters,
+//                         duration_seconds, rpe, custom_metric }] }] }
+//   Tum alanlar snake_case. pageSize MAX 10.
+const HEVY_API = 'https://api.hevyapp.com/v1';
+const HEVY_MAX_PAGES = 5;   // 5 x 10 = son 50 antrenman (~3-4 ay)
+const HEVY_KEEP_DAYS = 180;
+
+// Epley formulu: tahmini 1 tekrar maksimum. Gelisimi tek sayiya indirger —
+// 60kg x 8 ile 70kg x 5'i kiyaslayabilmek icin gerekli.
+function e1rm(kg, reps) {
+  if (!(kg > 0) || !(reps > 0)) return 0;
+  if (reps === 1) return kg;
+  return Math.round(kg * (1 + reps / 30) * 10) / 10;
+}
+
+// ISO zaman → TR takvim gunu ('YYYY-MM-DD')
+function hevyTrDate(iso) {
+  const ms = Date.parse(iso);
+  if (isNaN(ms)) return null;
+  return new Date(ms + TR_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+// Hevy workout objesi → Aidan'in kompakt formati.
+// Savunmaci: alan eksik/null gelirse cokmez, sayilar Number()'a zorlanir.
+function normalizeHevyWorkout(w) {
+  if (!w || !w.id) return null;
+  const date = hevyTrDate(w.start_time) || hevyTrDate(w.created_at);
+  if (!date) return null;
+  const startMs = Date.parse(w.start_time), endMs = Date.parse(w.end_time);
+  const durationMin = (!isNaN(startMs) && !isNaN(endMs) && endMs > startMs)
+    ? Math.round((endMs - startMs) / 60000) : null;
+
+  let volumeKg = 0, setCount = 0;
+  const exercises = [];
+  for (const ex of (w.exercises || [])) {
+    if (!ex) continue;
+    let exVol = 0, exSets = 0, top = null;
+    for (const st of (ex.sets || [])) {
+      if (!st) continue;
+      const kg = Number(st.weight_kg) || 0;
+      const reps = Number(st.reps) || 0;
+      if (kg > 0 && reps > 0) { exVol += kg * reps; }
+      if (kg > 0 || reps > 0) { exSets++; }
+      // Rekor hesabina isinma setleri GIRMEZ
+      if (st.type !== 'warmup' && kg > 0 && reps > 0) {
+        const e = e1rm(kg, reps);
+        if (!top || e > top.e1rm) top = { kg, reps, e1rm: e };
+      }
+    }
+    volumeKg += exVol; setCount += exSets;
+    exercises.push({
+      name: String(ex.title || 'Egzersiz').slice(0, 60),
+      tid: ex.exercise_template_id || null,
+      sets: exSets,
+      volumeKg: Math.round(exVol),
+      top,
+    });
+  }
+  return {
+    id: String(w.id),
+    date,
+    title: String(w.title || 'Antrenman').slice(0, 60),
+    durationMin,
+    volumeKg: Math.round(volumeKg),
+    setCount,
+    exercises,
+  };
+}
+
+// Hevy'den sayfali antrenman cek. Hata mesajlari TURKCE ve eyleme donuk.
+async function hevyFetchWorkouts(key, maxPages) {
+  if (!key) throw new Error('Hevy anahtarı yok');
+  const out = [];
+  const pages = Math.min(HEVY_MAX_PAGES, Math.max(1, maxPages || HEVY_MAX_PAGES));
+  for (let page = 1; page <= pages; page++) {
+    const r = await fetch(`${HEVY_API}/workouts?page=${page}&pageSize=10`, {
+      headers: { 'api-key': key, 'Accept': 'application/json' },
+    });
+    if (r.status === 401 || r.status === 403) {
+      throw new Error('Hevy anahtarı kabul edilmedi — Hevy Pro aboneliği gerekiyor ya da anahtar yanlış/iptal edilmiş.');
+    }
+    if (r.status === 429) throw new Error('Hevy çok fazla istek dedi, birazdan tekrar dene.');
+    if (!r.ok) throw new Error('Hevy sunucu hatası: ' + r.status);
+    let j;
+    try { j = await r.json(); } catch { throw new Error('Hevy cevabı okunamadı'); }
+    const list = Array.isArray(j.workouts) ? j.workouts : [];
+    for (const w of list) { const n = normalizeHevyWorkout(w); if (n) out.push(n); }
+    // Son sayfaya geldiysek dur (bos sayfa ya da page_count asildi)
+    if (!list.length) break;
+    if (j.page_count && page >= j.page_count) break;
+  }
+  return out;
+}
+
+// Yeni gelenleri mevcutla birlestir — id bazli dedupe, yeni veri kazanir
+function mergeHevyWorkouts(existing, incoming) {
+  const byId = new Map();
+  for (const w of (existing || [])) { if (w && w.id) byId.set(w.id, w); }
+  for (const w of (incoming || [])) { if (w && w.id) byId.set(w.id, w); }
+  const cutoff = new Date(Date.now() + TR_OFFSET_MS - HEVY_KEEP_DAYS * 86400000).toISOString().slice(0, 10);
+  return Array.from(byId.values())
+    .filter(w => w.date >= cutoff)
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+
+// Egzersiz bazli en iyi tahmini 1RM — "gelisim" metrigi
+function computeHevyPRs(workouts) {
+  const prs = {};
+  for (const w of (workouts || [])) {
+    for (const ex of (w.exercises || [])) {
+      if (!ex || !ex.top || !ex.top.e1rm) continue;
+      const cur = prs[ex.name];
+      if (!cur || ex.top.e1rm > cur.e1rm) {
+        prs[ex.name] = { e1rm: ex.top.e1rm, kg: ex.top.kg, reps: ex.top.reps, date: w.date };
+      }
+    }
+  }
+  return prs;
+}
+
+// Eski rekorlarla kiyasla → yeni kirilanlar (push icin)
+function newHevyPRs(oldPrs, newPrs, sinceDate) {
+  const out = [];
+  for (const [name, pr] of Object.entries(newPrs || {})) {
+    if (sinceDate && pr.date < sinceDate) continue;   // eski rekoru tekrar kutlama
+    const old = (oldPrs || {})[name];
+    if (!old || pr.e1rm > old.e1rm + 0.05) out.push({ name, ...pr, prev: old ? old.e1rm : null });
+  }
+  return out.sort((a, b) => b.e1rm - a.e1rm);
+}
+
+// PWA'dan senkron: {key} → normalize antrenmanlar. Anahtari FRONTEND gonderir,
+// worker sadece proxy'dir (CORS + anahtarin Hevy'ye gitmesi icin).
+async function handleHevySyncApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
+
+  const key = (body.key || '').toString().trim();
+  if (!key) return jsonCors({ error: 'Hevy anahtarı boş' }, 400, cors);
+  try {
+    const workouts = await hevyFetchWorkouts(key, body.pages);
+    return jsonCors({ workouts, count: workouts.length }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 502, cors);
+  }
+}
+
+// Gunluk arka plan senkronu (uygulama acilmasa bile veri taze kalir) + rekor push'u
+async function runHevySync(env) {
+  const users = await fetchAllUsers(env);
+  const results = [];
+  for (const u of users) {
+    try { results.push({ userId: u.userId, ...(await runHevySyncForUser(env, u)) }); }
+    catch (e) { results.push({ userId: u.userId, error: e.message }); }
+  }
+  return { type: 'hevy', users: users.length, results };
+}
+
+async function runHevySyncForUser(env, u) {
+  const data = u.data;
+  const key = (data.settings && data.settings.hevyKey) || '';
+  if (!key) return { skipped: 'anahtar-yok' };
+
+  data.hevy = data.hevy || { workouts: [], prs: {} };
+  const before = data.hevy.workouts || [];
+  let fresh;
+  try {
+    fresh = await hevyFetchWorkouts(key, 3);   // cron'da 3 sayfa yeter (son 30 antrenman)
+  } catch (e) {
+    data.hevy.lastError = e.message;
+    try { await saveUserData(env, u.userId, data); } catch (e2) {}
+    return { error: e.message };
+  }
+
+  const merged = mergeHevyWorkouts(before, fresh);
+  const oldPrs = data.hevy.prs || {};
+  const prs = computeHevyPRs(merged);
+  // Sadece son 3 gunun rekorlarini kutla (ilk senkronda tum gecmis patlamasin)
+  const since = new Date(Date.now() + TR_OFFSET_MS - 3 * 86400000).toISOString().slice(0, 10);
+  const broken = Object.keys(oldPrs).length ? newHevyPRs(oldPrs, prs, since) : [];
+
+  data.hevy.workouts = merged;
+  data.hevy.prs = prs;
+  data.hevy.lastSync = Date.now();
+  data.hevy.lastError = null;
+
+  if (broken.length) {
+    const top = broken.slice(0, 2);
+    const payload = {
+      title: broken.length > 1 ? `🏆 ${broken.length} yeni rekor` : '🏆 Yeni rekor',
+      message: top.map(p => `${p.name}: ${p.kg}kg × ${p.reps}`).join(' · '),
+      tag: 'aidan-hevy-pr',
+      url: '/?tab=diet',
+    };
+    await sendPushToAll(env, data, payload, { userId: u.userId });
+    logPush(data, 'hevy-pr', payload, ((data.settings && data.settings.pushSubs) || []).length);
+  }
+
+  try { await saveUserData(env, u.userId, data); } catch (e) { console.error('hevy save fail', e.message); }
+  return { workouts: merged.length, added: merged.length - before.length, prs: broken.length };
+}
+
+// ============================================================
 // 💾 Veri yedeği — haftalık snapshot aidan_backups tablosuna
 // ============================================================
 // Salim'in Supabase'inde tek satırlı aidan_data row'u var. Bozulursa/silinirse
@@ -4574,6 +5269,10 @@ export default {
     if (url.pathname === '/stock-fundamentals') {
       return handleStockFundamentalsApi(request, env);
     }
+    // 💪 Hevy antrenman senkronu
+    if (url.pathname === '/hevy-sync') {
+      return handleHevySyncApi(request, env);
+    }
     if (url.pathname === '/stock-news') {
       return handleStockNewsApi(request, env);
     }
@@ -4610,6 +5309,14 @@ export default {
             ? await runFixedReminders(env)
             : cronType === 'backup'
             ? await runBackup(env)
+            : cronType === 'autoplan'
+            ? await runAutoPlan(env, { trigger: 'manual' })
+            : cronType === 'autoplan-tomorrow'
+            ? await runAutoPlan(env, { trigger: 'manual', forDate: trDate(1) })
+            : cronType === 'planpings'
+            ? await runPlanBlockPings(env)
+            : cronType === 'hevy'
+            ? await runHevySync(env)
             : await runCronJob(env, cronType);
           return new Response(JSON.stringify(result, null, 2), {
             headers: { 'Content-Type': 'application/json' },
@@ -4639,9 +5346,12 @@ export default {
       ctx.waitUntil(runPortfolioSummary(env));
       return;
     }
-    // 💊 Sabit hatırlatıcılar — 15 dk'da bir saat kontrolü
-    if (event.cron === '*/15 * * * *') {
-      ctx.waitUntil(runFixedReminders(env));
+    // 💊 Sabit hatırlatıcılar + ⏱️ gün planı blok bildirimleri — 5 dk'da bir.
+    // Blok başlangıçlarını yakalamak için 15 dk yeterli değildi (yarım saatlik
+    // bloklarda bildirim bloğun ortasına düşüyordu) → 5 dk'ya çekildi.
+    // Sabit hatırlatıcı mantığı lastFired guard'ı sayesinde daha sık cron'da da tek atar.
+    if (event.cron === '*/5 * * * *') {
+      ctx.waitUntil(Promise.all([runFixedReminders(env), runPlanBlockPings(env)]));
       return;
     }
     // 💾 Haftalık veri yedeği — Pazartesi 03:00 TR (UTC 00:00)
@@ -4657,6 +5367,28 @@ export default {
       case '0 18 * * *': type = 'evening'; break;
       case '0 18 * * SUN': type = 'weekly'; break;
       default:           type = 'morning';
+    }
+    // Sabah brifingi + GUVENLIK AGI planlama: aksam yarini planlayamadiysa (AI hatasi,
+    // ayar 'morning' ise, ya da hic plan yoksa) sabah bugunu planlar. Plan zaten varsa dokunmaz.
+    if (type === 'morning') {
+      ctx.waitUntil(
+        runCronJob(env, type)
+          .then(() => runAutoPlan(env, { trigger: 'morning' }))
+          .catch(e => console.error('morning+autoplan', e.message))
+      );
+      return;
+    }
+    // Aksam ozeti + YARININ plani — uyanmadan plan hazir olsun, aksam gorup duzeltebilsin
+    if (type === 'evening') {
+      ctx.waitUntil(
+        runCronJob(env, type)
+          // Hevy once senkronlanir: bugunun antrenmani plan gecmisine islensin,
+          // planlayici yarini kurarken antrenman gununu bilsin
+          .then(() => runHevySync(env).catch(e => console.error('hevy sync', e.message)))
+          .then(() => runAutoPlan(env, { trigger: 'evening', forDate: trDate(1) }))
+          .catch(e => console.error('evening+autoplan', e.message))
+      );
+      return;
     }
     ctx.waitUntil(runCronJob(env, type));
   },

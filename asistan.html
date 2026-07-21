@@ -242,6 +242,8 @@
       <button class="secondary plan-clear" onclick="clearDayPlan()" title="Planı temizle"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
     </div>
 
+    <div id="planInsight" class="plan-insight"></div>
+
     <div id="planTimeline"></div>
   </div>
 
@@ -546,6 +548,9 @@
         </div>
       </div>
     </details>
+
+    <!-- 💪 ANTRENMAN (Hevy) -->
+    <div id="hevySection"></div>
   </div>
 
   <!-- AYARLAR -->
@@ -570,6 +575,49 @@
       <label>Aidan sana nasıl seslensin?</label>
       <input type="text" id="displayName" placeholder="Örn: Salim, Ahmet…" maxlength="24" onchange="saveDisplayName()" style="max-width:240px;">
       <div class="settings-help">Boş bırakırsan email'inden tahmin eder. AI senle bu isimle konuşur (AI butonu, akşam günlüğü, portföy yorumu).</div>
+    </div>
+
+    <div class="settings-row">
+      <label>🗓️ Otomatik gün planı</label>
+      <label class="settings-check"><input type="checkbox" id="autoPlanChk" onchange="setAutoPlan(this.checked)"><span>Sabah 08:00'de günümü kendisi planlasın</span></label>
+      <label class="settings-check"><input type="checkbox" id="planPingsChk" onchange="setPlanPings(this.checked)"><span>Her blok başlarken bildirim gönder</span></label>
+      <label class="settings-check"><input type="checkbox" id="autoShiftChk" onchange="setAutoShift(this.checked)"><span>Plan bozulunca kendisi toparlasın</span></label>
+      <div class="settings-inline">
+        <span>Ne zaman planlansın?</span>
+        <select id="planWhenSel" onchange="setPlanWhen(this.value)">
+          <option value="evening">Akşam 21:00 — yarını planlasın</option>
+          <option value="morning">Sabah 08:00 — bugünü planlasın</option>
+        </select>
+      </div>
+      <div class="settings-help">Geçmiş planlarından öğrenir: gerçek hızını (tahmin/gerçek sapması), hangi saat diliminde blok tutturduğunu ve neyi sürekli ertelediğini ölçüp planı ona göre kurar. Yaklaşan sınavları da hesaba katar. Açık görevlerine bakıp uyanık pencerenı (Görevler → Gün planı) saat saat doldurur, sonra her bloğun başında “Şimdi: X” push'u atar. Kendi elinle planladığın günün üzerine yazmaz.</div>
+    </div>
+
+    <div class="settings-row">
+      <label>💪 Hevy bağlantısı</label>
+      <div id="hevyStatus" class="hevy-status"></div>
+      <div class="hevy-connect">
+        <input type="password" id="hevyKeyInput" placeholder="Hevy API anahtarını yapıştır" autocomplete="off" spellcheck="false">
+        <button class="small" id="hevyConnectBtn" onclick="connectHevy()">Bağlan</button>
+        <button class="small secondary" id="hevySyncBtn" onclick="syncHevy(true)">Şimdi çek</button>
+        <button class="small secondary" id="hevyDisconnectBtn" onclick="disconnectHevy()">Bağlantıyı kes</button>
+      </div>
+      <div class="settings-help">Anahtarı <b>hevy.com/settings?developer</b> adresinden alırsın — <b>Hevy Pro</b> aboneliği şart, ücretsiz hesapta bu sayfa anahtar vermez. Bağlanınca antrenmanların Diyet sekmesinde gelişim paneli olarak görünür, rekor kırınca bildirim gelir ve planlayıcı antrenman günlerini hesaba katar.</div>
+    </div>
+
+    <div class="settings-row">
+      <label>📚 Haftalık sabit program</label>
+      <div id="fixedScheduleList"></div>
+      <div class="fixedsch-add">
+        <input type="text" id="fschLabel" placeholder="örn. Okul" maxlength="40">
+        <div class="fsch-times">
+          <input type="time" id="fschStart">
+          <span>→</span>
+          <input type="time" id="fschEnd">
+        </div>
+        <div class="fsch-days" id="fschDays"></div>
+        <button class="small" onclick="addFixedSchedule()">＋ Ekle</button>
+      </div>
+      <div class="settings-help">Okul, özel ders, antrenman gibi her hafta aynı saatte olan işler. Otomatik plan bunların <b>etrafına</b> kurulur, üzerlerine görev yazmaz. Bir kez gir, her hafta geçerli.</div>
     </div>
 
     <div class="settings-row">

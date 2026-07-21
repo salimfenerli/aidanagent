@@ -144,6 +144,7 @@ function renderDiet() {
   renderSupplements();
   renderMacroBars();
   renderMacroDonut();
+  if (typeof renderHevySection === 'function') renderHevySection();
   // Hedef inputları
   const gk = document.getElementById('goalKcal'); if (gk) gk.value = d.kcalGoal;
   const gw = document.getElementById('goalWater'); if (gw) gw.value = (d.waterGoalL || 2.5);

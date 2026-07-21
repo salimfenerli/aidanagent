@@ -462,19 +462,55 @@ function nowHM() { const n = new Date(); return String(n.getHours()).padStart(2,
 // Uyanık pencere: kayıtlıysa onu, değilse şimdi(30dk'ya yuvarlı, min 08:00) → 22:00
 function planWindow() {
   const dp = data.dayPlan || {};
-  let from = dp.windowFrom, to = dp.windowTo;
+  const st = data.settings || {};
+  // Pencere ayarlarda KALICI tutulur — dayPlan her gun sifirlaniyor, worker'in
+  // sabah otomatik plani da bu ayari okuyor (worker: st.planFrom / st.planTo).
+  let from = dp.windowFrom || st.planFrom, to = dp.windowTo || st.planTo;
   if (!from) { const nm = hmToMin(nowHM()); from = minToHM(Math.max(8 * 60, Math.ceil(nm / 30) * 30)); }
   if (!to) to = '22:00';
   return { from, to };
 }
 function savePlanWindow() {
-  data.dayPlan.windowFrom = document.getElementById('planFrom').value || null;
-  data.dayPlan.windowTo = document.getElementById('planTo').value || null;
+  const f = document.getElementById('planFrom').value || null;
+  const t = document.getElementById('planTo').value || null;
+  data.dayPlan.windowFrom = f;
+  data.dayPlan.windowTo = t;
+  // Ayarlara da yaz — yarin sabah worker otomatik planlarken bu pencereyi kullanir
+  data.settings = data.settings || {};
+  data.settings.planFrom = f;
+  data.settings.planTo = t;
   save();
 }
 
+// Plan yarin icin de kurulabilir (aksam 21:00 cron'u yarini planlar).
+// Bu yuzden dayPlan sadece bugun VE yarin disindaki tarihlerde sifirlanir.
+function tomorrowStr() {
+  const d = new Date(today() + 'T12:00:00');
+  d.setDate(d.getDate() + 1);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function planIsTomorrow() { return (data.dayPlan || {}).date === tomorrowStr(); }
+
+// Gecikmis bloklar: baslangici gecmis, bitmemis, sabit olmayan (bugunun planinda)
+function latePlanBlocks() {
+  if (planIsTomorrow()) return [];
+  const nowM = hmToMin(nowHM());
+  return (data.dayPlan.blocks || []).filter(b => b && !b.done && b.kind !== 'fixed' && hmToMin(b.end) <= nowM);
+}
+
 function renderDayPlan() {
-  if (data.dayPlan.date !== today()) data.dayPlan = { date: today(), blocks: [] };
+  const dpDate = (data.dayPlan || {}).date;
+  if (dpDate !== today() && dpDate !== tomorrowStr()) {
+    archivePlanDay(data.dayPlan);   // gun degisti — eski plani ogrenme verisine yaz
+    data.dayPlan = { date: today(), blocks: [] };
+    save();
+  }
+  renderPlanInsight();
+  const isTom = planIsTomorrow();
+  const sub = document.getElementById('planSub');
+  if (sub) sub.textContent = isTom
+    ? 'Yarının planı hazır — bu gece düzeltebilirsin, sabah seni bekliyor olacak.'
+    : 'Günü saat saat bloklara böl — zaman körlüğüne karşı.';
   const w = planWindow();
   const pf = document.getElementById('planFrom'), pt = document.getElementById('planTo');
   if (pf) pf.value = w.from;
@@ -486,21 +522,33 @@ function renderDayPlan() {
     tl.innerHTML = '<div class="plan-empty">Günün henüz boş.<br>Görevlerin varsa <b>Günümü planla</b>\'ya bas — Aidan saat saat doldursun.<br>Ya da <b>＋ Blok ekle</b> ile elle kur.</div>';
     return;
   }
-  const nowM = hmToMin(nowHM());
+  const nowM = isTom ? -1 : hmToMin(nowHM());
   let html = '';
+
+  // Gecikme uyarisi — plan bozuldugunda terk edilmesin diye tek tikla toparlama
+  const late = latePlanBlocks();
+  if (late.length) {
+    html += `<div class="plan-late">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <div class="pl-body"><b>${late.length} blok gecikti</b><span>Plan bozuldu diye günü bırakma — kalanı şu andan itibaren yeniden dizeyim.</span></div>
+      <button class="pl-btn" onclick="shiftPlanRemaining()">Yeniden diz</button>
+    </div>`;
+  }
+
   blocks.forEach((b, i) => {
     const s = hmToMin(b.start), e = hmToMin(b.end);
     const isNow = nowM >= s && nowM < e && !b.done;
+    const isLate = !isTom && !b.done && b.kind !== 'fixed' && e <= nowM;
     if (i > 0) { const gap = s - hmToMin(blocks[i - 1].end); if (gap >= 15) html += `<div class="plan-gap">⌄ ${gap} dk boşluk</div>`; }
     const kind = b.kind || 'task';
     const linked = b.taskId ? (data.tasks || []).find(t => t.id === b.taskId) : null;
     const dur = e > s ? (e - s) : 0;
-    html += `<div class="plan-block kind-${kind} ${isNow ? 'now' : ''} ${b.done ? 'done' : ''}">
+    html += `<div class="plan-block kind-${kind} ${isNow ? 'now' : ''} ${b.done ? 'done' : ''} ${isLate ? 'late' : ''}" id="planBlock-${b.id}">
       <button class="pb-check" onclick="togglePlanBlock(${b.id})" title="Bitti olarak işaretle">${b.done ? '✓' : ''}</button>
       <div class="pb-time"><span>${b.start}</span><span class="pb-end">${b.end}</span></div>
       <div class="pb-body">
         <div class="pb-label">${escapeHtml(b.label || '(boş)')}</div>
-        <div class="pb-meta">${isNow ? '<span class="pb-now-tag">● şu an</span>' : ''}<span>${dur} dk</span>${linked ? '<span>görev</span>' : ''}</div>
+        <div class="pb-meta">${isNow ? '<span class="pb-now-tag">● şu an</span>' : ''}${isLate ? '<span class="pb-late-tag">gecikti</span>' : ''}<span>${dur} dk</span>${b.fixedId ? '<span>sabit program</span>' : (linked ? '<span>görev</span>' : '')}</div>
       </div>
       <div class="pb-actions">
         ${kind === 'task' && linked ? `<button onclick="focusPlanBlock(${b.taskId})" title="Bu göreve odaklan"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5a9 9 0 0 1 18 0v5a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></button>` : ''}
@@ -577,9 +625,318 @@ function togglePlanBlock(id) { const b = (data.dayPlan.blocks || []).find(x => x
 function focusPlanBlock(taskId) { bindFocusTask(taskId); showTab('focus', document.querySelector('[data-tab=focus]')); }
 function clearDayPlan() {
   if (!(data.dayPlan.blocks || []).length) { showToast('Plan zaten boş', 'info'); return; }
-  if (!confirm('Bugünün tüm planını sil?')) return;
+  if (!confirm(planIsTomorrow() ? 'Yarının tüm planını sil?' : 'Bugünün tüm planını sil?')) return;
   data.dayPlan.blocks = []; save(); renderDayPlan();
   showToast('Plan temizlendi', 'info');
+}
+
+// ============ PLANLAMA ZEKASI (worker'daki ikizinin frontend eşi) ============
+// dayPlan üzerine yazılmadan önce arşivlenir → sonraki planlar bu veriyle kurulur.
+
+function daysBetweenDates(a, b) {
+  const da = Date.parse(a + 'T12:00:00Z'), db = Date.parse(b + 'T12:00:00Z');
+  if (isNaN(da) || isNaN(db)) return null;
+  return Math.round((db - da) / 86400000);
+}
+
+// s=start e=end k=kind d=done c=kategori — kompakt, son 21 gün
+function archivePlanDay(dp) {
+  if (!dp || !dp.date || !(dp.blocks || []).length) return;
+  data.planHistory = data.planHistory || [];
+  if (data.planHistory.some(h => h.date === dp.date)) return;
+  const tasks = data.tasks || [];
+  const trained = ((data.hevy && data.hevy.workouts) || []).some(w => w.date === dp.date);
+  data.planHistory.push({
+    date: dp.date,
+    w: trained || undefined,   // antrenman günü mü — planlayıcı bunu öğrenir
+    blocks: dp.blocks.map(b => {
+      const t = b.taskId ? tasks.find(x => x.id === b.taskId) : null;
+      return { s: b.start, e: b.end, k: b.kind || 'task', d: !!b.done, c: (t && t.category) || null };
+    }),
+  });
+  data.planHistory = data.planHistory.slice(-21);
+}
+
+// Gerçek veriden planlama profili: saat dilimi tutturma oranı, süre sapması,
+// günlük gerçekçi kapasite, en çok kaçan kategori.
+function planProfile() {
+  const hist = (data.planHistory || []).slice(-14);
+  const buckets = { sabah: { t: 0, d: 0 }, ogle: { t: 0, d: 0 }, aksam: { t: 0, d: 0 } };
+  const catMiss = {};
+  const perDay = [];
+  const gym = { t: 0, d: 0 }, rest = { t: 0, d: 0 };   // antrenman günü vs normal gün
+  for (const h of hist) {
+    let dn = 0;
+    for (const b of (h.blocks || [])) {
+      if (b.k === 'break' || b.k === 'fixed') continue;
+      const hm = hmToMin(b.s);
+      const key = hm < 720 ? 'sabah' : hm < 1020 ? 'ogle' : 'aksam';
+      buckets[key].t++;
+      const b2 = h.w ? gym : rest;
+      b2.t++;
+      if (b.d) { buckets[key].d++; b2.d++; dn++; }
+      else if (b.c) catMiss[b.c] = (catMiss[b.c] || 0) + 1;
+    }
+    perDay.push(dn);
+  }
+  const finished = (data.tasks || []).filter(t => t && t.done && t.estimateMin > 0 && t.actualMin > 0).slice(-30);
+  let ratio = null;
+  if (finished.length >= 3) {
+    const rs = finished.map(t => t.actualMin / t.estimateMin).sort((a, b) => a - b);
+    const mid = Math.floor(rs.length / 2);
+    ratio = rs.length % 2 ? rs[mid] : (rs[mid - 1] + rs[mid]) / 2;
+    ratio = Math.min(3, Math.max(0.5, ratio));
+  }
+  const avgDone = perDay.length ? perDay.reduce((a, b) => a + b, 0) / perDay.length : null;
+  return { days: hist.length, buckets, catMiss, ratio, avgDone, gym, rest };
+}
+
+const CAT_TR = { odev: 'ödev', ders: 'özel ders', ev: 'ev işi', kisisel: 'kişisel' };
+
+function profileLines(prof) {
+  if (!prof || prof.days < 3) return '';
+  const out = [];
+  const rate = b => (b.t >= 3 ? Math.round((b.d / b.t) * 100) : null);
+  const parts = [];
+  const rs = rate(prof.buckets.sabah), ro = rate(prof.buckets.ogle), ra = rate(prof.buckets.aksam);
+  if (rs !== null) parts.push(`sabah %${rs}`);
+  if (ro !== null) parts.push(`öğleden sonra %${ro}`);
+  if (ra !== null) parts.push(`akşam %${ra}`);
+  if (parts.length) out.push(`- Blok tamamlama oranı: ${parts.join(' · ')}. DÜŞÜK oranlı saat dilimine ağır/uzun iş KOYMA.`);
+  if (prof.ratio && Math.abs(prof.ratio - 1) > 0.15) {
+    out.push(prof.ratio > 1
+      ? `- Süre tahminleri gerçekte ~${prof.ratio.toFixed(1)} kat uzuyor. Süreler BU KATSAYIYLA DÜZELTİLDİ — tekrar uzatma.`
+      : `- İşler tahminden hızlı bitiyor (~${prof.ratio.toFixed(1)} kat). Süreler zaten düzeltildi.`);
+  }
+  if (prof.avgDone !== null && prof.avgDone > 0) {
+    const cap = Math.max(2, Math.round(prof.avgDone) + 1);
+    out.push(`- Günde ortalama ${prof.avgDone.toFixed(1)} çalışma bloğu bitiriyor. En fazla ${cap} çalışma bloğu koy.`);
+  }
+  const worst = Object.entries(prof.catMiss).sort((a, b) => b[1] - a[1])[0];
+  if (worst && worst[1] >= 3) {
+    out.push(`- En çok kaçırdığı kategori: "${CAT_TR[worst[0]] || worst[0]}" (${worst[1]} blok). Günün EN İYİ saatine, KISA bloklar halinde koy.`);
+  }
+  const g = prof.gym, rr = prof.rest;
+  if (g && rr && g.t >= 4 && rr.t >= 4) {
+    const gr = g.d / g.t, rrr = rr.d / rr.t;
+    if (rrr - gr >= 0.15) {
+      out.push(`- Antrenman yaptığı günlerde tamamlama oranı düşüyor (%${Math.round(gr * 100)} vs %${Math.round(rrr * 100)}). BUGÜN ANTRENMAN GÜNÜ ise daha AZ ve daha KISA blok koy.`);
+    }
+  }
+  return out.length ? `\n\n📊 GEÇMİŞ VERİSİ (son ${prof.days} gün — ölçüldü):\n${out.join('\n')}` : '';
+}
+
+// Hevy sadece GEÇMİŞİ verir — gelecek programı bilmez. Haftalık desene bakarız:
+// son 3 haftanın aynı gününde antrenman varsa bugün de muhtemelen antrenman günü.
+function gymDayLine(forDate) {
+  const ws = ((data.hevy || {}).workouts) || [];
+  if (ws.length < 4) return '';
+  const dayIdx = new Date(forDate + 'T12:00:00').getDay();
+  let hits = 0;
+  for (let k = 1; k <= 3; k++) {
+    const d = shiftDateStr(forDate, -7 * k);
+    if (ws.some(w => w.date === d)) hits++;
+  }
+  if (hits < 2) return '';
+  const names = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+  return `
+
+💪 Son 3 haftanın ${hits}'inde ${names[dayIdx]} günü antrenman yapıldı — bugün büyük ihtimalle ANTRENMAN GÜNÜ. Günü hafiflet, antrenman için ~90 dk boşluk bırak.`;
+}
+
+function deadlineLines(forDate) {
+  const cds = (data.countdowns || [])
+    .map(c => ({ label: c.label, d: daysBetweenDates(forDate, c.date) }))
+    .filter(x => x.d !== null && x.d >= 0 && x.d <= 14)
+    .sort((a, b) => a.d - b.d).slice(0, 5);
+  if (!cds.length) return '';
+  const lines = cds.map(c => `- ${c.label}: ${c.d === 0 ? 'BUGÜN' : c.d === 1 ? 'YARIN' : c.d + ' gün kaldı'}`);
+  return `\n\n⏳ YAKLAŞAN SINAV / TESLİM:\n${lines.join('\n')}\nBu tarihlere hazırlık gerektiren görevleri güne ÖNCE koy.`;
+}
+
+// Plan panelinde "Aidan neye göre planlıyor" şeffaflık satırı
+function renderPlanInsight() {
+  const el = document.getElementById('planInsight');
+  if (!el) return;
+  const p = planProfile();
+  if (p.days < 3) {
+    el.innerHTML = `<span class="pi-learn">Aidan planlarını izliyor — ${p.days}/3 gün. 3 günden sonra senin gerçek hızına ve verimli saatlerine göre planlamaya başlayacak.</span>`;
+    return;
+  }
+  const bits = [];
+  if (p.ratio && Math.abs(p.ratio - 1) > 0.15) bits.push(`süreler ${p.ratio.toFixed(1)}×`);
+  if (p.avgDone !== null) bits.push(`günde ~${p.avgDone.toFixed(1)} blok`);
+  const best = [['sabah', p.buckets.sabah], ['öğleden sonra', p.buckets.ogle], ['akşam', p.buckets.aksam]]
+    .filter(([, b]) => b.t >= 3).sort((a, b) => (b[1].d / b[1].t) - (a[1].d / a[1].t))[0];
+  if (best) bits.push(`en iyi: ${best[0]}`);
+  el.innerHTML = `<span class="pi-on">Son ${p.days} günün verisiyle planlanıyor${bits.length ? ' · ' + bits.join(' · ') : ''}</span>`;
+}
+
+// ============ SABİT PROGRAM + PLAN TOPARLAMA + BLOK AKSİYONLARI ============
+
+// data.fixedSchedule = [{id, label, days:[0..6 JS getDay], start, end, enabled}]
+// Okul / özel ders / antrenman gibi HER HAFTA aynı olan bloklar. AI bunların
+// etrafına plan kurar, üzerlerine yazmaz. Worker'daki fixedBlocksFor'un eşi.
+function fixedBlocksForDate(dateStr) {
+  const dayIdx = new Date(dateStr + 'T12:00:00').getDay();
+  return (data.fixedSchedule || [])
+    .filter(f => f && f.enabled !== false && Array.isArray(f.days) && f.days.includes(dayIdx)
+      && hmToMin(f.start) >= 0 && hmToMin(f.end) > hmToMin(f.start))
+    .map((f, k) => ({
+      id: Date.now() + 900000 + k,
+      label: (f.label || 'Sabit').slice(0, 100),
+      start: f.start, end: f.end,
+      kind: 'fixed', taskId: null, done: false, fixedId: f.id,
+    }))
+    .sort((a, b) => hmToMin(a.start) - hmToMin(b.start));
+}
+function blocksOverlap(a, b) {
+  return hmToMin(a.start) < hmToMin(b.end) && hmToMin(b.start) < hmToMin(a.end);
+}
+
+// Bir bloğu yerleştirebileceğin ilk boş başlangıç — sabit bloklara çarpmaz.
+// Sığmıyorsa -1 döner (pencere bitti).
+function nextFreeStart(cursor, dur, fixedList, winEnd) {
+  let c = cursor, guard = 0;
+  while (guard++ < 200) {
+    const clash = fixedList.find(f => c < hmToMin(f.end) && hmToMin(f.start) < c + dur);
+    if (!clash) break;
+    c = hmToMin(clash.end);
+  }
+  return (c + dur > winEnd) ? -1 : c;
+}
+
+// 🔁 Plan toparlama — ADHD'de planın ölme sebebi "bir blok kaçtı, gerisi çöp" hissi.
+// Kural tabanlı (AI YOK, anında): biten + sabit bloklar yerinde kalır, kalan
+// hareketli bloklar ŞU ANDAN itibaren sırayla yeniden dizilir. Sığmayan düşer.
+function shiftPlanRemaining(silent) {
+  if (planIsTomorrow()) { showToast('Bu yarının planı — kaydırmaya gerek yok', 'info', 3000); return; }
+  const all = (data.dayPlan.blocks || []).slice().sort((a, b) => hmToMin(a.start) - hmToMin(b.start));
+  if (!all.length) { showToast('Plan boş', 'info'); return; }
+
+  const nowM0 = hmToMin(nowHM());
+  const fixedList = all.filter(b => b.kind === 'fixed');
+  // Şu an üzerinde çalışılan bloğu YERİNDE bırak — tam ortasında yerini değiştirme
+  const inProg = all.find(b => b.kind !== 'fixed' && !b.done && hmToMin(b.start) <= nowM0 && nowM0 < hmToMin(b.end));
+  const keep = all.filter(b => b.kind === 'fixed' || b.done || b === inProg);
+  const movable = all.filter(b => keep.indexOf(b) === -1);
+  if (!movable.length) { showToast('Kaydırılacak blok yok — hepsi bitmiş', 'success', 3000); return; }
+
+  const winEnd = hmToMin(planWindow().to);
+  // Şu anı 5 dk yukarı yuvarla — "14:07'de başla" demek yerine 14:10
+  let cursor = Math.ceil(Math.max(nowM0, inProg ? hmToMin(inProg.end) : nowM0) / 5) * 5;
+  const dur = x => Math.max(5, hmToMin(x.end) - hmToMin(x.start));
+  const remaining = movable.slice();
+  const placed = [];
+  let guard = 0;
+
+  // Boşluk doldurmalı yerleştirme: sabit bloktan önce 40 dk boşluk kaldıysa
+  // ve sıradaki blok sığmıyorsa, sığan bir SONRAKİ bloğu oraya koyar.
+  // Sıra mümkün olduğunca korunur — sadece sığmayan atlanır, boşluk ziyan olmaz.
+  while (remaining.length && guard++ < 300) {
+    if (cursor >= winEnd) break;
+    const nextFixed = fixedList.find(f => hmToMin(f.start) >= cursor);
+    const gapEnd = nextFixed ? Math.min(hmToMin(nextFixed.start), winEnd) : winEnd;
+    const idx = remaining.findIndex(x => cursor + dur(x) <= gapEnd);
+    if (idx === -1) {
+      if (!nextFixed) break;                  // pencere bitti, kalanlar düşer
+      cursor = hmToMin(nextFixed.end);        // bu boşluğa hiçbiri sığmadı, sabiti atla
+      continue;
+    }
+    const b = remaining.splice(idx, 1)[0];
+    const d = dur(b);
+    b.start = minToHM(cursor);
+    b.end = minToHM(cursor + d);
+    b.pinged = false;                          // yeni saatinde tekrar bildirim gelsin
+    placed.push(b);
+    cursor += d;
+  }
+  const dropped = remaining;
+
+  data.dayPlan.blocks = keep.concat(placed).sort((a, b) => hmToMin(a.start) - hmToMin(b.start));
+  save(); renderDayPlan();
+  if (!silent) {
+    const msg = dropped.length
+      ? `${placed.length} blok kaydırıldı · ${dropped.length} tanesi güne sığmadı`
+      : `${placed.length} blok şu andan itibaren yeniden dizildi`;
+    showToast(msg, dropped.length ? 'warning' : 'success', 4000);
+  }
+  return { placed: placed.length, dropped: dropped.length };
+}
+
+// Tek bloğu ertele — sonrasındaki hareketli bloklar çarpışırsa onlar da kayar
+function snoozeBlock(id, mins) {
+  const blocks = (data.dayPlan.blocks || []).slice().sort((a, b) => hmToMin(a.start) - hmToMin(b.start));
+  const b = blocks.find(x => String(x.id) === String(id));
+  if (!b) return false;
+  const shift = mins || 15;
+  const fixedList = blocks.filter(x => x.kind === 'fixed');
+  const winEnd = hmToMin(planWindow().to);
+  const dur = Math.max(5, hmToMin(b.end) - hmToMin(b.start));
+  const st = nextFreeStart(hmToMin(b.start) + shift, dur, fixedList, winEnd);
+  if (st < 0) { showToast('Bu blok güne sığmıyor — yarına bırak ya da kısalt', 'warning', 4000); return false; }
+  b.start = minToHM(st); b.end = minToHM(st + dur); b.pinged = false;
+
+  // Kaskad: sonraki hareketli bloklar çakışıyorsa onları da it
+  let cursor = st + dur;
+  for (const x of blocks) {
+    if (x === b || x.kind === 'fixed' || x.done) continue;
+    if (hmToMin(x.start) < cursor) {
+      const d = Math.max(5, hmToMin(x.end) - hmToMin(x.start));
+      const ns = nextFreeStart(cursor, d, fixedList, winEnd);
+      if (ns < 0) continue;
+      x.start = minToHM(ns); x.end = minToHM(ns + d); x.pinged = false;
+      cursor = ns + d;
+    }
+  }
+  data.dayPlan.blocks = blocks.sort((a, b2) => hmToMin(a.start) - hmToMin(b2.start));
+  save(); renderDayPlan();
+  showToast(`Blok ${shift} dk ertelendi → ${b.start}`, 'info', 3000);
+  return true;
+}
+
+// 🔔 Bildirimden gelen aksiyon (sw.js → postMessage ya da /?blk=..&act=..)
+// iOS PWA bildirim butonlarını göstermez → orada act='open' gelir, plan sekmesi açılıp blok vurgulanır.
+function handleBlockAction(blockId, action) {
+  const b = (data.dayPlan.blocks || []).find(x => String(x.id) === String(blockId));
+  if (!b) { showToast('Blok bulunamadı — plan değişmiş olabilir', 'warning', 3500); return; }
+  if (action === 'done') {
+    if (!b.done) { b.done = true; save(); }
+    showToast(`✓ ${b.label}`, 'success', 3000);
+    showTab('plan', document.querySelector('[data-tab=plan]'));
+    return;
+  }
+  if (action === 'snooze') { snoozeBlock(b.id, 15); showTab('plan', document.querySelector('[data-tab=plan]')); return; }
+  if (action === 'start') {
+    if (b.taskId) { focusPlanBlock(b.taskId); return; }
+    showTab('focus', document.querySelector('[data-tab=focus]'));
+    return;
+  }
+  // 'open' ya da bilinmeyen — plan sekmesini aç, bloğu vurgula
+  showTab('plan', document.querySelector('[data-tab=plan]'));
+  setTimeout(() => {
+    const el = document.getElementById('planBlock-' + b.id);
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 2000); }
+  }, 200);
+}
+
+// Uygulama acilisinda URL'den (/?blk=..&act=..) ve calisirken SW mesajindan gelir
+function initBlockActionBridge() {
+  try {
+    const q = new URLSearchParams(location.search);
+    const blk = q.get('blk');
+    if (blk) {
+      const act = q.get('act') || 'open';
+      setTimeout(() => handleBlockAction(blk, act), 400);
+      history.replaceState(null, '', location.pathname);
+    }
+  } catch (e) {}
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', ev => {
+      const d = ev && ev.data;
+      if (d && d.type === 'BLOCK_ACTION' && d.blockId) handleBlockAction(d.blockId, d.action || 'open');
+    });
+  }
 }
 
 // AI: görevleri + uyanık pencereyi → saat saat plan (Worker /plan)
@@ -589,15 +946,35 @@ async function planMyDay() {
   if (!open.length) { showToast('Planlanacak görev yok — önce görev ekle', 'info', 3500); return; }
   const w = planWindow();
   // AI'ya kompakt, index referanslı liste (sayı uydurmasın diye süreler net)
-  const tasksForAi = open.slice(0, 20).map((t, i) => ({
-    i,
-    text: t.text.slice(0, 80),
-    min: t.estimateMin || null,
-    pri: t.priority === 'urgent' ? 'acil' : 'normal',
-    mit: t.mitDate === today(),
-    due: t.due || null,
-    cat: t.category || null,
-  }));
+  const _prof0 = planProfile();
+  const tasksForAi = open.slice(0, 20).map((t, i) => {
+    // Gerçekçi süre: tahmini ölçülen sapmayla çarp, 5 dk'ya yuvarla
+    let min = t.estimateMin || null;
+    if (min && _prof0.ratio) min = Math.max(10, Math.round((min * _prof0.ratio) / 5) * 5);
+    // Çok günlük iş: son tarihe kalan güne böl → bugün ne kadar çalışmalı
+    let todayShare = null;
+    if (min && t.due) {
+      const dl = daysBetweenDates(today(), t.due);
+      if (dl !== null && dl > 0) {
+        const sh = Math.max(20, Math.round(min / (dl + 1) / 5) * 5);
+        if (sh < min) todayShare = sh;
+      }
+    }
+    return {
+      i,
+      text: t.text.slice(0, 80),
+      min: todayShare || min,
+      full: todayShare ? min : null,
+      pri: t.priority === 'urgent' ? 'acil' : 'normal',
+      mit: t.mitDate === today(),
+      due: t.due || null,
+      cat: t.category || null,
+    };
+  });
+  if (data.dayPlan && data.dayPlan.date && data.dayPlan.date !== today()) archivePlanDay(data.dayPlan);
+  const prof = planProfile();
+  const insight = profileLines(prof) + deadlineLines(today()) + gymDayLine(today());
+  const fixed = fixedBlocksForDate(today());
   const btn = document.getElementById('planAiBtn');
   if (btn) btn.disabled = true;
   showToast('Günün planlanıyor… 10-15 sn sürebilir', 'info', 4000);
@@ -608,7 +985,11 @@ async function planMyDay() {
     const r = await fetch(PLAN_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ tasks: tasksForAi, from: w.from, to: w.to, now: nowHM() }),
+      body: JSON.stringify({
+        tasks: tasksForAi, from: w.from, to: w.to, now: nowHM(),
+        busy: fixed.map(f => ({ label: f.label, start: f.start, end: f.end })),
+        insight,
+      }),
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || ('sunucu hatası ' + r.status));
@@ -626,9 +1007,12 @@ async function planMyDay() {
         done: false,
       };
     }).filter(b => b.start && b.end && hmToMin(b.end) > hmToMin(b.start));
-    data.dayPlan = { date: today(), blocks: mapped, windowFrom: w.from, windowTo: w.to };
+    // AI talimata ragmen sabit saate blok koyduysa at — sabit program her zaman kazanir
+    const clean = fixed.length ? mapped.filter(b => !fixed.some(f => blocksOverlap(b, f))) : mapped;
+    const all = fixed.concat(clean).sort((a, b) => hmToMin(a.start) - hmToMin(b.start));
+    data.dayPlan = { date: today(), blocks: all, windowFrom: w.from, windowTo: w.to };
     save(); renderDayPlan();
-    showToast(`Günün planlandı — ${mapped.length} blok`, 'success', 3500);
+    showToast(`Günün planlandı — ${all.length} blok${fixed.length ? ` (${fixed.length} sabit)` : ''}`, 'success', 3500);
   } catch (e) {
     showToast('Planlanamadı: ' + e.message, 'error', 4500);
   } finally {

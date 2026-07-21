@@ -1675,11 +1675,316 @@ function saveDisplayName() {
   if (v) showToast(`Bundan sonra Aidan sana "${v}" diye sesleniyor`, 'success', 3500);
 }
 
+// Otomatik gun plani ayarlari — worker (morning cron + 5dk cron) bunlari okur.
+// Varsayilan ACIK: alan yoksa true kabul edilir, sadece false ise kapali.
+function setAutoPlan(on) {
+  data.settings.autoPlan = !!on;
+  save();
+  showToast(on ? 'Sabahlari gunun otomatik planlanacak' : 'Otomatik planlama kapatildi', on ? 'success' : 'info', 3000);
+}
+function setPlanPings(on) {
+  data.settings.planPings = !!on;
+  save();
+  showToast(on ? 'Blok bildirimleri acik' : 'Blok bildirimleri kapatildi', on ? 'success' : 'info', 3000);
+}
+
+// ============ 💪 HEVY — antrenman verisi + gelişim ============
+// Anahtar data.settings.hevyKey'de. Worker sadece proxy (CORS + anahtarın Hevy'ye
+// gitmesi için) — Hevy'yi tarayıcıdan doğrudan çağıramayız.
+const HEVY_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/hevy-sync';
+
+function ensureHevy() {
+  data.hevy = data.hevy || { workouts: [], prs: {}, lastSync: null, lastError: null };
+  data.hevy.workouts = data.hevy.workouts || [];
+  data.hevy.prs = data.hevy.prs || {};
+  return data.hevy;
+}
+
+function hevyWorkoutsIn(days) {
+  const h = ensureHevy();
+  const from = shiftDateStr(today(), -(days - 1));
+  return h.workouts.filter(w => w.date >= from);
+}
+function trainedOn(dateStr) {
+  return ensureHevy().workouts.some(w => w.date === dateStr);
+}
+
+async function syncHevy(loud) {
+  const h = ensureHevy();
+  const key = (data.settings.hevyKey || '').trim();
+  if (!key) { if (loud) showToast('Önce Hevy anahtarını bağla', 'warning', 3500); return false; }
+  if (!window._supa || !window._user) { if (loud) showToast('Bulut girişi gerekli — Ayarlar → giriş yap', 'warning', 4000); return false; }
+  const btn = document.getElementById('hevySyncBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const { data: sess } = await window._supa.auth.getSession();
+    const token = sess && sess.session && sess.session.access_token;
+    if (!token) throw new Error('oturum bulunamadı');
+    const r = await fetch(HEVY_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ key }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || ('sunucu hatası ' + r.status));
+
+    // id bazlı birleştir, son 180 gün
+    const byId = new Map();
+    for (const w of h.workouts) if (w && w.id) byId.set(w.id, w);
+    for (const w of (j.workouts || [])) if (w && w.id) byId.set(w.id, w);
+    const cutoff = shiftDateStr(today(), -180);
+    h.workouts = Array.from(byId.values()).filter(w => w.date >= cutoff)
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+
+    // Rekorlar (egzersiz bazlı en iyi tahmini 1RM)
+    const prs = {};
+    for (const w of h.workouts) {
+      for (const ex of (w.exercises || [])) {
+        if (!ex || !ex.top || !ex.top.e1rm) continue;
+        const cur = prs[ex.name];
+        if (!cur || ex.top.e1rm > cur.e1rm) prs[ex.name] = { e1rm: ex.top.e1rm, kg: ex.top.kg, reps: ex.top.reps, date: w.date };
+      }
+    }
+    h.prs = prs;
+    h.lastSync = Date.now();
+    h.lastError = null;
+    save();
+    renderHevyStatus(); renderHevySection();
+    if (typeof renderDailyScore === 'function') renderDailyScore();
+    if (loud) showToast(`${h.workouts.length} antrenman senkronlandı`, 'success', 3000);
+    return true;
+  } catch (e) {
+    h.lastError = e.message;
+    save();
+    renderHevyStatus();
+    if (loud) showToast('Hevy: ' + e.message, 'error', 6000);
+    return false;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function connectHevy() {
+  const inp = document.getElementById('hevyKeyInput');
+  const key = (inp.value || '').trim();
+  if (!key) { showToast('Anahtarı yapıştır', 'warning', 3000); return; }
+  data.settings.hevyKey = key;
+  save();
+  inp.value = '';
+  showToast('Anahtar kaydedildi, test ediliyor…', 'info', 2500);
+  const ok = await syncHevy(true);
+  if (!ok) {
+    // Anahtar çalışmadı — kaydını tutma, kafası karışmasın
+    data.settings.hevyKey = '';
+    save();
+    renderHevyStatus();
+  }
+}
+function disconnectHevy() {
+  if (!confirm('Hevy bağlantısını kes? Çekilmiş antrenman geçmişi silinmez.')) return;
+  data.settings.hevyKey = '';
+  save();
+  renderHevyStatus();
+  showToast('Hevy bağlantısı kesildi', 'info', 3000);
+}
+
+function renderHevyStatus() {
+  const el = document.getElementById('hevyStatus');
+  if (!el) return;
+  const h = ensureHevy();
+  const connected = !!(data.settings.hevyKey || '').trim();
+  const dis = document.getElementById('hevyDisconnectBtn');
+  const syn = document.getElementById('hevySyncBtn');
+  if (dis) dis.style.display = connected ? '' : 'none';
+  if (syn) syn.style.display = connected ? '' : 'none';
+
+  if (!connected) {
+    el.innerHTML = h.lastError
+      ? `<div class="hevy-st err">Bağlanamadı — ${escapeHtml(h.lastError)}</div>`
+      : `<div class="hevy-st off">Bağlı değil</div>`;
+    return;
+  }
+  const when = h.lastSync ? new Date(h.lastSync).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'henüz yok';
+  el.innerHTML = h.lastError
+    ? `<div class="hevy-st err">Son deneme başarısız — ${escapeHtml(h.lastError)}</div>`
+    : `<div class="hevy-st on">Bağlı · ${h.workouts.length} antrenman · son senkron ${when}</div>`;
+}
+
+// 📈 Gelişim paneli — Diyet sekmesinin altında
+function renderHevySection() {
+  const el = document.getElementById('hevySection');
+  if (!el) return;
+  const h = ensureHevy();
+  if (!(data.settings.hevyKey || '').trim() && !h.workouts.length) { el.innerHTML = ''; return; }
+  if (!h.workouts.length) {
+    el.innerHTML = `<div class="hevy-wrap"><div class="hevy-head"><h3>Antrenman</h3></div>
+      <div class="hevy-empty">Henüz antrenman verisi yok. Ayarlar → Hevy bağlantısı'ndan "Şimdi çek"e bas.</div></div>`;
+    return;
+  }
+
+  const w7 = hevyWorkoutsIn(7), w28 = hevyWorkoutsIn(28);
+  const prev28 = h.workouts.filter(w => w.date < shiftDateStr(today(), -27) && w.date >= shiftDateStr(today(), -55));
+  const vol = arr => arr.reduce((s, w) => s + (w.volumeKg || 0), 0);
+  const v28 = vol(w28), vp = vol(prev28);
+  const trendPct = vp > 0 ? Math.round(((v28 - vp) / vp) * 100) : null;
+  const last = h.workouts[0];
+
+  // En çok çalışılan 4 egzersizde gelişim: son 28 gün en iyi e1RM vs önceki 28 gün
+  const bestIn = (arr, name) => {
+    let b = 0;
+    for (const w of arr) for (const ex of (w.exercises || [])) {
+      if (ex.name === name && ex.top && ex.top.e1rm > b) b = ex.top.e1rm;
+    }
+    return b;
+  };
+  const freq = {};
+  for (const w of w28) for (const ex of (w.exercises || [])) {
+    if (ex && ex.top) freq[ex.name] = (freq[ex.name] || 0) + 1;
+  }
+  const topEx = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([name]) => {
+    const now = bestIn(w28, name), before = bestIn(prev28, name);
+    const diff = (now && before) ? Math.round((now - before) * 10) / 10 : null;
+    const pr = h.prs[name];
+    return { name, now, diff, pr };
+  });
+
+  const trendCls = trendPct === null ? '' : trendPct > 2 ? 'up' : trendPct < -2 ? 'down' : '';
+  const trendTxt = trendPct === null ? '—' : (trendPct > 0 ? '+' : '') + trendPct + '%';
+
+  el.innerHTML = `<div class="hevy-wrap">
+    <div class="hevy-head">
+      <h3>Antrenman</h3>
+      <button class="hevy-refresh" onclick="syncHevy(true)" title="Hevy'den güncelle"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></button>
+    </div>
+
+    <div class="hevy-stats">
+      <div class="hevy-stat"><span class="hs-val">${w7.length}</span><span class="hs-lbl">bu hafta</span></div>
+      <div class="hevy-stat"><span class="hs-val">${w28.length}</span><span class="hs-lbl">son 4 hafta</span></div>
+      <div class="hevy-stat"><span class="hs-val">${Math.round(v28 / 1000)}<small>t</small></span><span class="hs-lbl">hacim (4 hf)</span></div>
+      <div class="hevy-stat ${trendCls}"><span class="hs-val">${trendTxt}</span><span class="hs-lbl">önceki 4 hf'ye göre</span></div>
+    </div>
+
+    ${last ? `<div class="hevy-last">
+      <b>${escapeHtml(last.title)}</b>
+      <span>${hevyDateLabel(last.date)}${last.durationMin ? ` · ${last.durationMin} dk` : ''}${last.setCount ? ` · ${last.setCount} set` : ''}${last.volumeKg ? ` · ${last.volumeKg.toLocaleString('tr-TR')} kg` : ''}</span>
+    </div>` : ''}
+
+    ${topEx.length ? `<div class="hevy-ex-head">Gelişim (son 4 hafta vs öncesi)</div>
+    <div class="hevy-ex-list">${topEx.map(x => `
+      <div class="hevy-ex">
+        <div class="hx-name">${escapeHtml(x.name)}</div>
+        <div class="hx-vals">
+          ${x.now ? `<span class="hx-now">${x.now} kg<small> tahmini 1RM</small></span>` : '<span class="hx-now">—</span>'}
+          ${x.diff !== null ? `<span class="hx-diff ${x.diff > 0 ? 'up' : x.diff < 0 ? 'down' : ''}">${x.diff > 0 ? '+' : ''}${x.diff} kg</span>` : '<span class="hx-diff muted">ilk dönem</span>'}
+        </div>
+        ${x.pr ? `<div class="hx-pr">Rekor: ${x.pr.kg} kg × ${x.pr.reps} · ${hevyDateLabel(x.pr.date)}</div>` : ''}
+      </div>`).join('')}</div>` : ''}
+
+    <div class="hevy-note">Tahmini 1RM Epley formülüyle hesaplanır (ağırlık × (1 + tekrar/30)) — farklı ağırlık/tekrar kombinasyonlarını kıyaslayabilmek için. Isınma setleri sayılmaz.</div>
+  </div>`;
+}
+
+function hevyDateLabel(d) {
+  const t = today();
+  if (d === t) return 'bugün';
+  if (d === shiftDateStr(t, -1)) return 'dün';
+  return new Date(d + 'T12:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+}
+
+// ============ HAFTALIK SABİT PROGRAM ============
+// data.fixedSchedule = [{id, label, days:[0..6 JS getDay], start, end, enabled}]
+// Okul/özel ders/antrenman — otomatik plan bunların etrafına kurulur.
+const FSCH_DAYS = [[1, 'Pzt'], [2, 'Sal'], [3, 'Çar'], [4, 'Per'], [5, 'Cum'], [6, 'Cmt'], [0, 'Paz']];
+let _fschSel = new Set([1, 2, 3, 4, 5]); // varsayılan hafta içi
+
+function renderFschDayPicker() {
+  const el = document.getElementById('fschDays');
+  if (!el) return;
+  el.innerHTML = FSCH_DAYS.map(([d, n]) =>
+    `<button type="button" class="fsch-day ${_fschSel.has(d) ? 'on' : ''}" onclick="toggleFschDay(${d})">${n}</button>`
+  ).join('');
+}
+function toggleFschDay(d) {
+  if (_fschSel.has(d)) _fschSel.delete(d); else _fschSel.add(d);
+  renderFschDayPicker();
+}
+
+function renderFixedSchedule() {
+  renderFschDayPicker();
+  const el = document.getElementById('fixedScheduleList');
+  if (!el) return;
+  const list = (data.fixedSchedule || []).slice().sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+  if (!list.length) { el.innerHTML = '<div class="fsch-empty">Henüz sabit yok — okul saatlerini ekleyerek başla.</div>'; return; }
+  el.innerHTML = list.map(f => {
+    const days = FSCH_DAYS.filter(([d]) => (f.days || []).includes(d)).map(([, n]) => n).join(' ');
+    const off = f.enabled === false;
+    return `<div class="fsch-item ${off ? 'off' : ''}">
+      <button class="fsch-toggle" onclick="toggleFixedSchedule(${f.id})" title="${off ? 'Aç' : 'Kapat'}">${off
+        ? '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>'
+        : '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><polyline points="8 12 11 15 16 9"/></svg>'}</button>
+      <div class="fsch-body">
+        <div class="fsch-label">${escapeHtml(f.label || 'Sabit')}</div>
+        <div class="fsch-meta"><span>${f.start}–${f.end}</span><span>${days || '—'}</span></div>
+      </div>
+      <button class="fsch-del" onclick="deleteFixedSchedule(${f.id})" title="Sil"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
+    </div>`;
+  }).join('');
+}
+
+function addFixedSchedule() {
+  const label = (document.getElementById('fschLabel').value || '').trim().slice(0, 40);
+  const start = document.getElementById('fschStart').value;
+  const end = document.getElementById('fschEnd').value;
+  if (!label) { showToast('Bir isim yaz (örn. Okul)', 'warning', 3000); return; }
+  if (!start || !end) { showToast('Başlangıç ve bitiş saati gerekli', 'warning', 3000); return; }
+  if (hmToMin(end) <= hmToMin(start)) { showToast('Bitiş saati başlangıçtan sonra olmalı', 'warning', 3000); return; }
+  if (!_fschSel.size) { showToast('En az bir gün seç', 'warning', 3000); return; }
+  data.fixedSchedule = data.fixedSchedule || [];
+  data.fixedSchedule.push({
+    id: Date.now(), label, start, end,
+    days: Array.from(_fschSel).sort(), enabled: true,
+  });
+  save(); renderFixedSchedule();
+  document.getElementById('fschLabel').value = '';
+  showToast(`"${label}" sabit programa eklendi`, 'success', 3000);
+}
+function deleteFixedSchedule(id) {
+  data.fixedSchedule = (data.fixedSchedule || []).filter(f => f.id !== id);
+  save(); renderFixedSchedule();
+  showToast('Silindi', 'info', 2500);
+}
+function toggleFixedSchedule(id) {
+  const f = (data.fixedSchedule || []).find(x => x.id === id);
+  if (!f) return;
+  f.enabled = f.enabled === false;
+  save(); renderFixedSchedule();
+}
+function setAutoShift(on) {
+  data.settings.autoShift = !!on;
+  save();
+  showToast(on ? 'Plan bozulunca kendisi toparlayacak' : 'Otomatik toparlama kapatıldı', on ? 'success' : 'info', 3000);
+}
+function setPlanWhen(v) {
+  data.settings.planWhen = (v === 'morning') ? 'morning' : 'evening';
+  save();
+  showToast(v === 'morning' ? 'Sabah 08:00\'de bugün planlanacak' : 'Akşam 21:00\'de yarın planlanacak', 'success', 3200);
+}
+
 function loadSettings() {
   document.getElementById('supaUrl').value = data.settings.supaUrl || '';
   document.getElementById('supaKey').value = data.settings.supaKey || '';
   const dn = document.getElementById('displayName');
   if (dn) dn.value = data.settings.displayName || '';
+  const ap = document.getElementById('autoPlanChk');
+  if (ap) ap.checked = data.settings.autoPlan !== false;
+  const pp = document.getElementById('planPingsChk');
+  if (pp) pp.checked = data.settings.planPings !== false;
+  const as = document.getElementById('autoShiftChk');
+  if (as) as.checked = data.settings.autoShift !== false;
+  const pw = document.getElementById('planWhenSel');
+  if (pw) pw.value = data.settings.planWhen === 'morning' ? 'morning' : 'evening';
+  renderFixedSchedule();
+  renderHevyStatus();
   if (data.settings.supaUrl && data.settings.supaKey) {
     initSupabase();
   } else {
@@ -2546,7 +2851,8 @@ function renderDailyScore() {
   const dow = new Date(t + 'T12:00:00').getDay();
   const supps = (data.reminders || []).filter(r => r.kind === 'supp' && r.enabled !== false && !(r.days === 'weekdays' && (dow === 0 || dow === 6)));
   const suppTaken = supps.filter(r => (r.takenLog || []).includes(t) || r.takenDate === t).length;
-  if (!mit.length && !kcal && !waterL && !pomo && !supps.length) { el.innerHTML = ''; return; }
+  const hevyOn = (data.settings.hevyKey || '').trim() || ((data.hevy || {}).workouts || []).length;
+  if (!mit.length && !kcal && !waterL && !pomo && !supps.length && !hevyOn) { el.innerHTML = ''; return; }
   const items = [
     { label: 'MIT', val: mit.length ? `${mitDone}/${mit.length}` : '–', on: mit.length > 0 && mitDone >= mit.length },
     { label: kcal ? `/${kcalGoal} kcal` : 'kcal', val: kcal ? String(kcal) : '–', on: kcal > 0 && kcal <= kcalGoal },
@@ -2554,6 +2860,11 @@ function renderDailyScore() {
     { label: 'odak', val: pomo ? `${pomo} seans` : '–', on: pomo > 0 }
   ];
   if (supps.length) items.push({ label: 'takviye', val: `${suppTaken}/${supps.length}`, on: suppTaken >= supps.length });
+  // Antrenman — sadece Hevy bağlıysa göster (bağlı değilse boş hücre kirliliği olmasın)
+  if ((data.settings.hevyKey || '').trim() || ((data.hevy || {}).workouts || []).length) {
+    const gym = trainedOn(t);
+    items.push({ label: 'antrenman', val: gym ? '✓' : '–', on: gym });
+  }
   el.innerHTML = `<div class="score-card">` + items.map(i =>
     `<div class="score-item${i.on ? ' on' : ''}"><span class="score-val">${i.val}</span><span class="score-label">${i.label}</span></div>`
   ).join('') + `</div>`;
@@ -3974,6 +4285,16 @@ restoreTimerState();
 renderCountdowns();
 renderSchool();
 maybeShowOnboarding();
+if (typeof initBlockActionBridge === 'function') initBlockActionBridge();
+// Hevy: uygulama açılışında sessiz senkron (6 saatte bir — kota ve pil dostu)
+setTimeout(() => {
+  try {
+    const h = data.hevy || {};
+    if ((data.settings.hevyKey || '').trim() && (!h.lastSync || Date.now() - h.lastSync > 6 * 3600 * 1000)) {
+      syncHevy(false);
+    }
+  } catch (e) {}
+}, 2500);
 
 // ============ AIDAN'A SOR — sohbet / düşünme ortağı ============
 const CHAT_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/chat';

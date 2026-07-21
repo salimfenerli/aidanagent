@@ -1,4 +1,4 @@
-const CACHE = 'aidan-v7-107';
+const CACHE = 'aidan-v7-111';
 const ASSETS = [
   '/',
   '/supabase.js',
@@ -28,14 +28,26 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Bildirime tıklayınca uygulamayı aç (varsa odakla, yoksa yeni pencere)
+// Bildirime tıklayınca uygulamayı aç (varsa odakla, yoksa yeni pencere).
+// Gün planı blok bildirimlerinde aksiyon da taşınır:
+//   - Aksiyon butonuna basıldıysa e.action dolu gelir (Android / masaüstü Chrome)
+//   - iOS PWA aksiyon butonu GÖSTERMEZ → bildirimin gövdesine tıklanır, e.action boş olur;
+//     bu durumda uygulama açılıp o bloğun aksiyon sayfası gösterilir (act='open')
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  const url = (e.notification.data && e.notification.data.url) || '/';
+  const d = e.notification.data || {};
+  const act = e.action || (d.blockId ? 'open' : '');
+  let url = d.url || '/';
+  if (d.blockId) url = '/?blk=' + encodeURIComponent(d.blockId) + '&act=' + encodeURIComponent(act);
+
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
       for (const c of clients) {
-        if ('focus' in c) return c.focus();
+        if ('focus' in c) {
+          // Uygulama zaten açıksa navigate yerine mesaj gönder (state kaybolmasın)
+          if (d.blockId) { try { c.postMessage({ type: 'BLOCK_ACTION', blockId: d.blockId, action: act }); } catch (err) {} }
+          return c.focus();
+        }
       }
       if (self.clients.openWindow) return self.clients.openWindow(url);
     })
@@ -49,6 +61,8 @@ self.addEventListener('push', e => {
     let body = 'Yeni hatırlatma';
     let tag = 'aidan-push';
     let url = '/';
+    let actions = undefined;
+    let blockId = null;
     let parseErr = null;
     if (e.data) {
       try {
@@ -57,6 +71,9 @@ self.addEventListener('push', e => {
         body = p.body || body;
         tag = p.tag || tag;
         url = (p.data && p.data.url) || url;
+        blockId = (p.data && p.data.blockId) || null;
+        // actions: max 2-3 buton gösterilir, desteklemeyen platformda sessizce yok sayılır
+        if (Array.isArray(p.actions) && p.actions.length) actions = p.actions.slice(0, 3);
       } catch (err) {
         parseErr = err && err.message;
         try { const t = e.data.text(); if (t) body = t; } catch (e2) { parseErr = (parseErr || '') + ' / text: ' + (e2 && e2.message); }
@@ -69,7 +86,8 @@ self.addEventListener('push', e => {
         badge: '/icon.png',
         tag,
         renotify: true,
-        data: { url }
+        actions,
+        data: { url, blockId }
       });
     } catch (err) {
       // Minimum güvenli fallback — iOS izin iptalini önler
