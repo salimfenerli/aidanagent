@@ -87,7 +87,7 @@ def upload_script(worker_js: str):
         "main_module": "worker.js",
         "compatibility_date": "2025-01-01",
         "bindings": [
-            {"type": "ai", "name": "AI"},
+            {"type": "inherit", "name": "GEMINI_API_KEY"},
             {"type": "inherit", "name": "SUPABASE_URL"},
             {"type": "inherit", "name": "SUPABASE_KEY"},
             {"type": "inherit", "name": "AIDAN_EMAIL"},
@@ -169,6 +169,7 @@ if __name__ == "__main__":
     secret_names = [
         "SUPABASE_URL", "SUPABASE_KEY", "AIDAN_EMAIL", "AIDAN_PASSWORD",
         "WEBHOOK_SECRET", "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY",
+        "GEMINI_API_KEY",
     ]
     for k in secret_names:
         v = os.environ.get(k, "")

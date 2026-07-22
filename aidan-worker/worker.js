@@ -20,7 +20,122 @@
  */
 
 const TR_OFFSET_MS = 3 * 60 * 60 * 1000;
-const AI_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+// ============================================================
+// AI PROVIDER — Google Gemini (Llama'nin yerine, Tem 2026)
+// Sozlesme CF env.AI.run ile AYNI: girdi {messages, tools?, max_tokens, temperature},
+// cikti { response: string, tool_calls?: [{name, arguments}] }. Boylece tum cagri
+// noktalari degismeden calisir. Parali modele gecis = env.GEMINI_MODEL ayarla.
+// ============================================================
+const GEMINI_MODEL_DEFAULT = 'gemini-3.5-flash'; // ucretsiz katman; env.GEMINI_MODEL ile ezilebilir (or. gemini-3.5-pro)
+function geminiModel(env) { return (env && env.GEMINI_MODEL) || GEMINI_MODEL_DEFAULT; }
+function geminiEndpoint(model) {
+  return 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';
+}
+
+// OpenAI-sekilli messages -> Gemini contents + systemInstruction
+function toGeminiContents(messages) {
+  const contents = [];
+  let sys = '';
+  for (const m of (messages || [])) {
+    if (!m) continue;
+    if (m.role === 'system') {
+      const t = typeof m.content === 'string' ? m.content : '';
+      sys = sys ? sys + '\n\n' + t : t;
+      continue;
+    }
+    const role = m.role === 'assistant' ? 'model' : 'user';
+    let parts;
+    if (typeof m.content === 'string') {
+      parts = [{ text: m.content }];
+    } else if (Array.isArray(m.content)) {
+      parts = m.content.map(pt => {
+        if (pt && pt.type === 'text') return { text: pt.text || '' };
+        if (pt && pt.type === 'image_url') {
+          const url = (pt.image_url && pt.image_url.url) || '';
+          const mm = /^data:(.*?);base64,(.*)$/.exec(url);
+          if (mm) return { inline_data: { mime_type: mm[1] || 'image/jpeg', data: mm[2] } };
+        }
+        return { text: '' };
+      });
+    } else {
+      parts = [{ text: String(m.content || '') }];
+    }
+    contents.push({ role, parts });
+  }
+  return { contents, sys };
+}
+
+// JSON Schema -> Gemini OpenAPI semasi (type BUYUK harf ister)
+function toGeminiSchema(sc) {
+  if (!sc || typeof sc !== 'object') return sc;
+  const out = {};
+  for (const k in sc) {
+    if (k === 'type' && typeof sc[k] === 'string') out.type = sc[k].toUpperCase();
+    else if (k === 'properties') {
+      out.properties = {};
+      for (const pr in sc.properties) out.properties[pr] = toGeminiSchema(sc.properties[pr]);
+    } else if (k === 'items') out.items = toGeminiSchema(sc.items);
+    else out[k] = sc[k];
+  }
+  return out;
+}
+
+function toGeminiTools(tools) {
+  if (!tools || !tools.length) return null;
+  const fns = tools.map(t => {
+    const f = (t && t.function) || t;
+    return {
+      name: f.name,
+      description: f.description || '',
+      parameters: f.parameters ? toGeminiSchema(f.parameters) : { type: 'OBJECT', properties: {} },
+    };
+  });
+  return [{ functionDeclarations: fns }];
+}
+
+// Ana cagri — Gemini generateContent. CF env.AI.run yerine bunu kullan.
+async function aiRun(env, opts) {
+  opts = opts || {};
+  const key = env && env.GEMINI_API_KEY;
+  if (!key) throw new Error('GEMINI_API_KEY tanimli degil - Worker secret ekle');
+  const conv = toGeminiContents(opts.messages);
+  const body = {
+    contents: conv.contents,
+    generationConfig: {
+      temperature: opts.temperature != null ? opts.temperature : 0.3,
+      // Gemini 3.x "dusunme" token'i cikis butcesini yiyebilir -> tavani yuksek tut (ucretsiz katman, maliyet yok)
+      maxOutputTokens: Math.max(opts.max_tokens || 512, 2048),
+    },
+  };
+  if (conv.sys) body.systemInstruction = { parts: [{ text: conv.sys }] };
+  const tools = toGeminiTools(opts.tools);
+  if (tools) body.tools = tools;
+  if (opts.json) body.generationConfig.responseMimeType = 'application/json';
+
+  const model = opts.model || geminiModel(env);
+  const resp = await fetch(geminiEndpoint(model) + '?key=' + encodeURIComponent(key), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    let errTxt = '';
+    try { errTxt = await resp.text(); } catch (_) {}
+    throw new Error('Gemini ' + resp.status + ': ' + errTxt.slice(0, 300));
+  }
+  const j = await resp.json();
+  const cand = j && j.candidates && j.candidates[0];
+  const parts = (cand && cand.content && cand.content.parts) || [];
+  let text = '';
+  const toolCalls = [];
+  for (const pp of parts) {
+    if (pp && typeof pp.text === 'string') text += pp.text;
+    if (pp && pp.functionCall) toolCalls.push({ name: pp.functionCall.name, arguments: pp.functionCall.args || {} });
+  }
+  const out = { response: text };
+  if (toolCalls.length) out.tool_calls = toolCalls;
+  return out;
+}
 
 // ============================================================
 // Zaman yardımcıları (Türkiye saati)
@@ -499,7 +614,7 @@ ${mitContext}${mitLines ? ':\n' + mitLines : ''}
 Bunlardan yola çıkarak ${name}'e 3-4 cümlelik kişisel sabah brifingi yaz. Madde imi YOK, akıcı paragraf.`;
 
   try {
-    const r = await env.AI.run(AI_MODEL, {
+    const r = await aiRun(env, {
       messages: [
         { role: 'system', content: sysPrompt },
         { role: 'user', content: context },
@@ -674,7 +789,7 @@ async function buildWeekly(env, data) {
 
   let aiComment = '';
   try {
-    const r = await env.AI.run(AI_MODEL, {
+    const r = await aiRun(env, {
       messages: [
         { role: 'system', content: "Sen Aidan'sın, Salim'in ADHD asistanı. Hafta sonu özetinde KISA (2-3 cümle), TÜRKÇE, samimi, övgü öncelikli ama somut bir yorum yaz. Önce başarı (sayıyla), sonra 1 ince öneri. ASLA yargılayıcı/eleştirel olma. ASLA İngilizce yazma. ADHD'li için her bitirilen iş zaferdir." },
         { role: 'user', content: `Bu haftanın özeti:\n${factsForAi}\n\nKısa hafta yorumu yaz (en fazla 3 cümle, sıcak ama somut).` },
@@ -1761,7 +1876,7 @@ async function aiInterpret(env, data, userText, userEmail) {
     { role: 'user', content: userText },
   ];
 
-  const r = await env.AI.run(AI_MODEL, {
+  const r = await aiRun(env, {
     messages,
     tools: TOOL_SCHEMAS,
     max_tokens: 512,
@@ -1924,7 +2039,7 @@ ${text}
 
 3-4 cümle sıcak akşam yansıması yaz. TÜRKÇE, samimi, yargısız.`;
 
-    const r = await env.AI.run(AI_MODEL, {
+    const r = await aiRun(env, {
       messages: [
         { role: 'system', content: sysPrompt },
         { role: 'user', content: userMsg },
@@ -2020,7 +2135,7 @@ KURALLAR:
 - Gerektiğinde sor, ama tek soruyla; cevabı boğma.
 ${ctx}`;
 
-    const r = await env.AI.run(AI_MODEL, {
+    const r = await aiRun(env, {
       messages: [{ role: 'system', content: sysPrompt }, ...msgs],
       max_tokens: 700,
       temperature: 0.5,
@@ -2109,7 +2224,7 @@ Görev: "Mutfağı topla"
 Görev: "Sunumu hazırla"
 → ["Konuyu bir cümleyle yaz","Ana 3 başlığı listele","İlk slaydı kur","Kalan slaytları doldur","Bir kez baştan oku"]`;
 
-    const r = await env.AI.run(AI_MODEL, {
+    const r = await aiRun(env, {
       messages: [
         { role: 'system', content: splitPrompt },
         { role: 'user', content: `Görev: ${text}\n\nKüçük adımlara böl. Sadece JSON dizisi döndür.` },
@@ -2230,7 +2345,7 @@ async function generatePlanBlocks(env, { tasks, from, to, now, busy, insight }) 
     : '';
   const userMsg = `Uyanık pencere: ${from} - ${to}.${now ? ` Şu an saat: ${now}.` : ''}${busyLine}${insight || ''}\n\nGörevler (indeks · metin · süre · etiketler):\n${taskLines}\n\nGünü saat saat planla. Sadece JSON dizisi döndür.`;
 
-    const r = await env.AI.run(AI_MODEL, {
+    const r = await aiRun(env, {
       messages: [
         { role: 'system', content: planPrompt },
         { role: 'user', content: userMsg },
@@ -2300,7 +2415,7 @@ GÖREVİN: 3-5 cümle TÜRKÇE betimleyici özet. Sadece görüneni tarif et.
 📝 ÖRNEK ÇIKTI (referans):
 "Portföyün ağırlığı THYAO'da (%57.6) — yumurtaların çoğu tek sepette ${name}. GARAN ve ASELS kalan kısmı paylaşıyor. Günü genel olarak +%1.2 ile artıda kapamışsın. Toplam getiriniz +%8.4 — başlangıca göre öndesin."`;
 
-    const r = await env.AI.run(AI_MODEL, {
+    const r = await aiRun(env, {
       messages: [
         { role: 'system', content: pfPrompt },
         { role: 'user', content: `Portföy rakamları (PWA'dan, doğrulanmış):\n${facts}\n\nBetimleyici 3-5 cümlelik özet yaz. TÜRKÇE, tarafsız, karar verme.` },
@@ -2619,7 +2734,7 @@ async function handleStockNewsApi(request, env) {
     const sysP = `Her haber başlığını bir hisse yatırımcısı gözünden duyguya göre sınıfla: "pos" (olumlu/iyi gelişme), "neg" (olumsuz/kötü gelişme), "neu" (nötr/belirsiz). SADECE bir JSON dizi döndür; her eleman {"i":sira,"s":"pos|neg|neu"}. Açıklama, metin, İngilizce cümle YOK.`;
     const userM = headlines.map((h, i) => `${i + 1}. ${h}`).join('\n');
     try {
-      const r = await env.AI.run(AI_MODEL, {
+      const r = await aiRun(env, {
         messages: [{ role: 'system', content: sysP }, { role: 'user', content: userM }],
         max_tokens: 300, temperature: 0.1,
       });
@@ -2660,7 +2775,7 @@ TON: kısa, net, haber bülteni dili. Son cümle: "Bu sadece haber özeti — ya
     const userMsg = `${symbol} ile ilgili son haber başlıkları:\n${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}\n\nBunları 3-5 cümlelik tarafsız Türkçe özete dök.`;
 
     try {
-      const r = await env.AI.run(AI_MODEL, {
+      const r = await aiRun(env, {
         messages: [
           { role: 'system', content: sysPrompt },
           { role: 'user', content: userMsg },
@@ -2806,7 +2921,7 @@ ${signalsBlock}
 Bu verileri 5-8 cümlelik tarafsız teknik özete dök. ADX'in trend gücünü, Stochastic'in RSI ile uyumunu/diverjansını, EMA9/21 kesişimini ve pivot konumunu özetle. HER bahsettiğin göstergenin ne anlama geldiğini kısaca açıkla (${name} öğreniyor). Tavsiye YOK, gelecek tahmini YOK.`;
 
   try {
-    const r = await env.AI.run(AI_MODEL, {
+    const r = await aiRun(env, {
       messages: [
         { role: 'system', content: sysPrompt },
         { role: 'user', content: userMsg },
@@ -2910,7 +3025,7 @@ ${lines}
 Bu verileri 4-7 cümlelik tarafsız taktik özete dök. Geçen göstergelerin ne anlama geldiğini kısaca açıkla (${name} öğreniyor). Hangisi alınır/satılır YOK.`;
 
   try {
-    const r = await env.AI.run(AI_MODEL, {
+    const r = await aiRun(env, {
       messages: [
         { role: 'system', content: sysPrompt },
         { role: 'user', content: userMsg },
@@ -3029,7 +3144,7 @@ ${taskLines}
 Bunlardan TEK bir tanesini ${name}'e öner. SADECE JSON döndür.`;
 
   try {
-    const r = await env.AI.run(AI_MODEL, {
+    const r = await aiRun(env, {
       messages: [
         { role: 'system', content: sysPrompt },
         { role: 'user', content: userMsg },
@@ -3234,8 +3349,7 @@ async function handleSignupApi(request, env) {
 // Kullanıcı aracı kurum uygulamasının portföy ekranının fotoğrafını atar,
 // vision modeli sembol + adet + ortalama maliyet + piyasayı okur, JSON döner.
 // ============================================================
-const VISION_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct';       // yeni: dogustan multimodal, daha iyi OCR + Turkce
-const VISION_FALLBACK = '@cf/meta/llama-3.2-11b-vision-instruct';     // eski: Llama 4 patlarsa geri dus (5016 lisansli)
+// Vision artik Gemini multimodal uzerinden (visionRun -> aiRun). Ayri model sabiti yok.
 
 // base64 string → byte array (vision modeli image: number[] bekler)
 function base64ToBytes(b64) {
@@ -3467,7 +3581,7 @@ async function handleClassroomImageApi(request, env) {
       'SADECE geçerli bir JSON dizisi döndür, başka metin yazma. Ödev yoksa [].',
     ].join('\n');
     try {
-      const r = await env.AI.run(AI_MODEL, {
+      const r = await aiRun(env, {
         messages: [{ role: 'system', content: sys }, { role: 'user', content: String(transcript).slice(0, 6000) }],
         max_tokens: 1024, temperature: 0.1,
       });
@@ -3570,7 +3684,7 @@ async function handleDietPlanImageApi(request, env) {
       'SADECE geçerli bir JSON dizisi döndür, başka metin yazma. Yemek yoksa [].',
     ].join('\n');
     try {
-      const r = await env.AI.run(AI_MODEL, {
+      const r = await aiRun(env, {
         messages: [{ role: 'system', content: sys }, { role: 'user', content: String(transcript).slice(0, 6000) }],
         max_tokens: 1024, temperature: 0.1,
       });
@@ -3938,7 +4052,7 @@ SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
 Örnek: "4 yumurta 2 dilim ekmek 1 kase pilav" -> {"items":[{"name":"yumurta","en":"egg cooked","grams":200,"kcal":310,"protein":26,"carb":2,"fat":22},{"name":"ekmek","en":"white bread","grams":50,"kcal":133,"protein":4,"carb":25,"fat":1},{"name":"pilav","en":"cooked white rice","grams":150,"kcal":195,"protein":4,"carb":42,"fat":0}]}
 Örnek: "60 gram pirinç" -> {"items":[{"name":"pirinç","en":"raw white rice","grams":60,"kcal":216,"protein":4,"carb":47,"fat":1}]}
 Örnek: "200 gram tavuk" -> {"items":[{"name":"çiğ tavuk","en":"chicken breast raw","grams":200,"kcal":240,"protein":46,"carb":0,"fat":5}]}`;
-    const r = await env.AI.run(AI_MODEL, {
+    const r = await aiRun(env, {
       messages: [
         { role: 'system', content: sys },
         { role: 'user', content: query },
@@ -3996,39 +4110,20 @@ async function visionRun(env, input) {
   const prompt = (input && input.prompt) || '';
   const maxTok = (input && input.max_tokens) || 1024;
   const bytes = input && input.image;
-
-  // --- Önce Llama 4 Scout ---
-  if (bytes && bytes.length) {
-    try {
-      const b64 = bytesToBase64(bytes);
-      const r = await env.AI.run(VISION_MODEL, {
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + b64 } },
-          ],
-        }],
-        max_tokens: maxTok,
-        temperature: 0.1,
-      });
-      const rr = r && (r.response != null ? r.response : (r.text != null ? r.text : r.description));
-      if (rr != null && String(rr).trim()) return r; // Llama 4 okudu → dön
-    } catch (_) { /* Llama 4 patladı → fallback'e düş */ }
-  }
-
-  // --- Fallback: Llama 3.2 Vision (byte dizisi + 5016 lisans) ---
-  const legacy = { image: bytes, prompt, max_tokens: maxTok };
-  try {
-    return await env.AI.run(VISION_FALLBACK, legacy);
-  } catch (e) {
-    const msg = String(e && e.message || '');
-    if (msg.includes('5016') || /submit the prompt .?agree/i.test(msg)) {
-      try { await env.AI.run(VISION_FALLBACK, { prompt: 'agree' }); } catch (_) {}
-      return await env.AI.run(VISION_FALLBACK, legacy); // lisans kabul edildi, tekrar dene
-    }
-    throw e;
-  }
+  if (!bytes || !bytes.length) throw new Error('gorsel verisi yok');
+  const b64 = bytesToBase64(bytes);
+  // Gemini multimodal — OCR + Turkce, tek cagri (donus { response } sozlesmesi korunur)
+  return await aiRun(env, {
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'text', text: prompt },
+        { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + b64 } },
+      ],
+    }],
+    max_tokens: maxTok,
+    temperature: 0.1,
+  });
 }
 
 // Borsa alarm cron — watchlist fiyatlarını kontrol et, eşik geçildiyse push (her user için)
