@@ -1333,9 +1333,6 @@ function buildTacticalSignals(ta) {
     else if (ta.rsi <= 30) out.push(`RSI ${ta.rsi} — aşırı satım bölgesinde`);
     else out.push(`RSI ${ta.rsi} — nötr bölgede`);
   }
-  if (ta.stoch != null) {
-    out.push(`Stochastic %K ${ta.stoch.k} / %D ${ta.stoch.d} — ${ta.stochZone}`);
-  }
   if (ta.adx != null) {
     out.push(`ADX ${ta.adx} — ${ta.adxZone}`);
   }
@@ -1345,29 +1342,15 @@ function buildTacticalSignals(ta) {
   } else if (ta.sma20 != null && ta.current) {
     out.push(ta.current >= ta.sma20 ? 'Fiyat SMA20 üzerinde' : 'Fiyat SMA20 altında');
   }
-  if (ta.ema9 != null && ta.ema21 != null) {
-    out.push(ta.ema9 > ta.ema21
-      ? 'EMA9 > EMA21 — kısa vade momentum yukarı eğilimli'
-      : 'EMA9 < EMA21 — kısa vade momentum aşağı eğilimli');
-  }
   if (ta.macd) {
     out.push(ta.macd.histogram >= 0
       ? `MACD histogram pozitif (${ta.macd.histogram}) — momentum yukarı eğilimli`
       : `MACD histogram negatif (${ta.macd.histogram}) — momentum aşağı eğilimli`);
   }
-  if (ta.bb && ta.current) {
-    out.push(`Bollinger: fiyat ${ta.bbPosition}`);
-  }
-  if (ta.obv && ta.obv.trend && ta.obv.trend !== 'belirsiz') {
-    out.push(`OBV hacim akışı ${ta.obv.trend} eğilimde`);
-  }
   if (ta.volRatio != null && ta.volRatio >= 1.4) {
     out.push(`Hacim ortalamanın ${ta.volRatio}× üzerinde — hareketli seans`);
   } else if (ta.volRatio != null && ta.volRatio <= 0.6) {
     out.push(`Hacim düşük (${ta.volRatio}× ortalama) — sakin seans`);
-  }
-  if (ta.pivots && ta.current && ta.pivotZone && ta.pivotZone !== '—') {
-    out.push(`Pivot: fiyat ${ta.pivotZone} (PP ${ta.pivots.pp})`);
   }
   if (ta.sr && ta.current) {
     const nearSup = ta.sr.support && Math.abs(ta.current - ta.sr.support) / ta.current < 0.02;
@@ -1390,17 +1373,11 @@ function renderStockTA(ta, cur) {
   const obvCls = ta.obv == null ? '' : (ta.obv.trend === 'yukarı' ? 'up' : ta.obv.trend === 'aşağı' ? 'down' : '');
   const cells = [
     { lbl: 'RSI (14)', val: ta.rsi != null ? ta.rsi.toFixed(1) : '—', sub: ta.rsiZone, cls: ta.rsi != null ? (ta.rsi >= 70 ? 'warn' : (ta.rsi <= 30 ? 'down' : '')) : '' },
-    { lbl: 'Stoch %K/%D', val: ta.stoch ? `${ta.stoch.k} / ${ta.stoch.d}` : '—', sub: ta.stochZone, cls: stochCls },
     { lbl: 'ADX (14)', val: ta.adx != null ? ta.adx.toFixed(1) : '—', sub: ta.adxZone, cls: adxCls },
     { lbl: 'SMA 20', val: fmt(ta.sma20), sub: ta.priceVsSma20, cls: ta.sma20 != null && ta.current >= ta.sma20 ? 'up' : (ta.sma20 != null ? 'down' : '') },
     { lbl: 'SMA 50', val: fmt(ta.sma50), sub: cur, cls: '' },
-    { lbl: 'EMA 9 / 21', val: ta.ema9 != null ? fmt(Math.round(ta.ema9 * 100) / 100) : '—', sub: emaCross, cls: ta.ema9 != null && ta.ema21 != null ? (ta.ema9 > ta.ema21 ? 'up' : 'down') : '' },
     { lbl: 'MACD', val: ta.macd ? ta.macd.histogram.toFixed(2) : '—', sub: ta.macd ? `çizgi ${ta.macd.line}` : 'yetersiz veri', cls: ta.macd && ta.macd.histogram >= 0 ? 'up' : 'down' },
-    { lbl: 'Bollinger', val: ta.bb ? fmt(ta.bb.mid) : '—', sub: ta.bbPosition, cls: '' },
     { lbl: 'ATR %', val: ta.atrPct != null ? ta.atrPct + '%' : '—', sub: 'volatilite', cls: ta.atrPct > 3 ? 'warn' : '' },
-    { lbl: 'OBV', val: ta.obv ? ta.obv.trend : '—', sub: 'hacim akışı', cls: obvCls },
-    { lbl: 'Pivot PP', val: ta.pivots ? fmt(ta.pivots.pp) : '—', sub: ta.pivotZone, cls: '' },
-    { lbl: 'R1 / S1', val: ta.pivots ? `${fmt(ta.pivots.r1)} / ${fmt(ta.pivots.s1)}` : '—', sub: 'pivot', cls: '' },
     { lbl: 'Destek', val: fmt(ta.sr?.support), sub: '20 periyot', cls: '' },
     { lbl: 'Direnç', val: fmt(ta.sr?.resistance), sub: '20 periyot', cls: '' },
     { lbl: 'Hacim', val: ta.volRatio != null ? ta.volRatio + '×' : '—', sub: 'son/ort', cls: ta.volRatio >= 1.4 ? 'warn' : '' },
