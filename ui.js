@@ -2833,7 +2833,103 @@ function formatTrDate(dateStr) {
 
 // ============ 🧩 GÜNLÜK SKOR (modüller arası: MIT + kalori + su + odak) ============
 // Görevler tabının üstünde tek satır kart — dört modülün bugünkü durumu. Veri yoksa gizli.
+// ===== 😴 UYKU KARTI (v7-113) — sabah tek dokunuş giriş, sonra slim özet ===== 
+const SLEEP_MOON = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>';
+const SLEEP_QLABEL = { bad: 'Kötü', ok: 'Orta', good: 'İyi' };
+function sleepDetailFormHtml(rec) {
+  const bt = (rec && rec.bedtime) || '';
+  const wk = (rec && rec.wake) || '';
+  return `<div class="sleep-detail">
+      <label>Yattım <input type="time" id="sleepBed" value="${bt}"></label>
+      <label>Kalktım <input type="time" id="sleepWake" value="${wk}"></label>
+      <button class="sleep-detail-save" onclick="saveSleepDetail()">Kaydet</button>
+    </div>`;
+}
+function sleepSummaryHtml(rec) {
+  const hStr = rec.hours != null ? fmtSleepHours(rec.hours) : '';
+  const q = rec.quality || null;
+  const main = hStr || (q ? SLEEP_QLABEL[q] : 'Kaydedildi');
+  const dots = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = shiftDateStr(today(), -i);
+    const s = (data.sleep || []).find(x => x.date === d);
+    let cls = '';
+    if (s) {
+      if (s.quality) cls = s.quality;
+      else if (s.hours != null) cls = s.hours >= 7 ? 'good' : s.hours >= 6 ? 'ok' : 'bad';
+    }
+    dots.push(`<span class="sleep-dot ${cls}"></span>`);
+  }
+  const st = (typeof sleepStats === 'function') ? sleepStats() : { avg: null };
+  const avgStr = (st.avg != null && st.count >= 2) ? `ort. ${fmtSleepHours(Math.round(st.avg * 100) / 100)}` : '';
+  const qBadge = q ? `<span class="sleep-sum-q ${q}">${hStr ? '· ' : ''}${SLEEP_QLABEL[q]}</span>` : '';
+  return `<div class="sleep-summary" onclick="editSleep()" title="Düzenle">
+      ${SLEEP_MOON}
+      <span class="sleep-sum-main">${escapeHtml(main)}</span>
+      ${qBadge}
+      <span class="sleep-dots">${dots.join('')}${avgStr ? `<span class="sleep-avg">${avgStr}</span>` : ''}</span>
+    </div>`;
+}
+function renderSleepCard() {
+  const el = document.getElementById('sleepCard');
+  if (!el) return;
+  if (typeof ensureSleep === 'function') ensureSleep();
+  const t = today();
+  const rec = (data.sleep || []).find(s => s.date === t);
+  const hour = new Date().getHours();
+  const editing = el.dataset.editing === '1';
+  const logged = rec && (rec.quality || rec.hours != null);
+  // Girilmediyse sadece 15:00'e kadar sor — ADHD: geç saatte nag yok
+  if (!logged && hour >= 15 && !editing) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'block';
+  el.className = 'sleep-card';
+  if (logged && !editing) { el.innerHTML = sleepSummaryHtml(rec); return; }
+  const detailOpen = el.dataset.detail === '1' || (rec && (rec.bedtime || rec.wake));
+  const qsel = q => (rec && rec.quality === q) ? ' sel' : '';
+  el.innerHTML = `<div class="sleep-prompt-row">
+      <span class="sleep-q">${SLEEP_MOON} Bu gece nasıl uyudun?</span>
+      <span class="sleep-chips">
+        <button class="sleep-chip bad${qsel('bad')}" onclick="logSleepQuick('bad')">Kötü</button>
+        <button class="sleep-chip ok${qsel('ok')}" onclick="logSleepQuick('ok')">Orta</button>
+        <button class="sleep-chip good${qsel('good')}" onclick="logSleepQuick('good')">İyi</button>
+      </span>
+    </div>
+    <button class="sleep-detail-toggle" onclick="toggleSleepDetail()">${detailOpen ? 'saat detayını gizle' : '+ saat gir (yatış / kalkış)'}</button>
+    ${detailOpen ? sleepDetailFormHtml(rec) : ''}`;
+}
+function logSleepQuick(quality) {
+  const bed = (document.getElementById('sleepBed') || {}).value || null;
+  const wake = (document.getElementById('sleepWake') || {}).value || null;
+  logSleep(today(), { quality, bedtime: bed, wake });
+  const el = document.getElementById('sleepCard'); if (el) { el.dataset.detail = ''; el.dataset.editing = ''; }
+  if (typeof renderDailyScore === 'function') renderDailyScore(); else renderSleepCard();
+  showToast('Uyku kaydedildi', 'success', 1600);
+}
+function toggleSleepDetail() {
+  const el = document.getElementById('sleepCard'); if (!el) return;
+  el.dataset.detail = el.dataset.detail === '1' ? '' : '1';
+  renderSleepCard();
+}
+function saveSleepDetail() {
+  const bed = (document.getElementById('sleepBed') || {}).value || null;
+  const wake = (document.getElementById('sleepWake') || {}).value || null;
+  if (!bed || !wake) { showToast('Yatış ve kalkış saatini gir', 'warning', 2500); return; }
+  const h = sleepHours(bed, wake);
+  if (h == null) { showToast('Saatler geçersiz görünüyor — kontrol et', 'warning', 2800); return; }
+  const cur = (data.sleep || []).find(s => s.date === today());
+  logSleep(today(), { bedtime: bed, wake, quality: cur ? cur.quality : null });
+  const el = document.getElementById('sleepCard'); if (el) { el.dataset.detail = ''; el.dataset.editing = ''; }
+  if (typeof renderDailyScore === 'function') renderDailyScore(); else renderSleepCard();
+  showToast(`Uyku: ${fmtSleepHours(h)}`, 'success', 2000);
+}
+function editSleep() {
+  const el = document.getElementById('sleepCard'); if (!el) return;
+  el.dataset.editing = '1';
+  renderSleepCard();
+}
+
 function renderDailyScore() {
+  if (typeof renderSleepCard === 'function') renderSleepCard();
   if (typeof renderAidanNote === 'function') renderAidanNote();
   const el = document.getElementById('dailyScore');
   if (!el) return;
@@ -2905,6 +3001,13 @@ function aidanNoteLine() {
   if (cds.length) {
     const c = cds[0]; const when = c.d === 0 ? 'bugün' : (c.d === 1 ? 'yarın' : '2 gün sonra');
     return { tone: 'warn', text: `${c.label || 'Yaklaşan tarih'} ${when} — hazırlık zamanı` };
+  }
+
+  // 3. Kötü/az uyku — bugünü hafiflet (sabah/öğlen)
+  if (typeof lastNightSleep === 'function') {
+    const sl = lastNightSleep();
+    if (sl && (sl.quality === 'bad' || (sl.hours != null && sl.hours < 6)) && hour >= 6 && hour < 16)
+      return { tone: 'info', text: `Az/kötü uyumuşsun — bugünü hafif tut, en önemli 1-2 şeye odaklan` };
   }
 
   // 3. MIT seçili ama öğleden sonra hâlâ hiç bitmemiş

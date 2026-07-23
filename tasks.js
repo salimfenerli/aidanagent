@@ -754,6 +754,19 @@ function deadlineLines(forDate) {
   return `\n\n⏳ YAKLAŞAN SINAV / TESLİM:\n${lines.join('\n')}\nBu tarihlere hazırlık gerektiren görevleri güne ÖNCE koy.`;
 }
 
+// 😴 Dün geceki uyku → bugünün planına enerji ipucu (sadece bugün için bilinir)
+function sleepLine(forDate) {
+  if (forDate !== today() || typeof lastNightSleep !== 'function') return '';
+  const sl = lastNightSleep();
+  if (!sl) return '';
+  const bad = sl.quality === 'bad' || (sl.hours != null && sl.hours < 6);
+  const great = sl.quality === 'good' && (sl.hours == null || sl.hours >= 7.5);
+  const hStr = sl.hours != null ? fmtSleepHours(sl.hours) + ' ' : '';
+  if (bad) return `\n\n😴 Bu kişi dün gece ${hStr}kötü/az uyudu — enerji düşük. Bugün daha AZ ve KISA blok koy, ağır işi en verimli saate al, güne fazladan 20-30 dk tampon bırak. Zorlamayan bir gün kur.`;
+  if (great) return `\n\n😴 Bu kişi dün gece iyi dinlendi — enerji yüksek. Zorlu/derin işleri güne rahatça koyabilirsin.`;
+  return '';
+}
+
 // Plan panelinde "Aidan neye göre planlıyor" şeffaflık satırı
 function renderPlanInsight() {
   const el = document.getElementById('planInsight');
@@ -973,7 +986,7 @@ async function planMyDay() {
   });
   if (data.dayPlan && data.dayPlan.date && data.dayPlan.date !== today()) archivePlanDay(data.dayPlan);
   const prof = planProfile();
-  const insight = profileLines(prof) + deadlineLines(today()) + gymDayLine(today());
+  const insight = profileLines(prof) + deadlineLines(today()) + gymDayLine(today()) + sleepLine(today());
   const fixed = fixedBlocksForDate(today());
   const btn = document.getElementById('planAiBtn');
   if (btn) btn.disabled = true;

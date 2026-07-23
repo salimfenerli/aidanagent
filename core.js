@@ -73,6 +73,56 @@ function ensureDiet() {
   d.customFoods = d.customFoods || [];  // kendi besinlerim: [{id,name,unit,kcal,protein,carb,fat}]
   d.recipes = d.recipes || [];          // öğün paketi/tarif: [{id,name,slot,items:[{name,kcal,protein,carb,fat}]}]
 }
+// ===== 😴 UYKU TAKİBİ (v7-113) — kural tabanlı, plana bağlanır =====
+// data.sleep = [{date:'YYYY-MM-DD', bedtime:'HH:MM'|null, wake:'HH:MM'|null, hours:Number|null, quality:'bad'|'ok'|'good'}]
+// date = UYANILAN sabah → "dün gece"nin uykusu bugüne yazılır. Son 60 gün tutulur.
+function ensureSleep() { data.sleep = data.sleep || []; return data.sleep; }
+function sleepFor(date) { return ensureSleep().find(s => s.date === date) || null; }
+function hmToMinSafe(hm) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec((hm || '').trim());
+  if (!m) return null;
+  const h = +m[1], mi = +m[2];
+  if (h > 23 || mi > 59) return null;
+  return h * 60 + mi;
+}
+// Yatış→kalkış saat farkı (gece yarısını aşarsa +24). Geçersiz/aşırı ise null.
+function sleepHours(bedtime, wake) {
+  if (!bedtime || !wake) return null;
+  const bm = hmToMinSafe(bedtime), wm = hmToMinSafe(wake);
+  if (bm == null || wm == null) return null;
+  let diff = wm - bm;
+  if (diff <= 0) diff += 1440;          // 23:30 → 07:00 = gece yarısı geçişi
+  if (diff > 16 * 60) return null;      // 16 saatten fazla = hatalı giriş
+  return Math.round((diff / 60) * 100) / 100;
+}
+// Kaydet/güncelle (upsert). quality veya saat — en az biri anlamlı olmalı.
+function logSleep(date, opts) {
+  opts = opts || {};
+  ensureSleep();
+  const bedtime = opts.bedtime || null, wake = opts.wake || null;
+  const hours = sleepHours(bedtime, wake);
+  const cur = sleepFor(date);
+  const quality = opts.quality || (cur && cur.quality) || null;
+  const rec = { date, bedtime, wake, hours: hours != null ? hours : (cur ? cur.hours : null), quality };
+  if (cur) Object.assign(cur, rec); else data.sleep.push(rec);
+  data.sleep = data.sleep.filter(s => s && s.date).sort((a, b) => a.date < b.date ? 1 : -1).slice(0, 60);
+  save();
+}
+// Son 7 gecenin ortalama saati (trend/şeffaflık için)
+function sleepStats() {
+  const list = ensureSleep().filter(s => s.hours != null);
+  const last7 = list.filter(s => s.date >= shiftDateStr(today(), -6));
+  const avg = last7.length ? last7.reduce((a, s) => a + s.hours, 0) / last7.length : null;
+  return { avg, count: last7.length };
+}
+function lastNightSleep() { return sleepFor(today()); }
+// Saat ondalığını "7s 30dk" formatına
+function fmtSleepHours(h) {
+  if (h == null) return '';
+  const hh = Math.floor(h), mm = Math.round((h - hh) * 60);
+  return mm ? `${hh}s ${mm}dk` : `${hh}s`;
+}
+
 // Seçili diyet günü (varsayılan bugün). _dietDate ile geçmiş günlere gezilir.
 let _dietDate = null;
 function dietKey() { return _dietDate || today(); }

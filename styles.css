@@ -3358,6 +3358,34 @@
 .aidan-note.good .an-icon { color: #34c759; opacity: 1; }
 .aidan-note.info .an-icon { color: var(--secondary, #f5a524); }
 
+/* ===== 😴 UYKU KARTI (v7-113) ===== */
+.sleep-card { display: flex; flex-direction: column; gap: 9px; margin: 0 0 12px; padding: 11px 13px; border-radius: 12px; border: 1px solid var(--border-soft); background: var(--surface); }
+.sleep-prompt-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.sleep-q { font-size: 0.86rem; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.sleep-q .icon { width: 17px; height: 17px; opacity: 0.85; }
+.sleep-chips { display: flex; gap: 6px; margin-left: auto; }
+.sleep-chip { border: 1px solid var(--border); background: var(--surface-2); color: var(--text); border-radius: 9px; padding: 5px 12px; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: background .18s ease-out, border-color .18s ease-out; }
+.sleep-chip:hover { border-color: var(--accent); }
+.sleep-chip.bad.sel { background: rgba(239,68,68,.14); border-color: rgba(239,68,68,.4); color: #ff8f8f; }
+.sleep-chip.ok.sel { background: rgba(245,165,36,.14); border-color: rgba(245,165,36,.4); color: #fbbf5a; }
+.sleep-chip.good.sel { background: rgba(52,199,89,.14); border-color: rgba(52,199,89,.4); color: #6fe08a; }
+.sleep-detail-toggle { align-self: flex-start; background: none; border: none; color: var(--text-muted); font-size: 0.76rem; cursor: pointer; padding: 2px 0; text-decoration: underline; text-underline-offset: 2px; }
+.sleep-detail { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sleep-detail label { font-size: 0.76rem; color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+.sleep-detail input[type="time"] { background: var(--surface-2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 4px 7px; font-size: 0.82rem; }
+.sleep-detail-save { background: var(--accent-tint, rgba(245,165,36,.16)); border: 1px solid rgba(245,165,36,.4); color: var(--accent); border-radius: 8px; padding: 5px 12px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+.sleep-summary { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.sleep-summary .icon { width: 17px; height: 17px; opacity: 0.85; flex: 0 0 auto; }
+.sleep-sum-main { font-size: 0.88rem; color: var(--text-strong); font-weight: 700; font-variant-numeric: tabular-nums; }
+.sleep-sum-q { font-size: 0.8rem; font-weight: 600; }
+.sleep-sum-q.bad { color: #ff8f8f; } .sleep-sum-q.ok { color: #fbbf5a; } .sleep-sum-q.good { color: #6fe08a; }
+.sleep-dots { display: flex; gap: 3px; margin-left: auto; align-items: center; }
+.sleep-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border-soft); border: 1px solid var(--border); flex: 0 0 auto; }
+.sleep-dot.bad { background: #ef4444; border-color: #ef4444; }
+.sleep-dot.ok { background: #f5a524; border-color: #f5a524; }
+.sleep-dot.good { background: #34c759; border-color: #34c759; }
+.sleep-avg { font-size: 0.74rem; color: var(--text-muted); margin-left: 6px; white-space: nowrap; }
+
 /* 🎓 Classroom görselinden ödev */
 .school-classroom { margin: 4px 0 12px; }
 .school-classroom-btn { display: inline-flex; align-items: center; gap: 7px; width: 100%; justify-content: center; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border-soft); background: var(--surface); color: var(--text-strong); font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: background .18s ease, border-color .18s ease; }

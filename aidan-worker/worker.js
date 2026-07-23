@@ -4598,6 +4598,20 @@ function deadlineLines(data, forDate) {
   return `\n\n⏳ YAKLAŞAN SINAV / TESLİM:\n${lines.join('\n')}\nBu tarihlere hazırlık gerektiren görevleri güne ÖNCE ve yüksek-enerji saatine koy.`;
 }
 
+// 😴 Dün geceki uyku → bugünün planına enerji ipucu. Sadece BUGÜN için son gece bilinir
+// (akşam yarını planlarken uyku henüz olmadı → boş döner).
+function sleepLine(data, forDate) {
+  if (forDate !== trToday()) return '';
+  const sl = (data.sleep || []).find(s => s.date === forDate);
+  if (!sl) return '';
+  const bad = sl.quality === 'bad' || (sl.hours != null && sl.hours < 6);
+  const great = sl.quality === 'good' && (sl.hours == null || sl.hours >= 7.5);
+  const hStr = sl.hours != null ? `${sl.hours} saat ` : '';
+  if (bad) return `\n\n😴 Bu kişi dün gece ${hStr}kötü/az uyudu — enerji düşük. Bugün daha AZ ve KISA blok koy, ağır işi en verimli saate al, güne fazladan 20-30 dk tampon bırak.`;
+  if (great) return `\n\n😴 Bu kişi dün gece iyi dinlendi — zorlu/derin işleri güne rahatça koyabilirsin.`;
+  return '';
+}
+
 async function runAutoPlan(env, opts = {}) {
   const users = await fetchAllUsers(env);
   const results = [];
@@ -4649,7 +4663,7 @@ async function runAutoPlanForUser(env, u, opts = {}) {
     tasks, from, to,
     now: '', // ileri tarih planlanabilir — "su an" kisiti yok
     busy: fixed.map(f => ({ label: f.label, start: f.start, end: f.end })),
-    insight: profileLines(prof) + deadlineLines(data, forDate) + gymDayLine(data, forDate),
+    insight: profileLines(prof) + deadlineLines(data, forDate) + gymDayLine(data, forDate) + sleepLine(data, forDate),
   });
 
   let blocks = (raw || []).map(b => {
