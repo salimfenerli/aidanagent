@@ -81,7 +81,7 @@ CRON_LIST = [
 
 def upload_script(worker_js: str):
     url = f"{API}/accounts/{ACCOUNT}/workers/scripts/{SCRIPT_NAME}"
-    # bindings: AI binding ŞART (env.AI.run için) + secret'ları inherit ile koru.
+    # bindings: AI binding (eski CF Llama'dan kalma, artık kullanılmıyor ama zararsız) + secret'ları inherit ile koru.
     # inherit = önceki Worker versiyonundaki secret'ı aynen tut (değer GitHub Actions env'inde olmasa bile kaybolmaz).
     metadata = {
         "main_module": "worker.js",

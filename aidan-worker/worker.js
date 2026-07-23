@@ -1,8 +1,8 @@
 /**
  * Aidan Cloudflare Worker
  * - Cron: günlük brifingler + borsa alarmı + akşam portföy özeti + sabit hatırlatıcılar → web push
- * - PWA AI/journal/split/portföy-yorum endpoint'leri (Llama 3.3 70B + Vision)
- * - Yahoo Finance proxy + portföy görsel okuma (Llama 3.2 Vision)
+ * - PWA AI/journal/split/portföy-yorum endpoint'leri (Google Gemini)
+ * - Yahoo Finance proxy + portföy görsel okuma (Gemini multimodal)
  *
  * Environment variables (Cloudflare → Worker → Settings → Variables):
  *   SUPABASE_URL          — https://xxxxx.supabase.co
@@ -2058,7 +2058,7 @@ ${text}
 }
 
 // Aidan'a sor — sohbet endpoint'i (POST {messages:[...]} → AI sohbet cevabı, tool YOK).
-// Düşünme/planlama ortağı: görev EKLEMEZ, sadece konuşur. Llama 3.3 70B.
+// Düşünme/planlama ortağı: görev EKLEMEZ, sadece konuşur. Gemini.
 async function handleChatApi(request, env) {
   const cors = {
     'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
@@ -2168,7 +2168,7 @@ function extractStepsJson(raw) {
     .slice(0, 6);
 }
 
-// Görevi küçük adımlara böl (ADHD task initiation) — Llama, tool YOK, JSON dizi döner
+// Görevi küçük adımlara böl (ADHD task initiation) — Gemini, tool YOK, JSON dizi döner
 async function handleSplitApi(request, env) {
   const cors = {
     'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
@@ -2265,7 +2265,7 @@ function extractPlanJson(raw) {
     .slice(0, 24);
 }
 
-// 📅 Gün planlayıcı — görevler + uyanık pencere → saat saat blok dizisi. Llama, tool YOK.
+// 📅 Gün planlayıcı — görevler + uyanık pencere → saat saat blok dizisi. Gemini, tool YOK.
 async function handlePlanApi(request, env) {
   const cors = {
     'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
@@ -2942,7 +2942,7 @@ Bu verileri 5-8 cümlelik tarafsız teknik özete dök. ADX'in trend gücünü, 
 // ============================================================
 // 📊 Portföy teknik özet — tüm pozisyonların TA snapshot'unu betimleyici özetler
 // PWA her hisse için kendi /stock-history + computeStockTA çağırır, sonuçları (facts)
-// burada toplar → Llama'ya verir. Tek hisse /stock-analysis ile aynı no-advice kuralı.
+// burada toplar → Gemini'ye verir. Tek hisse /stock-analysis ile aynı no-advice kuralı.
 // ============================================================
 async function handlePortfolioTechnicalApi(request, env) {
   const cors = {
@@ -3043,7 +3043,7 @@ Bu verileri 4-7 cümlelik tarafsız taktik özete dök. Geçen göstergelerin ne
   }
 }
 
-// 🎯 AI "Sen ne yapayım?" — context'ten tek görev önerir (Llama).
+// 🎯 AI "Sen ne yapayım?" — context'ten tek görev önerir (Gemini).
 // PWA'dan görev özetleri + energy + saat + bugün biten/pomodoro yollanır.
 // Çıktı: {taskId, reason} — kısa Türkçe cümle.
 async function handleSuggestApi(request, env) {
@@ -3710,7 +3710,7 @@ async function handleDietPlanImageApi(request, env) {
   return jsonCors({ items: [], transcript: String(transcript).slice(0, 600) || undefined, raw: String(lastRaw || '').slice(0, 400), debug: debug || undefined, aiError: lastErr || undefined }, 200, cors);
 }
 
-// Besin makro JSON ayıkla (Llama'dan {en, grams, ai:{...}} bekler)
+// Besin makro JSON ayıkla (Gemini'den {en, grams, ai:{...}} bekler)
 function parseMacroJson(raw) {
   if (!raw) return null;
   let s = String(raw).replace(/```(?:json)?/gi, '').trim();
@@ -4090,7 +4090,7 @@ SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
   }
 }
 
-// Byte dizisi → base64 (Llama 4 image_url data URL için). base64ToBytes'in tersi.
+// Byte dizisi → base64 (Gemini image_url data URL için). base64ToBytes'in tersi.
 // Büyük görsellerde stack taşmasın diye parça parça (String.fromCharCode.apply sınırı).
 function bytesToBase64(bytes) {
   const arr = bytes || [];
@@ -4102,10 +4102,9 @@ function bytesToBase64(bytes) {
   return btoa(bin);
 }
 
-// Vision modeli çağır. ÖNCE Llama 4 Scout (doğuştan multimodal, messages+image_url
-// formatı, daha iyi OCR + Türkçe). Boş/hatalı dönerse eski Llama 3.2 Vision'a
-// (byte dizisi + Meta 5016 lisans akışı) OTOMATİK düşer — yani Llama 4 formatı
-// tutmasa bile mevcut pipeline bozulmaz. Çağıran arayüz aynı: { image, prompt, max_tokens }
+// Vision modeli çağır — Gemini multimodal (OCR + Türkçe, tek çağrı). image_url
+// data URL formatı, aiRun üzerinden gider. Çağıran arayüz: { image, prompt, max_tokens },
+// dönüş { response } sözleşmesi korunur (eski CF Vision ile aynı).
 async function visionRun(env, input) {
   const prompt = (input && input.prompt) || '';
   const maxTok = (input && input.max_tokens) || 1024;
