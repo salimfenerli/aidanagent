@@ -32,7 +32,7 @@ function showTab(name, btn) {
   if (name === 'tasks') { renderCountdowns(); renderSchool(); if (typeof renderDailyScore === 'function') renderDailyScore(); }
   if (name === 'chat') { renderChatMessages(); setTimeout(() => { const ci = document.getElementById('chatInput'); if (ci) ci.focus(); }, 60); }
   if (name === 'plan') renderDayPlan();
-  if (name === 'diet') { _dietDate = null; renderDiet(); }
+  if (name === 'diet') { _dietDate = null; renderDiet(); renderHealthCoach(); }  // koç şeridi: uyku+spor+beslenme desenleri
   // Borsa sekmesinden çıkınca canlı güncellemeyi durdur (batarya/kota)
   if (name !== 'stocks') stopStockAutoRefresh();
   if (name === 'stocks') {

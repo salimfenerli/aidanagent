@@ -4602,3 +4602,277 @@ async function sendChat() {
     renderChatMessages();
   }
 }
+
+// ============================================================
+// 🫀 AI SAĞLIK KOÇU — uyku + antrenman + beslenme BİRLİKTE
+// ============================================================
+// Tasarım ilkesi (portföy yorumu kalıbının aynısı):
+//   • SAYILARI PWA HESAPLAR — AI sayı uydurmaz, sadece yorumlar.
+//   • Lokal desen tespiti önce çalışır ($0, anında, AI'sız).
+//   • AI yalnızca "geliştirilebilir kısım" için çağrılır.
+// Mevcut helper'ları kullanır (yeniden yazmaz):
+//   sleepDebt / badSleepStreak / sleepStats30 / sleepSeries  (core.js)
+//   hevyWorkoutsIn / trainedOn / ensureHevy                  (ui.js)
+//   dietDay / ensureDiet                                     (core.js)
+const HEALTH_COACH_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/health-coach';
+
+function ensureCoach() {
+  data.coach = data.coach || { lastRunAt: null, lastText: null, reports: [] };
+  data.coach.reports = data.coach.reports || [];
+  return data.coach;
+}
+
+// Bir günün beslenme toplamı (kcal + protein + su)
+function nutritionOn(dateStr) {
+  const day = ((data.diet || {}).days || {})[dateStr];
+  if (!day) return null;
+  const meals = day.meals || [];
+  if (!meals.length && !day.waterL) return null;
+  return {
+    kcal: meals.reduce((s, m) => s + (m.kcal || 0), 0),
+    protein: meals.reduce((s, m) => s + (m.protein || 0), 0),
+    waterL: day.waterL || 0,
+    meals: meals.length
+  };
+}
+
+// ---------- LOKAL DESEN TESPİTİ (AI'sız, $0) ----------
+// Ciddiyet: danger > warn > good. En fazla 3 satır döner.
+function healthPatterns() {
+  const out = [];
+  const t = today();
+
+  // 1) Ardışık kötü/az uyku — mevcut badSleepStreak
+  const bad = typeof badSleepStreak === 'function' ? badSleepStreak() : 0;
+  if (bad >= 3) {
+    out.push({ level: 'danger', text: `${bad} gecedir kötü/az uyuyorsun — bugünü hafif tut.` });
+  }
+
+  // 2) Uyku borcu — mevcut sleepDebt
+  const sd = typeof sleepDebt === 'function' ? sleepDebt() : null;
+  if (sd && sd.nights >= 3 && sd.debt >= 4 && bad < 3) {
+    out.push({ level: 'warn', text: `Son ${sd.nights} gecede ${fmtSleepHours(sd.debt)} uyku borcu birikti.` });
+  }
+
+  // 3) Yatış saati savrulması — düzensizlik uykuyu süreden çok bozar
+  if (typeof sleepSeries === 'function') {
+    const beds = sleepSeries(7).filter(s => s.bedtime).map(s => {
+      const m = /^(\d{1,2}):(\d{2})$/.exec(s.bedtime);
+      if (!m) return null;
+      let mins = +m[1] * 60 + +m[2];
+      if (mins < 720) mins += 1440;      // 00:30 → gece tarafına al
+      return mins;
+    }).filter(x => x != null);
+    if (beds.length >= 4) {
+      const spread = Math.max(...beds) - Math.min(...beds);
+      if (spread >= 120) out.push({ level: 'warn', text: `Yatış saatin ${Math.round(spread / 60)} saat savruluyor — sabit saat en çok işe yarayan şey.` });
+    }
+  }
+
+  // 4) ÇAPRAZ SİNYAL: az uyuduğun günlerde antrenman düşüyor mu?
+  if (typeof trainedOn === 'function' && typeof sleepSeries === 'function') {
+    const last14 = sleepSeries(14).filter(s => s.hours != null);
+    if (last14.length >= 7) {
+      const lo = last14.filter(s => s.hours < 7), hi = last14.filter(s => s.hours >= 7);
+      if (lo.length >= 3 && hi.length >= 3) {
+        const loRate = lo.filter(s => trainedOn(s.date)).length / lo.length;
+        const hiRate = hi.filter(s => trainedOn(s.date)).length / hi.length;
+        if (hiRate - loRate >= 0.4) {
+          out.push({ level: 'warn', text: 'İyi uyuduğun günlerde antrenmana çok daha sık gidiyorsun — uyku, spor planının görünmeyen yarısı.' });
+        }
+      }
+    }
+  }
+
+  // 5) Antrenman boşluğu (Hevy bağlıysa)
+  if (typeof ensureHevy === 'function') {
+    const ws = (ensureHevy().workouts || []).map(w => w.date).filter(Boolean).sort();
+    if (ws.length) {
+      const lastW = ws[ws.length - 1];
+      const gap = Math.round((new Date(t + 'T12:00:00') - new Date(lastW + 'T12:00:00')) / 86400000);
+      if (gap >= 7) out.push({ level: 'warn', text: `${gap} gündür antrenman kaydı yok.` });
+      else if (gap <= 1 && (typeof hevyWorkoutsIn === 'function') && hevyWorkoutsIn(7).length >= 3) {
+        out.push({ level: 'good', text: `Bu hafta ${hevyWorkoutsIn(7).length} antrenman — düzen oturmuş.` });
+      }
+    }
+  }
+
+  // 6) Antrenman günü protein düşük — toparlanmanın ana girdisi
+  const pGoal = (data.diet || {}).proteinGoal || 0;
+  if (pGoal && typeof trainedOn === 'function') {
+    let lowTrainDays = 0, checked = 0;
+    for (let i = 1; i <= 7 && checked < 4; i++) {
+      const d = shiftDateStr(t, -i);
+      if (!trainedOn(d)) continue;
+      const n = nutritionOn(d);
+      if (!n || !n.meals) continue;
+      checked++;
+      if (n.protein < pGoal * 0.7) lowTrainDays++;
+    }
+    if (checked >= 2 && lowTrainDays >= 2) {
+      out.push({ level: 'warn', text: `Antrenman günlerinin ${lowTrainDays}'inde protein hedefinin altında kaldın.` });
+    }
+  }
+
+  const rank = { danger: 0, warn: 1, good: 2 };
+  return out.sort((a, b) => rank[a.level] - rank[b.level]).slice(0, 3);
+}
+
+// ---------- AI'A GİDECEK ÖZET (sayılar burada hesaplanır) ----------
+function buildHealthFacts(days = 14) {
+  const L = [];
+  const t = today();
+  const goalH = (typeof ensureSleepGoal === 'function' ? ensureSleepGoal().targetH : 8) || 8;
+  const d = data.diet || {};
+  L.push(`HEDEFLER: uyku ${goalH} saat/gece · ${d.kcalGoal || '-'} kcal · protein ${d.proteinGoal || '-'} g · su ${d.waterGoalL || '-'} L.`);
+
+  // --- Uyku ---
+  const ss = typeof sleepSeries === 'function' ? sleepSeries(days).filter(s => s.hours != null) : [];
+  if (ss.length) {
+    const avg = ss.reduce((a, s) => a + s.hours, 0) / ss.length;
+    const short = ss.filter(s => s.hours < goalH).length;
+    const sd = typeof sleepDebt === 'function' ? sleepDebt() : { debt: 0, nights: 0 };
+    L.push(`UYKU (${ss.length} gece kayıtlı): ortalama ${Math.round(avg * 10) / 10} saat, ${short} gece hedefin altında, 7 günlük borç ${sd.debt} saat.`);
+    if (typeof sleepStats30 === 'function') {
+      const s30 = sleepStats30();
+      if (s30.weekdayAvg != null && s30.weekendAvg != null) {
+        L.push(`Hafta içi ortalama ${s30.weekdayAvg} saat, hafta sonu ${s30.weekendAvg} saat.`);
+      }
+    }
+    L.push('Son geceler: ' + ss.slice(-8).map(s =>
+      `${s.date} ${s.hours}sa${s.bedtime ? ' (' + s.bedtime + '-' + s.wake + ')' : ''}${s.quality ? ' [' + s.quality + ']' : ''}`).join(' | '));
+  } else L.push('UYKU: kayıt yok.');
+
+  // --- Antrenman (Hevy) ---
+  const ws = typeof hevyWorkoutsIn === 'function' ? hevyWorkoutsIn(days) : [];
+  if (ws.length) {
+    const mins = ws.reduce((a, w) => a + (w.durMin || w.duration || 0), 0);
+    L.push(`ANTRENMAN (son ${days} gün): ${ws.length} seans${mins ? ', toplam ' + mins + ' dk' : ''}.`);
+    L.push('Seanslar: ' + ws.slice(-8).map(w => `${w.date} ${w.title || w.name || 'antrenman'}`).join(' | '));
+  } else L.push(`ANTRENMAN: son ${days} günde kayıt yok.`);
+
+  // --- Beslenme ---
+  const nd = [];
+  for (let i = 0; i < days; i++) {
+    const k = shiftDateStr(t, -i);
+    const n = nutritionOn(k);
+    if (n && n.meals) nd.push(Object.assign({ date: k }, n));
+  }
+  if (nd.length) {
+    const avgK = nd.reduce((a, x) => a + x.kcal, 0) / nd.length;
+    const avgP = nd.reduce((a, x) => a + x.protein, 0) / nd.length;
+    const avgW = nd.reduce((a, x) => a + x.waterL, 0) / nd.length;
+    L.push(`BESLENME (${nd.length} gün kayıtlı): ortalama ${Math.round(avgK)} kcal, protein ${Math.round(avgP)} g, su ${Math.round(avgW * 10) / 10} L.`);
+    // Antrenman günü vs dinlenme günü protein — AI'ın en çok işine yarayan kesit
+    if (typeof trainedOn === 'function') {
+      const gym = nd.filter(x => trainedOn(x.date)), rest = nd.filter(x => !trainedOn(x.date));
+      if (gym.length && rest.length) {
+        const gp = gym.reduce((a, x) => a + x.protein, 0) / gym.length;
+        const rp = rest.reduce((a, x) => a + x.protein, 0) / rest.length;
+        L.push(`Antrenman günü ortalama protein ${Math.round(gp)} g, dinlenme günü ${Math.round(rp)} g.`);
+      }
+    }
+  } else L.push('BESLENME: kayıt yok.');
+
+  // --- Kilo ---
+  const wts = (d.weights || []).filter(w => w && w.kg != null);
+  if (wts.length >= 2) {
+    const a = wts[wts.length - 1], b = wts[0];
+    L.push(`KİLO: son ${a.kg} kg (${a.date}), ilk kayıt ${b.kg} kg (${b.date}).`);
+  }
+
+  // --- Bağlam: üretkenlik + takviye ---
+  const doneWeek = (data.tasks || []).filter(x => x.done && x.doneDate && x.doneDate >= shiftDateStr(t, -6)).length;
+  const pomo = (data.pomoToday || {}).count || 0;
+  L.push(`BAĞLAM: son 7 günde ${doneWeek} görev tamamlandı, bugün ${pomo} odak seansı. Kullanıcı 16 yaşında, ADHD (sakin/dalgın tip), lise öğrencisi.`);
+
+  const pats = healthPatterns();
+  if (pats.length) L.push('OTOMATİK TESPİTLER: ' + pats.map(p => p.text).join(' | '));
+  return L.join('\n');
+}
+
+// Veri var mı? (yoksa AI çağırmanın anlamı yok)
+function hasHealthData() {
+  const s = typeof sleepSeries === 'function' ? sleepSeries(14).filter(x => x.hours != null).length : 0;
+  const w = typeof hevyWorkoutsIn === 'function' ? hevyWorkoutsIn(14).length : 0;
+  let n = 0;
+  for (let i = 0; i < 14; i++) if (nutritionOn(shiftDateStr(today(), -i))) n++;
+  return (s + w + n) >= 3;
+}
+
+// ---------- ŞERİT (Diyet sekmesi üstü) ----------
+function renderHealthCoach() {
+  const el = document.getElementById('healthCoachStrip');
+  if (!el) return;
+  ensureCoach();
+  const pats = healthPatterns();
+  const hasRep = !!data.coach.lastText;
+
+  if (!pats.length && !hasRep) {
+    if (!hasHealthData()) { el.innerHTML = ''; return; }   // veri yoksa gürültü yapma
+    el.innerHTML = `<button class="hcoach-cta" onclick="runHealthCoach()">
+      <span class="hcoach-cta-title">Aidan uyku · spor · beslenmeni birlikte incelesin</span>
+      <span class="hcoach-cta-sub">Neyi değiştirmek en çok işe yarar, onu söyler</span>
+    </button>`;
+    return;
+  }
+  const rows = pats.map(p =>
+    `<span class="hpat ${p.level}"><span class="hpat-dot"></span>${escapeHtml(p.text)}</span>`).join('');
+  el.innerHTML = `<div class="hcoach">
+    ${rows ? `<div class="hpat-row">${rows}</div>` : ''}
+    <div class="hcoach-actions">
+      <button class="hcoach-btn" onclick="runHealthCoach()">Analiz et</button>
+      ${hasRep ? '<button class="hcoach-btn ghost" onclick="openCoachReport()">Son rapor</button>' : ''}
+    </div>
+  </div>`;
+}
+
+async function runHealthCoach() {
+  ensureCoach();
+  if (!hasHealthData()) {
+    showToast('Analiz için birkaç günlük uyku/antrenman/öğün kaydı lazım.', 'info');
+    return;
+  }
+  openCoachReport(null, true);
+  try {
+    const token = await getSupaToken();
+    if (!token) { openCoachReport('Analiz için giriş gerekli — Ayarlar\'dan Supabase\'e gir.'); return; }
+    const r = await fetch(HEALTH_COACH_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ facts: buildHealthFacts(14) })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.comment) {
+      openCoachReport('Analiz alınamadı: ' + (j.error || ('HTTP ' + r.status)) + '\n\nBirazdan tekrar dene.');
+      return;
+    }
+    data.coach.lastText = j.comment;
+    data.coach.lastRunAt = Date.now();
+    data.coach.reports = data.coach.reports.concat([{ at: Date.now(), text: j.comment }]).slice(-12);
+    save();
+    openCoachReport(j.comment);
+    renderHealthCoach();
+  } catch (e) {
+    openCoachReport('Bağlantı hatası: ' + (e && e.message ? e.message : e));
+  }
+}
+
+function openCoachReport(text, loading) {
+  ensureCoach();
+  const m = document.getElementById('coachReportModal');
+  const body = document.getElementById('coachReportBody');
+  const meta = document.getElementById('coachReportMeta');
+  if (!m || !body) return;
+  const t = (text != null) ? text : (data.coach.lastText || 'Henüz analiz yok.');
+  body.innerHTML = loading
+    ? '<div class="coach-loading">Aidan verilerine bakıyor…</div>'
+    : String(t).split('\n').filter(l => l.trim()).map(l => `<p>${escapeHtml(l)}</p>`).join('');
+  if (meta) meta.textContent = (!loading && data.coach.lastRunAt)
+    ? 'Son analiz: ' + new Date(data.coach.lastRunAt).toLocaleString('tr-TR') : '';
+  m.classList.add('active');
+}
+function closeCoachReport() {
+  const m = document.getElementById('coachReportModal');
+  if (m) m.classList.remove('active');
+}

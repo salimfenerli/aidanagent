@@ -1030,6 +1030,7 @@ async function runCronJob(env, type) {
         case 'evening':  payload = buildEvening(u.data); break;
         case 'deadline': payload = buildDeadlineAlerts(u.data); break;
         case 'weekly':   payload = await buildWeekly(env, u.data); break;
+        case 'health':   payload = await buildHealthWeekly(env, u.data); break;
         default: throw new Error(`Bilinmeyen tip: ${type}`);
       }
       if (!payload) { results.push({ userId: u.userId, sent: false, reason: 'no-content' }); continue; }
@@ -1977,6 +1978,200 @@ async function handleAiApi(request, env) {
 // ============================================================
 // Akşam günlüğü — sesli/yazılı gün özeti, AI sıcak yansıma döner (tool YOK)
 // ============================================================
+
+// ============================================================
+// 🫀 AI SAĞLIK KOÇU — uyku + antrenman + beslenme birlikte
+// ============================================================
+// İlke: SAYILARI PWA/Worker hesaplar, AI sadece yorumlar (portföy yorumu kalıbı).
+// Frontend "Analiz et" → POST /health-coach
+// Pazar 21:00 → runCronJob('health') (YENİ CRON YOK, mevcut Pazar cron'una biner)
+
+// 16 yaşındaki bir kullanıcı için katı sınırlar — bu prompt gevşetilmemeli.
+const HEALTH_COACH_PROMPT = (name) => `Sen Aidan'sın — ${name}'in sağlık koçu. ${name} 16 yaşında, ADHD (sakin/dalgın tip), lise öğrencisi.
+Sana verilen TÜM sayılar uygulama tarafından hesaplandı — hepsi doğru. Senin işin bu sayıları YORUMLAMAK ve GELİŞTİRİLEBİLİR NOKTAYI göstermek.
+
+GÖREVİN — TÜRKÇE, 5-8 kısa cümle, akıcı paragraf (madde listesi değil):
+1. En dikkat çeken 1-2 örüntü — özellikle uyku ↔ antrenman ↔ beslenme ARASINDAKİ ilişki
+2. İyi giden 1 şey (gerçekten varsa; uydurma)
+3. Önümüzdeki hafta için EN FAZLA 2 somut ve küçük adım
+
+✅ İZİN VERİLEN:
+- Veriler arası ilişki kurmak ("az uyuduğun günlerde antrenmana gitmemişsin")
+- Genel, iyi bilinen sağlık prensipleri (sabit yatış saati, antrenman sonrası protein, su)
+- Küçük ve net öneri ("yatış saatini 30 dk öne al", "antrenman günü kahvaltıya 1 yumurta ekle")
+- Nazik ama dürüst dil — utandırma yok, gerçeği yumuşatma da yok
+
+🚫 MUTLAK YASAK:
+1. Sayı uydurmak — verilmemişse YOK
+2. Teşhis koymak, hastalık adı vermek, ilaç veya takviye önermek
+3. Kalori kısıtlaması, kilo verme diyeti, "şu kadar kilo ver/al" demek — 16 yaşındaki biri için ASLA
+4. Vücut şekli/görünüm yorumu ("kilolu", "zayıf", "forma girmek" gibi)
+5. Aşırı antrenman teşviki ("her gün git", "daha ağır kaldır")
+6. 2'den fazla öneri — ADHD'de fazla seçenek felç eder
+7. İngilizce
+8. "Tıbbi tavsiye değildir" eki — arayüzde zaten yazıyor, tekrarlama
+
+TON: yanında duran, veriye bakan bir arkadaş. Kısa cümle, net, suçlamayan.`;
+
+// Worker tarafı sağlık özeti — PWA'daki buildHealthFacts'in ikizi (cron için)
+function buildHealthFactsSrv(data, days = 14) {
+  const L = [];
+  const t = trToday();
+  const sg = (data.settings && data.settings.sleepGoal) || {};
+  const goalH = sg.targetH || 8;
+  const d = data.diet || {};
+  L.push(`HEDEFLER: uyku ${goalH} saat/gece · ${d.kcalGoal || '-'} kcal · protein ${d.proteinGoal || '-'} g · su ${d.waterGoalL || '-'} L.`);
+
+  const from = trDate(-(days - 1));
+  const sl = (data.sleep || []).filter(s => s && s.date >= from && s.hours != null)
+    .slice().sort((a, b) => a.date < b.date ? -1 : 1);
+  const hevy = ((data.hevy && data.hevy.workouts) || []).filter(w => w && w.date >= from);
+  const trainedOnSrv = (dt) => hevy.some(w => w.date === dt);
+
+  // --- Uyku ---
+  if (sl.length) {
+    const avg = sl.reduce((a, s) => a + s.hours, 0) / sl.length;
+    const short = sl.filter(s => s.hours < goalH).length;
+    const week = sl.filter(s => s.date >= trDate(-6));
+    const debt = week.reduce((a, s) => a + Math.max(-2, goalH - s.hours), 0);
+    L.push(`UYKU (${sl.length} gece kayıtlı): ortalama ${Math.round(avg * 10) / 10} saat, ${short} gece hedefin altında, 7 günlük borç ${Math.round(debt * 10) / 10} saat.`);
+    L.push('Son geceler: ' + sl.slice(-8).map(s =>
+      `${s.date} ${s.hours}sa${s.bedtime ? ' (' + s.bedtime + '-' + s.wake + ')' : ''}${s.quality ? ' [' + s.quality + ']' : ''}`).join(' | '));
+  } else L.push('UYKU: kayıt yok.');
+
+  // --- Antrenman ---
+  if (hevy.length) {
+    L.push(`ANTRENMAN (son ${days} gün): ${hevy.length} seans.`);
+    L.push('Seanslar: ' + hevy.slice(-8).map(w => `${w.date} ${w.title || w.name || 'antrenman'}`).join(' | '));
+  } else L.push(`ANTRENMAN: son ${days} günde kayıt yok.`);
+
+  // --- Beslenme ---
+  const days_ = (d.days) || {};
+  const nd = [];
+  for (let i = 0; i < days; i++) {
+    const k = trDate(-i), day = days_[k];
+    if (!day || !(day.meals || []).length) continue;
+    nd.push({
+      date: k,
+      kcal: day.meals.reduce((a, m) => a + (m.kcal || 0), 0),
+      protein: day.meals.reduce((a, m) => a + (m.protein || 0), 0),
+      waterL: day.waterL || 0,
+    });
+  }
+  if (nd.length) {
+    const avgK = nd.reduce((a, x) => a + x.kcal, 0) / nd.length;
+    const avgP = nd.reduce((a, x) => a + x.protein, 0) / nd.length;
+    const avgW = nd.reduce((a, x) => a + x.waterL, 0) / nd.length;
+    L.push(`BESLENME (${nd.length} gün kayıtlı): ortalama ${Math.round(avgK)} kcal, protein ${Math.round(avgP)} g, su ${Math.round(avgW * 10) / 10} L.`);
+    const gym = nd.filter(x => trainedOnSrv(x.date)), rest = nd.filter(x => !trainedOnSrv(x.date));
+    if (gym.length && rest.length) {
+      const gp = gym.reduce((a, x) => a + x.protein, 0) / gym.length;
+      const rp = rest.reduce((a, x) => a + x.protein, 0) / rest.length;
+      L.push(`Antrenman günü ortalama protein ${Math.round(gp)} g, dinlenme günü ${Math.round(rp)} g.`);
+    }
+  } else L.push('BESLENME: kayıt yok.');
+
+  const wts = (d.weights || []).filter(w => w && w.kg != null);
+  if (wts.length >= 2) {
+    const a = wts[wts.length - 1], b = wts[0];
+    L.push(`KİLO: son ${a.kg} kg (${a.date}), ilk kayıt ${b.kg} kg (${b.date}).`);
+  }
+
+  const doneWeek = (data.tasks || []).filter(x => x.done && x.doneDate && x.doneDate >= trDate(-6)).length;
+  L.push(`BAĞLAM: son 7 günde ${doneWeek} görev tamamlandı. Kullanıcı 16 yaşında, ADHD, lise öğrencisi.`);
+  return L.join('\n');
+}
+
+// Analiz için yeterli veri var mı? (yoksa AI çağırma, boş push atma)
+function hasHealthDataSrv(data, days = 14) {
+  const from = trDate(-(days - 1));
+  const s = (data.sleep || []).filter(x => x && x.date >= from && x.hours != null).length;
+  const w = ((data.hevy && data.hevy.workouts) || []).filter(x => x && x.date >= from).length;
+  const dd = (data.diet && data.diet.days) || {};
+  let n = 0;
+  for (let i = 0; i < days; i++) { const day = dd[trDate(-i)]; if (day && (day.meals || []).length) n++; }
+  return (s + w + n) >= 3;
+}
+
+async function generateHealthCoach(env, data, name) {
+  const facts = buildHealthFactsSrv(data, 14);
+  const r = await aiRun(env, {
+    messages: [
+      { role: 'system', content: HEALTH_COACH_PROMPT(name) },
+      { role: 'user', content: `Sağlık verileri (doğrulanmış):\n${facts}\n\nAnalizi yaz. TÜRKÇE, kısa, en fazla 2 öneri.` },
+    ],
+    max_tokens: 600,
+    temperature: 0.5,
+  });
+  let text = String((r && r.response) || '').trim();
+  if (!text || /^i'?m sorry|^as an ai|your input/i.test(text)) return null;
+  return text;
+}
+
+// ---------- POST /health-coach (PWA "Analiz et") ----------
+async function handleHealthCoachApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const facts = (body.facts || '').trim();
+  if (!facts) return jsonCors({ error: 'empty' }, 400, cors);
+  if (facts.length > 8000) return jsonCors({ error: 'too long' }, 400, cors);
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
+
+  try {
+    const session = await fetchUserDataForApi(env, user);
+    const name = getUserDisplayName(session.data, user.email);
+    const r = await aiRun(env, {
+      messages: [
+        { role: 'system', content: HEALTH_COACH_PROMPT(name) },
+        { role: 'user', content: `Sağlık verileri (doğrulanmış):\n${facts}\n\nAnalizi yaz. TÜRKÇE, kısa, en fazla 2 öneri.` },
+      ],
+      max_tokens: 600,
+      temperature: 0.5,
+    });
+    let comment = String((r && r.response) || '').trim();
+    if (!comment || /^i'?m sorry|^as an ai|your input/i.test(comment)) {
+      comment = `${name}, şu an analiz üretemedim — birazdan tekrar dene.`;
+    }
+    return jsonCors({ comment }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
+// ---------- Pazar akşamı otomatik haftalık sağlık raporu ----------
+// Tam metni data.coach'a yazar (PWA "Son rapor" ile açar), push'a kısa özet gider.
+async function buildHealthWeekly(env, data) {
+  if (!hasHealthDataSrv(data, 14)) return null;
+  const name = getUserDisplayName(data, null);
+  let text = null;
+  try { text = await generateHealthCoach(env, data, name); }
+  catch (e) { console.error('health coach', e.message); }
+  if (!text) return null;
+
+  data.coach = data.coach || { reports: [] };
+  data.coach.reports = data.coach.reports || [];
+  data.coach.lastText = text;
+  data.coach.lastRunAt = Date.now();
+  data.coach.reports = data.coach.reports.concat([{ at: Date.now(), text, auto: true }]).slice(-12);
+
+  let body = text.replace(/\s+/g, ' ').trim();
+  if (body.length > 380) body = body.slice(0, 380) + '… (devamı uygulamada)';
+  return { title: '🫀 Haftalık sağlık analizi', message: body };
+}
+
 async function handleJournalApi(request, env) {
   const cors = {
     'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
@@ -5302,6 +5497,11 @@ export default {
     }
 
     // Akşam günlüğü (POST gün özeti → AI sıcak yansıma, tool YOK)
+    // AI sağlık koçu — uyku + antrenman + beslenme birlikte (POST {facts})
+    if (url.pathname === '/health-coach') {
+      return handleHealthCoachApi(request, env);
+    }
+
     if (url.pathname === '/journal') {
       return handleJournalApi(request, env);
     }
@@ -5423,6 +5623,8 @@ export default {
             ? await runPortfolioSummary(env)
             : cronType === 'reminders'
             ? await runFixedReminders(env)
+            : cronType === 'health'
+            ? await runCronJob(env, 'health')
             : cronType === 'backup'
             ? await runBackup(env)
             : cronType === 'autoplan'
@@ -5503,6 +5705,15 @@ export default {
           .then(() => runHevySync(env).catch(e => console.error('hevy sync', e.message)))
           .then(() => runAutoPlan(env, { trigger: 'evening', forDate: trDate(1) }))
           .catch(e => console.error('evening+autoplan', e.message))
+      );
+      return;
+    }
+    // Pazar akşamı: haftalık görev özetinin yanına haftalık SAĞLIK analizi de gider
+    if (type === 'weekly') {
+      ctx.waitUntil(
+        runCronJob(env, type)
+          .then(() => runCronJob(env, 'health'))
+          .catch(e => console.error('weekly+health', e.message))
       );
       return;
     }

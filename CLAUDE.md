@@ -9,11 +9,33 @@
 **AI = Google Gemini** (`gemini-3.5-flash`, ücretsiz katman; `env.GEMINI_MODEL` ile ezilir, `env.GEMINI_API_KEY` secret). Worker'da tek AI fonksiyonu `aiRun` → Gemini generateContent; `visionRun` de Gemini multimodal (portföy/Classroom görsel OCR, `{response}` sözleşmesi korunur). Cloudflare `env.AI.run` (eski Llama) **ARTIK KULLANILMIYOR** — yanıltıcı Llama yorumları 24 Tem'de temizlendi. Sesli giriş tarayıcıda Web Speech API (Whisper yok).
 
 **Deployed büyük paketler (hepsi CANLI — detay CHANGELOG.md):**
+- **AI sağlık koçu (v7-117):** uyku + Hevy antrenman + beslenme BİRLİKTE — lokal desen tespiti ($0) + `/health-coach` (Gemini) + Pazar otomatik rapor. Diyet sekmesi üstünde şerit.
 - **Diyet:** barkod tarayıcı (html5-qrcode + Open Food Facts), Türk besin DB, USDA+AI arama, özel besin/tarif, takviye takibi, BMR/TDEE (`calcGoals`), çoklu+haftalık program, makro grafik.
 - **Borsa:** 15 göstergeli teknik analiz, mum grafik, Fibonacci, temel analiz paneli (`/stock-fundamentals`), AI taktik, BIST100 kıyas, risk/stop/pozisyon-boyutu paneli, işlem alarmı, portföy görselden ekleme.
 - **Görev/Plan:** otomatik gün planı + blok bildirimleri (v7-109), planlama zekası — geçmişten öğrenen `planHistory`/`planProfile` + otomatik toparlama (v7-110), haftalık sabit program (`fixedSchedule`).
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
+
+### 25 Temmuz 2026 — 🫀 AI SAĞLIK KOÇU (v7-117)
+Salim: "beslenme, spor, uyku verilerimi AI işleyip geliştirilebilir kısımları söylesin." Uyku (v7-113/116) ve Hevy (v7-111) ayrı ayrı vardı ama **hiçbiri birbirine bakmıyordu** — bu paket üçünü tek yerde birleştirir.
+- **Yer:** Diyet sekmesinin EN ÜSTÜ — `#healthCoachStrip` (`renderHealthCoach`, `showTab('diet')` içinden çağrılır). Yeni sekme YOK.
+- **Katman 1 — lokal desen tespiti (`healthPatterns`, $0, anında, AI YOK).** Mevcut helper'ları kullanır, yeniden yazmaz (`badSleepStreak`/`sleepDebt`/`sleepSeries`/`trainedOn`/`hevyWorkoutsIn`). 6 kural, ciddiyete göre sıralı (danger>warn>good), **max 3 satır**:
+  1. 3+ gece ardışık kötü/az uyku (danger) · 2. 7 günlük uyku borcu ≥4sa · 3. yatış saati savrulması ≥2sa
+  4. **ÇAPRAZ SİNYAL:** iyi uyuduğu günlerde antrenman oranı %40+ yüksekse → "uyku, spor planının görünmeyen yarısı"
+  5. 7+ gün antrenman boşluğu / haftada 3+ seans (good) · 6. **antrenman günlerinde protein hedefin %70'inin altında**
+- **Katman 2 — AI analizi.** `POST /health-coach` (Gemini, `aiRun`). `buildHealthFacts(14)` uyku+antrenman+beslenme+kilo+görev bağlamını düz metin özetler — **sayıları PWA hesaplar, AI uydurmaz** (portföy yorumu kalıbı). AI'ın en çok işine yarayan kesit: **antrenman günü vs dinlenme günü ortalama protein**.
+- **Prompt sınırları (16 yaş — KATI, gevşetilmemeli):** teşhis YASAK, ilaç/takviye YASAK, **kalori kısıtlaması / kilo verme diyeti YASAK**, vücut şekli/görünüm yorumu YASAK, aşırı antrenman teşviki YASAK, **en fazla 2 öneri** (ADHD'de fazla seçenek felç eder), Türkçe zorunlu. Modalda sabit not: "gözlem özetidir, tıbbi tavsiye değildir".
+- **Haftalık otomatik rapor:** Pazar 21:00 cron'u (`0 18 * * SUN`) artık `runCronJob('weekly')` → `.then(runCronJob('health'))`. **YENİ CRON EKLENMEDİ** — deploy.py/wrangler.toml'a dokunulmadı. Tam metin `data.coach.lastText`'e yazılır (PWA "Son rapor"), push'a 380 karakter özet gider. Manuel test: `?type=health&secret=<WEBHOOK_SECRET>`.
+- **Veri yoksa sessiz:** `hasHealthData()` (uyku+antrenman+öğün toplamı <3 kayıt) → şerit hiç görünmez, AI çağrılmaz, boş push atılmaz.
+- **Yeni veri alanı:** `data.coach = { lastRunAt, lastText, reports:[{at,text,auto?}] }` (son 12). Yeni DOSYA yok — kod `ui.js` sonuna eklendi.
+- **🐛 Düzeltilen mevcut bug:** `weightKg` ve `calcWeight` `type="number"` idi → **iPhone Türkçe klavyesinde virgüllü "70,5" HİÇ girilemiyordu** (tarayıcı type=number'da virgülü reddeder; koddaki `.replace(',','.')` ölü koddu). `type` kaldırıldı, `inputmode="decimal"` kaldı.
+- **Doğrulama (72 test, hepsi geçti):** worker saf fonksiyon 23 test (facts üretimi, veri eşiği, prompt sınırlarının varlığı) · jsdom gerçek DOM 24 test (6 desenin hepsi tetiklendi, çapraz sinyal dahil, XSS kaçışı, modal) · **regresyon 25 test, orijinal HEAD ile birebir karşılaştırıldı** (6 sekme + diyet/su/kilo/tarih + logSleep/sleepDebt/sleepStats30/renderSleepCard + Hevy + quickCapture + aidanNoteLine). Impeccable CSS denetimi temiz (yan-şerit/gradient/glass/saf-renk yok, reduced-motion var).
+- **Cache:** v7-116 → **v7-117**
+
+### ⚠️ 25 Tem 2026 — İKİ KOPYA REPO KARIŞIKLIĞI (çözüldü, tekrarlamasın)
+`C:\Users\Salim\OneDrive\Masaüstü\claudedeneme` = **29 Haziran'da donmuş ÖLÜ kopya** (v7-85, origin'den 32 commit geride). Gerçek repo: **`C:\Users\Salim\OneDrive\Documents\GitHub\aidanagent`**. GitHub Desktop'ta ikisi de aynı remote'a baktığı için **ikisi de "aidanagent" görünüyordu**; eski olan listeden kaldırıldı (dosyalar diskte duruyor).
+- **Kalıcı kural:** yeni seansta iş yapmadan önce `git rev-list --left-right --count HEAD...origin/main` ile uzak farkı KONTROL ET. Yerel `origin/main` ref'i hiç fetch edilmemişse "güncel" yalanı söyler — bir seans bu yüzden yanlış tabana yazıldı.
+- Ölü kopyadaki `.git/index.lock` (12 Tem'den kalma) GitHub Desktop'ın hiçbir değişikliği görmemesine yol açıyordu. **Sandbox `.git`'e yazamaz/silemez** — kilit dosyasını Salim elle silmeli.
 
 ### 24 Temmuz 2026 — 😴 UYKU TAKİBİ (v7-113)
 Salim: "uyku takibi ekle". Görevler üstünde **uyku kartı** — sabah Kötü/Orta/İyi chip + opsiyonel yatış/kalkış saati (gece yarısı geçişi hesaplanır, 16h üstü reddedilir), 15:00 sonrası nag yok, girildikten sonra slim özet + 7 gün nokta şeridi + haftalık ort. **Planlayıcıya bağ:** kötü/az uyku (kalite `bad` ya da <6s) → prompt'a "bugün enerji düşük, AZ+KISA blok, ağır işi en iyi saate, +20-30dk tampon"; iyi uyku → "zorlu işleri rahat koy". `sleepLine` twin (worker + tasks.js), **sadece bugün için** (akşam yarını planlarken uyku henüz yok → boş döner). "Aidan'ın notu"na kötü-uyku sabahı dürtüsü. Yeni veri `data.sleep[]` (60 gün, `{date,bedtime,wake,hours,quality}`), **kural tabanlı** (AI maliyeti yok). core.js helper: `ensureSleep/sleepFor/sleepHours/logSleep/sleepStats/lastNightSleep/fmtSleepHours`. 36 senaryo test + `node --check`. Cache v7-112 → **v7-113**.
