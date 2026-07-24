@@ -511,8 +511,10 @@ function openTradeModal() {
   const warn = document.getElementById('tmWarn');
   const opened = tradesOpenedToday(), streak = tradeLossStreak();
   let msg = '';
+  const _slBad = (typeof lastNightSleep === 'function') && (function () { const s = lastNightSleep(); return s && (s.quality === 'bad' || (s.hours != null && s.hours < 6)); })();
   if (streak >= 3) msg = `Son ${streak} işlem zararlı — bir mola iyi gelebilir. Bu işlem kuralına uyuyor mu?`;
   else if (opened >= 3) msg = `Bugün zaten ${opened} işlem açtın — bu bir plan mı, yoksa hırs mı?`;
+  else if (_slBad) msg = `Dün az/kötü uyudun — yorgunken karar kalitesi düşer, aceleci/impulsif işlemlere dikkat.`;
   if (warn) { warn.textContent = msg; warn.style.display = msg ? 'block' : 'none'; }
   updateTradePreview();
   const m = document.getElementById('tradeModal'); if (m) m.classList.add('active');

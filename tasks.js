@@ -762,7 +762,11 @@ function sleepLine(forDate) {
   const bad = sl.quality === 'bad' || (sl.hours != null && sl.hours < 6);
   const great = sl.quality === 'good' && (sl.hours == null || sl.hours >= 7.5);
   const hStr = sl.hours != null ? fmtSleepHours(sl.hours) + ' ' : '';
-  if (bad) return `\n\n😴 Bu kişi dün gece ${hStr}kötü/az uyudu — enerji düşük. Bugün daha AZ ve KISA blok koy, ağır işi en verimli saate al, güne fazladan 20-30 dk tampon bırak. Zorlamayan bir gün kur.`;
+  if (bad) {
+    const bstreak = (typeof badSleepStreak === 'function') ? badSleepStreak() : 1;
+    const extra = bstreak >= 2 ? ` Bu ${bstreak}. kötü gece üst üste — toparlanma öncelikli, gün çok hafif olsun.` : '';
+    return `\n\n😴 Bu kişi dün gece ${hStr}kötü/az uyudu — enerji düşük. Bugün daha AZ ve KISA blok koy, ağır işi en verimli saate al, güne fazladan 20-30 dk tampon bırak. Zorlamayan bir gün kur.${extra}`;
+  }
   if (great) return `\n\n😴 Bu kişi dün gece iyi dinlendi — enerji yüksek. Zorlu/derin işleri güne rahatça koyabilirsin.`;
   return '';
 }

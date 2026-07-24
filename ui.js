@@ -2687,7 +2687,7 @@ function renderPushLog() {
 function renderFixedReminders() {
   const el = document.getElementById('fixedRemindersList');
   if (!el) return;
-  const rems = (data.reminders || []).filter(r => r.kind !== 'supp');
+  const rems = (data.reminders || []).filter(r => r.kind !== 'supp' && r.kind !== 'sleep');
   if (!rems.length) {
     el.innerHTML = '<div class="fixedrem-empty">Henüz sabit hatırlatıcın yok — aşağıdan ekle.</div>';
     return;
@@ -2868,6 +2868,7 @@ function sleepSummaryHtml(rec) {
       <span class="sleep-sum-main">${escapeHtml(main)}</span>
       ${qBadge}
       <span class="sleep-dots">${dots.join('')}${avgStr ? `<span class="sleep-avg">${avgStr}</span>` : ''}</span>
+      <button class="sleep-trend-btn" onclick="event.stopPropagation();openSleepTrend()" title="30 günlük trend" aria-label="Uyku trendi"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg></button>
     </div>`;
 }
 function renderSleepCard() {
@@ -2927,6 +2928,110 @@ function editSleep() {
   el.dataset.editing = '1';
   renderSleepCard();
 }
+
+// ===== 😴 Uyku trend modalı + hijyen + yatma hatırlatıcısı (Faz 1 · v7-116) =====
+const SLEEP_HYGIENE_TIPS = [
+  'Yatmadan 1 saat önce ekranı bırak — mavi ışık melatonini geciktirir.',
+  'Öğleden sonra kafein (kahve, kola, enerji içeceği) uykuyu böler.',
+  'Odayı serin ve karanlık tut — 18-20°C ideal.',
+  'Her gün aynı saatte yat-kalk, hafta sonu dahil — ritim oturur.',
+  'Yatakta telefon yerine 10 dk kitap ya da nefes — beyin "yatak = uyku" öğrenir.',
+  'Akşam ağır/geç yemeği yatıştan 2-3 saat önce bitir.'
+];
+function sleepHygieneTip() {
+  const d = new Date();
+  const idx = (d.getFullYear() * 372 + d.getMonth() * 31 + d.getDate()) % SLEEP_HYGIENE_TIPS.length;
+  return SLEEP_HYGIENE_TIPS[idx];
+}
+function openSleepTrend() { renderSleepTrend(); const m = document.getElementById('sleepTrendModal'); if (m) m.classList.add('active'); }
+function closeSleepTrend() { const m = document.getElementById('sleepTrendModal'); if (m) m.classList.remove('active'); }
+function renderSleepTrend() {
+  const el = document.getElementById('sleepTrendBody');
+  if (!el) return;
+  if (typeof ensureSleep === 'function') ensureSleep();
+  const g = (typeof ensureSleepGoal === 'function') ? ensureSleepGoal() : { enabled: false, wake: '07:00', targetH: 8, leadMin: 30 };
+  const target = g.targetH || 8;
+  const series = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = shiftDateStr(today(), -i);
+    series.push({ date: d, rec: (data.sleep || []).find(x => x.date === d) || null });
+  }
+  const W = 320, H = 96, gap = 2, n = series.length;
+  const bw = (W - (n - 1) * gap) / n, maxH = 10;
+  const bars = series.map((it, i) => {
+    const x = (i * (bw + gap)).toFixed(1), s = it.rec;
+    if (!s || s.hours == null) {
+      const cls = s && s.quality ? s.quality : 'none';
+      return `<rect x="${x}" y="${H - 5}" width="${bw.toFixed(1)}" height="5" rx="1.5" class="stb ${cls}" opacity="0.45"><title>${it.date}${s && s.quality ? ' · ' + SLEEP_QLABEL[s.quality] : ' · kayıt yok'}</title></rect>`;
+    }
+    const h = Math.max(3, Math.min(s.hours, maxH) / maxH * H);
+    const cls = s.quality || (s.hours >= 7 ? 'good' : s.hours >= 6 ? 'ok' : 'bad');
+    return `<rect x="${x}" y="${(H - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" class="stb ${cls}"><title>${it.date}: ${fmtSleepHours(s.hours)}</title></rect>`;
+  }).join('');
+  const ty = (H - Math.min(target, maxH) / maxH * H).toFixed(1);
+  const chart = `<svg class="sleep-trend-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="30 günlük uyku grafiği"><line x1="0" y1="${ty}" x2="${W}" y2="${ty}" class="st-goal"/>${bars}</svg>`;
+
+  const st = (typeof sleepStats30 === 'function') ? sleepStats30() : { count: 0 };
+  const debt = (typeof sleepDebt === 'function') ? sleepDebt() : { debt: 0, nights: 0 };
+  const fmt = h => (h == null ? '–' : fmtSleepHours(Math.round(h * 100) / 100));
+  const trd = d => new Date(d + 'T12:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+
+  let statsHtml = '';
+  if (st.count >= 2) {
+    const wdWe = (st.weekdayAvg != null && st.weekendAvg != null)
+      ? `<div class="stt-row"><span>Hafta içi</span><b>${fmt(st.weekdayAvg)}</b></div><div class="stt-row"><span>Hafta sonu</span><b>${fmt(st.weekendAvg)}</b></div>`
+      : `<div class="stt-row"><span>Ortalama</span><b>${fmt(st.overallAvg)}</b></div>`;
+    const bwr = (st.best && st.worst)
+      ? `<div class="stt-row"><span>En iyi gece</span><b class="good">${fmt(st.best.hours)} · ${trd(st.best.date)}</b></div><div class="stt-row"><span>En kötü gece</span><b class="bad">${fmt(st.worst.hours)} · ${trd(st.worst.date)}</b></div>`
+      : '';
+    statsHtml = `<div class="sleep-trend-stats">${wdWe}${bwr}</div>`;
+  } else {
+    statsHtml = `<div class="sleep-trend-empty">Birkaç gece daha saat girince trend ve ortalamalar çıkar.</div>`;
+  }
+
+  let debtHtml = '';
+  if (debt.nights >= 2) {
+    if (debt.debt >= 1) debtHtml = `<div class="sleep-debt warn">Uyku borcu: son ${debt.nights} gecede <b>~${fmt(debt.debt)}</b> açık. Bir-iki gece erken yatmak toparlar.</div>`;
+    else if (debt.debt <= -1) debtHtml = `<div class="sleep-debt good">Hedefin ${fmt(-debt.debt)} üstündesin — dinlenmen yerinde.</div>`;
+    else debtHtml = `<div class="sleep-debt ok">Uyku borcun yok — hedefe yakınsın.</div>`;
+  }
+
+  let tipHtml = '';
+  if ((typeof badSleepStreak === 'function') && badSleepStreak() >= 1) {
+    tipHtml = `<div class="sleep-tip"><span class="st-tip-lbl">İpucu</span>${escapeHtml(sleepHygieneTip())}</div>`;
+  }
+
+  const bedStr = (typeof sleepTargetBedStr === 'function') ? sleepTargetBedStr() : null;
+  const pushStr = (typeof sleepBedtimeStr === 'function') ? sleepBedtimeStr() : null;
+  const targetOpts = [6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10].map(v => `<option value="${v}" ${v === target ? 'selected' : ''}>${fmtSleepHours(v)}</option>`).join('');
+  const leadOpts = [0, 15, 30, 45, 60].map(v => `<option value="${v}" ${v === (g.leadMin || 30) ? 'selected' : ''}>${v} dk önce</option>`).join('');
+  const reminderHtml = `<div class="sleep-goal">
+      <div class="sg-head">
+        <span class="sg-title">Yatma hatırlatıcısı</span>
+        <button class="sg-toggle ${g.enabled ? 'on' : ''}" onclick="toggleSleepReminder()" role="switch" aria-checked="${g.enabled}"><span class="sg-knob"></span></button>
+      </div>
+      <div class="sg-row"><label>Kalkış saati</label><input type="time" value="${g.wake || '07:00'}" onchange="setSleepWake(this.value)"></div>
+      <div class="sg-row"><label>Hedef uyku</label><select onchange="setSleepTarget(this.value)">${targetOpts}</select></div>
+      <div class="sg-row"><label>Bildirim</label><select onchange="setSleepLead(this.value)">${leadOpts}</select></div>
+      <div class="sg-calc">${bedStr ? `Yat: <b>${bedStr}</b> · bildirim <b>${pushStr}</b>` : 'Kalkış saatini gir'}</div>
+      ${g.enabled ? `<div class="sg-note">Bildirim için Ayarlar'dan push'un açık olması gerekir.</div>` : ''}
+    </div>`;
+
+  el.innerHTML = `<div class="sleep-trend-legend"><span>0</span><span>hedef ${fmtSleepHours(target)}</span><span>${maxH}s</span></div>
+    ${chart}
+    ${statsHtml}
+    ${debtHtml}
+    ${tipHtml}
+    ${reminderHtml}`;
+}
+function toggleSleepReminder() {
+  const g = ensureSleepGoal(); g.enabled = !g.enabled;
+  syncSleepReminder(); save(); renderSleepTrend();
+  showToast(g.enabled ? 'Yatma hatırlatıcısı açık' : 'Yatma hatırlatıcısı kapalı', g.enabled ? 'success' : 'info', 2200);
+}
+function setSleepWake(v) { const g = ensureSleepGoal(); g.wake = v || '07:00'; syncSleepReminder(); save(); renderSleepTrend(); }
+function setSleepTarget(v) { const g = ensureSleepGoal(); g.targetH = Math.max(4, Math.min(12, parseFloat(v) || 8)); syncSleepReminder(); save(); renderSleepTrend(); }
+function setSleepLead(v) { const g = ensureSleepGoal(); g.leadMin = Math.max(0, Math.min(120, parseInt(v, 10) || 0)); syncSleepReminder(); save(); renderSleepTrend(); }
 
 function renderDailyScore() {
   if (typeof renderSleepCard === 'function') renderSleepCard();
@@ -3006,8 +3111,11 @@ function aidanNoteLine() {
   // 3. Kötü/az uyku — bugünü hafiflet (sabah/öğlen)
   if (typeof lastNightSleep === 'function') {
     const sl = lastNightSleep();
-    if (sl && (sl.quality === 'bad' || (sl.hours != null && sl.hours < 6)) && hour >= 6 && hour < 16)
+    if (sl && (sl.quality === 'bad' || (sl.hours != null && sl.hours < 6)) && hour >= 6 && hour < 16) {
+      const bstreak = (typeof badSleepStreak === 'function') ? badSleepStreak() : 1;
+      if (bstreak >= 2) return { tone: 'warn', text: `${bstreak} gecedir kötü uyudun — bugün kendine yüklenme, uyku hijyenine bak. Riskli/aceleci kararları (işlem dahil) ertele.` };
       return { tone: 'info', text: `Az/kötü uyumuşsun — bugünü hafif tut, en önemli 1-2 şeye odaklan` };
+    }
   }
 
   // 3. MIT seçili ama öğleden sonra hâlâ hiç bitmemiş

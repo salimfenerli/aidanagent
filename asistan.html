@@ -1114,6 +1114,15 @@
   </div>
 </div>
 
+<!-- Uyku trend modalı -->
+<div class="modal-overlay" id="sleepTrendModal" onclick="if(event.target.id==='sleepTrendModal')closeSleepTrend()">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-title">Uyku · son 30 gün</div>
+    <div id="sleepTrendBody"></div>
+    <button class="modal-close" onclick="closeSleepTrend()">Kapat</button>
+  </div>
+</div>
+
 <!-- AI portföy yorumu modalı -->
 <div class="modal-overlay" id="pfCommentModal" onclick="if(event.target.id==='pfCommentModal')closePfComment()">
   <div class="modal" style="max-width:480px;">

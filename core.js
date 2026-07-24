@@ -123,6 +123,82 @@ function fmtSleepHours(h) {
   return mm ? `${hh}s ${mm}dk` : `${hh}s`;
 }
 
+// ===== Uyku hedefi + trend + borç (Faz 1 · v7-116) =====
+function ensureSleepGoal() {
+  var s = data.settings = data.settings || {};
+  s.sleepGoal = s.sleepGoal || { enabled: false, wake: '07:00', targetH: 8, leadMin: 30 };
+  if (s.sleepGoal.targetH == null) s.sleepGoal.targetH = 8;
+  if (s.sleepGoal.leadMin == null) s.sleepGoal.leadMin = 30;
+  if (!s.sleepGoal.wake) s.sleepGoal.wake = '07:00';
+  return s.sleepGoal;
+}
+// Son N gecenin kayıtları, tarih artan
+function sleepSeries(days) {
+  var from = shiftDateStr(today(), -(days - 1));
+  return ensureSleep().filter(function (s) { return s && s.date >= from; })
+    .slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+}
+// 30 gün istatistiği: hafta içi/sonu ort, en iyi/kötü gece
+function sleepStats30() {
+  var list = sleepSeries(30).filter(function (s) { return s.hours != null; });
+  var wd = [], we = [], best = null, worst = null;
+  list.forEach(function (s) {
+    var dow = new Date(s.date + 'T12:00:00').getDay();
+    (dow === 0 || dow === 6 ? we : wd).push(s.hours);
+    if (!best || s.hours > best.hours) best = s;
+    if (!worst || s.hours < worst.hours) worst = s;
+  });
+  var avg = function (a) { return a.length ? Math.round((a.reduce(function (x, y) { return x + y; }, 0) / a.length) * 100) / 100 : null; };
+  return { count: list.length, weekdayAvg: avg(wd), weekendAvg: avg(we), best: best, worst: worst,
+           overallAvg: avg(list.map(function (s) { return s.hours; })) };
+}
+// Uyku borcu: son 7 gecede (hedef - gerçek) toplamı. + = borç.
+function sleepDebt() {
+  var target = (ensureSleepGoal().targetH) || 8;
+  var list = sleepSeries(7).filter(function (s) { return s.hours != null; });
+  if (!list.length) return { debt: 0, nights: 0, target: target };
+  var debt = list.reduce(function (a, s) { return a + Math.max(-2, target - s.hours); }, 0);
+  return { debt: Math.round(debt * 10) / 10, nights: list.length, target: target };
+}
+// Bugünden geriye ardışık kötü/az uyku gecesi
+function badSleepStreak() {
+  var n = 0;
+  for (var i = 0; i < 14; i++) {
+    var s = sleepFor(shiftDateStr(today(), -i));
+    if (!s || (s.quality == null && s.hours == null)) break;
+    var bad = s.quality === 'bad' || (s.hours != null && s.hours < 6);
+    if (bad) n++; else break;
+  }
+  return n;
+}
+function _minToHm(m) {
+  m = ((Math.round(m) % 1440) + 1440) % 1440;
+  var hh = Math.floor(m / 60), mm = m % 60;
+  return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm;
+}
+// Hedef yatış saati (lead'siz): kalkış - hedef uyku
+function sleepTargetBedStr() {
+  var g = ensureSleepGoal(); var wm = hmToMinSafe(g.wake); if (wm == null) return null;
+  return _minToHm(wm - Math.round((g.targetH || 8) * 60));
+}
+// Push hatırlatıcı saati: hedef yatıştan leadMin önce
+function sleepBedtimeStr() {
+  var g = ensureSleepGoal(); var wm = hmToMinSafe(g.wake); if (wm == null) return null;
+  return _minToHm(wm - Math.round((g.targetH || 8) * 60) - (g.leadMin || 0));
+}
+// data.reminders[]'a yatma push kaydını senkronla (Worker 15dk cron fırlatır — deploy gerekmez)
+function syncSleepReminder() {
+  data.reminders = data.reminders || [];
+  var g = ensureSleepGoal();
+  var idx = -1;
+  for (var i = 0; i < data.reminders.length; i++) { if (data.reminders[i] && data.reminders[i].id === 'sleep-bedtime') { idx = i; break; } }
+  var time = g.enabled ? sleepBedtimeStr() : null;
+  if (!g.enabled || !time) { if (idx >= 0) data.reminders.splice(idx, 1); return; }
+  var rec = { id: 'sleep-bedtime', kind: 'sleep', label: 'Yatma vakti yaklaşıyor', time: time, days: 'daily',
+              enabled: true, lastFired: (idx >= 0 ? data.reminders[idx].lastFired : null) };
+  if (idx >= 0) data.reminders[idx] = rec; else data.reminders.push(rec);
+}
+
 // Seçili diyet günü (varsayılan bugün). _dietDate ile geçmiş günlere gezilir.
 let _dietDate = null;
 function dietKey() { return _dietDate || today(); }
