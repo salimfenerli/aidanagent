@@ -3386,6 +3386,57 @@
 .sleep-dot.good { background: #34c759; border-color: #34c759; }
 .sleep-avg { font-size: 0.74rem; color: var(--text-muted); margin-left: 6px; white-space: nowrap; }
 
+/* ===== 📓 İŞLEM GÜNLÜĞÜ (v7-114) ===== */
+.trade-journal { margin: 16px 0 8px; }
+.tj-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.tj-title { display:flex; align-items:center; gap:7px; font-weight:700; color:var(--text-strong); font-size:0.98rem; }
+.tj-title .icon { width:17px; height:17px; opacity:.8; }
+.tj-add { background:var(--accent); color:var(--on-accent); border:none; border-radius:9px; padding:7px 13px; font-weight:700; font-size:0.84rem; cursor:pointer; transition:background .15s ease-out; }
+.tj-add:hover { background:var(--accent-hover, #ffb43a); }
+.tj-stats { display:flex; gap:8px; margin-bottom:8px; }
+.tj-stat { flex:1; background:var(--surface); border:1px solid var(--border-soft); border-radius:12px; padding:9px 4px; text-align:center; display:flex; flex-direction:column; gap:2px; }
+.tj-stat-v { font-weight:700; font-size:1rem; color:var(--text-strong); font-variant-numeric:tabular-nums; }
+.tj-stat-v.up { color:#34c759; } .tj-stat-v.down { color:#ef4444; }
+.tj-stat-l { font-size:0.7rem; color:var(--text-muted); }
+.tj-insight { font-size:0.8rem; color:var(--text-muted); padding:5px 2px; }
+.tj-insight.warn { color:#fbbf5a; }
+.tj-insight b { color:var(--text); }
+.tj-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:var(--surface); border:1px solid var(--border-soft); border-radius:12px; padding:10px 12px; margin-bottom:7px; }
+.tj-row.open { background:rgba(245,165,36,.06); border-color:rgba(245,165,36,.25); }
+.tj-row-main { display:flex; align-items:center; gap:7px; }
+.tj-sym { font-weight:700; color:var(--text-strong); }
+.tj-side { font-size:0.74rem; font-weight:700; padding:2px 7px; border-radius:6px; }
+.tj-side.long { color:#34c759; background:rgba(52,199,89,.12); }
+.tj-side.short { color:#ef4444; background:rgba(239,68,68,.12); }
+.tj-tag { font-size:0.72rem; color:var(--text-muted); background:var(--surface-2); border-radius:6px; padding:2px 7px; }
+.tj-row-meta { flex-basis:100%; font-size:0.78rem; color:var(--text-muted); font-variant-numeric:tabular-nums; }
+.tj-row-actions { margin-left:auto; display:flex; gap:6px; align-items:center; }
+.tj-close-btn { background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:5px 12px; font-weight:600; font-size:0.8rem; cursor:pointer; }
+.tj-close-btn:hover { border-color:var(--accent); }
+.tj-del-btn { background:none; border:none; color:var(--text-faint); cursor:pointer; font-size:0.9rem; padding:4px 6px; line-height:1; }
+.tj-del-btn:hover { color:#ef4444; }
+.tj-row-res { margin-left:auto; font-weight:700; font-variant-numeric:tabular-nums; font-size:0.9rem; }
+.tj-row-res.win { color:#34c759; } .tj-row-res.loss { color:#ef4444; }
+.tj-row.closed { padding:8px 12px; }
+.tj-closed-wrap { margin-top:4px; }
+.tj-closed-wrap summary { cursor:pointer; font-size:0.82rem; color:var(--text-muted); padding:6px 2px; list-style:none; }
+.tj-closed-wrap summary::-webkit-details-marker { display:none; }
+.tj-empty { font-size:0.84rem; color:var(--text-muted); background:var(--surface); border:1px solid var(--border-soft); border-radius:12px; padding:13px; line-height:1.45; }
+
+/* İşlem açma modalı */
+.tm-warn { background:rgba(239,68,68,.10); border:1px solid rgba(239,68,68,.3); color:#ff9c9c; border-radius:10px; padding:9px 12px; font-size:0.83rem; margin-bottom:11px; line-height:1.35; }
+.tm-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:11px; }
+.tm-chip { background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:9px; padding:6px 12px; font-size:0.82rem; font-weight:600; cursor:pointer; transition:background .15s ease-out, border-color .15s ease-out; }
+.tm-chip:hover { border-color:var(--accent); }
+.tm-chip.sel { background:var(--accent-tint, rgba(245,165,36,.16)); border-color:rgba(245,165,36,.5); color:var(--accent-light, #fbbf5a); }
+.tm-grid { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-bottom:10px; }
+.tm-grid .modal-input { margin:0; width:100%; }
+.tm-label { font-size:0.74rem; color:var(--text-muted); display:block; margin-bottom:3px; }
+.tm-field-label { font-size:0.8rem; color:var(--text-muted); margin-bottom:6px; }
+.tm-preview { font-size:0.82rem; color:var(--text); background:var(--surface-2); border-radius:9px; padding:8px 11px; margin-bottom:12px; line-height:1.45; }
+.tm-preview .up { color:#34c759; } .tm-preview .down { color:#ef4444; }
+.tm-prev-hint { color:var(--text-faint); }
+
 /* 🎓 Classroom görselinden ödev */
 .school-classroom { margin: 4px 0 12px; }
 .school-classroom-btn { display: inline-flex; align-items: center; gap: 7px; width: 100%; justify-content: center; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border-soft); background: var(--surface); color: var(--text-strong); font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: background .18s ease, border-color .18s ease; }

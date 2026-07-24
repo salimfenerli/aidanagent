@@ -334,6 +334,7 @@
     </div>
     <div class="stocks-list" id="stocksList"></div>
     <div class="stocks-hint" id="stocksHint">BIST · ABD · Döviz · Kripto — fiyatlar Yahoo Finance'tan · alarm kurarsan eşik geçilince push bildirimi gelir.</div>
+    <section class="trade-journal" id="tradeJournal"></section>
   </div>
 
   <!-- DİYET -->
@@ -757,6 +758,46 @@
 </div>
 
 <!-- Plan blok ekle/düzenle modal -->
+<div class="modal-overlay" id="tradeModal" onclick="if(event.target.id==='tradeModal')closeTradeModal()">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-title">İşlem aç</div>
+    <div class="tm-warn" id="tmWarn" style="display:none;"></div>
+    <input type="text" id="tmSymbol" class="modal-input" list="tmSymList" placeholder="Sembol (THYAO)" autocapitalize="characters">
+    <datalist id="tmSymList"></datalist>
+    <div class="tm-chips" id="tmSideChips">
+      <button type="button" class="tm-chip sel" data-v="long" onclick="tjPick('side','long',this)">▲ Long</button>
+      <button type="button" class="tm-chip" data-v="short" onclick="tjPick('side','short',this)">▼ Short</button>
+    </div>
+    <div class="tm-grid">
+      <div><label class="tm-label" for="tmEntry">Giriş</label><input type="text" inputmode="decimal" id="tmEntry" class="modal-input" oninput="updateTradePreview()"></div>
+      <div><label class="tm-label" for="tmStop">Stop</label><input type="text" inputmode="decimal" id="tmStop" class="modal-input" oninput="updateTradePreview()"></div>
+      <div><label class="tm-label" for="tmTarget">Hedef</label><input type="text" inputmode="decimal" id="tmTarget" class="modal-input" oninput="updateTradePreview()"></div>
+      <div><label class="tm-label" for="tmQty">Adet</label><input type="text" inputmode="decimal" id="tmQty" class="modal-input" oninput="updateTradePreview()"></div>
+    </div>
+    <div class="tm-preview" id="tmPreview"></div>
+    <div class="tm-field-label">Neden giriyorum?</div>
+    <div class="tm-chips" id="tmReasonChips">
+      <button type="button" class="tm-chip" onclick="tjPick('reason','kirilim',this)">Kırılım</button>
+      <button type="button" class="tm-chip" onclick="tjPick('reason','pullback',this)">Geri çekilme</button>
+      <button type="button" class="tm-chip" onclick="tjPick('reason','trend',this)">Trend</button>
+      <button type="button" class="tm-chip" onclick="tjPick('reason','temel',this)">Temel/haber</button>
+      <button type="button" class="tm-chip" onclick="tjPick('reason','diger',this)">Diğer</button>
+    </div>
+    <div class="tm-field-label">Şu an ruh halim</div>
+    <div class="tm-chips" id="tmEmotionChips">
+      <button type="button" class="tm-chip" onclick="tjPick('emotion','plan',this)">Plana uygun</button>
+      <button type="button" class="tm-chip" onclick="tjPick('emotion','sakin',this)">Sakin</button>
+      <button type="button" class="tm-chip" onclick="tjPick('emotion','fomo',this)">FOMO</button>
+      <button type="button" class="tm-chip" onclick="tjPick('emotion','intikam',this)">İntikam</button>
+    </div>
+    <input type="text" id="tmNote" class="modal-input" placeholder="Not (opsiyonel)">
+    <div class="modal-actions">
+      <button onclick="saveTradeModal()">İşlemi kaydet</button>
+      <button class="secondary" onclick="closeTradeModal()">Vazgeç</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="planBlockModal" onclick="if(event.target.id==='planBlockModal')closePlanBlock()">
   <div class="modal">
     <div class="modal-title" id="planBlockTitle">Blok ekle</div>

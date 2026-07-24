@@ -257,6 +257,7 @@ function renderStocks() {
   renderPortfolioHistory();
   renderPortfolioRisk();
   renderBist100Compare();
+  renderTradeJournal();
   const _hasHoldings = (data.watchlist || []).some(w => w.qty != null && w.qty > 0 && w.cost != null);
   const _hasTaHoldings = (data.watchlist || []).some(w =>
     w.qty != null && w.qty > 0 && w.cost != null && TA_MARKETS.has(w.market || 'bist')
@@ -333,6 +334,230 @@ function formatLot(n) {
   if (n == null) return '—';
   // Tam sayıysa ondalık gösterme
   return Number.isInteger(n) ? String(n) : Number(n).toLocaleString('tr-TR', { maximumFractionDigits: 4 });
+}
+
+// ===== 📓 İŞLEM GÜNLÜĞÜ (v7-114) — süreç + disiplin, sinyal DEĞİL =====
+// data.trades = [{id, symbol, market, side:'long'|'short', entry, stop, target, qty,
+//   reason, emotion, note, opened, status:'open'|'closed', exit, closed, pnl, r}]  (son 200)
+// Al/sat tavsiyesi ve fiyat tahmini YOK — sadece kendi işlemini kaydet + veriyle gör.
+const TJ_SETUPS = { kirilim: 'Kırılım', pullback: 'Geri çekilme', trend: 'Trend', temel: 'Temel/haber', diger: 'Diğer' };
+const TJ_EMOTIONS = { plan: 'Plana uygun', sakin: 'Sakin', fomo: 'FOMO', intikam: 'İntikam' };
+let _tj = { side: 'long', reason: null, emotion: null };
+
+function ensureTrades() { data.trades = data.trades || []; return data.trades; }
+
+// Hisse başına risk (giriş-stop mesafesi)
+function tradeRiskPerShare(t) {
+  if (t.stop == null || t.entry == null) return null;
+  const d = Math.abs(t.entry - t.stop);
+  return d > 0 ? d : null;
+}
+// Planlanan risk/ödül oranı
+function tradeRR(t) {
+  const rps = tradeRiskPerShare(t);
+  if (rps == null || t.target == null) return null;
+  return Math.round((Math.abs(t.target - t.entry) / rps) * 100) / 100;
+}
+// Kapanışta pnl + R katı
+function computeTradeClose(t, exit) {
+  const dir = t.side === 'short' ? -1 : 1;
+  const rps = tradeRiskPerShare(t);
+  const pnl = (t.qty != null && t.qty > 0) ? Math.round((exit - t.entry) * dir * t.qty * 100) / 100 : null;
+  const r = (rps != null) ? Math.round(((exit - t.entry) * dir / rps) * 100) / 100 : null;
+  return { pnl, r };
+}
+function isTradeWin(t) {
+  if (t.r != null) return t.r > 0;
+  if (t.pnl != null) return t.pnl > 0;
+  return null;
+}
+function tradeStats() {
+  const closed = ensureTrades().filter(t => t.status === 'closed');
+  const withR = closed.filter(t => t.r != null);
+  const wins = closed.filter(t => isTradeWin(t) === true).length;
+  const decided = closed.filter(t => isTradeWin(t) !== null).length;
+  const winRate = decided ? Math.round((wins / decided) * 100) : null;
+  const avgR = withR.length ? Math.round((withR.reduce((a, t) => a + t.r, 0) / withR.length) * 100) / 100 : null;
+  // En iyi setup (ort. R, min 2 işlem)
+  const bySetup = {};
+  withR.forEach(t => { const k = t.reason || 'diger'; (bySetup[k] = bySetup[k] || []).push(t.r); });
+  let bestSetup = null, bestAvg = -Infinity;
+  for (const k in bySetup) { if (bySetup[k].length >= 2) { const a = bySetup[k].reduce((x, y) => x + y, 0) / bySetup[k].length; if (a > bestAvg) { bestAvg = a; bestSetup = k; } } }
+  // En kötü duygu (win rate, min 2 işlem)
+  const byEmo = {};
+  closed.filter(t => isTradeWin(t) !== null && t.emotion).forEach(t => { (byEmo[t.emotion] = byEmo[t.emotion] || []).push(isTradeWin(t) ? 1 : 0); });
+  let worstEmo = null, worstRate = Infinity;
+  for (const k in byEmo) { if (byEmo[k].length >= 2) { const a = byEmo[k].reduce((x, y) => x + y, 0) / byEmo[k].length; if (a < worstRate) { worstRate = a; worstEmo = k; } } }
+  return { count: closed.length, winRate, avgR, bestSetup, bestAvg, worstEmo, worstRate: worstEmo ? Math.round(worstRate * 100) : null };
+}
+// Bugün açılan işlem sayısı (overtrading uyarısı)
+function tradesOpenedToday() {
+  const t = today();
+  return ensureTrades().filter(x => (x.opened || '').slice(0, 10) === t).length;
+}
+// Son ardışık kapanan işlemlerde kayıp serisi
+function tradeLossStreak() {
+  const closed = ensureTrades().filter(t => t.status === 'closed' && isTradeWin(t) !== null)
+    .sort((a, b) => (a.closed || '') < (b.closed || '') ? 1 : -1);
+  let s = 0;
+  for (const t of closed) { if (isTradeWin(t) === false) s++; else break; }
+  return s;
+}
+
+function fmtR(r) { return (r > 0 ? '+' : '') + r + 'R'; }
+
+function renderTradeJournal() {
+  const el = document.getElementById('tradeJournal');
+  if (!el) return;
+  ensureTrades();
+  const open = data.trades.filter(t => t.status === 'open');
+  const closed = data.trades.filter(t => t.status === 'closed').sort((a, b) => (a.closed || '') < (b.closed || '') ? 1 : -1);
+  const st = tradeStats();
+
+  let statsHtml = '';
+  if (st.count > 0) {
+    const bits = [];
+    if (st.winRate != null) bits.push(`<div class="tj-stat"><span class="tj-stat-v">%${st.winRate}</span><span class="tj-stat-l">isabet</span></div>`);
+    if (st.avgR != null) bits.push(`<div class="tj-stat"><span class="tj-stat-v ${st.avgR >= 0 ? 'up' : 'down'}">${fmtR(st.avgR)}</span><span class="tj-stat-l">ort. R</span></div>`);
+    bits.push(`<div class="tj-stat"><span class="tj-stat-v">${st.count}</span><span class="tj-stat-l">işlem</span></div>`);
+    let insight = '';
+    if (st.bestSetup) insight += `<div class="tj-insight">En iyi setup: <b>${TJ_SETUPS[st.bestSetup] || st.bestSetup}</b> (${fmtR(Math.round(st.bestAvg * 100) / 100)})</div>`;
+    if (st.worstEmo && st.worstRate != null) insight += `<div class="tj-insight warn">En çok kaybettiren: <b>${TJ_EMOTIONS[st.worstEmo] || st.worstEmo}</b> (%${st.worstRate} isabet)</div>`;
+    statsHtml = `<div class="tj-stats">${bits.join('')}</div>${insight}`;
+  }
+
+  let openHtml = '';
+  if (open.length) {
+    openHtml = open.map(t => {
+      const rr = tradeRR(t);
+      const arrow = t.side === 'short' ? '▼ Short' : '▲ Long';
+      return `<div class="tj-row open">
+        <div class="tj-row-main">
+          <span class="tj-sym">${escapeHtml(t.symbol)}</span>
+          <span class="tj-side ${t.side}">${arrow}</span>
+        </div>
+        <div class="tj-row-meta">Giriş ${formatStockPrice(t.entry)} · Stop ${t.stop != null ? formatStockPrice(t.stop) : '—'}${t.target != null ? ' · Hedef ' + formatStockPrice(t.target) : ''}${rr != null ? ' · R/R ' + rr : ''}</div>
+        <div class="tj-row-actions">
+          <button class="tj-close-btn" onclick="closeTradePrompt(${t.id})">Kapat</button>
+          <button class="tj-del-btn" onclick="deleteTrade(${t.id})" title="Sil">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  let closedHtml = '';
+  if (closed.length) {
+    closedHtml = `<details class="tj-closed-wrap"><summary>Kapanan işlemler (${closed.length})</summary>` +
+      closed.slice(0, 12).map(t => {
+        const w = isTradeWin(t);
+        const cls = w === true ? 'win' : (w === false ? 'loss' : '');
+        const rTxt = t.r != null ? fmtR(t.r) : '';
+        const pnlTxt = t.pnl != null ? `${t.pnl > 0 ? '+' : ''}${formatStockPrice(t.pnl)}` : '';
+        return `<div class="tj-row closed ${cls}">
+          <div class="tj-row-main"><span class="tj-sym">${escapeHtml(t.symbol)}</span><span class="tj-side ${t.side}">${t.side === 'short' ? 'S' : 'L'}</span>${t.reason ? `<span class="tj-tag">${TJ_SETUPS[t.reason] || t.reason}</span>` : ''}</div>
+          <div class="tj-row-res ${cls}">${rTxt}${pnlTxt ? ' · ' + pnlTxt : ''}</div>
+          <button class="tj-del-btn" onclick="deleteTrade(${t.id})" title="Sil">✕</button>
+        </div>`;
+      }).join('') + `</details>`;
+  }
+
+  el.innerHTML = `
+    <div class="tj-head">
+      <span class="tj-title"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z" fill="none"/><path d="M4 9h16M9 4v16"/></svg> İşlem Günlüğü</span>
+      <button class="tj-add" onclick="openTradeModal()">+ İşlem aç</button>
+    </div>
+    ${statsHtml}
+    ${openHtml}
+    ${closedHtml}
+    ${!open.length && !closed.length ? '<div class="tj-empty">Henüz işlem yok. Bir pozisyon açmadan önce "+ İşlem aç" ile kaydet — giriş, stop, neden ve duygu. Zamanla neyin işe yaradığını veriyle görürsün.</div>' : ''}
+  `;
+}
+
+// ---- Modal ----
+function tjPick(field, val, btn) {
+  _tj[field] = val;
+  const sib = btn.parentNode.children;
+  for (const c of sib) c.classList.toggle('sel', c === btn);
+  if (field === 'side') updateTradePreview();
+}
+function updateTradePreview() {
+  const g = id => { const v = parseFloat((document.getElementById(id).value || '').replace(',', '.')); return isFinite(v) ? v : null; };
+  const entry = g('tmEntry'), stop = g('tmStop'), target = g('tmTarget'), qty = g('tmQty');
+  const el = document.getElementById('tmPreview');
+  if (!el) return;
+  if (entry == null || stop == null) { el.innerHTML = '<span class="tm-prev-hint">Giriş + stop gir → risk/ödül hesaplansın</span>'; return; }
+  const rps = Math.abs(entry - stop);
+  if (rps <= 0) { el.innerHTML = '<span class="tm-prev-hint">Stop girişe eşit olamaz</span>'; return; }
+  const bits = [`Hisse başı risk: <b>${formatStockPrice(rps)}</b>`];
+  if (qty != null && qty > 0) bits.push(`Toplam risk: <b>${formatStockPrice(rps * qty)}</b>`);
+  if (target != null) {
+    const rr = Math.round((Math.abs(target - entry) / rps) * 100) / 100;
+    const good = rr >= 2;
+    bits.push(`Risk/Ödül: <b class="${good ? 'up' : (rr < 1 ? 'down' : '')}">${rr}</b>${rr < 1 ? ' (ödül riskten küçük)' : ''}`);
+  }
+  el.innerHTML = bits.join(' · ');
+}
+function openTradeModal() {
+  _tj = { side: 'long', reason: null, emotion: null };
+  ['tmEntry', 'tmStop', 'tmTarget', 'tmQty', 'tmNote'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  const symEl = document.getElementById('tmSymbol'); if (symEl) symEl.value = '';
+  // datalist doldur (watchlist sembolleri)
+  const dl = document.getElementById('tmSymList');
+  if (dl) dl.innerHTML = (data.watchlist || []).map(w => `<option value="${escapeHtml(w.symbol)}">`).join('');
+  // chip reset
+  document.querySelectorAll('#tmSideChips .tm-chip').forEach(c => c.classList.toggle('sel', c.dataset.v === 'long'));
+  document.querySelectorAll('#tmReasonChips .tm-chip, #tmEmotionChips .tm-chip').forEach(c => c.classList.remove('sel'));
+  // disiplin uyarısı
+  const warn = document.getElementById('tmWarn');
+  const opened = tradesOpenedToday(), streak = tradeLossStreak();
+  let msg = '';
+  if (streak >= 3) msg = `Son ${streak} işlem zararlı — bir mola iyi gelebilir. Bu işlem kuralına uyuyor mu?`;
+  else if (opened >= 3) msg = `Bugün zaten ${opened} işlem açtın — bu bir plan mı, yoksa hırs mı?`;
+  if (warn) { warn.textContent = msg; warn.style.display = msg ? 'block' : 'none'; }
+  updateTradePreview();
+  const m = document.getElementById('tradeModal'); if (m) m.classList.add('active');
+}
+function closeTradeModal() { const m = document.getElementById('tradeModal'); if (m) m.classList.remove('active'); }
+function saveTradeModal() {
+  const num = id => { const v = parseFloat((document.getElementById(id).value || '').replace(',', '.')); return isFinite(v) ? v : null; };
+  const symbol = (document.getElementById('tmSymbol').value || '').trim().toUpperCase();
+  const entry = num('tmEntry'), stop = num('tmStop'), target = num('tmTarget'), qty = num('tmQty');
+  if (!symbol) { showToast('Sembol gir (örn THYAO)', 'warning', 2500); return; }
+  if (entry == null) { showToast('Giriş fiyatı gir', 'warning', 2500); return; }
+  if (stop == null) { showToast('Stop gir — risksiz işlem yok', 'warning', 2800); return; }
+  if (stop === entry) { showToast('Stop girişe eşit olamaz', 'warning', 2500); return; }
+  const wl = (data.watchlist || []).find(w => w.symbol === symbol);
+  ensureTrades();
+  data.trades.unshift({
+    id: Date.now(), symbol, market: wl ? wl.market : null, side: _tj.side,
+    entry, stop, target, qty,
+    reason: _tj.reason, emotion: _tj.emotion,
+    note: (document.getElementById('tmNote').value || '').trim() || null,
+    opened: new Date().toISOString(), status: 'open',
+    exit: null, closed: null, pnl: null, r: null,
+  });
+  data.trades = data.trades.slice(0, 200);
+  save(); closeTradeModal(); renderTradeJournal();
+  showToast(`${symbol} işlemi açıldı — iyi şanslar, kuralına sadık kal`, 'success', 2600);
+}
+async function closeTradePrompt(id) {
+  const t = ensureTrades().find(x => x.id === id);
+  if (!t) return;
+  const exIn = await aidanPrompt(`${t.symbol} — çıkış fiyatı`, `Pozisyonu kapattığın fiyat. Giriş ${formatStockPrice(t.entry)}, stop ${t.stop != null ? formatStockPrice(t.stop) : '—'}.`, '');
+  if (exIn === null) return;
+  const exit = parseFloat((exIn || '').trim().replace(',', '.'));
+  if (!isFinite(exit) || exit <= 0) { showToast('Geçersiz fiyat', 'warning', 2500); return; }
+  const { pnl, r } = computeTradeClose(t, exit);
+  t.status = 'closed'; t.exit = exit; t.closed = new Date().toISOString(); t.pnl = pnl; t.r = r;
+  save(); renderTradeJournal();
+  const res = r != null ? fmtR(r) : (pnl != null ? (pnl > 0 ? '+' : '') + formatStockPrice(pnl) : '');
+  showToast(`${t.symbol} kapandı: ${res}`, r != null && r < 0 ? 'info' : 'success', 3000);
+}
+function deleteTrade(id) {
+  ensureTrades();
+  data.trades = data.trades.filter(x => x.id !== id);
+  save(); renderTradeJournal();
+  showToast('İşlem silindi', 'info', 1800);
 }
 
 // Adet + ortalama maliyet gir → pozisyon
