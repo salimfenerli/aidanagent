@@ -1813,6 +1813,24 @@ async function aiStockAnalysis() {
     const token = window._supa ? (await window._supa.auth.getSession()).data.session?.access_token : null;
     if (!token) throw new Error('giriş yapılmamış');
     const facts = buildStockAnalysisFacts(_stockChartPayload.ta, _stockChartPayload.j);
+    // Haber katmanı (teknik + hikaye): açık sekmeden varsa onu kullan, yoksa sessizce çek
+    let newsHeadlines = [];
+    try {
+      if (_stockNewsLoaded && _stockNewsItems.length) {
+        newsHeadlines = _stockNewsItems.slice(0, 10).map(n => ({ title: n.title, time: n.time || null }));
+      } else {
+        const w = (data.watchlist || [])[_stockChartIdx];
+        if (w) {
+          const ySymbol = w.ySymbol || legacyYSymbol(w);
+          const nr = await fetch(STOCK_NEWS_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ ySymbol, symbol: w.symbol }),
+          });
+          if (nr.ok) { const nj = await nr.json(); if (Array.isArray(nj.news)) newsHeadlines = nj.news.slice(0, 10).map(n => ({ title: n.title, time: n.time || null })); }
+        }
+      }
+    } catch {}
     const r = await fetch(STOCK_ANALYSIS_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -1820,6 +1838,7 @@ async function aiStockAnalysis() {
         symbol: _stockChartPayload.symbol,
         range: _stockChartPayload.range,
         facts,
+        newsHeadlines,
       }),
     });
     const j = await r.json().catch(() => ({}));

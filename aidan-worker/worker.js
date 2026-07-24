@@ -2875,6 +2875,7 @@ async function handleStockAnalysisApi(request, env) {
 - Destek/direnç seviyelerini BİLGİ olarak söyle (tavsiye değil)
 - Hacim ortalamanın üstünde/altında betimlemesi
 - Taktik sinyaller listesini özetle (zaten nötr dilde verildi)
+- SON HABER başlıkları verilebilir: teknik tabloyu bu haberlerle BİRLİKTE yorumla — sayının arkasındaki olası hikâyeyi/gündemi betimle ("şu tarihte şu haber çıktı, tablo bu dönemde şöyle görünüyor" gibi BAĞ kur), ama haberin fiyatı yükseltip düşüreceğini SÖYLEME. Haber yoksa bu kısmı atla.
 - ${name}'e hitap
 
 📚 ÖĞRETİCİ KURAL (ÇOK ÖNEMLİ — ${name} öğrenmek istiyor):
@@ -2892,10 +2893,17 @@ Açıklama TANIM düzeyinde kalsın — "bu yüzden yükselir/düşer/alınır" 
 3. Değer yargısı ("iyi fırsat", "riskli", "ucuz/pahalı", "fiyat düşük kalmış")
 4. Verilenin dışında sayı uydurma
 5. İngilizce
+6. Haberden gelecek/fiyat tahmini çıkarma ("bu haber yükseltir/düşürür" DEME — sadece haberin var olduğunu ve tablonun o dönemki halini betimle)
 
 ✅ TON: deneyimli grafik okuyucu + sabırlı öğretmen — gözlüyor, tarif ediyor, terimi öğretiyor, ama karar vermiyor.
 Son cümle: "Bu betimleyici bir gözlem — yatırım tavsiyesi değildir" (+ kısa 💜).`;
 
+  const news = Array.isArray(body.newsHeadlines)
+    ? body.newsHeadlines.map(n => (typeof n === 'string' ? { title: n } : n)).filter(n => n && n.title).slice(0, 10)
+    : [];
+  const newsBlock = news.length
+    ? `\n\n📰 SON HABER BAŞLIKLARI (hisseye dair, teknik tabloyla birlikte yorumla — teknik + hikaye):\n${news.map(n => `- ${String(n.title).slice(0, 160)}`).join('\n')}`
+    : '';
   const signalsBlock = Array.isArray(facts.signals) && facts.signals.length
     ? facts.signals.map(s => `- ${s}`).join('\n')
     : '(yok)';
@@ -2916,9 +2924,9 @@ Hacim: son/ort ${facts.volRatio ?? '—'}× | OBV akışı: ${facts.obvTrend ?? 
 ${facts.recentChange7d != null ? `Son 7 periyot: ${facts.recentChange7d >= 0 ? '+' : ''}${facts.recentChange7d}%` : ''}
 
 Taktik gözlemler:
-${signalsBlock}
+${signalsBlock}${newsBlock}
 
-Bu verileri 5-8 cümlelik tarafsız teknik özete dök. ADX'in trend gücünü, Stochastic'in RSI ile uyumunu/diverjansını, EMA9/21 kesişimini ve pivot konumunu özetle. HER bahsettiğin göstergenin ne anlama geldiğini kısaca açıkla (${name} öğreniyor). Tavsiye YOK, gelecek tahmini YOK.`;
+Bu verileri 5-8 cümlelik tarafsız teknik özete dök. Haber verildiyse teknik tabloyu haberlerle birlikte, akıcı bir 'teknik + hikaye' anlatısı olarak yorumla (yine tavsiye/tahmin YOK). ADX'in trend gücünü, Stochastic'in RSI ile uyumunu/diverjansını, EMA9/21 kesişimini ve pivot konumunu özetle. HER bahsettiğin göstergenin ne anlama geldiğini kısaca açıkla (${name} öğreniyor). Tavsiye YOK, gelecek tahmini YOK.`;
 
   try {
     const r = await aiRun(env, {
@@ -2926,7 +2934,7 @@ Bu verileri 5-8 cümlelik tarafsız teknik özete dök. ADX'in trend gücünü, 
         { role: 'system', content: sysPrompt },
         { role: 'user', content: userMsg },
       ],
-      max_tokens: 400,
+      max_tokens: 520,
       temperature: 0.4,
     });
     let analysis = (r.response || '').trim();
