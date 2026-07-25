@@ -157,7 +157,7 @@ document.addEventListener('visibilitychange', () => {
 function updateEstimateStats() {
   const el = document.getElementById('estimateStats');
   if (!el) return;
-  const thirtyAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const thirtyAgo = isoLocal(new Date(Date.now() - 30 * 86400000));
   const dones = data.tasks.filter(t => t.done && t.doneDate && t.doneDate >= thirtyAgo);
   const withBoth = dones.filter(t => t.estimateMin && t.actualMin);
 
@@ -1099,7 +1099,7 @@ function parseQuickInput(raw) {
   let text = ' ' + raw + ' ';
   const detected = [];
   const today = new Date();
-  const isoDate = (d) => d.toISOString().slice(0, 10);
+  const isoDate = (d) => isoLocal(d);
   const addDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return isoDate(d); };
   // 0=Pazar (JS), 1=Pzt ... 6=Cmt
   const trDays = { 'pazartesi':1, 'salı':2, 'sali':2, 'çarşamba':3, 'carsamba':3, 'çarsamba':3, 'perşembe':4, 'persembe':4, 'cuma':5, 'cumartesi':6, 'pazar':0,
@@ -1511,7 +1511,7 @@ function journalDateLabel(dateStr) {
   const todayStr = today();
   if (dateStr === todayStr) return 'Bugün';
   const yd = new Date(); yd.setDate(yd.getDate() - 1);
-  if (dateStr === yd.toISOString().slice(0,10)) return 'Dün';
+  if (dateStr === isoLocal(yd)) return 'Dün';
   const months = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
   const days = ['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];
   return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]}`;

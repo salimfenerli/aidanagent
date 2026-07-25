@@ -2,7 +2,7 @@
 
 ## 🔴 GÜNCEL DURUM (özet — detaylı seans günlükleri: CHANGELOG.md)
 
-**Mimari:** `asistan.html` tek dosya DEĞİL — 5 modül sırayla yüklenir: `supabase.js` → `core.js` (diyet + uyku + ortak helper) → `tasks.js` (sekme/gün planı/quick-capture/journal/dump) → `stocks.js` (borsa) → `ui.js` (görev render/timer/ayarlar/auth/takvim/chat). `app.js` = ESKİ bundle, YÜKLENMİYOR — dokunma, modülleri düzenle.
+**Mimari:** `asistan.html` tek dosya DEĞİL — 5 modül sırayla yüklenir: `supabase.js` → `core.js` (diyet + uyku + ortak helper) → `tasks.js` (sekme/gün planı/quick-capture/journal/dump) → `stocks.js` (borsa) → `ui.js` (görev render/timer/ayarlar/auth/takvim/chat). (`app.js` eski bundle'ı repodan kalkmış — 25 Tem'de doğrulandı.)
 
 **⚠️ DÜZENLEME KURALI:** Büyük dosyalarda Edit riskli + sandbox `rm` YOK (`mv` var). Düzenleme = **Python byte-replace + `node --check`**; **.bak OLUŞTURMA**; rollback = `git checkout <dosya>`. EOL eşle: **styles.css TEK BAŞINA LF** · diğer HEPSİ CRLF (core.js/ui.js/tasks.js/stocks.js/supabase.js/sw.js/asistan.html/worker.js/CLAUDE.md). ⚠️ 25 Tem'de doğrulandı — eski not yanlıştı, byte-replace'te `assert b'\r\n' in b` ile kontrol et.
 
@@ -15,6 +15,16 @@
 - **Görev/Plan:** otomatik gün planı + blok bildirimleri (v7-109), planlama zekası — geçmişten öğrenen `planHistory`/`planProfile` + otomatik toparlama (v7-110), haftalık sabit program (`fixedSchedule`).
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
+
+### 🔴 25 Temmuz 2026 — SAAT DİLİMİ BUG'I (v7-119) — EN KRİTİK DÜZELTME
+Kod denetiminde bulundu. **`today()` UTC döndürüyordu**, Türkiye UTC+3 → **00:00–03:00 arası PWA bir önceki günü "bugün" sanıyordu.**
+- **Etki (her gece, 3 saat boyunca):** 01:00'de bitirilen görev düne yazılıyor · gece yarısından sonra girilen uyku yanlış geceye · 00:30'daki öğün dünün kalorisine · "yarın 14:00 dişçi" bir gün geri · MIT/pomodoro/arşiv/erteleme hepsi kayıyor.
+- **Daha kötüsü:** Worker `trToday()` ile TR saatini doğru hesaplıyordu → **PWA ile Worker o 3 saatte farklı gün söylüyordu**; cron'un yazdığını PWA başka güne okuyordu.
+- **Düzeltme:** `core.js`'e tek yardımcı — `isoLocal(d)` (yerel saat dilimi ofsetini düşerek ISO tarih üretir). `today()` buna bağlandı ve **21 ham `toISOString().slice(0,10)` çağrısının 21'i** (core/tasks/stocks/ui) buradan geçirildi. Artık dosyada tek ham çağrı `isoLocal`'ın kendi içinde.
+- **Doğrulama:** `TZ=Europe/Istanbul` altında 9 sınır testi (gece yarısı sonrası, gün dönümü, yıl dönümü, artık gün) + **24 saatin 1440 dakikasının hepsinde PWA `isoLocal` ile Worker `trToday` aynı günü veriyor.**
+- **⚠️ Kalıcı kural:** Yeni kodda `new Date().toISOString().slice(0,10)` **ASLA** yazma — her zaman `isoLocal(d)` / `today()` / `shiftDateStr()` kullan.
+
+**Aynı denetimde bulunan, henüz TEMİZLENMEYEN ölü kod** (7 fonksiyon, hiçbiri çağrılmıyor, dinamik dispatch de yok): `addDump`/`dumpVoice` (tasks.js), `lookupMealMacros`/`renderAiFood`/`renderMealList`/`searchFood` (core.js), `saveSettings` (ui.js). Ayrıca `app.js` artık repoda YOK (eski not güncellendi), modül isim çakışması da yok.
 
 ### 25 Temmuz 2026 — 😴 UYKU BORCU ALGORİTMASI (v7-118)
 Salim: "uyku borcunu sadece toplama çıkarma değil, farklı bi algoritması var ya, öyle hesaplayalım." Haklıydı — eski `sleepDebt` son 7 gecenin (hedef−gerçek) düz toplamıydı.

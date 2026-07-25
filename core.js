@@ -38,7 +38,13 @@ data.tasks.forEach(t => {
   if (t.nudgeDismissed === undefined) t.nudgeDismissed = false;
 });
 
-function today() { return new Date().toISOString().slice(0,10); }
+// ⚠️ Yerel (Türkiye) tarih. toISOString() UTC döndürdüğü için 00:00–03:00 arası
+// bir önceki günü veriyordu — gece yarısından sonra yapılan her kayıt yanlış güne
+// yazılıyordu ve Worker'ın trToday()'i ile çelişiyordu. Tüm tarih üretimi buradan geçer.
+function isoLocal(d) {
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+function today() { return isoLocal(new Date()); }
 function save() {
   localStorage.setItem('aidan', JSON.stringify(data));
   if (window._supa && window._user) schedulePush();
@@ -274,7 +280,7 @@ function dietDay(create = true) {
 function shiftDateStr(dateStr, delta) {
   const d = new Date(dateStr + 'T12:00:00');
   d.setDate(d.getDate() + delta);
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
 }
 function dietDateShift(delta) {
   const next = shiftDateStr(dietKey(), delta);
@@ -2002,7 +2008,7 @@ function markSuppTaken(id) {
 // Son 7 gün uyum şeridi — nötr gösterim (streak DEĞİL): dolu=alındı, boş=alınmadı, soluk=kapsam dışı
 // (hafta içi takviyesinde hafta sonu + takviye eklenmeden önceki günler sayılmaz)
 function suppLast7(r) {
-  const created = r.id ? new Date(r.id).toISOString().slice(0, 10) : null;
+  const created = r.id ? new isoLocal(Date(r.id)) : null;
   let out = '';
   for (let i = 6; i >= 0; i--) {
     const d = shiftDateStr(today(), -i);

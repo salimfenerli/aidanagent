@@ -73,7 +73,7 @@ function initFilter() {
 function isArchivedDone(t) {
   if (!t.done || !t.doneDate) return false;
   const d = new Date(); d.setDate(d.getDate() - 7);
-  return t.doneDate < d.toISOString().slice(0, 10);
+  return t.doneDate < isoLocal(d);
 }
 
 function filterTasks(tasks) {
@@ -431,7 +431,7 @@ async function aiSuggestTask() {
 function todayDate(offset) {
   const d = new Date();
   d.setDate(d.getDate() + offset);
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
 }
 
 function closeSuggestModal() {
@@ -740,7 +740,7 @@ function getMondayIso(daysAgo = 0) {
   d.setDate(d.getDate() - daysAgo);
   const day = (d.getDay() + 6) % 7; // Pazartesi=0, Pazar=6
   d.setDate(d.getDate() - day);
-  return d.toISOString().slice(0,10);
+  return isoLocal(d);
 }
 
 function renderWeeklyInsight() {
@@ -837,7 +837,7 @@ function daysOfWeekIso(mondayIso) {
   for (let i = 0; i < 7; i++) {
     const d = new Date(base);
     d.setDate(base.getDate() + i);
-    out.push(d.toISOString().slice(0, 10));
+    out.push(isoLocal(d));
   }
   return out;
 }
@@ -846,7 +846,7 @@ function daysOfWeekIso(mondayIso) {
 function prevDayIso(iso) {
   const d = new Date(iso + 'T12:00:00');
   d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
 }
 
 // weeksAgo: 0 = bu hafta, 1 = geçen hafta, 2 = önceki hafta...
@@ -1247,7 +1247,7 @@ function renderCapacity() {
 // MIT için akıllı skor — Worker'daki ile aynı mantık
 function scoreTaskForMit(t) {
   const todayStr = today();
-  const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0,10); })();
+  const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return isoLocal(d); })();
   let score = 0;
   if (t.due) {
     if (t.due < todayStr) score += 150;
@@ -2247,7 +2247,7 @@ async function loadBackupList() {
             <div class="countdown-row-label">${escapeHtml(dateStr)}</div>
             <div class="countdown-row-meta">${taskCount} görev · ${keyCount} alan</div>
           </div>
-          <button class="small secondary" onclick="downloadBackup(${r.id}, '${d.toISOString().slice(0,10)}')" title="JSON indir">İndir</button>
+          <button class="small secondary" onclick="downloadBackup(${r.id}, '${isoLocal(d)}')" title="JSON indir">İndir</button>
         </div>
       `;
     }).join('');
@@ -3088,7 +3088,7 @@ function renderDailyScore() {
 // Öncelik sırasıyla ilk eşleşen döner — en kritik sinyal üste çıkar.
 function suppMissedStreak(r) {
   // Dünden geriye: o güne planlıysa (gün filtresi + oluşturma sonrası) ve alınmadıysa ardışık say.
-  const created = r.id ? new Date(r.id).toISOString().slice(0, 10) : null;
+  const created = r.id ? isoLocal(new Date(r.id)) : null;
   let streak = 0;
   for (let i = 1; i <= 10; i++) {
     const d = shiftDateStr(today(), -i);
@@ -4245,11 +4245,11 @@ function parseDateInput(s) {
   if (s === 'bugün' || s === 'bugun' || s === 'today') return today();
   if (s === 'yarın' || s === 'yarin' || s === 'tomorrow') {
     const d = new Date(); d.setDate(d.getDate() + 1);
-    return d.toISOString().slice(0, 10);
+    return isoLocal(d);
   }
   if (s === 'haftaya' || s === 'next week') {
     const d = new Date(); d.setDate(d.getDate() + 7);
-    return d.toISOString().slice(0, 10);
+    return isoLocal(d);
   }
   const dayMap = { 'pazartesi':1, 'salı':2, 'sali':2, 'çarşamba':3, 'carsamba':3, 'perşembe':4, 'persembe':4, 'cuma':5, 'cumartesi':6, 'pazar':0 };
   for (const [name, dow] of Object.entries(dayMap)) {
@@ -4259,7 +4259,7 @@ function parseDateInput(s) {
       if (diff === 0) diff = 7;
       if (s.includes('gelecek') || s.includes('haftaya')) diff = ((dow - todayDow + 7) % 7) + 7;
       const d = new Date(); d.setDate(d.getDate() + diff);
-      return d.toISOString().slice(0, 10);
+      return isoLocal(d);
     }
   }
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;

@@ -777,7 +777,7 @@ function renderPortfolioHistory() {
   // N gün önceki tarihe en yakın (<=) snapshot'a göre değişim %
   const changeFrom = (daysAgo) => {
     const t = new Date(); t.setDate(t.getDate() - daysAgo);
-    const ts = t.toISOString().slice(0, 10);
+    const ts = isoLocal(t);
     let past = null;
     for (let i = series.length - 1; i >= 0; i--) { if (series[i].date <= ts) { past = series[i]; break; } }
     if (!past || past.value <= 0) return null;
@@ -2534,9 +2534,9 @@ async function postponeTask(id) {
   const menu = document.createElement('div');
   menu.id = 'postponeMenu';
   menu.className = 'postpone-menu';
-  const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0,10); })();
-  const in3 = (() => { const d = new Date(); d.setDate(d.getDate() + 3); return d.toISOString().slice(0,10); })();
-  const nextWeek = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().slice(0,10); })();
+  const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return isoLocal(d); })();
+  const in3 = (() => { const d = new Date(); d.setDate(d.getDate() + 3); return isoLocal(d); })();
+  const nextWeek = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return isoLocal(d); })();
   menu.innerHTML = `
     <div class="postpone-title">"${escapeHtml((t.text||'').slice(0,40))}" ertele</div>
     <button onclick="applyPostpone(${id}, '${tomorrow}')">⏭️ Yarın</button>
