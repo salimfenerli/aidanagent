@@ -1664,10 +1664,6 @@ function celebrateDone(taskId) {
   showDoneCounter();
 }
 
-// ============ AYARLAR ============
-function saveSettings() {
-  save();
-}
 function saveDisplayName() {
   const v = (document.getElementById('displayName').value || '').trim().slice(0, 24);
   data.settings.displayName = v;
@@ -2003,7 +1999,7 @@ async function autoConnectFromConfig() {
     if (!cfg.supaUrl || !cfg.supaKey) { renderAuthBox(); renderWelcome(); return; }
     data.settings.supaUrl = cfg.supaUrl;
     data.settings.supaKey = cfg.supaKey;
-    localStorage.setItem('aidan', JSON.stringify(data));
+    saveLocal();
     // Settings ekranını da güncelle (gizliyse de field'lar dolsun)
     const su = document.getElementById('supaUrl');
     const sk = document.getElementById('supaKey');
@@ -3907,7 +3903,7 @@ function connectSupabase() {
   document.getElementById('supaKey').value = key;
   data.settings.supaUrl = url;
   data.settings.supaKey = key;
-  localStorage.setItem('aidan', JSON.stringify(data));
+  saveLocal();
   initSupabase();
 }
 
@@ -3916,7 +3912,7 @@ function disconnectSupabase() {
   if (window._supa && window._user) window._supa.auth.signOut();
   data.settings.supaUrl = '';
   data.settings.supaKey = '';
-  localStorage.setItem('aidan', JSON.stringify(data));
+  saveLocal();
   window._supa = null;
   window._user = null;
   renderAuthBox();
@@ -3986,6 +3982,56 @@ async function onLoginSuccess() {
   }
 }
 
+// ===== SENKRON ÇAKIŞMA KORUMASI (v7-120) =====
+// Eski davranış: bulut yereli KOŞULSUZ eziyordu ("yereli onunla değiştir").
+// iPhone + PC birlikte kullanıldığı için bu sessiz veri kaybı demekti.
+// Artık son eşitlenen sürüm (syncRev) izlenir; iki taraf da değiştiyse SORULUR
+// ve ezilen taraf HER durumda yedeklenir (geri alınabilir).
+const SYNC_REV_KEY = 'aidan_syncRev';
+const SYNC_DIRTY_KEY = 'aidan_dirty';
+const SYNC_BACKUP_KEY = 'aidan_conflictBackup';
+
+function markLocalDirty() { try { localStorage.setItem(SYNC_DIRTY_KEY, '1'); } catch (_) {} }
+function isLocalDirty() { try { return localStorage.getItem(SYNC_DIRTY_KEY) === '1'; } catch (_) { return false; } }
+function clearLocalDirty() { try { localStorage.removeItem(SYNC_DIRTY_KEY); } catch (_) {} }
+function getSyncRev() { try { return localStorage.getItem(SYNC_REV_KEY) || ''; } catch (_) { return ''; } }
+function setSyncRev(rev) { try { localStorage.setItem(SYNC_REV_KEY, rev || ''); } catch (_) {} }
+// Sunucu formatı (mikrosaniye/offset) yerelde sakladığımızdan farklı yazılabilir → ms'e indir.
+function revMs(v) { const t = Date.parse(v || ''); return isNaN(t) ? 0 : t; }
+
+// Ezilecek tarafı her zaman yedekle — çakışmayı yanlış çözsek bile veri geri gelir.
+function backupBeforeOverwrite(side, obj) {
+  try {
+    localStorage.setItem(SYNC_BACKUP_KEY, JSON.stringify({ at: Date.now(), side, data: obj }));
+  } catch (_) {}   // kota doluysa yedek atlanır, ana akış bozulmaz
+}
+function hasConflictBackup() { try { return !!localStorage.getItem(SYNC_BACKUP_KEY); } catch (_) { return false; } }
+// Çakışmada kaybedilen tarafı geri yükle (Ayarlar → Yedekleme)
+function restoreConflictBackup() {
+  let raw; try { raw = localStorage.getItem(SYNC_BACKUP_KEY); } catch (_) { raw = null; }
+  if (!raw) { showToast('Geri alınacak çakışma yedeği yok', 'info', 3000); return; }
+  let snap; try { snap = JSON.parse(raw); } catch (_) { showToast('Yedek okunamadı', 'error', 3000); return; }
+  if (!snap || !snap.data) { showToast('Yedek boş', 'error', 3000); return; }
+  const when = new Date(snap.at || Date.now()).toLocaleString('tr-TR');
+  if (!confirm('Çakışma yedeğini geri yükle\n\n' + when + ' tarihli kayıt:\n' + syncSummary(snap.data) +
+               '\n\nŞu andaki veri bununla değiştirilecek. Devam?')) return;
+  backupBeforeOverwrite('pre-restore', data);   // geri almanın da geri alması olsun
+  data = snap.data;
+  ensureDiet(); data.tasks = data.tasks || []; data.settings = data.settings || {};
+  save();
+  renderTasks();
+  showToast('Yedek geri yüklendi', 'success', 4000);
+}
+// Çakışma modalında "hangisi daha dolu" karşılaştırması için kaba özet
+function syncSummary(d) {
+  d = d || {};
+  const tasks = (d.tasks || []).length;
+  const done = (d.tasks || []).filter(t => t && t.done).length;
+  const meals = Object.values((d.diet && d.diet.days) || {})
+    .reduce((a, x) => a + (((x && x.meals) || []).length), 0);
+  return tasks + ' görev (' + done + ' bitmiş) · ' + meals + ' öğün kaydı';
+}
+
 async function pullFromCloud() {
   if (!window._supa || !window._user) return;
   _pulling = true;
@@ -4003,7 +4049,40 @@ async function pullFromCloud() {
     }
 
     if (row && row.data) {
-      // Bulutta veri var — yereli onunla değiştir
+      const remoteRev = row.updated_at || '';
+      const knownRev = getSyncRev();
+      const dirty = isLocalDirty();
+      const remoteChanged = revMs(remoteRev) > revMs(knownRev);
+
+      // 1) Bulut en son bıraktığımız hâlde → yerelde bekleyen varsa onu yolla
+      if (!remoteChanged) {
+        if (dirty) { await pushToCloudNow(); showSupaStatus('Bu cihazdaki değişiklikler buluta yazıldı.', '#50fa7b'); }
+        else showSupaStatus('Zaten güncel.', '#50fa7b');
+        _pulling = false;
+        return;
+      }
+      // 2) İKİ TARAF DA değişmiş → sessizce ezme, sor
+      if (dirty) {
+        backupBeforeOverwrite('local', data);
+        const keepLocal = confirm(
+          'Eşitleme çakışması\n\n' +
+          'Bu cihazda ve başka bir cihazda aynı anda değişiklik yapılmış.\n\n' +
+          'BU CİHAZ : ' + syncSummary(data) + '\n' +
+          'BULUT    : ' + syncSummary(row.data) + '\n\n' +
+          'Tamam  = bu cihazdakini koru (bulut ezilir)\n' +
+          'İptal  = buluttakini al (bu cihazdaki Ayarlar → Yedekleme\'den geri alınabilir)'
+        );
+        if (keepLocal) {
+          await pushToCloudNow();
+          showSupaStatus('Bu cihazdaki veri korundu ve buluta yazıldı.', '#50fa7b');
+          _pulling = false;
+          return;
+        }
+      } else {
+        // 3) Sadece bulut değişmiş → güvenle uygula, yine de yedek al
+        backupBeforeOverwrite('local', data);
+      }
+
       const remoteData = row.data;
       data = remoteData;
       // Eski alanları ekle
@@ -4013,12 +4092,14 @@ async function pullFromCloud() {
       data.pomoToday = data.pomoToday || { date: today(), count: 0 };
       data.dayPlan = data.dayPlan || { date: today(), blocks: [] };
       ensureDiet();
-      localStorage.setItem('aidan', JSON.stringify(data));
+      saveLocal();
       // Yenilemeden re-render et (aktif sekmeyi koru)
       renderTasks();
       if (document.getElementById('plan').classList.contains('active')) renderDayPlan();
       if (document.getElementById('diet').classList.contains('active')) renderDiet();
             document.getElementById('pomoCount').textContent = data.pomoToday.count;
+      setSyncRev(row.updated_at || '');
+      clearLocalDirty();
       showSupaStatus('Buluttan veri çekildi.', '#50fa7b');
     } else {
       // Bulutta veri yok — yereli yükle
@@ -4042,15 +4123,23 @@ async function pushToCloudNow() {
   _pushing = true;
   try {
     const now = new Date();
-    const {error} = await window._supa
+    const {data: saved, error} = await window._supa
       .from('aidan_data')
       .upsert({
         user_id: window._user.id,
         data: data,
         updated_at: now.toISOString()
-      }, { onConflict: 'user_id' });
+      }, { onConflict: 'user_id' })
+      .select('updated_at')
+      .maybeSingle();
     if (error) console.warn('Push hata:', error);
-    else localStorage.setItem('aidan_lastPush', String(now.getTime()));
+    else {
+      localStorage.setItem('aidan_lastPush', String(now.getTime()));
+      // Sürümü SUNUCUNUN yazdığı değerden al — yerel ISO ile server formatı
+      // farklı olursa her pull sahte çakışma sayardı.
+      setSyncRev((saved && saved.updated_at) || now.toISOString());
+      clearLocalDirty();
+    }
   } catch(e) { console.warn('Push hata:', e); }
   // Echo'yu görmezden gelmek için kısa grace period
   setTimeout(() => { _pushing = false; }, 3000);
@@ -4070,10 +4159,16 @@ function subscribeToCloud() {
       // Kendi push'umuzun echo'sunu görmezden gel
       if (_pulling || _pushing) return;
       if (!payload.new || !payload.new.data) return;
+      // Bizim bildiğimizden eski/aynı sürüm → yoksay (echo veya gecikmiş olay)
+      const rtRev = payload.new.updated_at || '';
+      if (revMs(rtRev) <= revMs(getSyncRev())) return;
       // Veri gerçekten farklı mı?
       const remoteJson = JSON.stringify(payload.new.data);
       const localJson = JSON.stringify(data);
-      if (remoteJson === localJson) return;
+      if (remoteJson === localJson) { setSyncRev(rtRev); return; }
+      // Yerelde henüz gönderilmemiş değişiklik varsa sessizce ezme — önce yedekle
+      const wasDirty = isLocalDirty();
+      backupBeforeOverwrite('local', data);
       // Diğer cihazdan gelmiş — sayfa yenilemeden uygula
       data = payload.new.data;
       // Eski alanlar eksikse default ekle
@@ -4083,12 +4178,15 @@ function subscribeToCloud() {
       data.pomoToday = data.pomoToday || { date: today(), count: 0 };
       data.dayPlan = data.dayPlan || { date: today(), blocks: [] };
       ensureDiet();
-      localStorage.setItem('aidan', JSON.stringify(data));
+      saveLocal();
       // Sekmeyi koruyarak yeniden render et
       renderTasks();
       if (document.getElementById('diet').classList.contains('active')) renderDiet();
       if (document.getElementById('plan').classList.contains('active')) renderDayPlan();
-            showSupaStatus('Diğer cihazdan güncelleme alındı.', '#bd93f9');
+            setSyncRev(rtRev);
+      clearLocalDirty();
+      showSupaStatus('Diğer cihazdan güncelleme alındı.', '#bd93f9');
+      if (wasDirty) showToast('Başka cihazdan güncelleme geldi. Bu cihazdaki bekleyen değişiklik yedeklendi — Ayarlar → Yedekleme\'den geri alabilirsin.', 'info', 7000);
     })
     .subscribe();
 }

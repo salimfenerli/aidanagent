@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="supabase.js"></script>
+<script defer src="supabase.js"></script>
 <title>Aidan - ADHD Asistanım</title>
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -689,7 +689,8 @@
       <button class="small secondary" onclick="document.getElementById('importFile').click()">Yedek yükle</button>
       <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importData(event)">
       <button class="small danger" onclick="resetAll()">Her şeyi sıfırla</button>
-      <div class="settings-help">Verilerin sadece bu bilgisayarda kayıtlı. Yedek almazsan tarayıcı temizliğinde kaybolur.</div>
+      <button class="small secondary" onclick="restoreConflictBackup()">Çakışma yedeğini geri al</button>
+      <div class="settings-help">Verilerin sadece bu bilgisayarda kayıtlı. Yedek almazsan tarayıcı temizliğinde kaybolur.<br>İki cihazda aynı anda değişiklik olursa ezilen taraf otomatik yedeklenir — yukarıdaki butonla geri alabilirsin.</div>
     </div>
 
     <div class="settings-row">
@@ -1242,9 +1243,9 @@
   </div>
 </div>
 
-<script src="core.js"></script>
-<script src="tasks.js"></script>
-<script src="stocks.js"></script>
-<script src="ui.js"></script>
+<script defer src="core.js"></script>
+<script defer src="tasks.js"></script>
+<script defer src="stocks.js"></script>
+<script defer src="ui.js"></script>
 </body>
 </html>

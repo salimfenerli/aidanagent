@@ -16,6 +16,28 @@
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 25 Temmuz 2026 — VERİ MİMARİSİ SERTLEŞTİRME (v7-120)
+Kapsamlı değerlendirmenin çıkardığı 6 madde sırayla kapatıldı. **Özellik eklenmedi, dayanıklılık eklendi.**
+
+**1. Senkron çakışma koruması (kritik — sessiz veri kaybı vardı).** Eski `pullFromCloud` yorumu aynen "Bulutta veri var — yereli onunla değiştir" idi: karşılaştırma/birleştirme/zaman damgası YOK. iPhone + PC birlikte kullanıldığı için telefon çevrimdışıyken yapılan değişiklik, uygulama açılınca sessizce siliniyordu. `updated_at` yazılıyordu ama **hiçbir yerde okunmuyordu**.
+- Yeni durum: `aidan_syncRev` (son eşitlenen sürüm) + `aidan_dirty` (yerelde bekleyen değişiklik) izlenir. Karar matrisi: bulut aynı+temiz → hiçbir şey · bulut aynı+kirli → **yereli push et** · bulut yeni+temiz → uygula · **bulut yeni+kirli → ÇAKIŞMA, kullanıcıya sor** (her iki tarafın görev/öğün sayısı gösterilir).
+- **Ezilen taraf HER durumda `aidan_conflictBackup`'a yedeklenir**, Ayarlar → "Çakışma yedeğini geri al" ile dönülebilir (`restoreConflictBackup`).
+- `pushToCloudNow` artık `.select('updated_at')` ile **sunucunun yazdığı** sürümü geri okur — yerel ISO ile server timestamptz formatı farklı olsaydı her pull sahte çakışma sayardı.
+- Realtime handler: bizden eski sürümü yoksayar (`revMs` ile ms'e indirip karşılaştırır), yerelde bekleyen varsa yedekleyip toast'la haber verir. Eski koddaki 3 saniyelik "echo penceresi" gerçek güncellemeleri de sessizce düşürüyordu.
+
+**2. localStorage kota koruması.** 6 yerde çıplak `setItem` vardı, kota dolunca istisna fırlatıp o anki işlemi bozuyordu. Hepsi `saveLocal()`'a alındı: `QuotaExceededError`'da önce `pruneOldData(true)` ile agresif budama, sonra tek tekrar deneme, olmazsa kullanıcıya net uyarı. **İstisna asla dışarı sızmaz.**
+
+**3. Veri budama.** `data.tasks` (bitmiş görevler ASLA silinmiyordu, sadece arşivde gizleniyordu) ve `data.diet.days` sonsuza büyüyordu (~700 KB/yıl). `pruneOldData()` — 180 günden eski **bitmiş** görev + diyet günü atılır, günde bir kez init'te çalışır. **Aktif görevlere yaşı ne olursa olsun dokunulmaz** (teste bağlandı).
+
+**4. `defer`.** 5 script'e eklendi. `supabase.js` (201 KB) `<head>` içinde defer'siz durup çizimi bloke ediyordu. Gövdede inline `<script>` yok, script'ler zaten `</body>` öncesinde → sıra ve DOM erişimi güvenli.
+
+**5. Ölü kod.** 7 fonksiyon, **112 satır** silindi (`addDump`/`dumpVoice`/`lookupMealMacros`/`renderAiFood`/`renderMealList`/`searchFood`/`saveSettings`). Kalan referans: 0.
+
+**6. CSS — hipotez YANLIŞ çıktı.** "4 tema katmanı üst üste binmiş, aynı özellikler 2-4 kez tanımlanıyor" beklentisiyle bakıldı; gerçekte **1628 kuralın sadece 33'ü** (2.6 KB / %1.4) tamamen eziliyordu. Onlar silindi (188.3 → 185.7 KB). **CSS şişkin değil, uygulama gerçekten büyük** — ileride bu maddeye tekrar zaman harcama.
+
+**Doğrulama:** 18 senkron testi (5 pull senaryosu + yedek + revMs format farkı) · 15 budama/kota testi · önceki 41+9+200 test regresyonsuz · 6 dosya `node --check` temiz.
+**Cache:** v7-119 → **v7-120**
+
 ### 🔴 25 Temmuz 2026 — SAAT DİLİMİ BUG'I (v7-119) — EN KRİTİK DÜZELTME
 Kod denetiminde bulundu. **`today()` UTC döndürüyordu**, Türkiye UTC+3 → **00:00–03:00 arası PWA bir önceki günü "bugün" sanıyordu.**
 - **Etki (her gece, 3 saat boyunca):** 01:00'de bitirilen görev düne yazılıyor · gece yarısından sonra girilen uyku yanlış geceye · 00:30'daki öğün dünün kalorisine · "yarın 14:00 dişçi" bir gün geri · MIT/pomodoro/arşiv/erteleme hepsi kayıyor.

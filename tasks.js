@@ -1304,17 +1304,6 @@ function uniqueDumpWhen() {
   _lastDumpWhen = w;
   return w;
 }
-function addDump() {
-  const inp = document.getElementById('braindumpInput');
-  const text = inp.value.trim();
-  if (!text) return;
-  data.dumps = data.dumps || [];
-  data.dumps.unshift({ text, when: uniqueDumpWhen() });
-  inp.value = '';
-  save();
-  renderDumps();
-  showToast('Kafandan çıktı', 'success', 1800);
-}
 
 function deleteDump(when) {
   data.dumps = (data.dumps || []).filter(d => d.when !== when);
@@ -1372,38 +1361,6 @@ function renderDumps() {
   `).join('');
 }
 
-// Brain dump için sesli giriş — quickCaptureMic'in dump versiyonu
-function dumpVoice() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    showToast('Bu tarayıcı sesli girişi desteklemiyor.', 'warning', 4000);
-    return;
-  }
-  const inp = document.getElementById('braindumpInput');
-  const btn = document.getElementById('braindumpMic');
-  if (_speechRec) { try { _speechRec.stop(); } catch (e) {} return; }
-  const rec = new SR();
-  rec.lang = 'tr-TR'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
-  _speechRec = rec;
-  const origPh = inp.placeholder;
-  const cleanup = () => { if (btn) btn.classList.remove('recording'); inp.placeholder = origPh; _speechRec = null; };
-  rec.onstart = () => { if (btn) btn.classList.add('recording'); inp.placeholder = 'Dinliyorum...'; inp.value = ''; inp.focus(); };
-  rec.onresult = (e) => {
-    let final = '', interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      const t = e.results[i][0].transcript;
-      if (e.results[i].isFinal) final += t; else interim += t;
-    }
-    inp.value = (final || interim).trim();
-  };
-  rec.onerror = (e) => {
-    cleanup();
-    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') showToast('Mikrofon izni reddedildi.', 'warning', 4000);
-    else if (e.error === 'no-speech') showToast('Ses duyulmadı, tekrar dene', 'info', 2500);
-  };
-  rec.onend = () => { cleanup(); if (inp.value.trim()) inp.focus(); };
-  try { rec.start(); } catch (err) { cleanup(); showToast('Mikrofon başlatılamadı', 'error', 3000); }
-}
 
 // ============ AKŞAM GÜNLÜĞÜ ============
 // data.journal = [{ date:'YYYY-MM-DD', text, reflection, when }]

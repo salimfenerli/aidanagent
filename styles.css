@@ -70,7 +70,6 @@
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
-  .subtitle { text-align: center; color: var(--text-muted); margin-bottom: 22px; font-size: 0.88em; letter-spacing: 0.01em; }
 
   /* Üst bar - zaman körlüğü */
   .topbar {
@@ -89,8 +88,6 @@
   .topbar-item { display: flex; flex-direction: column; align-items: center; min-width: 90px; gap: 3px; }
   .topbar-label { font-size: 0.67em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
   .topbar-value { font-size: 1.2em; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-  .topbar-value.next { color: var(--warning); }
-  .topbar-value.session { color: var(--success); }
 
   /* iOS klavye için input scroll buffer'ı — scrollIntoView klavye üstüne yerleştirir */
   input, textarea, [contenteditable="true"] {
@@ -140,12 +137,6 @@
     align-items: center;
     gap: 6px;
   }
-  .tab:hover { background: var(--surface-hover); color: var(--text); }
-  .tab.active {
-    background: var(--surface);
-    color: var(--text);
-    box-shadow: 0 1px 6px rgba(0,0,0,0.5), 0 0 0 1px var(--border);
-  }
   .tab:active { transform: scale(0.97); }
   .panel {
     background: var(--surface);
@@ -156,8 +147,6 @@
     box-shadow: var(--shadow-md);
   }
   .panel.active { display: block; }
-  h2 { margin-bottom: 18px; color: var(--text); font-size: 1.15em; font-weight: 600; letter-spacing: -0.02em; }
-  h3 { color: var(--text); margin: 14px 0 10px; font-size: 0.98em; font-weight: 600; }
 
   /* Form elemanları */
   input[type="text"], input[type="email"], input[type="password"], input[type="time"], input[type="date"], input[type="number"], input:not([type]), select, textarea {
@@ -190,9 +179,7 @@
     font-family: inherit;
     letter-spacing: 0.01em;
   }
-  button:hover { background: var(--accent-hover); box-shadow: 0 0 0 3px var(--accent-glow); }
   button:active { transform: scale(0.97); }
-  button.danger { background: var(--danger); }
   button.danger:hover { background: #e04040; box-shadow: 0 0 0 3px var(--danger-soft); }
   button.secondary { background: var(--surface-hover); color: var(--text); border: 1px solid var(--border); box-shadow: none; }
   button.secondary:hover { background: var(--border); box-shadow: none; }
@@ -227,7 +214,6 @@
     transition: transform 0.2s ease;
     display: inline-block;
   }
-  .add-task-section[open] summary::before { transform: rotate(90deg); }
   .add-task-section summary:hover { color: var(--text); background: var(--surface-hover); }
   .add-task-inner { padding: 0 14px 14px; }
   .task-input {
@@ -922,19 +908,9 @@
     transition: background 0.12s, box-shadow 0.12s, border-color 0.12s;
     box-shadow: var(--shadow-sm);
   }
-  .task:hover {
-    background: var(--surface-hover);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-  }
-  .task.urgent { border-left-color: var(--danger); }
   .task.low { border-left-color: var(--text-faint); }
-  .task.cat-odev { border-left-color: var(--warning); }
-  .task.cat-ders { border-left-color: #5aa2ff; }
-  .task.cat-ev { border-left-color: var(--info); }
-  .task.cat-kisisel { border-left-color: var(--accent); }
   .task.done { opacity: 0.38; border-left-color: var(--border-soft); box-shadow: none; }
   .task.done .task-text { text-decoration: line-through; }
-  .task > div:first-child { padding-top: 2px; }
   .task-text { flex: 1; font-size: 0.93em; line-height: 1.45; }
   .task-notes {
     margin-top: 4px;
@@ -978,8 +954,6 @@
     transition: transform 0.1s;
     margin-top: 1px;
   }
-  .task input[type="checkbox"]:hover { transform: scale(1.15); }
-  .task input[type="checkbox"]:active { transform: scale(0.92); }
   .subtasks { margin-left: 28px; margin-top: 8px; }
   .subtask {
     background: var(--bg);
@@ -1019,7 +993,6 @@
     box-shadow: none;
   }
   .subtask-add:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); box-shadow: none; }
-  .task-actions { display: flex; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
 
   /* Odak / Pomodoro */
   .pomodoro { text-align: center; padding: 12px; }
@@ -1170,10 +1143,6 @@
     transition: border-color 0.15s, box-shadow 0.15s;
     box-shadow: var(--shadow-sm);
   }
-  .quick-capture:focus-within {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-glow);
-  }
   .quick-capture input {
     flex: 1;
     background: transparent;
@@ -1184,7 +1153,6 @@
     outline: none;
     font-family: inherit;
   }
-  .quick-capture input::placeholder { color: var(--text-muted); }
   .quick-capture-btn {
     background: var(--accent);
     color: white;
@@ -1198,7 +1166,6 @@
     line-height: 1;
     box-shadow: 0 1px 4px rgba(245,165,36, 0.3);
   }
-  .quick-capture-btn:hover { background: var(--accent-hover); box-shadow: 0 2px 8px var(--accent-glow); }
   .quick-capture-btn:active { transform: scale(0.95); }
   .quick-capture-btn.mic-btn {
     background: transparent;
@@ -1647,7 +1614,6 @@
     user-select: none;
     border: 1px solid transparent;
   }
-  .mit-item:hover { background: var(--surface-hover); border-color: var(--border-soft); }
   .mit-item:active { transform: scale(0.99); }
   .mit-item.done { text-decoration: line-through; opacity: 0.45; }
   .mit-check { font-size: 1em; flex-shrink: 0; }
@@ -1664,12 +1630,10 @@
     font-size: 0.88em;
     box-shadow: none;
   }
-  .mit-suggestion:hover { background: rgba(245,165,36, 0.16); border-color: var(--accent); }
   .mit-suggestion:active { transform: scale(0.98); }
   .mit-sug-icon { font-size: 0.85em; color: var(--accent); flex-shrink: 0; }
   .mit-sug-text { flex: 1; color: var(--text); font-size: 0.97em; }
   .mit-sug-meta { font-size: 0.76em; color: var(--text-muted); flex-shrink: 0; }
-  .task.mit { border-left-color: var(--warning); background: var(--warning-soft); }
 
   /* Filtre chip'leri */
   .filter-chips {
@@ -1692,8 +1656,6 @@
     letter-spacing: 0.01em;
     box-shadow: none;
   }
-  .filter-chip:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border); box-shadow: none; }
-  .filter-chip.active { background: var(--accent); color: white; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
   .filter-chip .chip-count {
     margin-left: 4px;
     opacity: 0.65;
@@ -1717,7 +1679,6 @@
     box-shadow: 0 2px 10px rgba(245,165,36, 0.3);
     letter-spacing: 0.01em;
   }
-  .suggest-btn:hover { background: var(--accent-hover); box-shadow: 0 4px 18px var(--accent-glow); }
   .suggest-btn:active { transform: scale(0.99); }
   .action-row {
     display: grid;
@@ -2400,7 +2361,6 @@
   }
   button.secondary:hover { background: var(--surface-hover); border-color: var(--border-strong); }
   button.danger { background: var(--danger); color: #1a0a08; }
-  button.danger:hover { background: #ff9389; }
 
   /* Stats: hide */
   .stats { display: none; }
@@ -2562,7 +2522,6 @@
     font-size: 13px;
     box-shadow: none;
   }
-  .mit-suggestion:hover { background: rgba(245,165,36, 0.18); border-color: var(--accent); }
   .mit-sug-icon { color: var(--accent); }
   .mit-sug-text { font-size: 13px; }
   .mit-sug-meta { font-size: 11px; }
@@ -2626,7 +2585,6 @@
     background: conic-gradient(var(--accent) var(--p, 0%), var(--surface-high) var(--p, 0%));
     box-shadow: 0 0 0 4px rgba(245,165,36, 0.06);
   }
-  .timer-ring.running { box-shadow: 0 0 0 6px rgba(245,165,36, 0.18), 0 0 40px rgba(245,165,36, 0.25); }
   .timer-inner { width: 252px; height: 252px; background: var(--bg); box-shadow: inset 0 2px 12px rgba(0,0,0,0.5); }
   .timer { font-size: 56px; }
   .focus-task { background: var(--surface); border-color: var(--border-soft); font-size: 14px; }
@@ -2949,7 +2907,6 @@
     border-radius: 0;
     padding: 8px 0 8px 16px;
   }
-  .mit-suggestion:hover { background: transparent; }
 
   /* 8pt RİTİM — disiplinli, monoton olmayan nefes */
   .quick-capture { margin-bottom: 24px; }
@@ -3243,7 +3200,6 @@
   .wd-row { display:flex; justify-content:space-between; font-size:0.85em; color:var(--text); padding:5px 8px; background:var(--surface-hover); border-radius:var(--radius-sm); }
   .wd-kg { font-weight:700; color:var(--text-strong); }
 
-
 /* ============ AIDAN'A SOR — sohbet ============ */
 .chat-wrap { display: flex; flex-direction: column; gap: 12px; }
 .chat-head { display: flex; align-items: center; justify-content: space-between; }
@@ -3484,7 +3440,6 @@
 .rk-size-sub { font-size: 0.76rem; color: var(--text-muted); margin-top: 3px; line-height: 1.4; }
 .rk-size-cap { font-size: 0.68rem; color: var(--text-faint); margin-top: 5px; }
 @media (prefers-reduced-motion: reduce) { .rk-chip { transition: none; } }
-
 
 /* Portföy geneli risk paneli (Tem 11) */
 .portfolio-risk-panel { margin-top: 8px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }

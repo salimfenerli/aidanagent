@@ -17,6 +17,7 @@ data.dayPlan = data.dayPlan || { date: today(), blocks: [] };
 if (data.dayPlan.date !== today()) data.dayPlan = { date: today(), blocks: [] };
 if (data.pomoToday.date !== today()) data.pomoToday = { date: today(), count: 0 };
 ensureDiet();  // diyet sekmesi veri yapısı (kalori/su günlüğü + kilo trendi)
+pruneOldData();  // 180 günden eski bitmiş görev + diyet günü (günde bir kez)
 
 // Geriye uyumluluk: eski görevlere yeni alanlar ekle
 data.tasks.forEach(t => {
@@ -45,8 +46,54 @@ function isoLocal(d) {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 function today() { return isoLocal(new Date()); }
+// ===== localStorage KOTA KORUMASI (v7-120) =====
+// Önceden 6 yerde çıplak setItem vardı; kota dolduğunda istisna fırlatıp
+// o an yapılan işlemi (görev ekleme, öğün kaydı...) sessizce bozuyordu.
+function saveLocal() {
+  try {
+    localStorage.setItem('aidan', JSON.stringify(data));
+    return true;
+  } catch (e) {
+    const quota = e && (e.name === 'QuotaExceededError' ||
+                        e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22);
+    if (quota) {
+      // Önce agresif buda, sonra bir kez daha dene
+      if (pruneOldData(true)) {
+        try { localStorage.setItem('aidan', JSON.stringify(data)); return true; } catch (_) {}
+      }
+      if (typeof showToast === 'function')
+        showToast('Depolama doldu. Eski kayıtlar budandı ama hâlâ yer yok — Ayarlar → Verileri indir ile yedek alıp sıfırla.', 'error', 9000);
+    } else if (typeof showToast === 'function') {
+      showToast('Kayıt hatası: ' + ((e && e.message) || e), 'error', 6000);
+    }
+    return false;
+  }
+}
+
+// ===== VERİ BUDAMA (v7-120) =====
+// data.tasks (bitmiş görevler) ve data.diet.days HİÇ budanmıyordu → blob sonsuza
+// büyüyor, her save() tüm blob'u localStorage'a + Supabase'e yazıyordu.
+function pruneOldData(force) {
+  const PRUNE_DAYS = 180;   // fonksiyon içi: init sırasında TDZ hatası olmasın
+  const t = today();
+  data.settings = data.settings || {};
+  if (!force && data.settings.lastPrune === t) return false;
+  const cutoff = shiftDateStr(t, -PRUNE_DAYS);
+  let removed = 0;
+  // 1) 180 günden eski BİTMİŞ görevler (aktif görevlere dokunulmaz)
+  const before = (data.tasks || []).length;
+  data.tasks = (data.tasks || []).filter(x => !(x && x.done && x.doneDate && x.doneDate < cutoff));
+  removed += before - data.tasks.length;
+  // 2) 180 günden eski diyet günleri
+  const days = (data.diet && data.diet.days) || null;
+  if (days) for (const k of Object.keys(days)) if (k < cutoff) { delete days[k]; removed++; }
+  data.settings.lastPrune = t;
+  return removed > 0;
+}
+
 function save() {
-  localStorage.setItem('aidan', JSON.stringify(data));
+  saveLocal();
+  if (typeof markLocalDirty === 'function') markLocalDirty();
   if (window._supa && window._user) schedulePush();
 }
 
@@ -410,23 +457,6 @@ function addMeal() {
   showToast(_autoSaved ? (name + ' eklendi \u00b7 besinlerine kaydedildi') : (name + ' eklendi'), 'success');
 }
 function removeMeal(id) { const day = dietDay(); day.meals = day.meals.filter(m => m.id !== id); save(); renderDiet(); }
-function renderMealList() {
-  const day = dietDay(false), el = document.getElementById('mealList');
-  if (!day.meals.length) { el.innerHTML = '<div class="diet-empty">Henüz öğün eklenmedi.</div>'; return; }
-  let html = '';
-  Object.keys(MEAL_SLOTS).forEach(slot => {
-    const items = day.meals.filter(m => m.slot === slot);
-    if (!items.length) return;
-    const sub = items.reduce((s, m) => s + (Number(m.kcal) || 0), 0);
-    html += `<div class="meal-group"><div class="meal-group-head">${MEAL_SLOTS[slot]}${sub ? ` · ${sub} kcal` : ''}</div>`;
-    items.forEach(m => {
-      const macroTag = (m.protein != null || m.carb != null || m.fat != null) ? ` · P${m.protein || 0} K${m.carb || 0} Y${m.fat || 0}` : '';
-      html += `<div class="meal-item"><span class="meal-name meal-name-edit" onclick="editMeal(${m.id})">${escapeHtml(m.name)}</span><span class="meal-kcal-tag">${m.kcal != null ? m.kcal + ' kcal' : ''}${macroTag}</span><button class="meal-del" onclick="removeMeal(${m.id})" title="Sil" aria-label="Sil">✕</button></div>`;
-    });
-    html += '</div>';
-  });
-  el.innerHTML = html;
-}
 
 // --- Sık yediklerin (geçmişten türetilir, tek tık tekrar ekle) ---
 function frequentMeals(limit = 8) {
@@ -882,28 +912,6 @@ function confirmDietPlanImport() {
 const FOOD_MACROS_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/food-macros';
 let _pendingMacros = null;
 
-async function lookupMealMacros() {
-  const q = (document.getElementById('mealName').value || '').trim();
-  const out = document.getElementById('macroResult');
-  if (!q) { showToast('Önce ne yediğini yaz', 'info'); document.getElementById('mealName').focus(); return; }
-  if (!window._supa || !window._user) { out.innerHTML = '<div class="diet-empty">Önce Ayarlar → bulut girişi yap.</div>'; return; }
-  out.innerHTML = '<div class="diet-empty">Aranıyor… birkaç sn.</div>';
-  try {
-    const { data: sess } = await window._supa.auth.getSession();
-    const token = sess && sess.session && sess.session.access_token;
-    if (!token) throw new Error('oturum yok');
-    const r = await fetch(FOOD_MACROS_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ query: q }),
-    });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error || ('hata ' + r.status));
-    renderMacroResult(j);
-  } catch (e) {
-    out.innerHTML = '<div class="diet-empty">Bulamadım: ' + escapeHtml(e.message) + '</div>';
-  }
-}
 
 function _macroLine(m) { return `${m.kcal != null ? m.kcal + ' kcal' : '? kcal'} · P${m.protein || 0} K${m.carb || 0} Y${m.fat || 0}`; }
 
@@ -1034,20 +1042,6 @@ async function offBarcode(code) {
   const j = await r.json();
   if (j.status !== 1 || !j.product) return null;
   return parseOffProduct(j.product);
-}
-async function searchFood() {
-  const q = (document.getElementById('foodSearchInput').value || '').trim();
-  const out = document.getElementById('foodSearchResults');
-  const fp = document.getElementById('foodPortion'); if (fp) { fp.style.display = 'none'; fp.innerHTML = ''; }
-  if (!q) { document.getElementById('foodSearchInput').focus(); return; }
-  out.innerHTML = '<div class="diet-empty">Aranıyor…</div>';
-  try {
-    _foodResults = await offSearch(q);
-    if (!_foodResults.length) { out.innerHTML = '<div class="diet-empty">Sonuç yok. Farklı yaz ya da "Elle" sekmesinden ekle.</div>'; return; }
-    out.innerHTML = _foodResults.map((p, i) => `<button class="food-result" onclick="pickFood(${i})"><span class="food-result-name">${escapeHtml(p.name)}${p.brand ? ` <span class="food-result-brand">${escapeHtml(p.brand)}</span>` : ''}</span><span class="food-result-kcal">${p.kcal100 != null ? Math.round(p.kcal100) + ' kcal/100g' : '—'}</span></button>`).join('');
-  } catch (e) {
-    out.innerHTML = '<div class="diet-empty">Arama başarısız: ' + escapeHtml(e.message) + '</div>';
-  }
 }
 // i: arama sonucundaki index VEYA doğrudan ürün objesi (barkod akışı)
 function pickFood(i) {
@@ -1222,18 +1216,6 @@ function renderSearchResults(q, offRes, aiJson) {
 function pickAiRow() {
   if (!_aiFood) return;
   showAiPortion(_aiFood.name, _aiFood._srcLbl || '', _aiFood._bd || '');
-}
-function renderAiFood(q, j) {
-  const out = document.getElementById('foodSearchResults');
-  const base = j.ai || j.db;
-  if (!base || base.kcal == null) { out.innerHTML = '<div class="diet-empty">Net sonuç yok. "Elle" sekmesinden kalori girebilirsin.</div>'; return; }
-  _aiFood = {
-    name: q, kcal: base.kcal, protein: base.protein, carb: base.carb, fat: base.fat,
-    multi: !!(j.items && j.items.length > 1), items: j.items || [], source: j.source
-  };
-  const srcLbl = j.source === 'usda' ? 'Veritabanı' : (j.source === 'mixed' ? 'Veritabanı + AI' : (_aiFood.multi ? 'Toplam' : 'AI tahmini'));
-  const bd = _aiFood.multi ? `<div class="macro-note">${_aiFood.items.map(it => `${escapeHtml(it.name)} · ${it.kcal} kcal${(it.source === 'usda' || it.source === 'curated') ? '' : ' (tahmin)'}`).join('  +  ')}</div>` : '';
-  showAiPortion(q, srcLbl, bd);
 }
 // Ortak porsiyon/adet arayüzü (AI sonucu + kişisel hafıza ikisi de kullanır)
 // Çoklu yemek (zaten miktarlı, ör "4 yumurta 2 ekmek") → adet çarpanı GİZLENİR (çift sayım önlenir),
