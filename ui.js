@@ -2972,7 +2972,8 @@ function renderSleepTrend() {
   const chart = `<svg class="sleep-trend-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="30 günlük uyku grafiği"><line x1="0" y1="${ty}" x2="${W}" y2="${ty}" class="st-goal"/>${bars}</svg>`;
 
   const st = (typeof sleepStats30 === 'function') ? sleepStats30() : { count: 0 };
-  const debt = (typeof sleepDebt === 'function') ? sleepDebt() : { debt: 0, nights: 0 };
+  const debt = (typeof sleepDebt === 'function') ? sleepDebt()
+    : { debt: 0, nights: 0, est: 0, missing: 0, band: 'clear', recoveryNights: 0 };
   const fmt = h => (h == null ? '–' : fmtSleepHours(Math.round(h * 100) / 100));
   const trd = d => new Date(d + 'T12:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
 
@@ -2991,9 +2992,19 @@ function renderSleepTrend() {
 
   let debtHtml = '';
   if (debt.nights >= 2) {
-    if (debt.debt >= 1) debtHtml = `<div class="sleep-debt warn">Uyku borcu: son ${debt.nights} gecede <b>~${fmt(debt.debt)}</b> açık. Bir-iki gece erken yatmak toparlar.</div>`;
-    else if (debt.debt <= -1) debtHtml = `<div class="sleep-debt good">Hedefin ${fmt(-debt.debt)} üstündesin — dinlenmen yerinde.</div>`;
-    else debtHtml = `<div class="sleep-debt ok">Uyku borcun yok — hedefe yakınsın.</div>`;
+    const estNote = debt.est ? `<span class="sd-est">${debt.est} gece saat girilmemiş, kendi kalite–saat ortalamandan tahmin edildi.</span>` : '';
+    if (debt.band === 'clear') {
+      debtHtml = `<div class="sleep-debt ok">Uyku borcun yok — hedefe yakınsın.${estNote}</div>`;
+    } else {
+      const cls = debt.band === 'mild' ? 'warn' : 'bad';
+      const lbl = SLEEP_BAND_LABEL[debt.band] || '';
+      const rec = debt.recoveryNights
+        ? ` Hedefin 1 saat üstünde <b>${debt.recoveryNights} gece</b> uyursan kapanır.`
+        : ' Toparlanma birkaç haftayı bulur.';
+      debtHtml = `<div class="sleep-debt ${cls}">Uyku borcu <b>${fmt(debt.debt)}</b> · ${lbl}.${rec}${estNote}</div>`;
+    }
+  } else if (debt.missing >= 3) {
+    debtHtml = `<div class="sleep-debt ok">Son 2 haftanın ${debt.missing} gecesi kayıtsız — borç hesabı için birkaç gece daha gerek.</div>`;
   }
 
   let tipHtml = '';
@@ -4648,10 +4659,12 @@ function healthPatterns() {
     out.push({ level: 'danger', text: `${bad} gecedir kötü/az uyuyorsun — bugünü hafif tut.` });
   }
 
-  // 2) Uyku borcu — mevcut sleepDebt
+  // 2) Uyku borcu — üstel ağırlıklı sleepDebt (v7-118), banda göre ciddiyet
   const sd = typeof sleepDebt === 'function' ? sleepDebt() : null;
-  if (sd && sd.nights >= 3 && sd.debt >= 4 && bad < 3) {
-    out.push({ level: 'warn', text: `Son ${sd.nights} gecede ${fmtSleepHours(sd.debt)} uyku borcu birikti.` });
+  if (sd && sd.nights >= 3 && sd.band !== 'clear' && bad < 3) {
+    const lvl = (sd.band === 'severe' || sd.band === 'high') ? 'danger' : 'warn';
+    const rec = sd.recoveryNights ? ` ${sd.recoveryNights} gece erken yatmak kapatır.` : '';
+    out.push({ level: lvl, text: `Birikmiş uyku borcun ${fmtSleepHours(sd.debt)} (${SLEEP_BAND_LABEL[sd.band]}).${rec}` });
   }
 
   // 3) Yatış saati savrulması — düzensizlik uykuyu süreden çok bozar
@@ -4731,8 +4744,9 @@ function buildHealthFacts(days = 14) {
   if (ss.length) {
     const avg = ss.reduce((a, s) => a + s.hours, 0) / ss.length;
     const short = ss.filter(s => s.hours < goalH).length;
-    const sd = typeof sleepDebt === 'function' ? sleepDebt() : { debt: 0, nights: 0 };
-    L.push(`UYKU (${ss.length} gece kayıtlı): ortalama ${Math.round(avg * 10) / 10} saat, ${short} gece hedefin altında, 7 günlük borç ${sd.debt} saat.`);
+    const sd = typeof sleepDebt === 'function' ? sleepDebt() : { debt: 0, nights: 0, band: 'clear', est: 0 };
+    L.push(`UYKU (${ss.length} gece kayıtlı): ortalama ${Math.round(avg * 10) / 10} saat, ${short} gece hedefin altında.`);
+    L.push(`Birikmiş uyku borcu ${sd.debt} saat (${SLEEP_BAND_LABEL[sd.band] || '-'}), ${sd.nights} geceden hesaplandı${sd.est ? `, bunun ${sd.est} gecesi kalite notundan tahmin` : ''}. Bu sayı üstel ağırlıklı: eski borç günde %15 erir, fazla uyku açığı ancak yarı verimle kapatır — düz toplam değildir, yeniden hesaplama.`);
     if (typeof sleepStats30 === 'function') {
       const s30 = sleepStats30();
       if (s30.weekdayAvg != null && s30.weekendAvg != null) {

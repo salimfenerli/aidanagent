@@ -152,20 +152,79 @@ function sleepStats30() {
   return { count: list.length, weekdayAvg: avg(wd), weekendAvg: avg(we), best: best, worst: worst,
            overallAvg: avg(list.map(function (s) { return s.hours; })) };
 }
-// Uyku borcu: son 7 gecede (hedef - gerçek) toplamı. + = borç.
+// ===== Uyku borcu — üstel ağırlıklı, asimetrik toparlanma (v7-118) =====
+// Doğrusal toplam DEĞİL. Borbély iki-süreç modelinin sadeleştirilmiş hali:
+//  1) Borç sonsuza birikmez — her gün %15 doğal erir (yarı ömür ~4.3 gün).
+//  2) Fazla uyku açığı 1:1 kapatmaz — ancak %50 verimle öder.
+//  3) "Uyku bankası" yoktur — borç 0'ın altına inmez.
+var SLEEP_DECAY = 0.85;       // günlük kalış oranı
+var SLEEP_PAYBACK = 0.5;      // fazla uykunun geri ödeme verimi
+var SLEEP_MAX_GAP = 4;        // tek gecede yazılabilecek en fazla açık (saat)
+var SLEEP_MAX_CREDIT = 2;     // tek gecede sayılabilecek en fazla fazla uyku
+var SLEEP_WINDOW = 14;        // pencere (gece)
+var SLEEP_MODEL_MIN = 8;      // kişisel kalite→saat modeli için gereken örnek
+
+// Kalite→saat modeli: SABİT KATSAYI UYDURMAZ, sadece kendi verinden öğrenir.
+// Hem kalite hem saat girilmiş geceleri kalite başına medyanlar. Yetersiz veri → null.
+function sleepQualityModel() {
+  var both = ensureSleep().filter(function (s) { return s && s.quality && s.hours != null; });
+  if (both.length < SLEEP_MODEL_MIN) return null;
+  var by = { bad: [], ok: [], good: [] }, out = {}, any = false;
+  both.forEach(function (s) { if (by[s.quality]) by[s.quality].push(s.hours); });
+  Object.keys(by).forEach(function (q) {
+    var a = by[q].slice().sort(function (x, y) { return x - y; });
+    if (a.length < 2) return;                    // tek örnekten medyan çıkmaz
+    var m = a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2;
+    out[q] = Math.round(m * 100) / 100; any = true;
+  });
+  return any ? out : null;
+}
+// Bir gecenin hesaba girecek saati: gerçek → kişisel tahmin → yok
+function sleepResolvedHours(rec, model) {
+  if (!rec) return null;
+  if (rec.hours != null) return { h: rec.hours, est: false };
+  if (model && rec.quality && model[rec.quality] != null) return { h: model[rec.quality], est: true };
+  return null;
+}
+var SLEEP_BAND_LABEL = { clear: 'temiz', mild: 'hafif', high: 'belirgin', severe: 'ağır' };
+function sleepDebtBand(debt) {
+  return debt < 2 ? 'clear' : debt < 5 ? 'mild' : debt < 9 ? 'high' : 'severe';
+}
+// Hedefin 1 saat üstünde uyunursa borç "temiz" banda (<2sa) kaç gecede iner
+function sleepRecoveryNights(debt) {
+  if (debt < 2) return 0;
+  var D = debt, n = 0, contrib = -1 * SLEEP_PAYBACK;
+  while (D >= 2 && n < 21) { D = Math.max(0, D * SLEEP_DECAY + contrib); n++; }
+  return D < 2 ? n : null;
+}
+// Uyku borcu (saat). + = borç. Kayıtsız gece "iyi uyudu" sayılmaz, sadece erime uygulanır.
 function sleepDebt() {
   var target = (ensureSleepGoal().targetH) || 8;
-  var list = sleepSeries(7).filter(function (s) { return s.hours != null; });
-  if (!list.length) return { debt: 0, nights: 0, target: target };
-  var debt = list.reduce(function (a, s) { return a + Math.max(-2, target - s.hours); }, 0);
-  return { debt: Math.round(debt * 10) / 10, nights: list.length, target: target };
+  var model = sleepQualityModel();
+  var D = 0, nights = 0, est = 0, missing = 0, started = false;
+  for (var i = SLEEP_WINDOW - 1; i >= 0; i--) {          // eskiden yeniye
+    var r = sleepResolvedHours(sleepFor(shiftDateStr(today(), -i)), model);
+    if (!r) { if (started) { D = D * SLEEP_DECAY; missing++; } continue; }
+    started = true;
+    var gap = target - r.h;
+    var contrib = gap > 0 ? Math.min(gap, SLEEP_MAX_GAP)
+                          : Math.max(gap, -SLEEP_MAX_CREDIT) * SLEEP_PAYBACK;
+    D = Math.max(0, D * SLEEP_DECAY + contrib);
+    nights++; if (r.est) est++;
+  }
+  var debt = Math.round(D * 10) / 10;
+  return { debt: debt, nights: nights, target: target, est: est, missing: missing,
+           modeled: !!model, band: sleepDebtBand(debt), recoveryNights: sleepRecoveryNights(debt) };
 }
-// Bugünden geriye ardışık kötü/az uyku gecesi
+// Bugünden geriye ardışık kötü/az uyku gecesi.
+// Tek günlük kayıt boşluğu seriyi BOZMAZ (unutulan sabah seriyi sıfırlamamalı);
+// üst üste 2 boşluk olursa dizi kopmuş sayılır.
 function badSleepStreak() {
-  var n = 0;
+  var n = 0, gap = 0;
   for (var i = 0; i < 14; i++) {
     var s = sleepFor(shiftDateStr(today(), -i));
-    if (!s || (s.quality == null && s.hours == null)) break;
+    if (!s || (s.quality == null && s.hours == null)) { gap++; if (gap >= 2) break; continue; }
+    gap = 0;
     var bad = s.quality === 'bad' || (s.hours != null && s.hours < 6);
     if (bad) n++; else break;
   }

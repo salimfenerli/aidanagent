@@ -4,7 +4,7 @@
 
 **Mimari:** `asistan.html` tek dosya DEĞİL — 5 modül sırayla yüklenir: `supabase.js` → `core.js` (diyet + uyku + ortak helper) → `tasks.js` (sekme/gün planı/quick-capture/journal/dump) → `stocks.js` (borsa) → `ui.js` (görev render/timer/ayarlar/auth/takvim/chat). `app.js` = ESKİ bundle, YÜKLENMİYOR — dokunma, modülleri düzenle.
 
-**⚠️ DÜZENLEME KURALI:** Büyük dosyalarda Edit riskli + sandbox `rm` YOK (`mv` var). Düzenleme = **Python byte-replace + `node --check`**; **.bak OLUŞTURMA**; rollback = `git checkout <dosya>`. EOL eşle: worker.js/styles.css/sw.js/ui.js/tasks.js/stocks.js = LF · asistan.html/core.js/CLAUDE.md = CRLF.
+**⚠️ DÜZENLEME KURALI:** Büyük dosyalarda Edit riskli + sandbox `rm` YOK (`mv` var). Düzenleme = **Python byte-replace + `node --check`**; **.bak OLUŞTURMA**; rollback = `git checkout <dosya>`. EOL eşle: **styles.css TEK BAŞINA LF** · diğer HEPSİ CRLF (core.js/ui.js/tasks.js/stocks.js/supabase.js/sw.js/asistan.html/worker.js/CLAUDE.md). ⚠️ 25 Tem'de doğrulandı — eski not yanlıştı, byte-replace'te `assert b'\r\n' in b` ile kontrol et.
 
 **AI = Google Gemini** (`gemini-3.5-flash`, ücretsiz katman; `env.GEMINI_MODEL` ile ezilir, `env.GEMINI_API_KEY` secret). Worker'da tek AI fonksiyonu `aiRun` → Gemini generateContent; `visionRun` de Gemini multimodal (portföy/Classroom görsel OCR, `{response}` sözleşmesi korunur). Cloudflare `env.AI.run` (eski Llama) **ARTIK KULLANILMIYOR** — yanıltıcı Llama yorumları 24 Tem'de temizlendi. Sesli giriş tarayıcıda Web Speech API (Whisper yok).
 
@@ -15,6 +15,24 @@
 - **Görev/Plan:** otomatik gün planı + blok bildirimleri (v7-109), planlama zekası — geçmişten öğrenen `planHistory`/`planProfile` + otomatik toparlama (v7-110), haftalık sabit program (`fixedSchedule`).
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
+
+### 25 Temmuz 2026 — 😴 UYKU BORCU ALGORİTMASI (v7-118)
+Salim: "uyku borcunu sadece toplama çıkarma değil, farklı bi algoritması var ya, öyle hesaplayalım." Haklıydı — eski `sleepDebt` son 7 gecenin (hedef−gerçek) düz toplamıydı.
+- **Yeni model (`core.js`, Borbély iki-süreç modelinin sadeleştirilmişi):** `D = max(0, D*0.85 + contrib)`, eskiden yeniye 14 gece.
+  - `SLEEP_DECAY 0.85` → borç günde %15 erir (**yarı ömür ~4.3 gün**), sonsuza birikmez.
+  - `SLEEP_PAYBACK 0.5` → **fazla uyku açığı 1:1 kapatmaz**, yarı verimle öder (4sa'lik geceden sonra 10sa uyumak borcu silmez).
+  - Gecelik tavan: açık en fazla **+4sa**, kredi en fazla **−2sa** (outlier koruması).
+  - **0 tabanı — "uyku bankası" YOK**, borç negatife inmez (eski kod inebiliyordu).
+  - **Kayıtsız gece "iyi uyudu" sayılmaz** — sadece erime uygulanır, `missing` sayacına yazılır.
+- **Kalite→saat: kendinden öğrenen model (`sleepQualityModel`).** Öznel kalite ile ölçülen süre arasında korelasyon sadece orta düzeyde (r≈0.3–0.5) → **sabit katsayı uydurulmaz**. Hem kalite hem saat girilmiş **≥8 gece** birikince Salim'in kendi kalite başına **medyanı** hesaplanır, saatsiz geceler onunla borca girer (`est:true`, UI'da "kaliteden tahmin" notu, AI özetinde "tahmini"). Yetersiz veri → tahmin yok, gece sessizce atlanmaz, kart "N gece kayıtsız" der.
+- **🐛 Düzeltilen 2 mevcut bug:**
+  1. **Chip-only geceler tüm hesaplardan düşüyordu** — sabah sadece Kötü/Orta/İyi'ye basıp saat girmezsen `hours=null` oluyor, `sleepDebt`/`buildHealthFacts`/çapraz-sinyal hepsi o geceyi atıyordu → **borç sürekli 0 görünüyor, AI'a "UYKU: kayıt yok" gidiyordu.**
+  2. **`badSleepStreak` eksik günde `break`** ediyordu → bir sabah kaydı unutulunca 5 gecelik kötü seri 2 görünüyordu. Artık tek gün boşluk seriyi bozmaz, 2 ardışık boşluk keser.
+- **Bant + toparlanma:** `sleepDebtBand` (<2 temiz · <5 hafif · <9 belirgin · 9+ ağır) ve `sleepRecoveryNights` — "hedefin 1sa üstünde kaç gece uyursan kapanır". ADHD için soyut saatten çok daha eylemsel. `healthPatterns` #2 artık banda göre danger/warn seçiyor.
+- **Worker ikizi:** `sleepDebtSrv` (`worker.js`) — cron sağlık raporu aynı sayıyı üretsin diye birebir port. AI prompt'una "bu sayı üstel ağırlıklı, düz toplam değil, **yeniden hesaplama**" notu eklendi.
+- **Doğrulama:** 41 senaryo testi (üstel birikim, asimetrik ödeme, 0 tabanı, erime, gecelik tavan, kayıtsız gece, model eşiği, bantlar, streak bug'ı + 10 regresyon) · **200 rastgele senaryoda PWA↔Worker ikizleri birebir aynı** · `node --check` core/ui/sw/worker temiz.
+- **CSS:** `.sleep-debt.bad` + `.sd-est` eklendi (tam kenar + tint, yan-şerit yok — Impeccable uyumlu).
+- **Cache:** v7-117 → **v7-118**
 
 ### 25 Temmuz 2026 — 🫀 AI SAĞLIK KOÇU (v7-117)
 Salim: "beslenme, spor, uyku verilerimi AI işleyip geliştirilebilir kısımları söylesin." Uyku (v7-113/116) ve Hevy (v7-111) ayrı ayrı vardı ama **hiçbiri birbirine bakmıyordu** — bu paket üçünü tek yerde birleştirir.
@@ -540,7 +558,7 @@ curl -s "https://aidanapp.pages.dev/sw.js" | head -1  # cache versiyonu
 - **Workers AI lisanslı model:** ilk kullanımda `5016: submit 'agree'` hatası → `visionRun()` bir kez `{prompt:'agree'}` yollar (hesap için kalıcı), sonra asıl istek.
 - **`env.AI.run` cevabı** bazen string değil dizi/obje → `typeof rr === 'string' ? rr : JSON.stringify(rr)`.
 - **Türk sayı formatı:** "2.145,00" → `parseNum()` (virgül=ondalık, nokta=binlik); AI'dan sayıyı görseldeki haliyle STRING iste.
-- **Satır sonları:** worker.js / styles.css / sw.js / ui.js = **LF**; asistan.html / core.js / CLAUDE.md = **CRLF** — Python replace'te EOL eşle.
+- **Satır sonları (25 Tem'de ölçüldü, eski not YANLIŞTI):** yalnız **styles.css = LF**; core.js / ui.js / tasks.js / stocks.js / supabase.js / sw.js / asistan.html / worker.js / CLAUDE.md = **CRLF**. Python replace'te önce `b.count(b'\r\n')` ile doğrula.
 - **Tarih hesapları** hep `'T12:00:00'` öğlen demirli (toISOString UTC kayması bug'ı).
 - **Preview testi:** SW cache taze modülü gizleyebilir → `serviceWorker.getRegistrations()→unregister()` + `caches.delete()` + reload.
 - **iOS PWA sınırları:** arka planda JS yok (timer timestamp bazlı), başka uygulama kilitlenemez, Yahoo BIST ~15dk gecikmeli.

@@ -2013,6 +2013,46 @@ GÖREVİN — TÜRKÇE, 5-8 kısa cümle, akıcı paragraf (madde listesi değil
 
 TON: yanında duran, veriye bakan bir arkadaş. Kısa cümle, net, suçlamayan.`;
 
+// Uyku borcu — core.js sleepDebt()'in birebir ikizi (üstel ağırlıklı, asimetrik).
+// Düz toplam DEĞİL: borç günde %15 erir, fazla uyku %50 verimle öder, 0'ın altına inmez.
+const SLEEP_BAND_LABEL_SRV = { clear: 'temiz', mild: 'hafif', high: 'belirgin', severe: 'ağır' };
+function sleepDebtSrv(data, target) {
+  const DECAY = 0.85, PAYBACK = 0.5, MAXGAP = 4, MAXCRED = 2, WINDOW = 14, MODEL_MIN = 8;
+  const all = (data.sleep || []).filter(s => s && s.date);
+  // kişisel kalite→saat modeli (sabit katsayı uydurulmaz)
+  let model = null;
+  const both = all.filter(s => s.quality && s.hours != null);
+  if (both.length >= MODEL_MIN) {
+    const by = { bad: [], ok: [], good: [] }; const out = {}; let any = false;
+    both.forEach(s => { if (by[s.quality]) by[s.quality].push(s.hours); });
+    for (const q of Object.keys(by)) {
+      const a = by[q].slice().sort((x, y) => x - y);
+      if (a.length < 2) continue;
+      const m = a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2;
+      out[q] = Math.round(m * 100) / 100;   // core.js ile birebir aynı yuvarlama
+      any = true;
+    }
+    if (any) model = out;
+  }
+  const byDate = {}; all.forEach(s => { byDate[s.date] = s; });
+  let D = 0, nights = 0, est = 0, missing = 0, started = false;
+  for (let i = WINDOW - 1; i >= 0; i--) {
+    const rec = byDate[trDate(-i)];
+    let h = null, isEst = false;
+    if (rec && rec.hours != null) h = rec.hours;
+    else if (rec && model && rec.quality && model[rec.quality] != null) { h = model[rec.quality]; isEst = true; }
+    if (h == null) { if (started) { D = D * DECAY; missing++; } continue; }
+    started = true;
+    const gap = target - h;
+    const contrib = gap > 0 ? Math.min(gap, MAXGAP) : Math.max(gap, -MAXCRED) * PAYBACK;
+    D = Math.max(0, D * DECAY + contrib);
+    nights++; if (isEst) est++;
+  }
+  const debt = Math.round(D * 10) / 10;
+  const band = debt < 2 ? 'clear' : debt < 5 ? 'mild' : debt < 9 ? 'high' : 'severe';
+  return { debt, nights, est, missing, band, modeled: !!model };
+}
+
 // Worker tarafı sağlık özeti — PWA'daki buildHealthFacts'in ikizi (cron için)
 function buildHealthFactsSrv(data, days = 14) {
   const L = [];
@@ -2032,9 +2072,9 @@ function buildHealthFactsSrv(data, days = 14) {
   if (sl.length) {
     const avg = sl.reduce((a, s) => a + s.hours, 0) / sl.length;
     const short = sl.filter(s => s.hours < goalH).length;
-    const week = sl.filter(s => s.date >= trDate(-6));
-    const debt = week.reduce((a, s) => a + Math.max(-2, goalH - s.hours), 0);
-    L.push(`UYKU (${sl.length} gece kayıtlı): ortalama ${Math.round(avg * 10) / 10} saat, ${short} gece hedefin altında, 7 günlük borç ${Math.round(debt * 10) / 10} saat.`);
+    const sd = sleepDebtSrv(data, goalH);
+    L.push(`UYKU (${sl.length} gece kayıtlı): ortalama ${Math.round(avg * 10) / 10} saat, ${short} gece hedefin altında.`);
+    L.push(`Birikmiş uyku borcu ${sd.debt} saat (${SLEEP_BAND_LABEL_SRV[sd.band]}), ${sd.nights} geceden hesaplandı${sd.est ? `, bunun ${sd.est} gecesi kalite notundan tahmin` : ''}. Bu sayı üstel ağırlıklı: eski borç günde %15 erir, fazla uyku açığı ancak yarı verimle kapatır — düz toplam değildir, yeniden hesaplama.`);
     L.push('Son geceler: ' + sl.slice(-8).map(s =>
       `${s.date} ${s.hours}sa${s.bedtime ? ' (' + s.bedtime + '-' + s.wake + ')' : ''}${s.quality ? ' [' + s.quality + ']' : ''}`).join(' | '));
   } else L.push('UYKU: kayıt yok.');

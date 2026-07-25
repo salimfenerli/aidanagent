@@ -3784,6 +3784,8 @@
 .sleep-debt.warn { background: rgba(245,165,36,.12); color: #fbbf5a; }
 .sleep-debt.good { background: rgba(52,199,89,.12); color: #6fe08a; }
 .sleep-debt.ok { background: var(--surface-2); color: var(--text-muted); }
+.sleep-debt.bad { background: rgba(239,68,68,.14); color: #ffa3a3; }
+.sleep-debt .sd-est { display: block; margin-top: 4px; font-size: 0.74rem; color: var(--text-muted); }
 .sleep-tip { margin-top: 10px; font-size: 0.8rem; color: var(--text); background: var(--surface-2); border-radius: 10px; padding: 8px 11px; line-height: 1.45; }
 .sleep-tip .st-tip-lbl { font-weight: 700; color: var(--accent); margin-right: 5px; }
 .sleep-goal { margin-top: 14px; padding: 12px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
