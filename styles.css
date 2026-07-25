@@ -3086,6 +3086,9 @@
   .weight-trend svg { width:100%; height:46px; }
   .weight-add { display:flex; gap:8px; }
   .weight-add input { flex:1; min-width:0; }
+  .weight-add input.narrow { flex:0 0 92px; }
+  .weight-import { display:flex; align-items:center; gap:10px; margin-top:8px; }
+  .weight-src { font-size:0.76em; color:var(--text-muted); }
   .wt-up { color:#ef4444; font-weight:700; }
   .wt-down { color:#34c759; font-weight:700; }
 

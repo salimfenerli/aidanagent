@@ -1051,7 +1051,7 @@ function dietKarneStats(period) {
     if (waterL > 0) { waterSum += waterL; waterDays++; }
     daily.push({ iso, kcal, logged });
   });
-  const weights = (data.diet.weights || []).filter(w => w.date >= isos[0] && w.date <= t).sort((a, b) => a.date < b.date ? -1 : 1);
+  const weights = (data.diet.weights || []).filter(w => w.kg != null && w.date >= isos[0] && w.date <= t).sort((a, b) => a.date < b.date ? -1 : 1);
   const wFirst = weights[0] || null, wLast = weights[weights.length - 1] || null;
   return {
     period, span, isos, daily, goal, wGoal, loggedDays,
@@ -5006,28 +5006,46 @@ function hcNutritionStats(dietDays, fromDate, toDate, isTrainDay, kcalGoal) {
 /* ---------------- KİLO EĞİLİMİ (en küçük kareler) ----------------
    Eskiden sadece "ilk kayıt / son kayıt" vardı — gürültüye açıktı.
    Regresyon eğimi haftalık gerçek değişimi verir.                   */
-function hcWeightTrend(weights, fromDate, toDate) {
-  var pts = (weights || []).filter(function (w) {
-    return w && w.kg != null && w.date && w.date >= fromDate && w.date <= toDate;
-  }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
-  if (pts.length < 4) return null;
-  var span = hcDayDiff(pts[0].date, pts[pts.length - 1].date);
+// Tek seri için en küçük kareler eğimi. Kilo/yağ oranı/yağsız kütle aynı
+// yöntemden geçer — biyoimpedans gürültüsünde tek ölçüm değil EĞİM anlamlıdır.
+function hcRegress(pts, key) {
+  var v = (pts || []).filter(function (p) { return p && p[key] != null; });
+  if (v.length < 4) return null;
+  var span = hcDayDiff(v[0].date, v[v.length - 1].date);
   if (span < 14) return null;                    // 2 haftadan kısa seride eğim anlamsız
-
-  var n = pts.length, sx = 0, sy = 0, sxy = 0, sxx = 0;
+  var n = v.length, sx = 0, sy = 0, sxy = 0, sxx = 0;
   for (var i = 0; i < n; i++) {
-    var x = hcDayDiff(pts[0].date, pts[i].date), y = pts[i].kg;
+    var x = hcDayDiff(v[0].date, v[i].date), y = v[i][key];
     sx += x; sy += y; sxy += x * y; sxx += x * x;
   }
   var den = n * sxx - sx * sx;
   if (!den) return null;
-  var slopePerDay = (n * sxy - sx * sy) / den;
   return {
     n: n, spanDays: span,
-    first: pts[0].kg, last: pts[n - 1].kg,
-    firstDate: pts[0].date, lastDate: pts[n - 1].date,
-    slopeKgPerWeek: hcRound(slopePerDay * 7, 2),
-    totalChange: hcRound(pts[n - 1].kg - pts[0].kg, 1),
+    first: v[0][key], last: v[n - 1][key],
+    firstDate: v[0].date, lastDate: v[n - 1].date,
+    perWeek: hcRound((n * sxy - sx * sy) / den * 7, 2),
+    total: hcRound(v[n - 1][key] - v[0][key], 1),
+  };
+}
+// v7-122: kilo TEK BAŞINA yanıltıcı — kilo sabitken yağ düşüp kas artabilir.
+// Üç seri ayrı ayrı regres edilir; eski alan adları (slopeKgPerWeek, totalChange…)
+// geriye uyumluluk için korunur, yağ/yağsız kütle alt nesne olarak eklenir.
+function hcWeightTrend(weights, fromDate, toDate) {
+  var pts = (weights || []).filter(function (w) {
+    return w && w.date && w.date >= fromDate && w.date <= toDate;
+  }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  if (!pts.length) return null;
+  var kg = hcRegress(pts, 'kg'), fat = hcRegress(pts, 'fat'), lean = hcRegress(pts, 'lean');
+  if (!kg && !fat) return null;
+  var base = kg || fat;
+  return {
+    n: base.n, spanDays: base.spanDays,
+    first: kg ? kg.first : null, last: kg ? kg.last : null,
+    firstDate: base.firstDate, lastDate: base.lastDate,
+    slopeKgPerWeek: kg ? kg.perWeek : null,
+    totalChange: kg ? kg.total : null,
+    fat: fat, lean: lean,
   };
 }
 
@@ -5068,7 +5086,7 @@ var HC_WIN = { sleep: 14, diet: 28, train: 84, weight: 84 };
 
 // Yeni lokal kurallar (AI'sız, $0) — antrenman/beslenme/kilo tarafı.
 // healthPatterns() bunları uyku kurallarıyla birleştirip ciddiyete göre sıralar.
-function hcTrainingPatterns(hev, nut, wt, energy) {
+function hcTrainingPatterns(hev, nut, wt, energy, toDate) {
   var out = [];
 
   // A) Haftalık hacim düşüşü — devamlılık kaybının erken sinyali
@@ -5120,6 +5138,28 @@ function hcTrainingPatterns(hev, nut, wt, energy) {
   // E) Kısmi loglama oranı yüksekse ortalamalar zaten güvenilmez
   if (nut && (nut.partialDays + nut.missingDays) > (nut.fullDays + nut.partialDays + nut.missingDays) * 0.5) {
     out.push({ level: 'warn', text: 'Günlerin yarısından fazlasında beslenme kaydı eksik — analiz zayıf kalıyor.' });
+  }
+
+  // F) REKOMPOZİSYON — kilo sabit, yağ düşüyor, yağsız kütle korunuyor.
+  // Tartıya bakan biri "hiçbir şey olmuyor" sanır; asıl ilerleme tam da budur.
+  if (wt && wt.fat && wt.slopeKgPerWeek != null &&
+      Math.abs(wt.slopeKgPerWeek) < 0.15 && wt.fat.perWeek <= -0.1 &&
+      (!wt.lean || wt.lean.perWeek >= -0.05)) {
+    out.push({ level: 'good', text: 'Kilon sabit ama yağ oranın düşüyor — tartının göstermediği ilerleme bu.' });
+  }
+
+  // G) Yağsız kütle kaybı — kalori/protein/uyku tarafında bir şey eksik demektir.
+  // Kayıtlar eksikse (eksik-log) sayı zaten güvenilmez, uyarı verilmez.
+  if (wt && wt.lean && wt.lean.perWeek <= -0.2 && wt.lean.spanDays >= 21 &&
+      !(energy && energy.verdict === 'eksik-log')) {
+    out.push({ level: 'warn', text: 'Yağsız kütlen haftada ' + Math.abs(wt.lean.perWeek) + ' kg düşüyor — yeterli yiyor ve uyuyor musun, ona bak.' });
+  }
+
+  // H) SESSİZ ARIZA TESPİTİ — tartı verisi akmayı bırakmış olabilir.
+  // Kısayol/senkron durduğunda hiçbir hata görünmez; haftalarca fark edilmez.
+  if (wt && toDate && wt.lastDate) {
+    var wGap = hcDayDiff(wt.lastDate, toDate);
+    if (wGap >= 10) out.push({ level: 'warn', text: wGap + ' gündür tartım kaydı gelmiyor — otomatik aktarım durmuş olabilir.' });
   }
 
   return out;
@@ -5181,12 +5221,20 @@ function hcBuildFacts(ctx) {
 
   // --- Kilo + enerji tutarlılığı ---
   var wt = ctx.weight;
-  if (wt) {
+  if (wt && wt.slopeKgPerWeek != null) {
     L.push('KİLO (son ' + wt.spanDays + ' gün, ' + wt.n + ' tartım): ' + wt.first + ' → ' + wt.last + ' kg, toplam ' +
       (wt.totalChange > 0 ? '+' : '') + wt.totalChange + ' kg. Regresyon eğimi haftada ' +
       (wt.slopeKgPerWeek > 0 ? '+' : '') + wt.slopeKgPerWeek + ' kg.');
   } else {
     L.push('KİLO: eğim hesaplanamadı (en az 4 tartım ve 2 hafta aralık gerekir).');
+  }
+  if (wt && wt.fat) {
+    L.push('YAĞ ORANI (' + wt.fat.n + ' ölçüm, ' + wt.fat.spanDays + ' gün): %' + wt.fat.first + ' → %' + wt.fat.last +
+      ', regresyon eğimi haftada ' + (wt.fat.perWeek > 0 ? '+' : '') + wt.fat.perWeek + ' puan.' +
+      (wt.lean ? ' Yağsız kütle ' + wt.lean.first + ' → ' + wt.lean.last + ' kg (haftada ' +
+        (wt.lean.perWeek > 0 ? '+' : '') + wt.lean.perWeek + ' kg).' : ''));
+    L.push('NOT: yağ oranı biyoimpedans tartıdan geliyor — tek ölçüm ±%3-5 sapabilir, su tutumu ve öğün saatinden etkilenir. TEK ölçümü yorumlama, sadece EĞİLİMİ yorumla.');
+    L.push('Kilo ile yağ oranını BİRLİKTE oku: kilo sabit + yağ düşüyor = kas kazanımı (olumlu). Kilo düşüyor + yağ oranı sabit/artıyor = kaybın bir kısmı kastan.');
   }
   var en = ctx.energy;
   if (en) {
@@ -5320,7 +5368,7 @@ function hcAllPatterns(inp) {
   var out = []
     .concat(hcSleepPatterns(inp.sleep, inp.goalH, inp.debt, inp.bandLabel, inp.debtLabel, inp.recoveryNights, inp.badStreak, inp.isTrainDay, inp.today))
     .concat(hcHabitPatterns(inp.workouts, inp.dietDays, inp.isTrainDay, inp.proteinGoal, inp.today))
-    .concat(hcTrainingPatterns(inp.hev, inp.nut, inp.wt, inp.energy));
+    .concat(hcTrainingPatterns(inp.hev, inp.nut, inp.wt, inp.energy, inp.today));
   var rank = { danger: 0, warn: 1, good: 2 };
   return out.sort(function (a, b) { return rank[a.level] - rank[b.level]; });
 }

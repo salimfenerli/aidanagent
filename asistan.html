@@ -458,8 +458,14 @@
       </div>
       <div id="weightTrend" class="weight-trend" onclick="openWeightDetail()"></div>
       <div class="weight-add">
-        <input id="weightKg" inputmode="decimal" placeholder="bugünkü kilo (kg)" onkeydown="if(event.key==='Enter')logWeight()">
+        <input id="weightKg" inputmode="decimal" placeholder="kilo (kg)" onkeydown="if(event.key==='Enter')logWeight()">
+        <input id="weightFat" class="narrow" inputmode="decimal" placeholder="yağ %" onkeydown="if(event.key==='Enter')logWeight()">
         <button class="small primary" onclick="logWeight()">Kaydet</button>
+      </div>
+      <div class="weight-import">
+        <input type="file" id="bodyCsvInput" accept=".csv,text/csv,text/plain" style="display:none;" onchange="importBodyCsv(event)">
+        <button class="small" onclick="document.getElementById('bodyCsvInput').click()">Tartı geçmişini yükle (CSV)</button>
+        <span class="weight-src" id="weightSrcMeta"></span>
       </div>
     </div>
 

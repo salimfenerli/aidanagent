@@ -541,33 +541,201 @@ function quickAddMeal(i) {
   showToast(m.name + ' eklendi', 'success');
 }
 
-// --- Kilo ---
+// --- Kilo + vücut kompozisyonu (v7-122) ---
+// Tartı artık sadece kilo değil: yağ oranı (fat, %) ve yağsız kütle (lean, kg) da tutulur.
+// Kilo tek başına yanıltıcı — kilo sabitken yağ düşüp kas artabilir (rekompozisyon).
+// src: 'manual' elle | 'health' iOS Kısayol → Apple Health | 'csv' toplu içe aktarım.
+function bodyNum(v, min, max, dec) {
+  if (v == null || v === '') return null;
+  var n = (typeof v === 'number') ? v
+    : parseFloat(String(v).replace(',', '.').replace(/[^0-9.\-]/g, ''));
+  if (!isFinite(n) || n < min || n > max) return null;
+  var p = Math.pow(10, dec);
+  return Math.round(n * p) / p;
+}
+// Aynı güne ikinci kayıt gelirse ÜZERİNE YAZMAZ, alan alan birleştirir:
+// sabah Kısayol yağ oranını yazdıysa akşam elle kilo girilince yağ oranı kaybolmasın.
+function upsertBody(entry) {
+  ensureDiet();
+  if (!entry || !entry.date) return null;
+  var kg = bodyNum(entry.kg, 20, 500, 1);
+  var fat = bodyNum(entry.fat, 3, 70, 1);
+  var lean = bodyNum(entry.lean, 10, 300, 1);
+  if (kg == null && fat == null && lean == null) return null;
+  var arr = data.diet.weights, ex = null;
+  for (var i = 0; i < arr.length; i++) { if (arr[i] && arr[i].date === entry.date) { ex = arr[i]; break; } }
+  if (!ex) { ex = { date: entry.date }; arr.push(ex); }
+  if (kg != null) ex.kg = kg;
+  if (fat != null) ex.fat = fat;
+  if (lean != null) ex.lean = lean;
+  // Yağsız kütle BİRLEŞMİŞ kayıttan türetilir: sabah kilo, akşam yağ oranı ayrı
+  // girildiğinde de hesaplansın (yalnız gelen veriye bakılsaydı boş kalırdı).
+  else if (ex.kg != null && ex.fat != null) ex.lean = Math.round(ex.kg * (100 - ex.fat) / 100 * 10) / 10;
+  ex.src = entry.src || 'manual';
+  arr.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  return ex;
+}
 function logWeight() {
   const el = document.getElementById('weightKg');
-  const kg = parseFloat((el.value || '').replace(',', '.'));
-  if (!kg || kg <= 0 || kg > 500) { showToast('Geçerli kilo gir', 'info'); el.focus(); return; }
-  ensureDiet();
-  const k = dietKey(), arr = data.diet.weights;
-  const ex = arr.find(w => w.date === k);
-  if (ex) ex.kg = kg; else arr.push({ date: k, kg });
-  arr.sort((a, b) => a.date < b.date ? -1 : 1);
-  el.value = '';
+  const fe = document.getElementById('weightFat');
+  const rawKg = (el.value || '').trim(), rawFat = fe ? (fe.value || '').trim() : '';
+  if (!rawKg && !rawFat) { showToast('Kilo ya da yağ oranı gir', 'info'); el.focus(); return; }
+  const rec = upsertBody({ date: dietKey(), kg: rawKg || null, fat: rawFat || null, src: 'manual' });
+  if (!rec) { showToast('Geçerli değer gir (kilo 20-500, yağ %3-70)', 'info'); el.focus(); return; }
+  el.value = ''; if (fe) fe.value = '';
   save(); renderDiet();
-  showToast('Kilo kaydedildi', 'success');
+  showToast('Kaydedildi', 'success');
+}
+// Meta satırı: kilo ve yağ oranı AYRI serilerdir — biri eksikken diğeri görünmeye devam etmeli.
+function weightMetaHtml(arr) {
+  const kgs = arr.filter(w => w && w.kg != null), fats = arr.filter(w => w && w.fat != null);
+  const part = (list, key, unit, pre) => {
+    if (!list.length) return '';
+    const lastV = list[list.length - 1][key];
+    const head = pre + lastV + unit;
+    if (list.length < 2) return head;
+    const d = +(lastV - list[0][key]).toFixed(1);
+    if (!d) return head;
+    const cls = d > 0 ? 'wt-up' : 'wt-down';
+    return `${head} <span class="${cls}">${d > 0 ? '+' : ''}${d}</span>`;
+  };
+  return [part(kgs, 'kg', ' kg', ''), part(fats, 'fat', ' yağ', '%')].filter(Boolean).join(' · ');
 }
 function renderWeightTrend() {
   const arr = (data.diet.weights || []);
   const el = document.getElementById('weightTrend'), meta = document.getElementById('weightMeta');
-  if (arr.length < 2) {
+  const kgs = arr.filter(w => w && w.kg != null).map(w => w.kg);
+  if (kgs.length < 2) {
     el.innerHTML = '<div class="diet-empty">En az 2 kayıt olunca trend görünür.</div>';
-    meta.textContent = arr.length ? arr[arr.length - 1].kg + ' kg' : '';
+    meta.innerHTML = weightMetaHtml(arr);
+    renderWeightSrc(arr);          // erken dönüşte de tazele — yoksa eski rozet ekranda kalıyordu
     return;
   }
-  const vals = arr.map(w => w.kg);
-  el.innerHTML = sparkline(vals);
-  const first = vals[0], last = vals[vals.length - 1], diff = +(last - first).toFixed(1);
-  const sign = diff > 0 ? '+' : '';
-  meta.innerHTML = `${last} kg · <span class="${diff > 0 ? 'wt-up' : (diff < 0 ? 'wt-down' : '')}">${sign}${diff} kg</span>`;
+  el.innerHTML = sparkline(kgs);
+  meta.innerHTML = weightMetaHtml(arr);
+  renderWeightSrc(arr);
+}
+// Kaynak rozeti: verinin nereden geldiği görünmezse, Kısayol sessizce durduğunda
+// haftalarca fark edilmez. Son kaydın kaynağı ve tarihi açıkça yazılır.
+function renderWeightSrc(arr) {
+  const el = document.getElementById('weightSrcMeta');
+  if (!el) return;
+  const last = arr[arr.length - 1];
+  if (!last) { el.textContent = ''; return; }
+  const names = { manual: 'elle', health: 'Sağlık', csv: 'CSV' };
+  el.textContent = arr.length + ' kayıt · son: ' + last.date + ' (' + (names[last.src] || 'elle') + ')';
+}
+
+/* ---------------- TARTI GEÇMİŞİ — CSV İÇE AKTARIM ----------------
+   Xiaomi Home / Mi Fitness / Zepp Life dışa aktarımları tek bir standart
+   kullanmıyor: ayraç virgül ya da noktalı virgül olabiliyor, tarih 4 ayrı
+   biçimde gelebiliyor, sütun başlıkları TR/EN karışık. Bu yüzden sütunlar
+   sabit sıraya göre DEĞİL, başlıktaki anahtar kelimeye göre eşleştirilir.
+   Eşleşmeyen satır sessizce ATLANIR ve sayısı kullanıcıya bildirilir —
+   sessizce yanlış veri almak, eksik veri almaktan kötüdür.              */
+function csvSplitLine(line, sep) {
+  var out = [], cur = '', q = false;
+  for (var i = 0; i < line.length; i++) {
+    var c = line[i];
+    if (q) {
+      if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === sep) { out.push(cur.trim()); cur = ''; }
+    else cur += c;
+  }
+  out.push(cur.trim());
+  return out;
+}
+// 'YYYY-MM-DD' üretir. Ham toISOString KULLANILMAZ (UTC kayması bug'ı, v7-119).
+function bodyCsvDate(raw) {
+  var s = String(raw || '').trim();
+  if (!s) return null;
+  var m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+  m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
+  if (m) {
+    var a = +m[1], bb = +m[2];
+    // Belirsiz durumda (ikisi de <=12) Türkiye biçimi varsayılır: gün.ay.yıl
+    var day = a, mon = bb;
+    if (a <= 12 && bb > 12) { day = bb; mon = a; }
+    if (mon < 1 || mon > 12 || day < 1 || day > 31) return null;
+    return m[3] + '-' + ('0' + mon).slice(-2) + '-' + ('0' + day).slice(-2);
+  }
+  return null;
+}
+function parseBodyCsv(text) {
+  var lines = String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/).filter(function (l) { return l.trim(); });
+  if (lines.length < 2) return { rows: [], skipped: 0, err: 'Dosyada veri satırı yok.' };
+  // Ayraç: başlık satırında en çok geçen aday
+  var seps = [',', ';', '\t'], sep = ',', best = -1;
+  for (var i = 0; i < seps.length; i++) {
+    var c = lines[0].split(seps[i]).length;
+    if (c > best) { best = c; sep = seps[i]; }
+  }
+  if (best < 2) return { rows: [], skipped: 0, err: 'Sütunlar ayrıştırılamadı — dosya CSV değil olabilir.' };
+  var head = csvSplitLine(lines[0], sep).map(function (h) { return h.toLowerCase(); });
+  var find = function (re, not) {
+    for (var j = 0; j < head.length; j++) {
+      if (re.test(head[j]) && !(not && not.test(head[j]))) return j;
+    }
+    return -1;
+  };
+  // Sıra önemli: 'body fat (kg)' gibi başlıklar kilo sütunuyla karışmasın diye
+  // yağ oranı ÖNCE ve kütle birimi içerenler DIŞLANARAK aranır.
+  var iFat = find(/(fat|yağ|yag)/, /(kg|mass|kütle|kutle|free|yağsız|yagsiz)/);
+  var iKg = find(/(weight|kilo|ağırlık|agirlik)/, /(fat|yağ|yag|goal|hedef|target)/);
+  if (iKg < 0) iKg = find(/^kg$/, null);
+  var iLean = find(/(lean|fat[- ]?free|yağsız|yagsiz)/, null);
+  var iDate = find(/(date|tarih|time|zaman)/, null);
+  if (iDate < 0) iDate = 0;
+  if (iKg < 0 && iFat < 0) return { rows: [], skipped: 0, err: 'Kilo ya da yağ oranı sütunu bulunamadı.' };
+
+  var rows = [], skipped = 0, seen = {};
+  for (var k = 1; k < lines.length; k++) {
+    var cells = csvSplitLine(lines[k], sep);
+    var date = bodyCsvDate(cells[iDate]);
+    if (!date) { skipped++; continue; }
+    var kg = iKg >= 0 ? bodyNum(cells[iKg], 20, 500, 1) : null;
+    var fatRaw = iFat >= 0 ? bodyNum(cells[iFat], 0.03, 70, 3) : null;
+    // Bazı dışa aktarımlar yağ oranını kesir yazar (0.18 = %18) — %3'ün altı kesir kabul edilir.
+    var fat = (fatRaw != null && fatRaw < 1) ? Math.round(fatRaw * 1000) / 10 : fatRaw;
+    if (fat != null && (fat < 3 || fat > 70)) fat = null;
+    var lean = iLean >= 0 ? bodyNum(cells[iLean], 10, 300, 1) : null;
+    if (kg == null && fat == null && lean == null) { skipped++; continue; }
+    // Günde birden fazla tartım varsa SONUNCUSU kalır (dosyalar eskiden yeniye sıralı gelir)
+    if (seen[date] != null) rows[seen[date]] = { date: date, kg: kg, fat: fat, lean: lean };
+    else { seen[date] = rows.length; rows.push({ date: date, kg: kg, fat: fat, lean: lean }); }
+  }
+  return { rows: rows, skipped: skipped, err: null };
+}
+function importBodyCsv(e) {
+  var file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function (ev) {
+    var res;
+    try { res = parseBodyCsv(ev.target.result); }
+    catch (err) { showToast('Dosya okunamadı: ' + err.message, 'danger'); return; }
+    if (res.err) { showToast(res.err, 'danger'); return; }
+    if (!res.rows.length) { showToast('Geçerli tartım satırı bulunamadı', 'info'); return; }
+    var first = res.rows[0].date, last = res.rows[res.rows.length - 1].date;
+    var withFat = res.rows.filter(function (r) { return r.fat != null; }).length;
+    var msg = res.rows.length + ' tartım bulundu (' + first + ' → ' + last + ').\n' +
+      withFat + ' tanesinde yağ oranı var.' +
+      (res.skipped ? '\n' + res.skipped + ' satır okunamadı, atlanacak.' : '') +
+      '\n\nAidan\'a eklensin mi? (aynı güne ait mevcut kayıtlar birleştirilir, silinmez)';
+    if (!confirm(msg)) return;
+    var added = 0;
+    for (var i = 0; i < res.rows.length; i++) {
+      var r = res.rows[i];
+      if (upsertBody({ date: r.date, kg: r.kg, fat: r.fat, lean: r.lean, src: 'csv' })) added++;
+    }
+    save(); renderDiet();
+    showToast(added + ' tartım eklendi', 'success');
+  };
+  reader.readAsText(file);
 }
 
 // --- Hedefler ---
@@ -2039,7 +2207,9 @@ function deleteMealFromEdit() { if (_editMealId != null) removeMeal(_editMealId)
 
 // ===== Kilo detay modalı =====
 function openWeightDetail() {
-  const arr = (data.diet.weights || []);
+  // Yalnız kilosu OLAN kayıtlar: yağ oranı girilip kilo girilmemiş gün NaN üretiyordu
+  const all = (data.diet.weights || []);
+  const arr = all.filter(w => w && w.kg != null);
   const modal = document.getElementById('weightDetailModal'); if (!modal) return;
   const body = document.getElementById('weightDetailBody');
   if (!arr.length) { body.innerHTML = '<div class="diet-empty">Henüz kilo kaydı yok.</div>'; modal.classList.add('active'); return; }
@@ -2047,7 +2217,7 @@ function openWeightDetail() {
   const min = Math.min(...vals), max = Math.max(...vals), last = vals[vals.length - 1], first = vals[0];
   const diff = +(last - first).toFixed(1), sign = diff > 0 ? '+' : '';
   const chart = arr.length >= 2 ? `<div class="wd-chart">${lineChart(vals, diff > 0)}</div>` : '<div class="diet-empty">En az 2 kayıt olunca grafik çıkar.</div>';
-  const rows = [...arr].slice(-12).reverse().map(w => `<div class="wd-row"><span>${new Date(w.date + 'T12:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: '2-digit' })}</span><span class="wd-kg">${w.kg} kg</span></div>`).join('');
+  const rows = [...all].slice(-12).reverse().map(w => `<div class="wd-row"><span>${new Date(w.date + 'T12:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: '2-digit' })}</span><span class="wd-kg">${w.kg != null ? w.kg + ' kg' : '—'}${w.fat != null ? ' · %' + w.fat : ''}</span></div>`).join('');
   body.innerHTML = chart +
     `<div class="wd-stats"><div><span class="wd-num">${last}</span><span class="wd-lbl">son (kg)</span></div>` +
     `<div><span class="wd-num ${diff > 0 ? 'wt-up' : (diff < 0 ? 'wt-down' : '')}">${sign}${diff}</span><span class="wd-lbl">değişim</span></div>` +

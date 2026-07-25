@@ -1,123 +1,152 @@
-# 📱 iPhone'a Aidan Kısayolları Kur
+# 📱 iPhone Kısayolları — Tartı verisini Aidan'a otomatik gönder
 
-Bu kısayollarla iPhone'undan **Siri + tek tık** Aidan'a not bırakacaksın.
-Hepsi ücretsiz, ekstra app gerekmiyor — sadece **Kısayollar** (Shortcuts) app.
+Amaç: her sabah tartıya çıkacaksın, **sen hiçbir şey yapmadan** kilo ve yağ oranı Aidan'a düşecek.
 
----
+Zincir şu:
 
-## 🔑 Önce: Bot bilgilerini hazırla
+```
+Tartı → Xiaomi Home → Apple Sağlık → [Kısayol] → Aidan
+        └── zaten çalışıyor ──┘        └─ bunu kuracaksın ─┘
+```
 
-İhtiyacın olan 2 şey (`.env`'den bul, kimseyle paylaşma):
-
-- **BOT_TOKEN** — örn `7826532789:AAH...` (Telegram BotFather verdi)
-- **CHAT_ID** — `7264211579` (senin ID'in)
-
-Bu ikisini iPhone'a **Apple Notes**'a kaydet, kısayol kurarken kopyala-yapıştır lazım olacak.
+İhtiyacın olan tek şey iPhone'da zaten kurulu olan **Kısayollar** uygulaması. Ekstra app yok, ücret yok.
 
 ---
 
-## 🎤 Kısayol 1: "Aidan'a not bırak" (Siri ile sesli)
+## 🔧 Adım 0: Önce iki şeyi hazırla (5 dk)
 
-**Kullanım:** "Hey Siri, **Aidan'a not bırak**" de → Siri "ne not bırakayım?" diye sorar → konuş → Telegram bot'a otomatik gider, brain dump'a düşer.
+### A) Xiaomi → Apple Sağlık izni
 
-### Kurulum (5 dk)
+1. iPhone'da **Ayarlar** → **Sağlık** → **Veri Erişimi ve Aygıtlar**
+2. Listeden **Mi Home / Xiaomi Home**'u seç
+3. Şunları **aç**: `Kilo`, `Vücut Yağ Yüzdesi`, `Vücut Kitle İndeksi`
+4. Kapalıysa veri hiç akmaz — bu adımı atlama
 
-1. iPhone'da **Kısayollar** app'ini aç
-2. Sağ üstte **+** tıkla
-3. **Eylem Ekle** (Add Action) tıkla
-4. Arama kutusuna **"Dikte Et"** yaz, **Metin Dikte Et** seç
-   - Bu Siri'nin konuşmayı yazıya çevirir
-5. Tekrar **+** tıkla → **"URL'nin İçeriğini Al"** (Get Contents of URL) ekle
-6. URL kutusuna yapıştır:
-   ```
-   https://api.telegram.org/bot<BOT_TOKEN>/sendMessage
-   ```
-   ⚠️ `<BOT_TOKEN>` yerine GERÇEK token'ı yapıştır
-7. URL kutusunun altındaki **▾ Göster Daha Fazla** tıkla
-8. **Yöntem (Method)**: `POST` seç
-9. **İstek Gövdesi (Request Body)**: `JSON` seç
-10. **+ Yeni Alan Ekle**:
-    - Alan adı: `chat_id` · Tip: **Sayı (Number)** · Değer: senin chat ID (örn `7264211579`)
-    - **+ Yeni Alan Ekle** → Alan adı: `text` · Tip: **Metin (Text)** · Değer kutusuna **dokun** → açılan listede **Diktelenmiş Metin** (Dictated Text) seç
-11. Üstten **kısayol adını** "Aidan'a not bırak" yap
-12. **Bitti** (Done) tıkla
+> Xiaomi Home uygulaman **8.7 veya üstü** olmalı. App Store'dan güncelle.
 
-### Test
-- Siri'ye "**Hey Siri, Aidan'a not bırak**" de
-- "Söyle bakalım" gibi soracak → konuş: "yarın saat 3'te diş hekimi"
-- Telegram'da bot'tan cevap gelecek: "✅ Brain dump'a eklendi" gibi
+### B) Gizli anahtarı bul
+
+Aidan'ın Worker'ında `WEBHOOK_SECRET` adında bir anahtar var.
+
+- Cloudflare Dashboard → **Workers & Pages** → `aidan-pusher` → **Settings** → **Variables**
+- `WEBHOOK_SECRET` değerini kopyala
+
+Bunu iPhone'da **Notlar**'a geçici olarak yapıştır — birazdan lazım olacak. Kısayolu kurduktan sonra nottan sil.
 
 ---
 
-## 📊 Kısayol 2: "Aidan durum" (bugünün özeti)
+## ⚖️ Kısayol: "Tartımı Aidan'a gönder"
 
-**Kullanım:** "Hey Siri, **Aidan durum**" → Telegram'da bugünün özeti hemen gelir.
+### Kurulum
 
-### Kurulum (2 dk)
+1. **Kısayollar** uygulamasını aç → sağ üstte **+**
 
-1. Yeni kısayol (sağ üstte +)
-2. **URL'nin İçeriğini Al** ekle
-3. URL: `https://api.telegram.org/bot<BOT_TOKEN>/sendMessage`
-4. Yöntem: POST, Gövde: JSON
-5. Alanlar:
-   - `chat_id` (Number) → senin chat ID
-   - `text` (Text) → `bugün ne yapayım`
-6. Kısayol adı: "Aidan durum"
-7. Bitti
+2. **Eylem Ekle** → arama kutusuna **"Sağlık Örneklerini Bul"** yaz, seç
+   - **Tür**: `Kilo`
+   - **Sırala**: `Başlangıç Tarihi` · **Sıra**: `En Yeni Önce` · **Limit**: `1`
 
-### Test
-- "Hey Siri, **Aidan durum**" → Telegram'a brifing gelir
+3. **+** → **"Sağlık Örneği Ayrıntılarını Al"** ekle
+   - Ayrıntı: **`Değer`**
+   - Bunu **Değişkene Ayarla** ile `kilo` adında bir değişkene kaydet
+     (Eylem Ekle → "Değişkene Ayarla" → adı: `kilo`)
+
+4. Şimdi aynısını yağ oranı için tekrarla:
+   - **"Sağlık Örneklerini Bul"** → **Tür**: `Vücut Yağ Yüzdesi` · En Yeni Önce · Limit 1
+   - **"Sağlık Örneği Ayrıntılarını Al"** → **Değer**
+   - **"Değişkene Ayarla"** → adı: `yag`
+
+5. **+** → **"URL'nin İçeriğini Al"** ekle
+   - URL kutusuna yapıştır:
+     ```
+     https://aidan-pusher.fenerlisalim04.workers.dev/body
+     ```
+   - Altındaki **▾ Daha Fazla Göster**'e dokun
+   - **Yöntem**: `POST`
+   - **Başlıklar (Headers)** → **Yeni Başlık Ekle**:
+     - Anahtar: `X-Aidan-Secret`
+     - Değer: Adım 0-B'de kopyaladığın anahtar
+   - **İstek Gövdesi**: `JSON`
+   - **Yeni Alan Ekle** (iki alan):
+     | Alan adı | Tip | Değer |
+     |---|---|---|
+     | `kg` | Metin | değişken **kilo** |
+     | `fat` | Metin | değişken **yag** |
+
+     > Değer kutusuna dokununca çıkan listeden değişkeni seç — elle yazma.
+
+6. **+** → **"Bildirim Göster"** ekle
+   - İçerik: **URL'nin İçeriği** (bir önceki adımın çıktısı)
+   - Bu, işin olup olmadığını görmeni sağlar. Aidan cevabında `summary` diye bir satır döner.
+
+7. Üstten kısayol adını **"Tartımı Aidan'a gönder"** yap → **Bitti**
+
+### Test et
+
+Kısayollar listesinde kısayola dokun. Bildirimde şuna benzer bir şey görmelisin:
+
+```
+{"ok":true,"saved":1,"summary":"2026-07-25: 72.4 kg · %18.2 yağ"}
+```
+
+`"ok":true` görüyorsan tamam. Aidan'ı aç → **Diyet** sekmesi → Kilo kartında görünecek.
 
 ---
 
-## ⚡ Kısayol 3: Share Sheet'ten görev ekle
+## ⏰ Her sabah kendi kendine çalışsın
 
-**Kullanım:** Safari/Mail/Notlar'da bir yazıyı **seç → Paylaş → Aidan'a görev ekle** → görev olarak girer.
+1. Kısayollar uygulaması → alt sekmeden **Otomasyon**
+2. **+** → **Günün Saati**
+3. Saat: **09:00** · Tekrar: **Günlük**
+4. **İleri** → kısayol olarak **"Tartımı Aidan'a gönder"** seç
+5. ⚠️ **"Çalıştırmadan Önce Sor"u KAPAT** → "Hemen Çalıştır"ı seç
+   - Bunu kapatmazsan her sabah onay bildirimi çıkar, ADHD beynine gereksiz bir karar daha ekler
 
-### Kurulum (3 dk)
-
-1. Yeni kısayol
-2. Üstten **i** ikonuna tıkla (settings) → **Paylaşım Sayfasında Göster** (Show in Share Sheet) açık olsun
-3. **Eylem Ekle** → **URL'nin İçeriğini Al**
-4. URL: `https://api.telegram.org/bot<BOT_TOKEN>/sendMessage`
-5. Yöntem: POST, Gövde: JSON
-6. Alanlar:
-   - `chat_id` → senin chat ID
-   - `text` → Metin alanına dokun → **Kısayol Girdisi** (Shortcut Input) seç
-     - Yani paylaşım sayfasından gelen metin direkt görev olur
-7. Kısayol adı: "Aidan'a görev ekle"
-8. Bitti
-
-### Test
-- Safari'de bir başlık seç → Paylaş ikonu → aşağı kaydır → **Aidan'a görev ekle** → görev olarak gider
+Bitti. Bundan sonra elini sürmüyorsun.
 
 ---
 
-## 🔒 Güvenlik notu
+## 📊 Geçmiş tartımları toplu yükle (tek seferlik)
 
-Bot token'ı kısayolun içine yapıştırınca **iCloud Keychain'a şifreli kaydedilir**. Sadece senin iCloud'una bağlı cihazlardan erişilir. Yine de:
+Kısayol bugünden itibaren çalışır. Eski tartımların da içeri girsin ki Aidan'ın eğilim
+analizi ilk günden anlamlı olsun (regresyon için en az 4 tartım + 2 hafta gerekiyor).
 
-- ❌ Kısayolu **paylaşma** (link share) — token'ı içeriyor
-- ✅ AirDrop ile başkasına yollarsan token'ı önce çıkar
+1. **Xiaomi Home** uygulaması → tartı cihazın → geçmiş/veri ekranı → **Dışa Aktar** (CSV)
+2. Dosyayı iPhone'dan bilgisayara ya da iCloud Drive'a at
+3. Aidan → **Diyet** sekmesi → Kilo kartı → **"Tartı geçmişini yükle (CSV)"**
+4. Aidan sana kaç tartım bulduğunu ve tarih aralığını gösterir → onayla
+
+> Aynı güne ait mevcut kayıtların **silinmez**, birleştirilir. Rahatça yükleyebilirsin.
 
 ---
 
 ## 🆘 Çalışmıyor mu?
 
-- **"Yanıt bekleniyor" takılı kalıyor**: BOT_TOKEN yanlış. `.env`'den tekrar kopyala.
-- **"Bot bana cevap yazmadı"**: chat_id yanlış. Sadece **senin** chat_id'inle bot konuşur.
-- **Siri "Bu kısayolu çalıştıramadım"**: JSON gövdesinde alan adlarını kontrol et: `chat_id` (alt çizgi ve küçük harf), `text` (küçük harf).
-- **Test için**: Kısayollar app içinden manuel ▶️ ile çalıştır, hata mesajı net gözükür.
+| Belirti | Sebep | Çözüm |
+|---|---|---|
+| Bildirimde `Not found` | Anahtar yanlış | `X-Aidan-Secret` başlığındaki değeri Cloudflare'den tekrar kopyala |
+| `"ok":false, "geçerli ölçüm yok"` | Sağlık'ta veri yok | Xiaomi Home'da bir kez tartıl, izinleri kontrol et (Adım 0-A) |
+| Kilo geliyor, yağ oranı gelmiyor | İzin kapalı | Ayarlar → Sağlık → Veri Erişimi → Xiaomi → `Vücut Yağ Yüzdesi` aç |
+| Kısayol hata veriyor, mesaj yok | Değişken seçilmemiş | JSON alanlarında değeri **elle yazmadığından** emin ol, listeden değişken seç |
+| Aidan'da eski tarih görünüyor | Tartılmamışsın | Kısayol Sağlık'taki **en son** ölçümü alır; o gün tartılmadıysan dünkü veriyi yollar |
+
+**Aidan sessiz arızayı kendi yakalar:** 10 gündür yeni tartım gelmezse Diyet sekmesinde
+"tartım kaydı gelmiyor — otomatik aktarım durmuş olabilir" uyarısı çıkar.
 
 ---
 
-## 🎁 Bonus: Kilit ekranı widget
+## 🔒 Güvenlik notu
 
-iOS 16+ kilit ekranına **küçük kısayol butonu** koyabilirsin:
+- `X-Aidan-Secret` kısayolun içinde iCloud Keychain'e şifreli kaydedilir
+- ❌ Kısayolu **link ile paylaşma** — anahtarı içeriyor
+- Bu uç nokta **sadece** kilo/yağ oranı alanlarına yazar. Görev, diyet ya da borsa verine dokunamaz —
+  anahtar sızsa bile birinin yapabileceği tek şey sahte tartım kaydı eklemek olur
 
-1. Kilit ekranını basılı tut → **Özelleştir** (Customize)
-2. Saat altındaki widget alanı → **+ Widget Ekle**
-3. **Kısayollar** seç → "Aidan'a not bırak" küçük buton
-4. Bitti — kilit ekranında tek tıkla Siri tetiklenir
+---
 
-Sabah uyandığında telefonu kaldır → tek tık → "günaydın matematik var" diye konuş → bot'a düşer.
+## 🎁 Bonus: kilit ekranı butonu
+
+1. Kilit ekranını basılı tut → **Özelleştir**
+2. Saat altındaki widget alanı → **+ Widget Ekle** → **Kısayollar**
+3. "Tartımı Aidan'a gönder" seç
+
+Tartıdan iner inmez tek dokunuşla yollarsın — otomasyonun 09:00'ı beklemeden.

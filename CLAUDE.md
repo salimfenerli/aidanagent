@@ -16,6 +16,31 @@
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 25 Temmuz 2026 — ⚖️ VÜCUT KOMPOZİSYONU + OTOMATİK TARTI (v7-122)
+Salim: "yağ oranı için Xiaomi S400 akıllı tartım var, ordan bilgi alabilir miyiz — her gün çeksin aktif olarak."
+**Kilo tek başına yanıltıcıydı:** kilo sabitken yağ düşüp kas artabilir (rekompozisyon), `hcWeightTrend` bunu göremiyordu.
+
+**Neden Xiaomi Cloud DEĞİL, Apple Health (kalıcı karar).** Xiaomi'nin resmî API'si yok; var olan her şey tersine mühendislik (token extractor, micloud). 4 duvar: ① Worker'ın veri-merkezi IP'si Xiaomi'de sürekli captcha tetikler ② Xiaomi hesap şifresi Worker secret'ında durmak zorunda kalırdı — Aidan'da hiçbir yerde gerçek şifre saklanmıyor ③ Xiaomi istekleri RC4 imzalı, Web Crypto RC4 desteklemiyor ④ resmî olmadığı için habersiz kırılır, **sessizce** — yeni kurulan doğruluk katmanının tam tersi. Xiaomi zaten Apple Health'e kendisi yazıyor; verinin çıkmasını beklediği kapı orası. **Bu maddeye tekrar zaman harcama.**
+
+**PWA Apple Health'i okuyamaz** (HealthKit native-only) → köprü **iOS Kısayol**.
+
+**1. Veri modeli.** `diet.weights[]` artık `{date, kg, fat, lean, src}` — `fat` yağ oranı (%), `lean` yağsız kütle (kg), `src` `'manual'|'health'|'csv'`. Yeni `upsertBody()` **alan alan birleştirir, üzerine yazmaz**: sabah Kısayol kiloyu, akşam elle yağ oranı girilirse ikisi de kalır. `lean` verilmemişse **birleşmiş kayıttan** türetilir (ilk yazımda sadece gelen veriden türetiliyordu → yakalandı, testte kilitlendi).
+
+**2. `POST /body` (worker.js).** Kimlik `X-Aidan-Secret` header'ı (ya da `?secret=`), **Supabase token DEĞİL** — Kısayol'un token yenileyecek yeri yok, 1 saatlik access_token her sabah patlardı. Uç **sadece** `diet.weights`'e yazar; secret sızsa yapılabilecek tek şey sahte tartım eklemek. Tek `{kg,fat,lean,date}` ya da toplu `{items:[…]}`. Kısayol her şeyi metin yollar → string/virgüllü ondalık ve **kesirli yağ oranı (0.182 = %18.2)** kabul edilir. Cevapta `summary` döner (Kısayol bildirimde gösterir — sessiz başarı = fark edilmeyen arıza).
+
+**3. CSV içe aktarım.** Xiaomi/Mi Fitness/Zepp dışa aktarımları tek standart kullanmıyor → sütunlar **sabit sıraya göre değil başlıktaki anahtar kelimeye göre** eşleştirilir; ayraç (`,`/`;`/tab) otomatik, 4 tarih biçimi, `'Fat Mass (kg)'` kilo sütunuyla karışmasın diye yağ ÖNCE ve kütle birimliler DIŞLANARAK aranır. Okunamayan satır atlanır ve **sayısı kullanıcıya söylenir**.
+
+**4. Paylaşılan çekirdek (ui.js ↔ worker.js byte-byte özdeş).** Yeni `hcRegress(pts,key)` — tek seri en küçük kareler; `hcWeightTrend` artık kilo/yağ/yağsız kütleyi **ayrı ayrı** regres eder, eski alan adları (`slopeKgPerWeek`, `totalChange`…) geriye uyumlu korundu. Kurallar 12 → **15**: **F)** rekompozisyon (kilo sabit + yağ düşüyor → `good`) · **G)** yağsız kütle kaybı (`eksik-log` varsa susar) · **H)** **sessiz arıza tespiti** — 10 gündür tartım gelmiyorsa uyarır (Kısayol durduğunda haftalarca fark edilmezdi).
+
+**5. AI prompt.** Yağ oranını nasıl okuyacağı eklendi: tek ölçüm ±%3-5 sapar, **sadece eğilim** yorumlanır; kilo+yağ birlikte okunur; yağsız kütle düşüyorsa **daha az yemek değil** protein/uyku önerilir. **16 yaş sınırları korundu + biri eklendi: yağ oranı için "ideal/hedef sayı" vermek YASAK.**
+
+**🐛 Düzeltilen 2 mevcut bug:** kilo detay modalı `arr.map(w=>w.kg)` ile **NaN** üretiyordu (kilosuz kayıt gelince) · veri silinince **kaynak rozeti eski metniyle ekranda kalıyordu** (erken dönüş `renderWeightSrc`'yi atlıyordu).
+
+**Doğrulama:** 73 test (18 CSV ayrıştırma + 9 worker upsert + 27 çekirdek/kural + 19 DOM) · paylaşılan çekirdek **16 fonksiyon 26825 bayt byte-byte özdeş** · **250 rastgele senaryoda PWA ↔ Worker birebir aynı fakt** · 6 dosya `node --check` temiz · EOL doğrulandı (styles.css LF, diğerleri CRLF).
+**Yeni veri alanları:** `diet.weights[*].fat` / `.lean` / `.src`
+**Yeni dosya yok** · **Rehber:** `ios-shortcuts.md` tamamen yeniden yazıldı (eski Telegram içeriği ölüydü)
+**Cache:** v7-121 → **v7-122**
+
 ### 🔴 25 Temmuz 2026 — 🫀 SAĞLIK ANALİZ DOĞRULUĞU (v7-121)
 Salim: "beslenme, ağırlık antrenmanı, uyku hepsini AI analiz etsin ve geliştirsin — bunu yüksek doğrulukta yapabiliyor muyuz?" **Cevap hayırdı.** Veri toplanıyordu ama AI'a giderken atılıyordu. Özellik değil, DOĞRULUK eklendi.
 
