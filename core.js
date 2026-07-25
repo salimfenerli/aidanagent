@@ -314,6 +314,12 @@ function syncSleepReminder() {
 // Seçili diyet günü (varsayılan bugün). _dietDate ile geçmiş günlere gezilir.
 let _dietDate = null;
 function dietKey() { return _dietDate || today(); }
+// Öğün saati damgası (v7-121). Antrenman öncesi/sonrası beslenme ve geç yeme–uyku
+// ilişkisi ancak saatle analiz edilebiliyor; eski kayıtlarda yok, yenilere yazılır.
+function mealNow() {
+  try { return (typeof nowHM === 'function') ? nowHM() : null; } catch (e) { return null; }
+}
+
 function dietDay(create = true) {
   ensureDiet();
   const k = dietKey();
@@ -437,7 +443,7 @@ function addMeal() {
   const protein = anyManual ? mP : (pm.protein != null ? pm.protein : null);
   const carb = anyManual ? mC : (pm.carb != null ? pm.carb : null);
   const fat = anyManual ? mF : (pm.fat != null ? pm.fat : null);
-  day.meals.push({ id: Date.now(), slot: _mealSlot, name, kcal, protein, carb, fat });
+  day.meals.push({ id: Date.now(), slot: _mealSlot, name, kcal, protein, carb, fat, at: mealNow() });
   // Elle girilen besin bir daha sorulmasin diye 'kendi besinlerim'e otomatik kaydet (ad ile dedupe)
   let _autoSaved = false;
   if (kcal != null) {
@@ -530,7 +536,7 @@ function quickAddMeal(i) {
   const m = _freqMeals[i];
   if (!m) return;
   const day = dietDay();
-  day.meals.push({ id: Date.now(), slot: m.slot || _mealSlot || 'atistirma', name: m.name, kcal: (m.kcal != null ? m.kcal : null), protein: m.protein, carb: m.carb, fat: m.fat });
+  day.meals.push({ id: Date.now(), slot: m.slot || _mealSlot || 'atistirma', name: m.name, kcal: (m.kcal != null ? m.kcal : null), protein: m.protein, carb: m.carb, fat: m.fat, at: mealNow() });
   save(); renderDiet(); closeFoodModal();
   showToast(m.name + ' eklendi', 'success');
 }
@@ -800,7 +806,7 @@ function togglePlanEaten(planId) {
   const day = dietDay();
   const idx = day.meals.findIndex(m => m.planId === planId);
   if (idx >= 0) day.meals.splice(idx, 1);
-  else day.meals.push({ id: Date.now(), slot: p.slot, name: p.name, kcal: p.kcal, protein: p.protein != null ? p.protein : null, carb: p.carb != null ? p.carb : null, fat: p.fat != null ? p.fat : null, planId });
+  else day.meals.push({ id: Date.now(), slot: p.slot, name: p.name, kcal: p.kcal, protein: p.protein != null ? p.protein : null, carb: p.carb != null ? p.carb : null, fat: p.fat != null ? p.fat : null, planId, at: mealNow() });
   save(); renderDiet();
 }
 
@@ -1070,7 +1076,7 @@ function addPickedFood() {
   const day = dietDay();
   const gv = Math.round(Number(g) || 0);
   const label = _foodPick.name + (gv && gv !== 100 ? ` (${gv}g)` : '');
-  day.meals.push({ id: Date.now(), slot: _mealSlot, name: label, kcal: sc.kcal, protein: sc.protein, carb: sc.carb, fat: sc.fat });
+  day.meals.push({ id: Date.now(), slot: _mealSlot, name: label, kcal: sc.kcal, protein: sc.protein, carb: sc.carb, fat: sc.fat, at: mealNow() });
   save(); renderDiet(); closeFoodModal();
   showToast(_foodPick.name + ' eklendi', 'success');
 }
@@ -1372,6 +1378,7 @@ function addRecipe(id) {
       protein: it.protein != null ? it.protein : null,
       carb: it.carb != null ? it.carb : null,
       fat: it.fat != null ? it.fat : null,
+      at: mealNow(),
     });
   });
   save(); renderDiet();
@@ -1902,7 +1909,8 @@ function addAiFood() {
     kcal: Math.round((_aiFood.kcal || 0) * m),
     protein: Math.round((_aiFood.protein || 0) * m),
     carb: Math.round((_aiFood.carb || 0) * m),
-    fat: Math.round((_aiFood.fat || 0) * m)
+    fat: Math.round((_aiFood.fat || 0) * m),
+    at: mealNow()
   });
   save(); renderDiet(); closeFoodModal();
   showToast('Eklendi', 'success');
@@ -2162,7 +2170,7 @@ function copyPrevDay() {
   const day = dietDay();
   let n = 0;
   src.forEach(m => {
-    day.meals.push({ id: Date.now() + Math.floor(Math.random() * 10000) + n, slot: m.slot, name: m.name, kcal: m.kcal, protein: m.protein != null ? m.protein : null, carb: m.carb != null ? m.carb : null, fat: m.fat != null ? m.fat : null });
+    day.meals.push({ id: Date.now() + Math.floor(Math.random() * 10000) + n, slot: m.slot, name: m.name, kcal: m.kcal, protein: m.protein != null ? m.protein : null, carb: m.carb != null ? m.carb : null, fat: m.fat != null ? m.fat : null, at: mealNow() });
     n++;
   });
   save(); renderDiet(); showToast(n + ' öğün önceki günden kopyalandı', 'success');

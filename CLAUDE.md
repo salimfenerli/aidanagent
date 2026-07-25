@@ -16,6 +16,36 @@
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 25 Temmuz 2026 — 🫀 SAĞLIK ANALİZ DOĞRULUĞU (v7-121)
+Salim: "beslenme, ağırlık antrenmanı, uyku hepsini AI analiz etsin ve geliştirsin — bunu yüksek doğrulukta yapabiliyor muyuz?" **Cevap hayırdı.** Veri toplanıyordu ama AI'a giderken atılıyordu. Özellik değil, DOĞRULUK eklendi.
+
+**Bulunan 6 doğruluk kaybı ve kapatılışı:**
+
+**1. Antrenman analizi kördü (en büyük kayıp).** `buildHealthFacts` antrenman için sadece `${w.date} ${w.title}` gönderiyordu. Oysa `normalizeHevyWorkout` her seansta `volumeKg`/`setCount`/`durationMin`, her egzersizde `{name, tid, sets, volumeKg, top:{kg,reps,e1rm}}` saklıyor ve `h.prs` rekorları hesaplanıyordu — **hiçbiri fakta girmiyordu.** AI "gittin/gitmedin" dışında bir şey bilmediği için "antrenmanını geliştir" fiziksel olarak diyemiyordu.
+- Yeni `hcHevyStats`: dönem hacmi, haftalık hacim serisi + son 2 hafta trendi, haftalık set, **kas grubu set dağılımı (itme/çekme/bacak/gövde)**, itme/çekme oranı, bacak payı, ortalama süre, en çok çalışılan 6 egzersiz ve **en çok yapılan 5 harekette e1RM eğilimi** (ilk yarı en iyisi → son yarı en iyisi, %değişim).
+- **Kas grubu gerçek veriden:** yeni `hevyFetchTemplates` Hevy `/exercise_templates`'ten `tid → primary_muscle_group` haritası çeker, `data.hevy.muscles`'a yazar, 30 günde bir tazelenir (PWA `withTemplates` bayrağıyla ister, cron da tazeler). Harita yoksa `HC_NAME_HINTS` ad tahminine düşer ve fakta "%N tahmindir" notu girer.
+- 🐛 Yan bug: PWA `w.durMin || w.duration` okuyordu, gerçek alan `durationMin` → **antrenman süresi PWA faktlarında hep 0 gidiyormuş.**
+
+**2. Kısmi gün bias'ı (sessiz, sistematik).** Sadece kahvaltı girilen gün TAM GÜN sayılıp ortalamaya giriyordu → kcal ve protein **sistematik olarak düşük** çıkıyor, AI da buna bakıp "yetersiz besleniyorsun" diyordu. Ölçüldü: sentetik veride eski yöntem 2225 kcal, doğrusu 2600 — **%17 hata.** Artık `<2 öğün` ya da `<max(600, hedefin %50'si)` olan gün "kısmi" işaretlenir, ortalamaya KATILMAZ, sayısı ayrıca raporlanır.
+- Ek: **makro kapsama oranı** — kcal girilip protein girilmeyen öğünler protein ortalamasını düşürüyordu. %85'in altındaysa fakta "gerçek alım bundan YÜKSEK, 'protein yetersiz' deme" notu girer.
+
+**3. Kalori↔kilo tutarlılık kontrolü (yeni — asıl "yüksek doğruluk" burası).** Kilo eskiden sadece "ilk kayıt / son kayıt"tı. Artık `hcWeightTrend` **en küçük kareler regresyonu** ile kg/hafta eğimi verir (min 4 tartım + 2 hafta). `hcEnergyCheck` bunu kaloriyle birleştirir: `gerçek harcama ≈ ort.kcal − (eğim×7700/7)`, Mifflin-St Jeor TDEE ile karşılaştırır. Sapma ≥%20 ise **"eksik-log"** verdikti fakta girer ve prompt AI'a "bu sayılar olduğundan düşüktür, beslenme yetersizliği yorumu YAPMA, kaydı tamamlamayı öner" der. **Artık AI eksik loga tam veri muamelesi yapmıyor.**
+
+**4. Karbonhidrat/yağ + öğün saati.** `m.carb`/`m.fat` her öğünde kayıtlıydı, fakta girmiyordu — eklendi. Yeni alan **`meal.at` ('HH:MM')**: core.js'teki 7 `day.meals.push` noktasının hepsi `mealNow()` ile damgalanır. Geç yeme (22:00 sonrası) analizi açıldı. Eski kayıtlarda yok, kapsama oranı raporlanır.
+
+**5. Katmanlı pencere.** Tek 14 gün her şeye yetmiyordu. `HC_WIN = { sleep:14, diet:28, train:84, weight:84 }` — antrenman progresyonu ve kilo eğilimi 2-3 ay ister, uyku borcu 14 günlük bir olgudur.
+
+**6. Lokal kurallar 6 → 12** (`healthPatterns`, AI'sız $0): hacim düşüşü/artışı · itme-çekme dengesizliği · **hiç çekme yok** (0'a bölme kaçağıydı, oran `null` dönüp uyarı hiç çıkmıyordu — testte yakalandı) · bacak ihmali · güç durgunluğu/gerilemesi/ilerlemesi · eksik log · yetersiz kayıt.
+
+**⚠️ MİMARİ — PAYLAŞILAN ÇEKİRDEK (yeni kalıcı kural).** Önceki ikizler (PWA `buildHealthFacts` ↔ worker `buildHealthFactsSrv`) elle kopyalandığı için **kayıyordu**: aynı veriden iki farklı "OTOMATİK TESPİTLER" satırı çıkıyordu (uyku kuralları sadece PWA'daydı). Artık sayısal işin TAMAMI **`ui.js` ve `worker.js` içinde birebir aynı 573 satırlık blokta** (`hc*` önekli, hiçbir global okumayan saf fonksiyonlar): `hcHevyStats` · `hcNutritionStats` · `hcWeightTrend` · `hcEnergyCheck` · `hcSleepLines` · `hcSleepPatterns` · `hcHabitPatterns` · `hcTrainingPatterns` · `hcAllPatterns` · `hcBuildFacts`. Her iki `buildHealthFacts` ince sarmalayıcıya indi.
+- **Bu bloğu düzenlersen İKİ DOSYAYA DA yaz** — test blok uzunluğunu ve içeriğini byte-byte karşılaştırıyor.
+
+**AI prompt'u:** yeni alanların nasıl okunacağı eklendi (denge aralığı 0.8-1.3, durgunlukta önce uyku/yemek bak, "kısmi gün zaten ayrıldı tekrar düzeltme", "eksik-log varsa yetersizlik yorumu yapma"). **16 yaş güvenlik sınırları AYNEN korundu** (teşhis/ilaç/kalori kısıtlama/görünüm yorumu/aşırı antrenman yasak, max 2 öneri).
+
+**Doğrulama:** paylaşılan çekirdek iki dosyada **byte-byte özdeş (29401 byte)** · **200 rastgele senaryoda PWA ve Worker birebir aynı faktları üretti** · 28 kural/kenar-durum testi (5 yeni kural + eski 6 kural regresyonu + ince-veri koruması + 0'a bölme + tarih sınırları) · 6 dosya `node --check` temiz · EOL doğrulandı (styles.css LF, diğerleri CRLF).
+**Yeni veri alanları:** `data.hevy.muscles` / `.musclesAt` · `diet.days[*].meals[*].at`
+**Cache:** v7-120 → **v7-121**
+
 ### 🔴 25 Temmuz 2026 — VERİ MİMARİSİ SERTLEŞTİRME (v7-120)
 Kapsamlı değerlendirmenin çıkardığı 6 madde sırayla kapatıldı. **Özellik eklenmedi, dayanıklılık eklendi.**
 

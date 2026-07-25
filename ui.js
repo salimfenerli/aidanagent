@@ -1690,9 +1690,11 @@ function setPlanPings(on) {
 const HEVY_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/hevy-sync';
 
 function ensureHevy() {
-  data.hevy = data.hevy || { workouts: [], prs: {}, lastSync: null, lastError: null };
+  data.hevy = data.hevy || { workouts: [], prs: {}, lastSync: null, lastError: null, muscles: null, musclesAt: 0 };
   data.hevy.workouts = data.hevy.workouts || [];
   data.hevy.prs = data.hevy.prs || {};
+  // muscles: { exerciseTemplateId: 'chest' } — Hevy'den 30 günde bir tazelenir (v7-121)
+  if (data.hevy.muscles === undefined) { data.hevy.muscles = null; data.hevy.musclesAt = 0; }
   return data.hevy;
 }
 
@@ -1719,7 +1721,7 @@ async function syncHevy(loud) {
     const r = await fetch(HEVY_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ key }),
+      body: JSON.stringify({ key, withTemplates: (!h.muscles || (Date.now() - (h.musclesAt || 0)) > 30 * 86400000) }),
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || ('sunucu hatası ' + r.status));
@@ -1742,6 +1744,8 @@ async function syncHevy(loud) {
       }
     }
     h.prs = prs;
+    // Kas grubu haritası geldiyse sakla — set dağılımı tahmin yerine gerçek veriyle hesaplanır
+    if (j.muscles && Object.keys(j.muscles).length) { h.muscles = j.muscles; h.musclesAt = Date.now(); }
     h.lastSync = Date.now();
     h.lastError = null;
     save();
@@ -4740,167 +4744,634 @@ function nutritionOn(dateStr) {
   return {
     kcal: meals.reduce((s, m) => s + (m.kcal || 0), 0),
     protein: meals.reduce((s, m) => s + (m.protein || 0), 0),
+    carb: meals.reduce((s, m) => s + (m.carb || 0), 0),
+    fat: meals.reduce((s, m) => s + (m.fat || 0), 0),
     waterL: day.waterL || 0,
     meals: meals.length
   };
 }
 
-// ---------- LOKAL DESEN TESPİTİ (AI'sız, $0) ----------
-// Ciddiyet: danger > warn > good. En fazla 3 satır döner.
-function healthPatterns() {
-  const out = [];
-  const t = today();
+/* ===================================================================
+   SAĞLIK ANALİTİĞİ ÇEKİRDEĞİ (v7-121) — PAYLAŞILAN SAF FONKSİYONLAR
+   ⚠️ Bu blok ui.js ve aidan-worker/worker.js içinde BİREBİR AYNIDIR.
+   Birini değiştirirsen ötekini de değiştir — ikizlik testi bunu kontrol eder.
+   Hiçbir global okumaz: her girdi parametreyle gelir, çıktı deterministiktir.
+   Amaç: AI'a "gittin/gitmedin" değil, ANALİZ EDİLEBİLİR veri göndermek.
+   =================================================================== */
 
-  // 1) Ardışık kötü/az uyku — mevcut badSleepStreak
-  const bad = typeof badSleepStreak === 'function' ? badSleepStreak() : 0;
-  if (bad >= 3) {
-    out.push({ level: 'danger', text: `${bad} gecedir kötü/az uyuyorsun — bugünü hafif tut.` });
+// Hevy primary_muscle_group → kaba hareket grubu (itme/çekme/bacak dengesi için)
+var HC_GROUP_OF = {
+  chest: 'itme', shoulders: 'itme', triceps: 'itme',
+  lats: 'cekme', upper_back: 'cekme', biceps: 'cekme', traps: 'cekme', forearms: 'cekme',
+  quadriceps: 'bacak', hamstrings: 'bacak', glutes: 'bacak', calves: 'bacak',
+  abductors: 'bacak', adductors: 'bacak',
+  abdominals: 'govde', lower_back: 'govde', neck: 'govde',
+  cardio: 'kardiyo', full_body: 'tam',
+};
+var HC_GROUP_TR = { itme: 'itme', cekme: 'çekme', bacak: 'bacak', govde: 'gövde', kardiyo: 'kardiyo', tam: 'tüm vücut', diger: 'diğer' };
+
+// Template haritası yoksa egzersiz adından tahmin. SIRA ÖNEMLİ:
+// "leg curl" biseps kıvırmasıyla karışmasın diye bacak kalıpları önce gelir.
+var HC_NAME_HINTS = [
+  [/squat|leg press|lunge|hack |çömelme|bacak pres/i, 'quadriceps'],
+  [/deadlift|rdl|romanian|hamstring|leg curl|arka bacak/i, 'hamstrings'],
+  [/glute|hip thrust|kalça/i, 'glutes'],
+  [/calf|baldır/i, 'calves'],
+  [/bench|chest|göğüs|push[- ]?up|pec |fly|dip\b|dips\b/i, 'chest'],
+  [/shoulder|omuz|overhead|\bohp\b|lateral raise|front raise|arnold|upright/i, 'shoulders'],
+  [/tricep|triseps|pushdown|skull|kickback/i, 'triceps'],
+  [/pulldown|pull[- ]?up|chin[- ]?up|\blat\b|kanat|row\b|kürek|çekiş/i, 'lats'],
+  [/bicep|biseps|curl|preacher|hammer/i, 'biceps'],
+  [/trap|shrug/i, 'traps'],
+  [/forearm|wrist|ön kol|grip/i, 'forearms'],
+  [/abs?\b|crunch|plank|karın|core|sit[- ]?up|raise leg|leg raise/i, 'abdominals'],
+  [/back extension|hyperext|good morning|bel/i, 'lower_back'],
+  [/run|treadmill|bike|cycl|rowing machine|cardio|koşu|kardiyo|elliptical/i, 'cardio'],
+];
+
+// Egzersizin kas grubunu bul: önce Hevy template haritası (kesin), sonra ad tahmini.
+// Dönüş { muscle, group, guessed } — guessed=true ise tahmindir, güven notu düşer.
+function hcMuscleOf(ex, muscleMap) {
+  var name = (ex && ex.name) || '';
+  var tid = ex && ex.tid;
+  if (tid && muscleMap && muscleMap[tid]) {
+    var m = muscleMap[tid];
+    return { muscle: m, group: HC_GROUP_OF[m] || 'diger', guessed: false };
+  }
+  for (var i = 0; i < HC_NAME_HINTS.length; i++) {
+    if (HC_NAME_HINTS[i][0].test(name)) {
+      var g = HC_NAME_HINTS[i][1];
+      return { muscle: g, group: HC_GROUP_OF[g] || 'diger', guessed: true };
+    }
+  }
+  return { muscle: 'other', group: 'diger', guessed: true };
+}
+
+// --- Saf tarih yardımcıları (iki tarafta da aynı sonucu versin diye yerel) ---
+function hcShift(iso, n) {
+  var d = new Date(iso + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function hcDayDiff(a, b) {   // b - a, gün
+  return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
+}
+function hcRound(x, n) { var p = Math.pow(10, n || 0); return Math.round(x * p) / p; }
+function hcAvg(a) { return a.length ? a.reduce(function (s, x) { return s + x; }, 0) / a.length : null; }
+
+/* ---------------- ANTRENMAN İSTATİSTİĞİ ----------------
+   Girdi: normalize edilmiş Hevy antrenmanları (normalizeHevyWorkout çıktısı).
+   Her antrenmanda volumeKg / setCount / durationMin, her egzersizde
+   {name, tid, sets, volumeKg, top:{kg,reps,e1rm}} VAR — eskiden hiç kullanılmıyordu.
+   Çıktı: dönem hacmi, haftalık set, kas grubu dağılımı, haftalık hacim serisi,
+          en çok çalışılan egzersizlerde e1RM eğilimi.                        */
+function hcHevyStats(workouts, fromDate, toDate, muscleMap) {
+  var ws = (workouts || []).filter(function (w) { return w && w.date && w.date >= fromDate && w.date <= toDate; })
+    .sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  if (!ws.length) return null;
+
+  var spanDays = hcDayDiff(fromDate, toDate) + 1;
+  var weeks = Math.max(1, spanDays / 7);
+  var vol = 0, sets = 0, mins = 0, guessedSets = 0;
+  var byGroup = { itme: 0, cekme: 0, bacak: 0, govde: 0, kardiyo: 0, tam: 0, diger: 0 };
+  var exMap = {};
+  var weekVol = {};   // haftaIndex → hacim
+
+  for (var i = 0; i < ws.length; i++) {
+    var w = ws[i];
+    vol += w.volumeKg || 0;
+    sets += w.setCount || 0;
+    mins += w.durationMin || 0;
+    var wk = Math.floor(hcDayDiff(fromDate, w.date) / 7);
+    weekVol[wk] = (weekVol[wk] || 0) + (w.volumeKg || 0);
+
+    var exs = w.exercises || [];
+    for (var j = 0; j < exs.length; j++) {
+      var ex = exs[j];
+      if (!ex) continue;
+      var info = hcMuscleOf(ex, muscleMap);
+      byGroup[info.group] = (byGroup[info.group] || 0) + (ex.sets || 0);
+      if (info.guessed) guessedSets += ex.sets || 0;
+      var key = ex.name || 'Egzersiz';
+      var e = exMap[key];
+      if (!e) { e = exMap[key] = { name: key, sets: 0, vol: 0, pts: [], muscle: info.muscle }; }
+      e.sets += ex.sets || 0;
+      e.vol += ex.volumeKg || 0;
+      if (ex.top && ex.top.e1rm) e.pts.push({ date: w.date, e1rm: ex.top.e1rm });
+    }
   }
 
-  // 2) Uyku borcu — üstel ağırlıklı sleepDebt (v7-118), banda göre ciddiyet
-  const sd = typeof sleepDebt === 'function' ? sleepDebt() : null;
-  if (sd && sd.nights >= 3 && sd.band !== 'clear' && bad < 3) {
-    const lvl = (sd.band === 'severe' || sd.band === 'high') ? 'danger' : 'warn';
-    const rec = sd.recoveryNights ? ` ${sd.recoveryNights} gece erken yatmak kapatır.` : '';
-    out.push({ level: lvl, text: `Birikmiş uyku borcun ${fmtSleepHours(sd.debt)} (${SLEEP_BAND_LABEL[sd.band]}).${rec}` });
+  // Haftalık hacim serisi (eksik hafta = 0, antrenmansız hafta gerçek bilgidir)
+  var nWeeks = Math.ceil(spanDays / 7);
+  var volSeries = [];
+  for (var k = 0; k < nWeeks; k++) volSeries.push(Math.round(weekVol[k] || 0));
+
+  // Son 2 hafta vs önceki 2 hafta hacim değişimi (yeterli veri varsa)
+  var volTrendPct = null;
+  if (volSeries.length >= 4) {
+    var recent = volSeries.slice(-2).reduce(function (s, x) { return s + x; }, 0);
+    var prev = volSeries.slice(-4, -2).reduce(function (s, x) { return s + x; }, 0);
+    if (prev > 0) volTrendPct = Math.round((recent - prev) / prev * 100);
+  }
+
+  // e1RM eğilimi — en çok set yapılan egzersizler, ilk yarı en iyisi vs son yarı en iyisi
+  var exList = Object.keys(exMap).map(function (k2) { return exMap[k2]; })
+    .sort(function (a, b) { return b.sets - a.sets; });
+  var strength = [];
+  for (var m = 0; m < exList.length && strength.length < 5; m++) {
+    var e2 = exList[m];
+    if (e2.pts.length < 4) continue;
+    var pts = e2.pts.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+    var span = hcDayDiff(pts[0].date, pts[pts.length - 1].date);
+    if (span < 21) continue;                       // 3 haftadan kısa aralıkta trend okunmaz
+    var half = Math.floor(pts.length / 2);
+    var firstBest = Math.max.apply(null, pts.slice(0, half).map(function (p) { return p.e1rm; }));
+    var lastBest = Math.max.apply(null, pts.slice(half).map(function (p) { return p.e1rm; }));
+    strength.push({
+      name: e2.name,
+      sessions: pts.length,
+      spanDays: span,
+      firstE1rm: hcRound(firstBest, 1),
+      lastE1rm: hcRound(lastBest, 1),
+      pct: firstBest > 0 ? Math.round((lastBest - firstBest) / firstBest * 100) : null,
+    });
+  }
+
+  var pushSets = byGroup.itme, pullSets = byGroup.cekme, legSets = byGroup.bacak;
+  var namedSets = pushSets + pullSets + legSets + byGroup.govde;
+
+  return {
+    sessions: ws.length,
+    spanDays: spanDays,
+    perWeek: hcRound(ws.length / weeks, 1),
+    volumeKg: Math.round(vol),
+    volPerWeek: Math.round(vol / weeks),
+    sets: sets,
+    setsPerWeek: hcRound(sets / weeks, 1),
+    avgMin: mins && ws.length ? Math.round(mins / ws.length) : null,
+    byGroup: byGroup,
+    pushPullRatio: pullSets > 0 ? hcRound(pushSets / pullSets, 2) : null,
+    legShare: namedSets > 0 ? Math.round(legSets / namedSets * 100) : null,
+    volSeries: volSeries,
+    volTrendPct: volTrendPct,
+    strength: strength,
+    // Kas grubu ne kadar tahmine dayanıyor — güven şeffaflığı
+    guessedPct: sets > 0 ? Math.round(guessedSets / sets * 100) : 0,
+    lastDate: ws[ws.length - 1].date,
+    topExercises: exList.slice(0, 6).map(function (e3) { return { name: e3.name, sets: e3.sets, muscle: e3.muscle }; }),
+  };
+}
+
+/* ---------------- BESLENME İSTATİSTİĞİ ----------------
+   KRİTİK DÜZELTME: eskiden bir öğün girilen gün de "tam gün" sayılıp
+   ortalamaya giriyordu → kcal ve protein SİSTEMATİK OLARAK DÜŞÜK çıkıyordu,
+   AI da buna bakıp "yetersiz besleniyorsun" diyordu. Artık kısmi gün ayrılır. */
+function hcNutritionStats(dietDays, fromDate, toDate, isTrainDay, kcalGoal) {
+  var full = [], partial = [], none = 0;
+  // Kısmi eşiği: 2'den az öğün VEYA hedefin yarısının altı (hedef yoksa 600 kcal)
+  var minKcal = kcalGoal ? Math.max(600, Math.round(kcalGoal * 0.5)) : 600;
+  var mealsTotal = 0, mealsWithProtein = 0, mealsWithTime = 0;
+
+  for (var d = fromDate; d <= toDate; d = hcShift(d, 1)) {
+    var day = (dietDays || {})[d];
+    var meals = (day && day.meals) || [];
+    if (!meals.length) { none++; continue; }
+    var kcal = 0, protein = 0, carb = 0, fat = 0, times = [];
+    for (var i = 0; i < meals.length; i++) {
+      var m = meals[i];
+      kcal += m.kcal || 0;
+      protein += m.protein || 0;
+      carb += m.carb || 0;
+      fat += m.fat || 0;
+      mealsTotal++;
+      if (m.protein != null) mealsWithProtein++;
+      if (m.at) { mealsWithTime++; times.push({ at: m.at, slot: m.slot, kcal: m.kcal || 0 }); }
+    }
+    var rec = {
+      date: d, kcal: Math.round(kcal), protein: Math.round(protein),
+      carb: Math.round(carb), fat: Math.round(fat),
+      waterL: (day && day.waterL) || 0, meals: meals.length, times: times,
+    };
+    if (meals.length < 2 || kcal < minKcal) partial.push(rec); else full.push(rec);
+  }
+
+  if (!full.length && !partial.length) return null;
+  var base = full.length ? full : partial;   // hiç tam gün yoksa kısmiden konuş, ama işaretle
+  var avg = function (f) { return hcAvg(base.map(f)); };
+
+  // Antrenman günü vs dinlenme günü — AI'ın en çok işine yarayan kesit
+  var gym = base.filter(function (x) { return isTrainDay(x.date); });
+  var rest = base.filter(function (x) { return !isTrainDay(x.date); });
+  var split = null;
+  if (gym.length >= 2 && rest.length >= 2) {
+    split = {
+      gymDays: gym.length, restDays: rest.length,
+      gymKcal: Math.round(hcAvg(gym.map(function (x) { return x.kcal; }))),
+      restKcal: Math.round(hcAvg(rest.map(function (x) { return x.kcal; }))),
+      gymProtein: Math.round(hcAvg(gym.map(function (x) { return x.protein; }))),
+      restProtein: Math.round(hcAvg(rest.map(function (x) { return x.protein; }))),
+    };
+  }
+
+  // Geç yeme: 22:00 sonrası öğün oranı (uyku ilişkisi için — saat kaydı varsa)
+  var lateDays = 0, timedDays = 0;
+  for (var j = 0; j < base.length; j++) {
+    if (!base[j].times.length) continue;
+    timedDays++;
+    var late = base[j].times.some(function (t) {
+      var h = parseInt(String(t.at).slice(0, 2), 10);
+      return h >= 22 || h < 4;
+    });
+    if (late) lateDays++;
+  }
+
+  return {
+    fullDays: full.length, partialDays: partial.length, missingDays: none,
+    usingPartial: !full.length,
+    kcal: Math.round(avg(function (x) { return x.kcal; })),
+    protein: Math.round(avg(function (x) { return x.protein; })),
+    carb: Math.round(avg(function (x) { return x.carb; })),
+    fat: Math.round(avg(function (x) { return x.fat; })),
+    waterL: hcRound(avg(function (x) { return x.waterL; }), 1),
+    mealsPerDay: hcRound(avg(function (x) { return x.meals; }), 1),
+    // Makro kapsaması: kcal girilip protein girilmeyen öğün ortalamayı düşürür
+    proteinCoverPct: mealsTotal ? Math.round(mealsWithProtein / mealsTotal * 100) : 0,
+    timeCoverPct: mealsTotal ? Math.round(mealsWithTime / mealsTotal * 100) : 0,
+    lateEatDays: timedDays >= 3 ? lateDays : null,
+    timedDays: timedDays,
+    split: split,
+  };
+}
+
+/* ---------------- KİLO EĞİLİMİ (en küçük kareler) ----------------
+   Eskiden sadece "ilk kayıt / son kayıt" vardı — gürültüye açıktı.
+   Regresyon eğimi haftalık gerçek değişimi verir.                   */
+function hcWeightTrend(weights, fromDate, toDate) {
+  var pts = (weights || []).filter(function (w) {
+    return w && w.kg != null && w.date && w.date >= fromDate && w.date <= toDate;
+  }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  if (pts.length < 4) return null;
+  var span = hcDayDiff(pts[0].date, pts[pts.length - 1].date);
+  if (span < 14) return null;                    // 2 haftadan kısa seride eğim anlamsız
+
+  var n = pts.length, sx = 0, sy = 0, sxy = 0, sxx = 0;
+  for (var i = 0; i < n; i++) {
+    var x = hcDayDiff(pts[0].date, pts[i].date), y = pts[i].kg;
+    sx += x; sy += y; sxy += x * y; sxx += x * x;
+  }
+  var den = n * sxx - sx * sx;
+  if (!den) return null;
+  var slopePerDay = (n * sxy - sx * sy) / den;
+  return {
+    n: n, spanDays: span,
+    first: pts[0].kg, last: pts[n - 1].kg,
+    firstDate: pts[0].date, lastDate: pts[n - 1].date,
+    slopeKgPerWeek: hcRound(slopePerDay * 7, 2),
+    totalChange: hcRound(pts[n - 1].kg - pts[0].kg, 1),
+  };
+}
+
+/* ---------------- ENERJİ TUTARLILIK KONTROLÜ ----------------
+   "Yüksek doğruluk" burada başlıyor: loglanan kalori ile GERÇEKLEŞEN kilo
+   değişimi uyuşuyor mu? Uyuşmuyorsa beslenme ortalamaları güvenilmezdir ve
+   AI bunu bilmek zorunda — yoksa eksik loga tam veri muamelesi yapar.
+   1 kg yağ doku ≈ 7700 kcal.                                              */
+function hcEnergyCheck(avgKcal, slopeKgPerWeek, calc) {
+  if (avgKcal == null || slopeKgPerWeek == null || !calc) return null;
+  var kg = Number(calc.weight), cm = Number(calc.height), age = Number(calc.age);
+  var act = Number(calc.activity) || 1.55;
+  if (!(kg > 0 && cm > 0 && age > 0)) return null;
+  var bmr = Math.round(10 * kg + 6.25 * cm - 5 * age + (calc.sex === 'male' ? 5 : -161));
+  var tdee = Math.round(bmr * act);
+  // Enerji dengesi: günlük fazla/eksik = eğim(kg/hafta) * 7700 / 7
+  var dailyBalance = slopeKgPerWeek * 7700 / 7;
+  var impliedBurn = Math.round(avgKcal - dailyBalance);   // loga göre gerçek harcama
+  var devPct = Math.round((impliedBurn - tdee) / tdee * 100);
+  var verdict, note;
+  if (devPct <= -20) {
+    verdict = 'eksik-log';
+    note = 'Loglanan kalori, kilo değişiminin gerektirdiğinden belirgin düşük — muhtemelen bazı öğünler girilmiyor. Kalori ve protein ortalamalarını OLDUĞUNDAN DÜŞÜK kabul et, "az yiyorsun" yorumu YAPMA.';
+  } else if (devPct >= 20) {
+    verdict = 'fazla-log';
+    note = 'Loglanan kalori, kilo değişiminin gerektirdiğinden belirgin yüksek — porsiyonlar olduğundan büyük girilmiş ya da kilo kaydı seyrek olabilir.';
+  } else {
+    verdict = 'tutarli';
+    note = 'Loglanan kalori ile kilo değişimi tutarlı — beslenme kayıtları güvenilir.';
+  }
+  return { bmr: bmr, tdee: tdee, impliedBurn: impliedBurn, devPct: devPct, verdict: verdict, note: note };
+}
+
+/* ---------------- KATMANLI ANALİZ PENCERESİ ----------------
+   Tek 14 gün her şeye yetmiyordu: uyku borcu 14 günlük bir olgu ama
+   antrenman progresyonu ve kilo eğilimi 2-3 ay istiyor.               */
+var HC_WIN = { sleep: 14, diet: 28, train: 84, weight: 84 };
+
+// Yeni lokal kurallar (AI'sız, $0) — antrenman/beslenme/kilo tarafı.
+// healthPatterns() bunları uyku kurallarıyla birleştirip ciddiyete göre sıralar.
+function hcTrainingPatterns(hev, nut, wt, energy) {
+  var out = [];
+
+  // A) Haftalık hacim düşüşü — devamlılık kaybının erken sinyali
+  if (hev && hev.volTrendPct != null && hev.sessions >= 8) {
+    if (hev.volTrendPct <= -25) {
+      out.push({ level: 'warn', text: 'Son 2 haftada antrenman hacmin %' + Math.abs(hev.volTrendPct) + ' düştü.' });
+    } else if (hev.volTrendPct >= 15) {
+      out.push({ level: 'good', text: 'Antrenman hacmin son 2 haftada %' + hev.volTrendPct + ' arttı.' });
+    }
+  }
+
+  // B) Kas grubu dengesizliği — itme/çekme oranı ve bacak payı
+  if (hev && hev.setsPerWeek >= 6) {
+    // Bir taraf TAMAMEN boşsa oran hesaplanamaz (0'a bölme) — en uç dengesizlik
+    // sessizce kaybolmasın diye ayrıca yakalanır.
+    if (hev.byGroup.cekme === 0 && hev.byGroup.itme >= 10) {
+      out.push({ level: 'warn', text: 'Hiç çekme hareketi yok — omuz sağlığı için sırt/kanat ekle.' });
+    } else if (hev.byGroup.itme === 0 && hev.byGroup.cekme >= 10) {
+      out.push({ level: 'warn', text: 'Hiç itme hareketi yok — göğüs/omuz dengeyi tamamlar.' });
+    } else if (hev.pushPullRatio != null && hev.pushPullRatio >= 1.8) {
+      out.push({ level: 'warn', text: 'İtme setlerin çekmenin ' + hev.pushPullRatio + ' katı — omuz sağlığı için çekmeyi artır.' });
+    } else if (hev.pushPullRatio != null && hev.pushPullRatio <= 0.55) {
+      out.push({ level: 'warn', text: 'Çekme setlerin itmenin belirgin üstünde — dengeyi gözden geçir.' });
+    }
+    if (hev.legShare != null && hev.legShare < 20 && hev.sessions >= 8) {
+      out.push({ level: 'warn', text: 'Setlerinin sadece %' + hev.legShare + "'i bacak — en büyük kas grubu boşta." });
+    }
+  }
+
+  // C) Güç durgunluğu — en çok çalıştığın hareketlerde e1RM ilerlemiyor
+  if (hev && hev.strength && hev.strength.length >= 2) {
+    var flat = hev.strength.filter(function (s) { return s.pct != null && s.pct <= 1; });
+    var down = hev.strength.filter(function (s) { return s.pct != null && s.pct <= -5; });
+    if (down.length >= 2) {
+      out.push({ level: 'warn', text: down.length + ' ana hareketinde güç geriliyor — uyku ve yeterli yemek ilk bakılacak yer.' });
+    } else if (flat.length >= Math.ceil(hev.strength.length * 0.7)) {
+      out.push({ level: 'warn', text: hev.strength.length + ' ana hareketin ' + flat.length + "'inde " + Math.round(hev.strength[0].spanDays / 7) + ' haftadır ilerleme yok.' });
+    } else {
+      var up = hev.strength.filter(function (s) { return s.pct != null && s.pct >= 5; });
+      if (up.length) out.push({ level: 'good', text: up[0].name + ' ' + up[0].pct + '% arttı — program çalışıyor.' });
+    }
+  }
+
+  // D) Kilo–kalori çelişkisi: kayıtlar gerçeği yansıtmıyor
+  if (energy && energy.verdict === 'eksik-log') {
+    out.push({ level: 'warn', text: 'Öğün kayıtların eksik görünüyor — kilo değişimin loglanan kaloriyle uyuşmuyor.' });
+  }
+
+  // E) Kısmi loglama oranı yüksekse ortalamalar zaten güvenilmez
+  if (nut && (nut.partialDays + nut.missingDays) > (nut.fullDays + nut.partialDays + nut.missingDays) * 0.5) {
+    out.push({ level: 'warn', text: 'Günlerin yarısından fazlasında beslenme kaydı eksik — analiz zayıf kalıyor.' });
+  }
+
+  return out;
+}
+
+/* ---------------- FAKT ÜRETİCİ (AI'a giden metin) ----------------
+   Sayısal kısmın tamamı burada üretilir → PWA ve Worker BİREBİR aynı metni verir.
+   Uyku satırları dışarıdan gelir (her taraf kendi sleepDebt ikizini kullanır).   */
+function hcBuildFacts(ctx) {
+  var L = [];
+  var g = ctx.goals || {};
+  L.push('HEDEFLER: uyku ' + (g.sleepH || 8) + ' saat/gece · ' + (g.kcal || '-') + ' kcal · protein ' + (g.protein || '-') + ' g · su ' + (g.waterL || '-') + ' L.');
+  (ctx.sleepLines || []).forEach(function (x) { if (x) L.push(x); });
+
+  // --- Antrenman ---
+  var hev = ctx.hevy;
+  if (hev) {
+    L.push('ANTRENMAN (son ' + hev.spanDays + ' gün): ' + hev.sessions + ' seans, haftada ' + hev.perWeek +
+      (hev.avgMin ? ', ortalama ' + hev.avgMin + ' dk' : '') + '. Son antrenman ' + hev.lastDate + '.');
+    L.push('Haftalık hacim ' + hcRound(hev.volPerWeek / 1000, 1) + ' ton, haftada ' + hev.setsPerWeek + ' set' +
+      (hev.volTrendPct != null ? '. Son 2 haftanın hacmi önceki 2 haftaya göre %' + hev.volTrendPct : '') + '.');
+    var gp = hev.byGroup;
+    L.push('Set dağılımı — itme ' + gp.itme + ', çekme ' + gp.cekme + ', bacak ' + gp.bacak + ', gövde ' + gp.govde + '.' +
+      (hev.pushPullRatio != null ? ' İtme/çekme oranı ' + hev.pushPullRatio + ' (dengeli aralık 0.8-1.3).' : '') +
+      (hev.legShare != null ? ' Bacak payı %' + hev.legShare + '.' : ''));
+    if (hev.strength.length) {
+      L.push('Güç eğilimi (tahmini 1RM, ilk yarı → son yarı): ' + hev.strength.map(function (s) {
+        return s.name + ' ' + s.firstE1rm + ' → ' + s.lastE1rm + ' kg (%' + (s.pct > 0 ? '+' + s.pct : s.pct) + ', ' + s.sessions + ' seans/' + s.spanDays + ' gün)';
+      }).join(' | '));
+    } else {
+      L.push('Güç eğilimi: henüz yeterli tekrar yok (aynı hareketin 3+ hafta boyunca 4+ seansı gerekir).');
+    }
+    L.push('En çok çalışılan: ' + hev.topExercises.map(function (e) { return e.name + ' (' + e.sets + ' set)'; }).join(', ') + '.');
+    if (hev.guessedPct >= 20) L.push('NOT: kas grubu bilgisinin %' + hev.guessedPct + "'i egzersiz adından tahmin edildi, dağılım yaklaşıktır.");
+  } else {
+    L.push('ANTRENMAN: son ' + HC_WIN.train + ' günde kayıt yok.');
+  }
+
+  // --- Beslenme ---
+  var n = ctx.nutrition;
+  if (n) {
+    L.push('BESLENME (son ' + HC_WIN.diet + ' gün): ' + n.fullDays + ' tam gün, ' + n.partialDays +
+      ' kısmi gün (2 öğünden az ya da çok düşük kalori — ORTALAMAYA KATILMADI), ' + n.missingDays + ' gün kayıtsız.');
+    L.push((n.usingPartial ? 'Kısmi günlerin' : 'Tam günlerin') + ' ortalaması: ' + n.kcal + ' kcal, protein ' + n.protein +
+      ' g, karbonhidrat ' + n.carb + ' g, yağ ' + n.fat + ' g, su ' + n.waterL + ' L, günde ' + n.mealsPerDay + ' öğün.');
+    if (n.proteinCoverPct < 85) {
+      L.push('DİKKAT: öğünlerin sadece %' + n.proteinCoverPct + "'inde protein değeri girilmiş — gerçek protein alımı yukarıdaki sayıdan YÜKSEK. 'Protein yetersiz' yorumu yapma.");
+    }
+    if (n.split) {
+      L.push('Antrenman günü ortalama ' + n.split.gymKcal + ' kcal / ' + n.split.gymProtein + ' g protein (' + n.split.gymDays + ' gün); dinlenme günü ' +
+        n.split.restKcal + ' kcal / ' + n.split.restProtein + ' g protein (' + n.split.restDays + ' gün).');
+    }
+    if (n.lateEatDays != null) {
+      L.push('Saat kaydı olan ' + n.timedDays + ' günün ' + n.lateEatDays + "'inde 22:00'den sonra öğün var.");
+    }
+  } else {
+    L.push('BESLENME: kayıt yok.');
+  }
+
+  // --- Kilo + enerji tutarlılığı ---
+  var wt = ctx.weight;
+  if (wt) {
+    L.push('KİLO (son ' + wt.spanDays + ' gün, ' + wt.n + ' tartım): ' + wt.first + ' → ' + wt.last + ' kg, toplam ' +
+      (wt.totalChange > 0 ? '+' : '') + wt.totalChange + ' kg. Regresyon eğimi haftada ' +
+      (wt.slopeKgPerWeek > 0 ? '+' : '') + wt.slopeKgPerWeek + ' kg.');
+  } else {
+    L.push('KİLO: eğim hesaplanamadı (en az 4 tartım ve 2 hafta aralık gerekir).');
+  }
+  var en = ctx.energy;
+  if (en) {
+    L.push('ENERJİ TUTARLILIĞI: hesaplanan BMR ' + en.bmr + ', TDEE ' + en.tdee + ' kcal. Loglanan alım + kilo eğimine göre gerçek harcama ≈ ' +
+      en.impliedBurn + ' kcal (%' + (en.devPct > 0 ? '+' + en.devPct : en.devPct) + ' sapma). ' + en.note);
+  }
+
+  if (ctx.contextLine) L.push(ctx.contextLine);
+  if (ctx.patterns && ctx.patterns.length) L.push('OTOMATİK TESPİTLER: ' + ctx.patterns.join(' | '));
+  return L.join('\n');
+}
+
+/* ---------------- UYKU SATIRLARI (paylaşılan) ----------------
+   Uyku BORCU her tarafta kendi ikiziyle hesaplanır (sleepDebt / sleepDebtSrv),
+   ama metne dökme işi burada — böylece iki taraf birebir aynı cümleyi üretir. */
+function hcSleepLines(sleepArr, goalH, debt, bandLabel) {
+  var to = null, from = null;
+  var all = (sleepArr || []).filter(function (s) { return s && s.date; });
+  if (!all.length) return ['UYKU: kayıt yok.'];
+  var dates = all.map(function (s) { return s.date; }).sort();
+  to = dates[dates.length - 1];
+  from = hcShift(to, -(HC_WIN.sleep - 1));
+  var sl = all.filter(function (s) { return s.date >= from && s.hours != null; })
+    .sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  if (!sl.length) return ['UYKU: son ' + HC_WIN.sleep + ' günde saat kaydı yok.'];
+
+  var L = [];
+  var avg = hcAvg(sl.map(function (s) { return s.hours; }));
+  var short = sl.filter(function (s) { return s.hours < goalH; }).length;
+  L.push('UYKU (son ' + HC_WIN.sleep + ' gün, ' + sl.length + ' gece kayıtlı): ortalama ' + hcRound(avg, 1) + ' saat, ' + short + ' gece hedefin altında.');
+  if (debt) {
+    L.push('Birikmiş uyku borcu ' + debt.debt + ' saat (' + (bandLabel || '-') + '), ' + debt.nights + ' geceden hesaplandı' +
+      (debt.est ? ', bunun ' + debt.est + ' gecesi kalite notundan tahmin' : '') +
+      '. Bu sayı üstel ağırlıklı: eski borç günde %15 erir, fazla uyku açığı ancak yarı verimle kapatır — düz toplam değildir, yeniden hesaplama.');
+  }
+  // Hafta içi / hafta sonu (30 gün) — sosyal jetlag sinyali
+  var wFrom = hcShift(to, -29);
+  var wd = [], we = [];
+  all.filter(function (s) { return s.date >= wFrom && s.hours != null; }).forEach(function (s) {
+    var dow = new Date(s.date + 'T12:00:00').getDay();
+    (dow === 0 || dow === 6 ? we : wd).push(s.hours);
+  });
+  if (wd.length >= 3 && we.length >= 2) {
+    L.push('Son 30 gün — hafta içi ortalama ' + hcRound(hcAvg(wd), 1) + ' saat, hafta sonu ' + hcRound(hcAvg(we), 1) + ' saat.');
+  }
+  L.push('Son geceler: ' + sl.slice(-8).map(function (s) {
+    return s.date + ' ' + s.hours + 'sa' + (s.bedtime ? ' (' + s.bedtime + '-' + s.wake + ')' : '') + (s.quality ? ' [' + s.quality + ']' : '');
+  }).join(' | '));
+  return L;
+}
+
+/* ---------------- UYKU DESENLERİ (paylaşılan) ----------------
+   v7-121 öncesi bu kurallar sadece PWA'daydı; worker'ın ürettiği fakta girmiyordu
+   → aynı veriden iki farklı "OTOMATİK TESPİTLER" satırı çıkıyordu. Artık tek kaynak.
+   badStreak/recoveryNights dışarıdan gelir (her taraf kendi ikizini kullanır). */
+function hcSleepPatterns(sleepArr, goalH, debt, bandLabel, debtLabel, recoveryNights, badStreak, isTrainDay, toDate) {
+  var out = [];
+  var all = (sleepArr || []).filter(function (s) { return s && s.date; });
+
+  // 1) Ardışık kötü/az uyku
+  if (badStreak >= 3) out.push({ level: 'danger', text: badStreak + ' gecedir kötü/az uyuyorsun — bugünü hafif tut.' });
+
+  // 2) Birikmiş uyku borcu (bandına göre ciddiyet)
+  if (debt && debt.nights >= 3 && debt.band !== 'clear' && badStreak < 3) {
+    var lvl = (debt.band === 'severe' || debt.band === 'high') ? 'danger' : 'warn';
+    var rec = recoveryNights ? ' ' + recoveryNights + ' gece erken yatmak kapatır.' : '';
+    out.push({ level: lvl, text: 'Birikmiş uyku borcun ' + (debtLabel || debt.debt + ' saat') + ' (' + (bandLabel || '-') + ').' + rec });
   }
 
   // 3) Yatış saati savrulması — düzensizlik uykuyu süreden çok bozar
-  if (typeof sleepSeries === 'function') {
-    const beds = sleepSeries(7).filter(s => s.bedtime).map(s => {
-      const m = /^(\d{1,2}):(\d{2})$/.exec(s.bedtime);
-      if (!m) return null;
-      let mins = +m[1] * 60 + +m[2];
-      if (mins < 720) mins += 1440;      // 00:30 → gece tarafına al
-      return mins;
-    }).filter(x => x != null);
-    if (beds.length >= 4) {
-      const spread = Math.max(...beds) - Math.min(...beds);
-      if (spread >= 120) out.push({ level: 'warn', text: `Yatış saatin ${Math.round(spread / 60)} saat savruluyor — sabit saat en çok işe yarayan şey.` });
-    }
+  var from7 = hcShift(toDate, -6);
+  var beds = all.filter(function (s) { return s.date >= from7 && s.bedtime; }).map(function (s) {
+    var m = /^(\d{1,2}):(\d{2})$/.exec(s.bedtime);
+    if (!m) return null;
+    var mins = +m[1] * 60 + +m[2];
+    if (mins < 720) mins += 1440;         // 00:30 → gece tarafına al
+    return mins;
+  }).filter(function (x) { return x != null; });
+  if (beds.length >= 4) {
+    var spread = Math.max.apply(null, beds) - Math.min.apply(null, beds);
+    if (spread >= 120) out.push({ level: 'warn', text: 'Yatış saatin ' + Math.round(spread / 60) + ' saat savruluyor — sabit saat en çok işe yarayan şey.' });
   }
 
   // 4) ÇAPRAZ SİNYAL: az uyuduğun günlerde antrenman düşüyor mu?
-  if (typeof trainedOn === 'function' && typeof sleepSeries === 'function') {
-    const last14 = sleepSeries(14).filter(s => s.hours != null);
-    if (last14.length >= 7) {
-      const lo = last14.filter(s => s.hours < 7), hi = last14.filter(s => s.hours >= 7);
-      if (lo.length >= 3 && hi.length >= 3) {
-        const loRate = lo.filter(s => trainedOn(s.date)).length / lo.length;
-        const hiRate = hi.filter(s => trainedOn(s.date)).length / hi.length;
-        if (hiRate - loRate >= 0.4) {
-          out.push({ level: 'warn', text: 'İyi uyuduğun günlerde antrenmana çok daha sık gidiyorsun — uyku, spor planının görünmeyen yarısı.' });
-        }
-      }
+  var from14 = hcShift(toDate, -13);
+  var l14 = all.filter(function (s) { return s.date >= from14 && s.hours != null; });
+  if (l14.length >= 7) {
+    var lo = l14.filter(function (s) { return s.hours < 7; }), hi = l14.filter(function (s) { return s.hours >= 7; });
+    if (lo.length >= 3 && hi.length >= 3) {
+      var loR = lo.filter(function (s) { return isTrainDay(s.date); }).length / lo.length;
+      var hiR = hi.filter(function (s) { return isTrainDay(s.date); }).length / hi.length;
+      if (hiR - loR >= 0.4) out.push({ level: 'warn', text: 'İyi uyuduğun günlerde antrenmana çok daha sık gidiyorsun — uyku, spor planının görünmeyen yarısı.' });
     }
   }
+  return out;
+}
 
-  // 5) Antrenman boşluğu (Hevy bağlıysa)
-  if (typeof ensureHevy === 'function') {
-    const ws = (ensureHevy().workouts || []).map(w => w.date).filter(Boolean).sort();
-    if (ws.length) {
-      const lastW = ws[ws.length - 1];
-      const gap = Math.round((new Date(t + 'T12:00:00') - new Date(lastW + 'T12:00:00')) / 86400000);
-      if (gap >= 7) out.push({ level: 'warn', text: `${gap} gündür antrenman kaydı yok.` });
-      else if (gap <= 1 && (typeof hevyWorkoutsIn === 'function') && hevyWorkoutsIn(7).length >= 3) {
-        out.push({ level: 'good', text: `Bu hafta ${hevyWorkoutsIn(7).length} antrenman — düzen oturmuş.` });
-      }
+// Antrenman boşluğu / düzeni + antrenman günü protein — eskiden sadece PWA'daydı
+function hcHabitPatterns(workouts, dietDays, isTrainDay, proteinGoal, toDate) {
+  var out = [];
+  var ds = (workouts || []).map(function (w) { return w && w.date; }).filter(Boolean).sort();
+  if (ds.length) {
+    var gap = hcDayDiff(ds[ds.length - 1], toDate);
+    if (gap >= 7) out.push({ level: 'warn', text: gap + ' gündür antrenman kaydı yok.' });
+    else if (gap <= 1) {
+      var from7 = hcShift(toDate, -6);
+      var n7 = ds.filter(function (d) { return d >= from7; }).length;
+      if (n7 >= 3) out.push({ level: 'good', text: 'Bu hafta ' + n7 + ' antrenman — düzen oturmuş.' });
     }
   }
-
-  // 6) Antrenman günü protein düşük — toparlanmanın ana girdisi
-  const pGoal = (data.diet || {}).proteinGoal || 0;
-  if (pGoal && typeof trainedOn === 'function') {
-    let lowTrainDays = 0, checked = 0;
-    for (let i = 1; i <= 7 && checked < 4; i++) {
-      const d = shiftDateStr(t, -i);
-      if (!trainedOn(d)) continue;
-      const n = nutritionOn(d);
-      if (!n || !n.meals) continue;
+  if (proteinGoal) {
+    var low = 0, checked = 0;
+    for (var i = 1; i <= 7 && checked < 4; i++) {
+      var d = hcShift(toDate, -i);
+      if (!isTrainDay(d)) continue;
+      var day = (dietDays || {})[d];
+      var meals = (day && day.meals) || [];
+      if (!meals.length) continue;
       checked++;
-      if (n.protein < pGoal * 0.7) lowTrainDays++;
+      var p = 0;
+      for (var k = 0; k < meals.length; k++) p += meals[k].protein || 0;
+      if (p < proteinGoal * 0.7) low++;
     }
-    if (checked >= 2 && lowTrainDays >= 2) {
-      out.push({ level: 'warn', text: `Antrenman günlerinin ${lowTrainDays}'inde protein hedefinin altında kaldın.` });
-    }
+    if (checked >= 2 && low >= 2) out.push({ level: 'warn', text: 'Antrenman günlerinin ' + low + "'inde protein hedefinin altında kaldın." });
   }
+  return out;
+}
 
-  const rank = { danger: 0, warn: 1, good: 2 };
-  return out.sort((a, b) => rank[a.level] - rank[b.level]).slice(0, 3);
+// Tüm desenleri tek yerde topla + ciddiyete göre sırala (danger > warn > good)
+function hcAllPatterns(inp) {
+  var out = []
+    .concat(hcSleepPatterns(inp.sleep, inp.goalH, inp.debt, inp.bandLabel, inp.debtLabel, inp.recoveryNights, inp.badStreak, inp.isTrainDay, inp.today))
+    .concat(hcHabitPatterns(inp.workouts, inp.dietDays, inp.isTrainDay, inp.proteinGoal, inp.today))
+    .concat(hcTrainingPatterns(inp.hev, inp.nut, inp.wt, inp.energy));
+  var rank = { danger: 0, warn: 1, good: 2 };
+  return out.sort(function (a, b) { return rank[a.level] - rank[b.level]; });
+}
+
+// ---------- LOKAL DESEN TESPİTİ (AI'sız, $0) ----------
+// Ciddiyet: danger > warn > good. En fazla 3 satır döner.
+// Tüm kurallar paylaşılan çekirdekte (hcAllPatterns) — Worker ile birebir aynı sonuç.
+// Burada sadece PWA'nın kendi hesaplayıcıları toplanıp içeri verilir.
+function hcInputs() {
+  const t = today();
+  const goalH = (typeof ensureSleepGoal === 'function' ? ensureSleepGoal().targetH : 8) || 8;
+  const h = typeof ensureHevy === 'function' ? ensureHevy() : { workouts: [] };
+  const all = h.workouts || [];
+  const trainSet = {};
+  for (let i = 0; i < all.length; i++) { if (all[i] && all[i].date) trainSet[all[i].date] = 1; }
+  const isTrainDay = dt => !!trainSet[dt];
+  const d = data.diet || {};
+  const sd = typeof sleepDebt === 'function' ? sleepDebt() : null;
+  const hev = hcHevyStats(all, hcShift(t, -(HC_WIN.train - 1)), t, h.muscles || null);
+  const nut = hcNutritionStats(d.days || {}, hcShift(t, -(HC_WIN.diet - 1)), t, isTrainDay, d.kcalGoal);
+  const wt = hcWeightTrend(d.weights || [], hcShift(t, -(HC_WIN.weight - 1)), t);
+  const en = hcEnergyCheck(nut && !nut.usingPartial ? nut.kcal : null, wt ? wt.slopeKgPerWeek : null, d.calc);
+  return {
+    today: t, goalH, sleep: data.sleep || [], debt: sd,
+    bandLabel: sd ? SLEEP_BAND_LABEL[sd.band] : null,
+    debtLabel: sd ? fmtSleepHours(sd.debt) : null,
+    recoveryNights: sd ? sd.recoveryNights : null,
+    badStreak: typeof badSleepStreak === 'function' ? badSleepStreak() : 0,
+    isTrainDay, workouts: all, dietDays: d.days || {}, proteinGoal: d.proteinGoal || 0,
+    hev, nut, wt, energy: en,
+  };
+}
+
+function healthPatterns() {
+  try { return hcAllPatterns(hcInputs()).slice(0, 3); }
+  catch (e) { return []; }   // şerit hiçbir koşulda çökmemeli
 }
 
 // ---------- AI'A GİDECEK ÖZET (sayılar burada hesaplanır) ----------
-function buildHealthFacts(days = 14) {
-  const L = [];
-  const t = today();
-  const goalH = (typeof ensureSleepGoal === 'function' ? ensureSleepGoal().targetH : 8) || 8;
+function buildHealthFacts(days) {
+  const I = hcInputs();
   const d = data.diet || {};
-  L.push(`HEDEFLER: uyku ${goalH} saat/gece · ${d.kcalGoal || '-'} kcal · protein ${d.proteinGoal || '-'} g · su ${d.waterGoalL || '-'} L.`);
-
-  // --- Uyku ---
-  const ss = typeof sleepSeries === 'function' ? sleepSeries(days).filter(s => s.hours != null) : [];
-  if (ss.length) {
-    const avg = ss.reduce((a, s) => a + s.hours, 0) / ss.length;
-    const short = ss.filter(s => s.hours < goalH).length;
-    const sd = typeof sleepDebt === 'function' ? sleepDebt() : { debt: 0, nights: 0, band: 'clear', est: 0 };
-    L.push(`UYKU (${ss.length} gece kayıtlı): ortalama ${Math.round(avg * 10) / 10} saat, ${short} gece hedefin altında.`);
-    L.push(`Birikmiş uyku borcu ${sd.debt} saat (${SLEEP_BAND_LABEL[sd.band] || '-'}), ${sd.nights} geceden hesaplandı${sd.est ? `, bunun ${sd.est} gecesi kalite notundan tahmin` : ''}. Bu sayı üstel ağırlıklı: eski borç günde %15 erir, fazla uyku açığı ancak yarı verimle kapatır — düz toplam değildir, yeniden hesaplama.`);
-    if (typeof sleepStats30 === 'function') {
-      const s30 = sleepStats30();
-      if (s30.weekdayAvg != null && s30.weekendAvg != null) {
-        L.push(`Hafta içi ortalama ${s30.weekdayAvg} saat, hafta sonu ${s30.weekendAvg} saat.`);
-      }
-    }
-    L.push('Son geceler: ' + ss.slice(-8).map(s =>
-      `${s.date} ${s.hours}sa${s.bedtime ? ' (' + s.bedtime + '-' + s.wake + ')' : ''}${s.quality ? ' [' + s.quality + ']' : ''}`).join(' | '));
-  } else L.push('UYKU: kayıt yok.');
-
-  // --- Antrenman (Hevy) ---
-  const ws = typeof hevyWorkoutsIn === 'function' ? hevyWorkoutsIn(days) : [];
-  if (ws.length) {
-    const mins = ws.reduce((a, w) => a + (w.durMin || w.duration || 0), 0);
-    L.push(`ANTRENMAN (son ${days} gün): ${ws.length} seans${mins ? ', toplam ' + mins + ' dk' : ''}.`);
-    L.push('Seanslar: ' + ws.slice(-8).map(w => `${w.date} ${w.title || w.name || 'antrenman'}`).join(' | '));
-  } else L.push(`ANTRENMAN: son ${days} günde kayıt yok.`);
-
-  // --- Beslenme ---
-  const nd = [];
-  for (let i = 0; i < days; i++) {
-    const k = shiftDateStr(t, -i);
-    const n = nutritionOn(k);
-    if (n && n.meals) nd.push(Object.assign({ date: k }, n));
-  }
-  if (nd.length) {
-    const avgK = nd.reduce((a, x) => a + x.kcal, 0) / nd.length;
-    const avgP = nd.reduce((a, x) => a + x.protein, 0) / nd.length;
-    const avgW = nd.reduce((a, x) => a + x.waterL, 0) / nd.length;
-    L.push(`BESLENME (${nd.length} gün kayıtlı): ortalama ${Math.round(avgK)} kcal, protein ${Math.round(avgP)} g, su ${Math.round(avgW * 10) / 10} L.`);
-    // Antrenman günü vs dinlenme günü protein — AI'ın en çok işine yarayan kesit
-    if (typeof trainedOn === 'function') {
-      const gym = nd.filter(x => trainedOn(x.date)), rest = nd.filter(x => !trainedOn(x.date));
-      if (gym.length && rest.length) {
-        const gp = gym.reduce((a, x) => a + x.protein, 0) / gym.length;
-        const rp = rest.reduce((a, x) => a + x.protein, 0) / rest.length;
-        L.push(`Antrenman günü ortalama protein ${Math.round(gp)} g, dinlenme günü ${Math.round(rp)} g.`);
-      }
-    }
-  } else L.push('BESLENME: kayıt yok.');
-
-  // --- Kilo ---
-  const wts = (d.weights || []).filter(w => w && w.kg != null);
-  if (wts.length >= 2) {
-    const a = wts[wts.length - 1], b = wts[0];
-    L.push(`KİLO: son ${a.kg} kg (${a.date}), ilk kayıt ${b.kg} kg (${b.date}).`);
-  }
-
-  // --- Bağlam: üretkenlik + takviye ---
-  const doneWeek = (data.tasks || []).filter(x => x.done && x.doneDate && x.doneDate >= shiftDateStr(t, -6)).length;
+  const doneWeek = (data.tasks || []).filter(x => x.done && x.doneDate && x.doneDate >= shiftDateStr(I.today, -6)).length;
   const pomo = (data.pomoToday || {}).count || 0;
-  L.push(`BAĞLAM: son 7 günde ${doneWeek} görev tamamlandı, bugün ${pomo} odak seansı. Kullanıcı 16 yaşında, ADHD (sakin/dalgın tip), lise öğrencisi.`);
-
-  const pats = healthPatterns();
-  if (pats.length) L.push('OTOMATİK TESPİTLER: ' + pats.map(p => p.text).join(' | '));
-  return L.join('\n');
+  return hcBuildFacts({
+    goals: { sleepH: I.goalH, kcal: d.kcalGoal, protein: d.proteinGoal, waterL: d.waterGoalL },
+    sleepLines: hcSleepLines(I.sleep, I.goalH, I.debt, I.bandLabel),
+    hevy: I.hev, nutrition: I.nut, weight: I.wt, energy: I.energy,
+    contextLine: `BAĞLAM: son 7 günde ${doneWeek} görev tamamlandı, bugün ${pomo} odak seansı. Kullanıcı 16 yaşında, ADHD (sakin/dalgın tip), lise öğrencisi.`,
+    patterns: hcAllPatterns(I).slice(0, 5).map(p => p.text),
+  });
 }
 
 // Veri var mı? (yoksa AI çağırmanın anlamı yok)
