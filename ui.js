@@ -5031,6 +5031,42 @@ function hcRegress(pts, key) {
 // v7-122: kilo TEK BAŞINA yanıltıcı — kilo sabitken yağ düşüp kas artabilir.
 // Üç seri ayrı ayrı regres edilir; eski alan adları (slopeKgPerWeek, totalChange…)
 // geriye uyumluluk için korunur, yağ/yağsız kütle alt nesne olarak eklenir.
+/* ---------------- KİLO DEĞİŞİMİNİN BİLEŞİMİ (v7-123) ----------------
+   "Haftada +0.40 kg" tek başına iyi mi kötü mü SÖYLEMEZ: aynı sayı kas
+   kazanımı da olabilir yağlanma da. Yağ kütlesi (kg) = kilo × yağ% ; yağsız
+   kütle zaten kayıtlı. İkisinin eğimi kilonun eğimini paylaştırır:
+       yağ payı % = (yağ kütlesi eğimi / kilo eğimi) × 100
+   Bu bir ÇIKARMA işlemi — AI'a bırakılmaz. Dil modeli regresyon eğimini her
+   çalıştırmada farklı hesaplar; sağlık verisinde aynı girdiden iki farklı
+   sonuç çıkması kabul edilemez. Hesap burada, YORUM AI'da.                 */
+function hcComposition(kgPerWeek, fatMassPerWeek, leanPerWeek) {
+  if (kgPerWeek == null || fatMassPerWeek == null) return null;
+  var out = {
+    kgPerWeek: kgPerWeek,
+    fatMassPerWeek: fatMassPerWeek,
+    leanPerWeek: leanPerWeek != null ? leanPerWeek : hcRound(kgPerWeek - fatMassPerWeek, 2),
+    fatSharePct: null,
+    gaining: null,
+    verdict: 'sabit',
+  };
+  // Kilo neredeyse sabitse paylaştırma anlamsız (0'a bölme + gürültü payı
+  // sonucu uçurur). O durum zaten F kuralında rekompozisyon olarak ele alınır.
+  if (Math.abs(kgPerWeek) < 0.05) return out;
+  out.gaining = kgPerWeek > 0;
+  out.fatSharePct = Math.round(fatMassPerWeek / kgPerWeek * 100);
+  // Pay NEGATİF olabilir ve bu bir hata değil: kilo alırken yağ kaybetmek
+  // (en iyi durum, pay < 0) ya da kilo verirken yağ kazanmak (en kötü durum,
+  // yine pay < 0). Eşikler her iki ucu da doğru tarafa düşürür.
+  if (out.gaining) {
+    out.verdict = out.fatSharePct >= 70 ? 'yag-agirlikli'
+      : (out.fatSharePct <= 40 ? 'kas-agirlikli' : 'dengeli-alim');
+  } else {
+    out.verdict = out.fatSharePct <= 40 ? 'kas-kaybi'
+      : (out.fatSharePct >= 70 ? 'yag-kaybi' : 'dengeli-kayip');
+  }
+  return out;
+}
+
 function hcWeightTrend(weights, fromDate, toDate) {
   var pts = (weights || []).filter(function (w) {
     return w && w.date && w.date >= fromDate && w.date <= toDate;
@@ -5039,6 +5075,16 @@ function hcWeightTrend(weights, fromDate, toDate) {
   var kg = hcRegress(pts, 'kg'), fat = hcRegress(pts, 'fat'), lean = hcRegress(pts, 'lean');
   if (!kg && !fat) return null;
   var base = kg || fat;
+  // Yağ KÜTLESİ (kg) — oran değil. Kilo eğimini paylaştırmak için gerekli.
+  // Orijinal kayıtlara YAZILMAZ, kopya seri kurulur (yoksa türetilmiş alan
+  // localStorage'a ve oradan buluta sızar).
+  var mpts = pts.map(function (w) {
+    var fm = null;
+    if (w.kg != null && w.fat != null) fm = hcRound(w.kg * w.fat / 100, 2);
+    else if (w.kg != null && w.lean != null) fm = hcRound(w.kg - w.lean, 2);
+    return { date: w.date, fatMass: fm };
+  });
+  var fatMass = hcRegress(mpts, 'fatMass');
   return {
     n: base.n, spanDays: base.spanDays,
     first: kg ? kg.first : null, last: kg ? kg.last : null,
@@ -5046,6 +5092,8 @@ function hcWeightTrend(weights, fromDate, toDate) {
     slopeKgPerWeek: kg ? kg.perWeek : null,
     totalChange: kg ? kg.total : null,
     fat: fat, lean: lean,
+    fatMass: fatMass,
+    comp: hcComposition(kg ? kg.perWeek : null, fatMass ? fatMass.perWeek : null, lean ? lean.perWeek : null),
   };
 }
 
@@ -5162,6 +5210,25 @@ function hcTrainingPatterns(hev, nut, wt, energy, toDate) {
     if (wGap >= 10) out.push({ level: 'warn', text: wGap + ' gündür tartım kaydı gelmiyor — otomatik aktarım durmuş olabilir.' });
   }
 
+  // I) KİLO DEĞİŞİMİNİN BİLEŞİMİ (v7-123) — "+0.40 kg" tek başına anlamsız:
+  // aynı sayı kas kazanımı da olabilir yağlanma da. Ayrım yağ KÜTLESİ eğiminden
+  // gelir. Eksik-log burada susturmaz: bileşim doğrudan tartıdan ölçülür,
+  // loglanan kaloriden türetilmez — yani kayıt eksikken de geçerlidir.
+  var cmp = wt && wt.comp;
+  if (cmp && cmp.fatSharePct != null && wt.fatMass && wt.fatMass.spanDays >= 21) {
+    // G kuralı yağsız kütle kaybını zaten mutlak eşikle uyardıysa tekrarlama.
+    var lw = !!(wt.lean && wt.lean.perWeek <= -0.2 && wt.lean.spanDays >= 21);
+    if (cmp.verdict === 'yag-agirlikli') {
+      out.push({ level: 'warn', text: 'Aldığın kilonun %' + cmp.fatSharePct + "'i yağ — kalori fazlan gereğinden büyük görünüyor." });
+    } else if (cmp.verdict === 'kas-agirlikli') {
+      out.push({ level: 'good', text: 'Aldığın kilonun %' + (100 - cmp.fatSharePct) + "'i yağsız kütle — kas kazanıyorsun." });
+    } else if (cmp.verdict === 'kas-kaybi' && !lw) {
+      out.push({ level: 'warn', text: 'Verdiğin kilonun %' + (100 - cmp.fatSharePct) + "'i yağsız kütle — protein ve uyku ilk bakılacak yer." });
+    } else if (cmp.verdict === 'yag-kaybi') {
+      out.push({ level: 'good', text: 'Verdiğin kilonun %' + cmp.fatSharePct + "'i yağ — yağsız kütlen korunuyor." });
+    }
+  }
+
   return out;
 }
 
@@ -5235,6 +5302,13 @@ function hcBuildFacts(ctx) {
         (wt.lean.perWeek > 0 ? '+' : '') + wt.lean.perWeek + ' kg).' : ''));
     L.push('NOT: yağ oranı biyoimpedans tartıdan geliyor — tek ölçüm ±%3-5 sapabilir, su tutumu ve öğün saatinden etkilenir. TEK ölçümü yorumlama, sadece EĞİLİMİ yorumla.');
     L.push('Kilo ile yağ oranını BİRLİKTE oku: kilo sabit + yağ düşüyor = kas kazanımı (olumlu). Kilo düşüyor + yağ oranı sabit/artıyor = kaybın bir kısmı kastan.');
+  }
+  if (wt && wt.comp && wt.comp.fatSharePct != null) {
+    var cp = wt.comp;
+    L.push('KİLO BİLEŞİMİ (regresyonla HESAPLANDI, tahmin değil): haftalık ' + (cp.kgPerWeek > 0 ? '+' : '') + cp.kgPerWeek +
+      ' kg değişimin ' + (cp.fatMassPerWeek > 0 ? '+' : '') + cp.fatMassPerWeek + ' kg yağ kütlesi, ' +
+      (cp.leanPerWeek > 0 ? '+' : '') + cp.leanPerWeek + ' kg yağsız kütle. Yağ payı %' + cp.fatSharePct + '.');
+    L.push('NOT: bu paylaştırma sana hazır verildi — YENİDEN HESAPLAMA, olduğu gibi kullan. Okuma kılavuzu: kilo ALIRKEN yağ payı %70 üstü ise kalori fazlası büyük, %40 altı ise kazanım ağırlıklı kas. Kilo VERİRKEN yağ payı düşükse kayıp yağsız kütleden geliyor demektir.');
   }
   var en = ctx.energy;
   if (en) {
