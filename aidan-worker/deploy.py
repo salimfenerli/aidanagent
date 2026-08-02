@@ -67,15 +67,9 @@ def build_worker_js() -> str:
 
 
 CRON_LIST = [
-    {"cron": "0 5 * * *"},   # 08:00 TR sabah brifing
-    {"cron": "0 6 * * *"},   # 09:00 TR deadline uyarı
-    {"cron": "0 9 * * *"},   # 12:00 TR öğle ping
-    {"cron": "0 18 * * *"},  # 21:00 TR akşam özet
-    {"cron": "0 18 * * SUN"},  # Pazar 21:00 TR — haftalık review (AI yorumlu)
-    {"cron": "*/30 7-15 * * 1-5"},  # BIST saatleri (10-18 TR, hafta içi) — borsa alarm
-    {"cron": "30 15 * * 1-5"},  # 18:30 TR hafta içi — akşam portföy özeti (BIST kapanışı sonrası)
-    {"cron": "*/5 * * * *"},  # 5 dk'da bir — sabit hatırlatıcı + gün planı blok bildirimleri
-    {"cron": "0 0 * * 1"},  # Pazartesi 03:00 TR (UTC 00:00) — haftalık veri yedeği aidan_backups tablosuna
+    # TEK tetikleyici — Cloudflare ucretsiz plan worker basina 3 cron kabul eder.
+    # Onceden 9 gonderiliyordu, fazlasi sessizce dusuyordu (bkz. worker.js scheduled()).
+    {"cron": "*/5 * * * *"},
 ]
 
 

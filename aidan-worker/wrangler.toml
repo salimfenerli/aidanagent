@@ -2,18 +2,14 @@ name = "aidan-pusher"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 
-# Cron tetikleyiciler — Cloudflare UTC kullanır (TR = UTC+3)
+# Cron tetikleyiciler — TEK cron (Agu 2026).
+# Cloudflare ucretsiz plan worker basina 3 trigger kabul ediyor; burada 9 tanimliyken
+# fazlasi HIC kaydolmamis ve takviye/blok/deadline/haftalik/borsa/portfoy/yedek
+# cron'lari aylardir calismamisti. Artik tek tetikleyici var, hangi isin vakti
+# geldigine TR saatine gore worker.js icindeki scheduled() karar veriyor.
 [triggers]
 crons = [
-  "0 5 * * *",   # 08:00 TR — sabah brifingi
-  "0 6 * * *",   # 09:00 TR — deadline uyarısı
-  "0 9 * * *",   # 12:00 TR — öğle ping
-  "0 18 * * *",  # 21:00 TR — akşam özet
-  "0 18 * * SUN",  # Pazar 21:00 TR — haftalık review (AI yorumlu)
-  "*/30 7-15 * * 1-5",  # BIST saatleri (10-18 TR, hafta içi) — borsa alarm kontrol
-  "30 15 * * 1-5",  # 18:30 TR hafta içi — akşam portföy özeti (BIST kapanışı sonrası)
-  "*/5 * * * *",  # 5 dk'da bir — sabit hatırlatıcı + gün planı blok bildirimleri
-  "0 0 * * 1",  # Pazartesi 03:00 TR (UTC 00:00) — haftalık veri yedeği (aidan_backups tablosu)
+  "*/5 * * * *",  # TEK TETIKLEYICI — is dagitimi worker.js scheduled() icinde
 ]
 
 # NOT: Environment değişkenlerini KOD'A YAZMA.

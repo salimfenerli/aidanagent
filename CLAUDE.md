@@ -16,6 +16,25 @@
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 2 Ağustos 2026 — ⏰ TEK CRON + TAKVİYE NAG (v7-124)
+Salim: "supplement hatırlatması falan gelmiyo bana." Teşhis canlı veriden yapıldı: **8 hatırlatıcı kurulu, hepsinde `lastFired: null`, pushLog'da hiç `reminder` kaydı yok** — bir kez bile ateşlenmemiş.
+
+**KÖK NEDEN — sessiz deploy arızası (KALICI KURAL).** Cloudflare Workers **ücretsiz planda worker başına 3 cron trigger** kabul ediyor. `wrangler.toml`/`deploy.py` **9 cron** gönderiyordu; fazlası Cloudflare'de hiç kaydolmadı. `set_crons()` hatayı sadece `print` edip geçtiği için **aylarca fark edilmedi.** Ölü olan cron'lar: sabit hatırlatıcı/takviye · gün planı blok bildirimleri · deadline uyarısı · haftalık review + sağlık raporu · borsa alarmı · akşam portföy özeti · haftalık veri yedeği. Kodları yazılmış ve testliydi, sadece hiç çağrılmıyordu.
+- **Çözüm:** tek `*/5 * * * *` tetikleyici. İş dağıtımı `worker.js` → `scheduled()` içinde TR saatine göre yapılır (`at(h,m)` 5 dk pencere; hedefler 5'in katı olduğu için her hedefe tam bir tur denk gelir, cron 1-4 dk kayarsa iş atlanmaz, aynı hedefe iki tur giremez). `Promise.allSettled` — bir iş patlarsa diğerleri devam eder. Günde 288 istek (limit 100K).
+- **⚠️ Bir daha ASLA `wrangler.toml`/`deploy.py`'ye yeni cron ekleme** — yeni zamanlı iş `scheduled()` içine `if (at(h,m))` satırı olarak eklenir.
+- **Doğrulama:** 7 gün × 288 tur simülasyonu — her iş beklenen sayıda tetiklendi (morning/deadline/noon/evening günde 1, weekly Pazar 1, backup Pazartesi 1, stocks hafta içi 16, portfolio hafta içi 1), 0-4 dk kaymada iş kaçmıyor, 5 dk'da çift atmıyor.
+
+**💊 Takviye "işaretleyene kadar" modu.** Salim: "içildi işaretleyene kadar 15 dakikada bir hatırlatsın." Sabit saatte tek push ADHD'de işe yaramıyordu (bildirim gelir → "birazdan" → unutulur). Mevcut `mode:'interval'` sadece saate bakıyordu, **alındı durumuna bakmıyordu.**
+- Yeni alanlar: `reminders[*].nagEvery` (dk) + `.nagUntil` ('HH:MM'). `kind:'supp'` + `nagEvery` varsa worker, `takenLog` bugünü içerene kadar `nagEvery` dk'da bir hatırlatır. **Nag'ı bitiren tek şey işaretlemek.**
+- Pencere: varsayılan başlangıç **+3 saat**, en geç 23:00 (6 saat = 24 bildirim = bildirim körlüğü; 3 saat = 12). Gece bildirim yağmaz.
+- PWA: takviye formunda "işaretleyene kadar 15 dk'da bir hatırlat" onay kutusu (**varsayılan açık**), listede rozet.
+- **Doğrulama:** 10 senaryo (işaretlenmemiş gün 13 bildirim · işaretleyince susma · baştan işaretli · gece sessizlik · varsayılan pencere · 23:00 tavanı · hafta sonu · aynı slotta çift atmama · ertesi gün sıfırlanma · eski kayıt regresyonu).
+
+**🐛 Düzeltilen bug:** `suppLast7`'de `new isoLocal(Date(r.id))` — geçersiz ifade (v7-119 toplu `isoLocal` değişiminin regresyonu, tek yerde). `created` obje dönüyor, `d < created` hep true → **7 günlük uyum şeridi her zaman soluk** görünüyordu. → `isoLocal(new Date(r.id))`.
+
+**⚠️ AÇIK — `GEMINI_API_KEY` Worker secret'ı TANIMLI DEĞİL.** AI'a yazınca "GEMINI_API_KEY tanimli degil" dönüyor; sağlık koçu, otomatik plan, quick capture AI, görsel OCR **hepsi ölü**. Salim'in Cloudflare Dashboard'dan eklemesi gerekiyor. Ayrıca `GEMINI_MODEL_DEFAULT = 'gemini-3.5-flash'` — bu model adı Gemini dokümanlarında **doğrulanamadı**; key eklendikten sonra 404 gelirse `env.GEMINI_MODEL` ile güncel bir ada çevir.
+**Cache:** v7-123 → **v7-124**
+
 ### 🔴 25 Temmuz 2026 — ⚖️ VÜCUT KOMPOZİSYONU + OTOMATİK TARTI (v7-122)
 Salim: "yağ oranı için Xiaomi S400 akıllı tartım var, ordan bilgi alabilir miyiz — her gün çeksin aktif olarak."
 **Kilo tek başına yanıltıcıydı:** kilo sabitken yağ düşüp kas artabilir (rekompozisyon), `hcWeightTrend` bunu göremiyordu.
@@ -653,8 +672,9 @@ curl -s "https://aidanapp.pages.dev/sw.js" | head -1  # cache versiyonu
 ## Yeni Sohbet Başlıyorsa — Kalıcı Uyarılar
 1. ⚠️ Deploy = `git push` → GitHub Actions (Pages + Worker birlikte). Netlify / drag-drop / ntfy ASLA önerme.
 2. ⚠️ **Sandbox'tan ASLA `git` komutu çalıştırma** (`git status`/`add`/`diff` dahil). Git `.git/index.lock` yaratıyor ve sandbox'ta silme izni olmadığı için dosya kalıyor → Salim'in bilgisayarında "a lock file exists / Another git process seems to be running" hatası çıkıyor. Değişen dosyaları görmek için `ls`/dosya araçlarını kullan. Kaza olursa: `mv .git/index.lock .git/index.lock.eskimis` (mv izni VAR, rm YOK).
-3. ⚠️ Büyük dosyalarda Edit aracı yerine **Python byte-replace + `node --check`** (üstteki DÜZENLEME KURALI); .bak oluşturma, rollback = `git checkout <dosya>`.
-4. ⚠️ Push bildirimi sorununda 3 şart: Worker `Urgency: high` + SW her push'ta `showNotification` + fresh subscription (Ayarlar → "Push'u sıfırla"). Kayıtlar `data.settings.pushSubs[]`.
-5. ⚠️ Tasarım: Impeccable standardı (üstte, KALICI) — koyu tema + amber accent. Eski mor/indigo YOK.
-6. Kaldırılmış özellikleri yeniden önerme — "Önemli Kararlar" + "Kaldırılan özellikler" listesine bak.
-7. Salim'in test sonuçlarını sor; sıradaki iş için "Açık işler / backlog" bölümüne bak.
+3. ⚠️ **Cloudflare ücretsiz plan = worker başına 3 cron.** `wrangler.toml`/`deploy.py`'de tek `*/5 * * * *` var; yeni zamanlı iş oraya DEĞİL, `worker.js` `scheduled()` içine `if (at(h,m))` olarak eklenir. Fazla cron sessizce düşer (Ağu 2'de 6 özellik bu yüzden aylarca ölüydü).
+4. ⚠️ Büyük dosyalarda Edit aracı yerine **Python byte-replace + `node --check`** (üstteki DÜZENLEME KURALI); .bak oluşturma, rollback = `git checkout <dosya>`.
+5. ⚠️ Push bildirimi sorununda 3 şart: Worker `Urgency: high` + SW her push'ta `showNotification` + fresh subscription (Ayarlar → "Push'u sıfırla"). Kayıtlar `data.settings.pushSubs[]`.
+6. ⚠️ Tasarım: Impeccable standardı (üstte, KALICI) — koyu tema + amber accent. Eski mor/indigo YOK.
+7. Kaldırılmış özellikleri yeniden önerme — "Önemli Kararlar" + "Kaldırılan özellikler" listesine bak.
+8. Salim'in test sonuçlarını sor; sıradaki iş için "Açık işler / backlog" bölümüne bak.

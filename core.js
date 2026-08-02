@@ -2095,7 +2095,7 @@ function renderSupplements() {
   el.innerHTML = supps.map(r => {
     const taken = suppTakenOn(r, t);
     const timeStr = r.mode === 'interval' ? `${r.startTime}–${r.endTime}` : (r.time || '–');
-    const daysStr = (r.days === 'weekdays' ? 'Hafta içi' : 'Her gün') + (r.mode === 'interval' ? ` · ${suppEveryLabel(+r.everyMin || 60)}` : '');
+    const daysStr = (r.days === 'weekdays' ? 'Hafta içi' : 'Her gün') + (r.mode === 'interval' ? ` · ${suppEveryLabel(+r.everyMin || 60)}` : (r.nagEvery ? ` · ${r.nagEvery} dk'da bir, işaretleyene kadar` : ''));
     return `<div class="supp-item${r.enabled === false ? ' off' : ''}${taken ? ' taken' : ''}">` +
       `<button class="supp-check${taken ? ' on' : ''}" onclick="markSuppTaken(${r.id})" title="${taken ? 'işareti kaldır' : 'aldım'}" aria-label="aldım">${taken ? '✓' : ''}</button>` +
       `<span class="supp-time">${escapeHtml(timeStr)}</span>` +
@@ -2114,6 +2114,14 @@ function setSuppMode(m) {
   const rs = document.getElementById('suppSingleRow'), ri = document.getElementById('suppIntervalRow');
   if (rs) rs.style.display = (m === 'single') ? '' : 'none';
   if (ri) ri.style.display = (m === 'interval') ? '' : 'none';
+}
+// Nag penceresinin sonu: baslangictan 6 saat sonra, en gec 23:00.
+// Sinir sart — "alinana kadar" sinirsiz olsaydi gece boyu bildirim yagardi.
+function suppNagUntil(time) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(time || '');
+  if (!m) return null;
+  const end = Math.min((+m[1]) * 60 + (+m[2]) + 180, 23 * 60);
+  return String(Math.floor(end / 60)).padStart(2, '0') + ':' + String(end % 60).padStart(2, '0');
 }
 function suppEveryLabel(m) { return m === 30 ? "30 dk'da bir" : m === 60 ? 'saatte bir' : `${Math.round(m / 60)} saatte bir`; }
 function addSupplement() {
@@ -2134,9 +2142,13 @@ function addSupplement() {
   } else {
     const time = document.getElementById('suppTime').value;
     if (!time) { showToast('Saat seç', 'info'); return; }
-    data.reminders.push({ id: Date.now(), label: name, time, days, enabled: true, lastFired: null, kind: 'supp' });
+    const nagOn = (document.getElementById('suppNag') || {}).checked;
+    const rec = { id: Date.now(), label: name, time, days, enabled: true, lastFired: null, kind: 'supp' };
+    // "Isaretleyene kadar" modu: alindi isaretlenene dek 15 dk'da bir hatirlatir (worker tarafi)
+    if (nagOn) { rec.nagEvery = 15; rec.nagUntil = suppNagUntil(time); }
+    data.reminders.push(rec);
     document.getElementById('suppTime').value = '';
-    showToast(`${time} — ${name} kuruldu`, 'success');
+    showToast(nagOn ? `${time}'dan itibaren ${name} — işaretleyene kadar hatırlatır` : `${time} — ${name} kuruldu`, 'success');
   }
   document.getElementById('suppName').value = '';
   save(); renderSupplements();
@@ -2166,7 +2178,7 @@ function markSuppTaken(id) {
 // Son 7 gün uyum şeridi — nötr gösterim (streak DEĞİL): dolu=alındı, boş=alınmadı, soluk=kapsam dışı
 // (hafta içi takviyesinde hafta sonu + takviye eklenmeden önceki günler sayılmaz)
 function suppLast7(r) {
-  const created = r.id ? new isoLocal(Date(r.id)) : null;
+  const created = r.id ? isoLocal(new Date(r.id)) : null;
   let out = '';
   for (let i = 6; i >= 0; i--) {
     const d = shiftDateStr(today(), -i);

@@ -5281,6 +5281,33 @@ async function runFixedRemindersForUser(env, u) {
 
   const due = [];
   for (const r of rems) {
+    // TAKVIYE "ALINANA KADAR" MODU (Agu 2026)
+    // Salim: "icildi isaretleyene kadar 15 dakikada bir hatirlatsin."
+    // Sabit saatte tek push ADHD'de ise yaramiyordu: bildirim gelir, "birazdan"
+    // denir, unutulur. Bu mod isaretlenene kadar nagEvery dk'da bir hatirlatir;
+    // nag'i bitiren TEK sey takviyenin alindi isaretlenmesi (takenLog).
+    // Pencere kapaninca (nagUntil, varsayilan +6sa, en gec 23:00) susar —
+    // gece boyu bildirim yagmasin.
+    if (r.kind === 'supp' && r.nagEvery) {
+      const mstart = /^(\d{1,2}):(\d{2})$/.exec(r.time || '');
+      if (!mstart) continue;
+      // Bugun alindiysa sus
+      if ((r.takenLog || []).includes(todayStr) || r.takenDate === todayStr) continue;
+      if (r.days === 'weekdays' && !isWeekday) continue;
+      const startM = (+mstart[1]) * 60 + (+mstart[2]);
+      const muntil = /^(\d{1,2}):(\d{2})$/.exec(r.nagUntil || '');
+      const untilM = muntil ? (+muntil[1]) * 60 + (+muntil[2]) : Math.min(startM + 180, 1380);
+      if (nowMin < startM || nowMin > untilM) continue;
+      const nagEvery = Math.max(15, +r.nagEvery || 15);
+      const nagSlot = startM + Math.floor((nowMin - startM) / nagEvery) * nagEvery;
+      if (nowMin - nagSlot > 5) continue;              // cron kacirdiysa eski slotu telafi etme
+      const nagKey = todayStr + '@' + nagSlot;
+      if (r.lastFired === nagKey) continue;
+      r.lastFired = nagKey;
+      r._nagIndex = Math.round((nagSlot - startM) / nagEvery);   // mesaj tonu icin
+      due.push(r);
+      continue;
+    }
     if (r.mode === 'interval') {
       // Aralıklı hatırlatıcı (örn. takviye): startTime–endTime arasında everyMin dk'da bir.
       // lastFired = 'YYYY-MM-DD@slotDk' — her slot en fazla 1 kez atılır.
@@ -5328,12 +5355,18 @@ async function runFixedRemindersForUser(env, u) {
   if (!due.length) return { checked: rems.length, sent: 0 };
 
   for (const r of due) {
-    const payload = {
-      title: `⏰ ${r.label || 'Hatırlatma'}`,
-      message: r.mode === 'interval'
-        ? `${r.startTime}–${r.endTime} arası hatırlatma — hadi 💜`
-        : `Saat ${r.time} — günün sabiti, hadi 💜`
-    };
+    // Nag turlarinda ton yumusak kalir: suclama yok, ne yapilacagi net.
+    let msg;
+    if (r._nagIndex != null) {
+      msg = r._nagIndex === 0
+        ? `Saat ${r.time} — aldıktan sonra Diyet sekmesinden işaretle`
+        : `Hâlâ işaretlenmedi — aldıysan işaretle, hatırlatma dursun`;
+    } else if (r.mode === 'interval') {
+      msg = `${r.startTime}–${r.endTime} arası hatırlatma — hadi`;
+    } else {
+      msg = `Saat ${r.time} — günün sabiti, hadi`;
+    }
+    const payload = { title: `⏰ ${r.label || 'Hatırlatma'}`, message: msg };
     await sendPushToAll(env, data, payload, { userId: u.userId });
     logPush(data, 'reminder', payload, ((data.settings && data.settings.pushSubs) || []).length);
   }
@@ -6547,70 +6580,78 @@ export default {
     return new Response('Not found', { status: 404 });
   },
 
+  // ============================================================
+  // TEK CRON MIMARISI (Agu 2026)
+  // ============================================================
+  // Cloudflare ucretsiz planda worker basina 3 cron trigger siniri var.
+  // wrangler.toml'da 9 tanimliydi -> fazlasi Cloudflare'de HIC kaydolmamis;
+  // sabit hatirlatici (takviye), gun plani blok bildirimi, deadline uyarisi,
+  // haftalik review, borsa alarmi, portfoy ozeti ve veri yedegi aylardir
+  // calismiyordu (data.reminders[*].lastFired hep null kaldi, pushLog'da
+  // hic 'reminder' kaydi yok). Tanisi: 8 hatirlatici kurulu, 0 push.
+  //
+  // Cozum: TEK '*/5 * * * *' tetikleyici. Hangi isin vakti geldigine TR
+  // saatine bakarak burada karar veriliyor. Gunde 288 istek (limit 100K/gun).
+  //
+  // Hedef saatler 5'in kati secildi: tur 5 dk'da bir geldigi icin her hedefe
+  // tam bir tur denk gelir. at() penceresi 5 dk tolerans tanir (cron kayarsa
+  // is atlanmaz), ayni hedefe iki tur giremez.
   async scheduled(event, env, ctx) {
-    // Borsa alarm cron — BIST saatlerinde fiyat kontrol (push)
-    if (event.cron === '*/30 7-15 * * 1-5') {
-      ctx.waitUntil(runStockCheck(env));
-      return;
+    const tr = new Date(Date.now() + TR_OFFSET_MS);
+    const nowMin = tr.getUTCHours() * 60 + tr.getUTCMinutes();
+    const dow = tr.getUTCDay();               // 0 = Pazar
+    const isWeekday = dow >= 1 && dow <= 5;
+    const at = (h, m) => nowMin >= h * 60 + m && nowMin < h * 60 + m + 5;
+    const jobs = [];
+
+    // HER TURDA: sabit hatirlatici (takviye) + gun plani blok bildirimleri.
+    // Ikisinin de kendi lastFired guard'i var, sik cron'da tek atarlar.
+    jobs.push(runFixedReminders(env));
+    jobs.push(runPlanBlockPings(env));
+
+    // 08:00 - sabah brifingi + guvenlik agi planlama (aksam planlayamadiysa
+    // sabah bugunu planlar; plan zaten varsa dokunmaz)
+    if (at(8, 0)) jobs.push(
+      runCronJob(env, 'morning').then(() => runAutoPlan(env, { trigger: 'morning' }))
+    );
+
+    // 09:00 - deadline uyarisi
+    if (at(9, 0)) jobs.push(runCronJob(env, 'deadline'));
+
+    // 12:00 - ogle check-in
+    if (at(12, 0)) jobs.push(runCronJob(env, 'noon'));
+
+    // 21:00 - aksam ozeti -> Hevy senkron -> YARININ plani.
+    // Hevy once senkronlanir: bugunun antrenmani plan gecmisine islensin,
+    // planlayici yarini kurarken antrenman gununu bilsin.
+    if (at(21, 0)) jobs.push(
+      runCronJob(env, 'evening')
+        .then(() => runHevySync(env).catch(e => console.error('hevy sync', e.message)))
+        .then(() => runAutoPlan(env, { trigger: 'evening', forDate: trDate(1) }))
+    );
+
+    // Pazar 21:00 - haftalik gorev ozeti + haftalik SAGLIK analizi
+    // (aksam ozetiyle ayni saat; eskiden de iki ayri trigger olarak boyleydi)
+    if (dow === 0 && at(21, 0)) jobs.push(
+      runCronJob(env, 'weekly').then(() => runCronJob(env, 'health'))
+    );
+
+    // Hafta ici 10:00-18:00 arasi, 30 dk'da bir - borsa alarm kontrolu
+    if (isWeekday && nowMin >= 600 && nowMin < 1080 && nowMin % 30 < 5) {
+      jobs.push(runStockCheck(env));
     }
-    // Akşam portföy özeti — BIST kapanışı sonrası (18:30 TR hafta içi)
-    if (event.cron === '30 15 * * 1-5') {
-      ctx.waitUntil(runPortfolioSummary(env));
-      return;
-    }
-    // 💊 Sabit hatırlatıcılar + ⏱️ gün planı blok bildirimleri — 5 dk'da bir.
-    // Blok başlangıçlarını yakalamak için 15 dk yeterli değildi (yarım saatlik
-    // bloklarda bildirim bloğun ortasına düşüyordu) → 5 dk'ya çekildi.
-    // Sabit hatırlatıcı mantığı lastFired guard'ı sayesinde daha sık cron'da da tek atar.
-    if (event.cron === '*/5 * * * *') {
-      ctx.waitUntil(Promise.all([runFixedReminders(env), runPlanBlockPings(env)]));
-      return;
-    }
-    // 💾 Haftalık veri yedeği — Pazartesi 03:00 TR (UTC 00:00)
-    if (event.cron === '0 0 * * 1') {
-      ctx.waitUntil(runBackup(env));
-      return;
-    }
-    let type;
-    switch (event.cron) {
-      case '0 5 * * *':  type = 'morning'; break;
-      case '0 6 * * *':  type = 'deadline'; break;
-      case '0 9 * * *':  type = 'noon'; break;
-      case '0 18 * * *': type = 'evening'; break;
-      case '0 18 * * SUN': type = 'weekly'; break;
-      default:           type = 'morning';
-    }
-    // Sabah brifingi + GUVENLIK AGI planlama: aksam yarini planlayamadiysa (AI hatasi,
-    // ayar 'morning' ise, ya da hic plan yoksa) sabah bugunu planlar. Plan zaten varsa dokunmaz.
-    if (type === 'morning') {
-      ctx.waitUntil(
-        runCronJob(env, type)
-          .then(() => runAutoPlan(env, { trigger: 'morning' }))
-          .catch(e => console.error('morning+autoplan', e.message))
-      );
-      return;
-    }
-    // Aksam ozeti + YARININ plani — uyanmadan plan hazir olsun, aksam gorup duzeltebilsin
-    if (type === 'evening') {
-      ctx.waitUntil(
-        runCronJob(env, type)
-          // Hevy once senkronlanir: bugunun antrenmani plan gecmisine islensin,
-          // planlayici yarini kurarken antrenman gununu bilsin
-          .then(() => runHevySync(env).catch(e => console.error('hevy sync', e.message)))
-          .then(() => runAutoPlan(env, { trigger: 'evening', forDate: trDate(1) }))
-          .catch(e => console.error('evening+autoplan', e.message))
-      );
-      return;
-    }
-    // Pazar akşamı: haftalık görev özetinin yanına haftalık SAĞLIK analizi de gider
-    if (type === 'weekly') {
-      ctx.waitUntil(
-        runCronJob(env, type)
-          .then(() => runCronJob(env, 'health'))
-          .catch(e => console.error('weekly+health', e.message))
-      );
-      return;
-    }
-    ctx.waitUntil(runCronJob(env, type));
+
+    // Hafta ici 18:30 - BIST kapanisi sonrasi portfoy ozeti
+    if (isWeekday && at(18, 30)) jobs.push(runPortfolioSummary(env));
+
+    // Pazartesi 03:00 - haftalik veri yedegi (aidan_backups)
+    if (dow === 1 && at(3, 0)) jobs.push(runBackup(env));
+
+    // allSettled: bir is patlarsa digerleri devam etsin (eskiden tek is vardi,
+    // artik ayni turda birden fazla is olabilir).
+    ctx.waitUntil(Promise.allSettled(jobs).then(rs => {
+      const bad = rs.filter(r => r.status === 'rejected');
+      if (bad.length) console.error('cron fail:', bad.map(x => (x.reason && x.reason.message) || x.reason).join(' | '));
+    }));
   },
 };
