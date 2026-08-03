@@ -178,6 +178,9 @@ async function aiRun(env, opts) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+    });
+    if (rFree.ok) resp = rFree;
+  }
   // Model thinkingLevel'i tanımıyorsa (eski sürüm) 400 döner -> parametresiz tek tekrar
   if (!resp.ok && resp.status === 400) {
     const fb = JSON.parse(JSON.stringify(body));
