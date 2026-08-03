@@ -169,6 +169,15 @@ async function aiRun(env, opts) {
   });
 
   let resp = await call(body);
+  // ⚠️ PRO modeli erişilemezse (bakiye bitti / kota doldu / model kapalı) ÜCRETSİZ modele düş.
+  // Bakiye bittiğinde kullanıcı "analiz yapılamadı" görmemeli — kalite düşer ama hizmet sürer.
+  // 429 kota/bakiye · 402 ödeme · 403 erişim yok · 404 model adı geçersiz.
+  if (!resp.ok && model !== geminiModel(env) && [429, 402, 403, 404].includes(resp.status)) {
+    const freeUrl = geminiEndpoint(geminiModel(env)) + '?key=' + encodeURIComponent(key);
+    const rFree = await fetch(freeUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
   // Model thinkingLevel'i tanımıyorsa (eski sürüm) 400 döner -> parametresiz tek tekrar
   if (!resp.ok && resp.status === 400) {
     const fb = JSON.parse(JSON.stringify(body));

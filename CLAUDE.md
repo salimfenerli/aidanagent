@@ -43,6 +43,9 @@ Salim: "millet API key çalıp 2000 dolar fatura yiyormuş, öyle bir şeye maru
 
 **2. `heavy` yalnız hesap sahibine açık — `aiTierForUser(env, user, 'heavy')`.** `allowUser` multi-user modunda (`SUPABASE_SERVICE_KEY` tanımlıyken) **herkese izin veriyordu**; Supabase'de hesabı olan biri Salim'in faturasını harcayabilirdi. Artık e-posta `env.AIDAN_EMAIL` değilse istek sessizce `deep`'e düşer — hizmet kesilmez, **ücret üretilemez**. 4 kullanıcı-tetiklemeli çağrının hepsi (health-coach API, stock-analysis, portfolio-technical, /plan) kilitli. `AIDAN_EMAIL` tanımlı değilse (tek-user kurulum) davranış değişmez.
 
+**3. Bakiye/kota bitince ÜCRETSİZ modele düşer (sessiz arıza koruması).** PRO modeli 429 (kota/bakiye) · 402 (ödeme) · 403 (erişim) · 404 (model adı) dönerse `aiRun` aynı isteği ücretsiz Flash'a yollar. Bakiye bittiğinde Salim "analiz yapılamadı" görmez — kalite düşer, hizmet sürer. 500 gibi geçici hatalarda fallback YOK (yanlış modele sessizce kaymasın); ücretsiz model zaten kullanılıyorsa tekrar YOK (döngü koruması).
+**Prepaid bakiye (3 Ağu, 1000 TL ≈ $21, KDV sonrası ~$17.5):** heavy istek ≈ $0.04-0.06 → **~300-400 istek**. Sohbet/öğrenme komutları `deep`'te olduğu için bakiyeyi YEMEZ; tüketen tek şey gün planı (günde 1) + elle tetiklenen analizler. Gerçekçi ömür **3-6 ay**.
+
 **Salim'in yapması gerekenler (kod dışı, PRO secret'ından ÖNCE):**
 - Google Cloud Console → APIs & Services → Generative Language API → **Quotas** → günlük istek limitini düşür. **Bütçe uyarısı harcamayı DURDURMAZ, sadece mail atar — mutlak tavan yalnızca kotadır.**
 - Cloudflare + Google hesaplarına **2FA**.
