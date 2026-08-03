@@ -739,14 +739,16 @@
             <button onclick="chatSuggest(this.textContent)">Bugünü nasıl planlayayım?</button>
             <button onclick="chatSuggest(this.textContent)">Kafam çok dağınık, yardım et</button>
             <button onclick="chatSuggest(this.textContent)">Sınav haftasına nasıl çalışırım?</button>
+            <button onclick="chatSuggest('/komutlar')">Öğrenme komutları</button>
           </div>
         </div>
       </div>
+      <div class="chat-cmds" id="chatCmds" role="listbox" aria-label="Öğrenme komutları"></div>
       <div class="chat-input-row">
-        <textarea id="chatInput" rows="1" placeholder="Aidan'a yaz — Enter gönderir, Shift+Enter satır atlar" aria-label="Aidan'a mesaj" onkeydown="chatKey(event)" oninput="chatAutoGrow(this)"></textarea>
+        <textarea id="chatInput" rows="1" placeholder="Aidan'a yaz — &quot;/&quot; öğrenme komutları" aria-label="Aidan'a mesaj" onkeydown="chatKeyNav(event)" oninput="chatInputChange(this)"></textarea>
         <button class="chat-send" id="chatSend" onclick="sendChat()" title="Gönder" aria-label="Gönder"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
       </div>
-      <div class="chat-foot">Aidan düşünme ortağın — görev eklemez, yatırım tavsiyesi vermez.</div>
+      <div class="chat-foot">Aidan düşünme ortağın — yatırım tavsiyesi vermez. Öğrenme yöntemleri için &quot;/&quot; yaz.</div>
     </div>
   </div>
 </div>

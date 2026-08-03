@@ -3880,3 +3880,13 @@
   line-height: 1.3;
 }
 .supp-nag-opt input[type="checkbox"] { flex: none; margin: 0; }
+
+/* --- Meta-öğrenme komut paleti (chat "/" ) --- */
+.chat-cmds { display: none; max-height: 240px; overflow-y: auto; margin-bottom: 8px; background: var(--surface-mid); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 4px; }
+.chat-cmd { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; background: transparent; border: 0; color: var(--text); padding: 8px 10px; border-radius: 10px; cursor: pointer; font: inherit; transition: background .16s cubic-bezier(.22,1,.36,1); }
+.chat-cmd:hover, .chat-cmd.sel { background: var(--accent-soft); }
+.chat-cmd-name { font-size: 0.88rem; font-weight: 700; color: var(--accent-tint); white-space: nowrap; }
+.chat-cmd-name em { font-style: normal; font-weight: 500; color: var(--text-muted); }
+.chat-cmd-desc { font-size: 0.8rem; color: var(--text-muted); flex: 1; line-height: 1.35; }
+.chat-cmd-tag { font-size: 0.68rem; font-weight: 700; color: var(--accent-tint); background: var(--accent-soft); border: 1px solid var(--border-soft); padding: 2px 7px; border-radius: var(--radius-pill); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .chat-cmd { transition: none; } }

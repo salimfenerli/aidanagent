@@ -16,6 +16,56 @@
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 3 Ağustos 2026 — 🎓 META-ÖĞRENME KOMUTLARI (v7-125)
+Salim: "meta learning yöntemleriyle yardımcı olsun." Chat'e **slash komut sistemi** eklendi — kanıta dayalı öğrenme yöntemleri.
+
+**7 AI modu** (`worker.js` → `META_MODES`, `/chat` sistem prompt'una eklenir): `/anlat` (Feynman — sen anlat, Aidan boşluğu işaretler) · `/sor` (aktif hatırlama, TEK TEK 5 soru) · `/basit` (öz+benzetme+sık hata) · `/karistir` (interleaving, konular arası karışık 6 soru) · `/zorla` (desirable difficulty — tanıma değil üretim sorusu) · `/nasil` (konu tipine göre yöntem seçimi + 20 dk ilk oturum) · `/kontrol` (kalibrasyon — bildiğini sandığın kadar biliyor musun).
+- Mod `detectMetaMode(msgs)` ile **geçmişte geriye taranır** — kullanıcı cevap yazarken mod kaybolmaz, yeni komut eskiyi ezer, tanınmayan komut modu bitirir. `temperature` modlu sohbette 0.35.
+- Ortak kural: **cevabı hazır verme, kullanıcı üretsin** (retrieval practice); 16 yaş / TR müfredat seviyesi.
+
+**2 LOKAL komut** (`ui.js`, AI'a hiç gitmez — $0, anında, girişsiz, GEMINI_API_KEY yokken bile çalışır):
+- `/tekrar <konu>` → **aralıklı tekrar**: 1/3/7/16/35. güne 5 görev ekler. **Yeni veri modeli YOK** — mevcut seri altyapısı kullanılır (`seriesId`/`seriesIndex`/`seriesTotal`), seri modalı ve yeniden dengeleme bedava gelir. Not alanında "nota BAKMADAN hatırla" kuralı.
+- `/komutlar` → liste.
+
+**UI:** chat input'a `/` yazınca komut paleti (`#chatCmds`, ok tuşları + Enter/Tab/Esc ile gezinme), lokal komutlar "anında" rozetli. Lokal mesajlar `local:true` işaretlenir ve **AI bağlamına gönderilmez** (`_chatHistory.filter(m => !m.local)`).
+
+**Doğrulama:** 46 test (komut ayrıştırma, palet eşleşme, tekrar tarihleri/seri alanları, boş+uzun konu, lokal yönlendirme, worker mod tespiti 7 senaryo, **PWA komut listesi ↔ worker mod listesi tutarlılığı**, prompt kuralı varlığı) · `node --check` ui/worker temiz · EOL doğrulandı.
+**⚠️ AI modları `GEMINI_API_KEY` secret'ı eklenene kadar ÇALIŞMAZ** (bkz. 2 Ağu notu). `/tekrar` ve `/komutlar` şimdiden çalışır.
+**Cache:** v7-124 → **v7-125**
+
+### 🔴 3 Ağustos 2026 — 💸 PRO MALİYET KORUMASI (KALICI KURAL)
+Salim: "millet API key çalıp 2000 dolar fatura yiyormuş, öyle bir şeye maruz kalmayalım."
+
+**Denetim sonucu — key sızma yüzeyi zaten dar:** key Worker secret'ında, tarayıcıya HİÇ gitmiyor (PWA worker'a Supabase token'ıyla konuşuyor), repoda key yok, `.gitignore` doğru. Klasik "frontend'e key gömme" hatası Aidan'da YOK. Bulunan 2 gerçek açık kapatıldı:
+
+**1. Serbest akışlı hiçbir yol ücretli modele gidemez (`deep` katmanı).** Sohbet sınırsız kullanılabilir → `heavy` (PRO) olsaydı fatura tavanı olmazdı. Yeni **`deep`** katmanı: `thinking:high` + 8192 çıkış AMA **her zaman ücretsiz model**. Chat meta-öğrenme modları `heavy` → **`deep`** yapıldı; kalite aynı (thinking high), maliyet $0.
+- **KALICI KURAL:** `tier:'heavy'` yalnız ① cron (günde sabit sayıda) ② kullanıcının düğmeye basmasıyla tetiklenen ağır analiz olabilir. Yeni bir serbest akışlı özellik ASLA `heavy` almaz — `deep` alır. Fatura üst sınırı istek sayısıyla değil **özelliğin doğasıyla** sınırlanır.
+
+**2. `heavy` yalnız hesap sahibine açık — `aiTierForUser(env, user, 'heavy')`.** `allowUser` multi-user modunda (`SUPABASE_SERVICE_KEY` tanımlıyken) **herkese izin veriyordu**; Supabase'de hesabı olan biri Salim'in faturasını harcayabilirdi. Artık e-posta `env.AIDAN_EMAIL` değilse istek sessizce `deep`'e düşer — hizmet kesilmez, **ücret üretilemez**. 4 kullanıcı-tetiklemeli çağrının hepsi (health-coach API, stock-analysis, portfolio-technical, /plan) kilitli. `AIDAN_EMAIL` tanımlı değilse (tek-user kurulum) davranış değişmez.
+
+**Salim'in yapması gerekenler (kod dışı, PRO secret'ından ÖNCE):**
+- Google Cloud Console → APIs & Services → Generative Language API → **Quotas** → günlük istek limitini düşür. **Bütçe uyarısı harcamayı DURDURMAZ, sadece mail atar — mutlak tavan yalnızca kotadır.**
+- Cloudflare + Google hesaplarına **2FA**.
+
+**Doğrulama:** 45 test (deep katmanı PRO kullanmıyor, sahip/başkası/kullanıcısız/boş-email kilidi, büyük-küçük harf, `AIDAN_EMAIL` yokken davranış, sabit heavy yalnız 1 cron yolunda, 4 tetiklemeli çağrının hepsi kilitli, chat'te `heavy` string'i YOK).
+
+### 🔴 3 Ağustos 2026 — 🧠 AI KATMANLARI (tier) + thinking_level
+Salim: "önemli şeyleri daha üst düzey AI, diğerlerini free tier — AI kendi de düşünsün."
+
+**`aiRun` artık `tier` alır** (`worker.js` → `AI_TIERS`). Gemini 3.x `thinking_level` parametresi (minimal/low/medium/high) modelin cevap üretmeden ÖNCEKİ akıl yürütme derinliğini belirler — **ücretsiz katmanda düşünme token'ı para değil, sadece gecikme**, yani kalite bedava artar. Eskiden hiç set edilmiyordu.
+
+| Katman | thinking | min çıkış | Nerede |
+|---|---|---|---|
+| `light` | low | 2048 | görsel OCR (`visionRun`), `/food-macros`, haber ön elemesi |
+| `normal` (varsayılan) | medium | 3072 | sohbet, günlük, `/split`, portföy yorumu, brifing |
+| `heavy` | high | 8192 | sağlık koçu (API+cron), gün planı, hisse analizi, portföy teknik, **chat'te meta-öğrenme modları** |
+
+**Model rotası:** `heavy` katmanı `env.GEMINI_MODEL_PRO` secret'ı **tanımlıysa** onu kullanır (ör. `gemini-3.1-pro-preview`, $2/$12 per 1M). Tanımlı değilse ücretsiz Flash + `thinking:high` ile çalışır → **şu an $0, yükseltme tek secret**. `normal`/`light` PRO'ya ASLA gitmez (ücret sızıntısı koruması, teste bağlandı).
+
+**⚠️ Düşünme token'ları ÇIKIŞ bütçesinden yenir.** `high` + düşük `maxOutputTokens` = model düşünürken bütçeyi bitirir ve **boş metin** döner (sessiz arıza). Bu yüzden her katmanın kendi `minOut` tavanı var + iki koruma: ① 400 gelirse `thinkingConfig`'siz tek tekrar (model parametreyi tanımıyorsa) ② boş metin dönerse `low` ile tek tekrar. `low`/`minimal` katmanda tekrar YOK (sonsuz döngü koruması).
+
+**Doğrulama:** 30 test — katman varsayılanları, PRO yönlendirme + sızıntı koruması, boş PRO secret'ı, bilinmeyen tier, 400 fallback, boş-metin kurtarma, tool_calls korunumu, max_tokens tavanı, worker'daki tier dağılımı (5 heavy / 3 light / chat dinamik).
+
 ### 🔴 2 Ağustos 2026 — ⏰ TEK CRON + TAKVİYE NAG (v7-124)
 Salim: "supplement hatırlatması falan gelmiyo bana." Teşhis canlı veriden yapıldı: **8 hatırlatıcı kurulu, hepsinde `lastFired: null`, pushLog'da hiç `reminder` kaydı yok** — bir kez bile ateşlenmemiş.
 

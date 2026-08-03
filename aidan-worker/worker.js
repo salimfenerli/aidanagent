@@ -94,17 +94,65 @@ function toGeminiTools(tools) {
 }
 
 // Ana cagri — Gemini generateContent. CF env.AI.run yerine bunu kullan.
+// ============================================================
+// AI IŞ AĞIRLIĞI KATMANLARI (tier) — 3 Ağu 2026
+// ============================================================
+// Gemini 3.x'te `thinking_level` modelin cevap üretmeden ÖNCEKİ akıl yürütme
+// derinliğini belirler (minimal | low | medium | high). Ücretsiz katmanda
+// düşünme token'ı para değil, sadece gecikme demek — yani kalite BEDAVA artar.
+//
+// ⚠️ KRİTİK: düşünme token'ları ÇIKIŞ bütçesinden yenir. `high` + düşük
+// maxOutputTokens = model düşünürken bütçeyi bitirir ve BOŞ metin döner
+// (sessiz arıza). Bu yüzden her katmanın kendi minimum çıkış tavanı var.
+//
+// `pro: true` olan katman, env.GEMINI_MODEL_PRO tanımlıysa o modeli kullanır
+// (ör. gemini-3.1-pro-preview — ücretli). Tanımlı DEĞİLSE ücretsiz Flash +
+// thinking:high ile çalışır. Yani şu an $0; yükseltmek tek secret eklemek.
+const AI_TIERS = {
+  light:  { thinking: 'low',    minOut: 2048 },              // sınıflandırma, OCR, ön eleme
+  normal: { thinking: 'medium', minOut: 3072 },              // sohbet, özet, yorum (varsayılan)
+  deep:   { thinking: 'high',   minOut: 8192 },              // derin düşünme AMA ÜCRETSİZ model
+  heavy:  { thinking: 'high',   minOut: 8192, pro: true },   // derin + ÜCRETLİ model (yalnız tetiklemeli işler)
+};
+
+// ⚠️ MALİYET SINIRI (3 Ağu 2026) — `heavy` yani ücretli modele giden çağrılar
+// SADECE şu iki tipte olabilir: ① cron (günde sabit sayıda) ② kullanıcının bir
+// düğmeye basmasıyla tetiklenen ağır analiz. Sohbet gibi SERBEST AKIŞLI hiçbir
+// yol `heavy` kullanamaz — orada `deep` var (aynı düşünme derinliği, $0 model).
+// Böylece fatura üst sınırı istek sayısıyla değil, özelliğin doğasıyla sınırlı.
+//
+// Ayrıca `heavy` yalnızca hesap sahibine (env.AIDAN_EMAIL) açıktır: multi-user
+// modunda başka bir kullanıcı, hesabı geçerli olsa bile ücret ÜRETEMEZ — deep'e düşer.
+function aiTierForUser(env, user, wanted) {
+  if (wanted !== 'heavy') return wanted;
+  const owner = ((env && env.AIDAN_EMAIL) || '').trim().toLowerCase();
+  if (!owner) return 'heavy';                    // tek-user kurulum, sahip zaten tek kişi
+  const email = ((user && user.email) || '').trim().toLowerCase();
+  return email && email === owner ? 'heavy' : 'deep';
+}
+
+function geminiModelFor(env, tierName) {
+  const t = AI_TIERS[tierName];
+  if (t && t.pro && env && (env.GEMINI_MODEL_PRO || '').trim()) return env.GEMINI_MODEL_PRO.trim();
+  return geminiModel(env);
+}
+
 async function aiRun(env, opts) {
   opts = opts || {};
   const key = env && env.GEMINI_API_KEY;
   if (!key) throw new Error('GEMINI_API_KEY tanimli degil - Worker secret ekle');
   const conv = toGeminiContents(opts.messages);
+  const tierName = AI_TIERS[opts.tier] ? opts.tier : 'normal';
+  const tier = AI_TIERS[tierName];
+  const thinking = opts.thinking || tier.thinking;
+
   const body = {
     contents: conv.contents,
     generationConfig: {
       temperature: opts.temperature != null ? opts.temperature : 0.3,
-      // Gemini 3.x "dusunme" token'i cikis butcesini yiyebilir -> tavani yuksek tut (ucretsiz katman, maliyet yok)
-      maxOutputTokens: Math.max(opts.max_tokens || 512, 2048),
+      // Düşünme token'i çıkış bütçesini yer -> katman tavanının altına inme
+      maxOutputTokens: Math.max(opts.max_tokens || 512, tier.minOut),
+      thinkingConfig: { thinkingLevel: thinking },
     },
   };
   if (conv.sys) body.systemInstruction = { parts: [{ text: conv.sys }] };
@@ -112,29 +160,55 @@ async function aiRun(env, opts) {
   if (tools) body.tools = tools;
   if (opts.json) body.generationConfig.responseMimeType = 'application/json';
 
-  const model = opts.model || geminiModel(env);
-  const resp = await fetch(geminiEndpoint(model) + '?key=' + encodeURIComponent(key), {
+  const model = opts.model || geminiModelFor(env, tierName);
+  const url = geminiEndpoint(model) + '?key=' + encodeURIComponent(key);
+  const call = (payload) => fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   });
+
+  let resp = await call(body);
+  // Model thinkingLevel'i tanımıyorsa (eski sürüm) 400 döner -> parametresiz tek tekrar
+  if (!resp.ok && resp.status === 400) {
+    const fb = JSON.parse(JSON.stringify(body));
+    delete fb.generationConfig.thinkingConfig;
+    const r2 = await call(fb);
+    if (r2.ok) resp = r2;
+  }
   if (!resp.ok) {
     let errTxt = '';
     try { errTxt = await resp.text(); } catch (_) {}
     throw new Error('Gemini ' + resp.status + ': ' + errTxt.slice(0, 300));
   }
-  const j = await resp.json();
-  const cand = j && j.candidates && j.candidates[0];
-  const parts = (cand && cand.content && cand.content.parts) || [];
-  let text = '';
-  const toolCalls = [];
-  for (const pp of parts) {
-    if (pp && typeof pp.text === 'string') text += pp.text;
-    if (pp && pp.functionCall) toolCalls.push({ name: pp.functionCall.name, arguments: pp.functionCall.args || {} });
+
+  const parseOut = (j) => {
+    const cand = j && j.candidates && j.candidates[0];
+    const parts = (cand && cand.content && cand.content.parts) || [];
+    let text = '';
+    const toolCalls = [];
+    for (const pp of parts) {
+      if (pp && typeof pp.text === 'string') text += pp.text;
+      if (pp && pp.functionCall) toolCalls.push({ name: pp.functionCall.name, arguments: pp.functionCall.args || {} });
+    }
+    return { text, toolCalls, finish: cand && cand.finishReason };
+  };
+
+  let out = parseOut(await resp.json());
+  // Düşünme bütçeyi yemiş olabilir (finishReason MAX_TOKENS + boş metin) -> düşük thinking ile tek tekrar
+  if (!out.text && !out.toolCalls.length && thinking !== 'low' && thinking !== 'minimal') {
+    const fb = JSON.parse(JSON.stringify(body));
+    fb.generationConfig.thinkingConfig = { thinkingLevel: 'low' };
+    const r3 = await call(fb);
+    if (r3.ok) {
+      const o3 = parseOut(await r3.json());
+      if (o3.text || o3.toolCalls.length) out = o3;
+    }
   }
-  const out = { response: text };
-  if (toolCalls.length) out.tool_calls = toolCalls;
-  return out;
+
+  const res = { response: out.text };
+  if (out.toolCalls.length) res.tool_calls = out.toolCalls;
+  return res;
 }
 
 // ============================================================
@@ -2855,6 +2929,7 @@ function hasHealthDataSrv(data, days = 14) {
 async function generateHealthCoach(env, data, name) {
   const facts = buildHealthFactsSrv(data, 14);
   const r = await aiRun(env, {
+    tier: 'heavy',
     messages: [
       { role: 'system', content: HEALTH_COACH_PROMPT(name) },
       { role: 'user', content: `Sağlık verileri (doğrulanmış):\n${facts}\n\nAnalizi yaz. TÜRKÇE, kısa, en fazla 2 öneri.` },
@@ -2893,6 +2968,7 @@ async function handleHealthCoachApi(request, env) {
     const session = await fetchUserDataForApi(env, user);
     const name = getUserDisplayName(session.data, user.email);
     const r = await aiRun(env, {
+      tier: aiTierForUser(env, user, 'heavy'),
       messages: [
         { role: 'system', content: HEALTH_COACH_PROMPT(name) },
         { role: 'user', content: `Sağlık verileri (doğrulanmış):\n${facts}\n\nAnalizi yaz. TÜRKÇE, kısa, en fazla 2 öneri.` },
@@ -3013,6 +3089,89 @@ ${text}
 
 // Aidan'a sor — sohbet endpoint'i (POST {messages:[...]} → AI sohbet cevabı, tool YOK).
 // Düşünme/planlama ortağı: görev EKLEMEZ, sadece konuşur. Gemini.
+// ============================================================
+// META-ÖĞRENME MODLARI — kanıta dayalı öğrenme yöntemleri
+// ============================================================
+// Chat'te "/anlat konu" gibi bir komut yazılınca sistem prompt'una
+// o yöntemin kuralları eklenir. Mod, yeni bir komut gelene kadar sürer
+// (kullanıcı cevap yazarken mod kaybolmasın diye geriye doğru taranır).
+// PWA ayrıca `mode` alanı gönderebilir; komut yoksa o kullanılır.
+// NOT: "/tekrar" burada YOK — o PWA'da lokal çalışır (AI'sız, görev ekler).
+const META_MODES = {
+  anlat: {
+    label: 'Feynman — sen anlat, boşlukları ben bulayım',
+    prompt: `AKTIF MOD: FEYNMAN. Kullanıcı konuyu KENDİ cümleleriyle anlatır, sen öğretmezsin.
+- Kullanıcı henüz anlatmadıysa (sadece konu adı verdiyse): tek cümleyle "anlat bakalım, boşlukları ben işaretlerim" de ve DUR. Konuyu sen anlatma.
+- Anlatım geldiğinde sırasıyla: (1) doğru kurduğu 1 noktayı söyle, (2) en fazla 2 eksik/bulanık noktayı işaretle, (3) tam o boşluğu delen TEK soru sor.
+- Eksiğin cevabını SEN VERME — kullanıcı bulsun. Israr ederse önce ipucu, sonra cevap.
+- Toplam 150 kelimeyi geçme.`,
+  },
+  sor: {
+    label: 'Aktif hatırlama — tek tek soru',
+    prompt: `AKTIF MOD: AKTİF HATIRLAMA (retrieval practice). Toplam 5 soru soracaksın.
+- Her mesajda SADECE 1 soru sor, sonra dur. Cevabı bekle.
+- Cevap gelince: doğru mu eksik mi (en fazla 2 cümle) → sonraki soruyu sor. Kaçıncı soruda olduğunu başa yaz: "2/5".
+- Sorular kolaydan zora gitsin. Cevabı soruyla birlikte ASLA verme.
+- "Bilmiyorum" derse: önce ipucu ver, tekrar sor. İki denemede olmazsa kısa cevabı ver ve devam et.
+- 5. sorudan sonra: hangi 1 nokta zayıf, onu tek cümlede söyle.`,
+  },
+  basit: {
+    label: 'Basit anlat — öz + benzetme + tuzak',
+    prompt: `AKTIF MOD: BASİTLEŞTİRME. Konuyu 3 katmanda anlat, sırayla ve başlıksız:
+1) Tek cümlelik öz.
+2) Günlük hayattan somut bir benzetme (soyut benzetme yok).
+3) Bu konuda en sık yapılan hata.
+Sonunda kullanıcıya 1 kontrol sorusu sor. Toplam 180 kelimeyi geçme. Jargon kullanma, kullanırsan hemen parantezle açıkla.`,
+  },
+  karistir: {
+    label: 'Karışık tekrar (interleaving)',
+    prompt: `AKTIF MOD: INTERLEAVING (karışık pratik). Kullanıcının verdiği 2-4 konudan 6 soru üret.
+- Soruları KARIŞIK sırala; aynı konudan iki soru arka arkaya GELMESİN.
+- Hepsini tek mesajda, numaralı ver. Konu adını soru başında yazma (hangi konu olduğunu kullanıcı kendi seçmeli — zorluk kasıtlı).
+- Cevap anahtarını VERME. Kullanıcı cevaplarını yazınca tek tek değerlendir.
+- Kullanıcı tek konu verdiyse: o konunun farklı alt başlıklarından karıştır.`,
+  },
+  zorla: {
+    label: 'Zor sorular — tanıma değil üretim',
+    prompt: `AKTIF MOD: İSTENEN ZORLUK (desirable difficulty). Tanıma sorusu YASAK.
+- "X nedir", "X'in tanımı" gibi ezber sorusu SORMA.
+- Bunun yerine: karşılaştırma ("X ile Y farkını bir örnekle göster"), tahmin ("şu durumda ne olur, neden"), transfer ("bunu farklı bir örnekte uygula"), hata avı ("şu akıl yürütmede ne yanlış").
+- 3 soru, tek mesajda, numaralı. Cevapları verme.
+- Kullanıcı zorlanırsa bu normaldir — "zorlanman iyi işaret" gibi tek cümle destek, sonra ipucu.`,
+  },
+  nasil: {
+    label: 'Bu konuya nasıl çalışılır',
+    prompt: `AKTIF MOD: YÖNTEM SEÇİMİ (metabiliş). Önce konunun tipini belirle: ezber / kavrama / işlem-becerisi / uygulama.
+- Tipi tek cümlede söyle.
+- O tipe EN uygun tek yöntemi ver ve NEDEN onu seçtiğini 1 cümleyle açıkla (örnek: ezber→aralıklı tekrar+aktif hatırlama; işlem→bol soru+konuların karıştırılması; kavrama→Feynman; uygulama→değişken örnekler).
+- Sonra somut bir 20 dakikalık İLK OTURUM planı ver (3 adım, dakikalı).
+- En fazla 2 öneri. Fazla seçenek ADHD'de felç eder.`,
+  },
+  kontrol: {
+    label: 'Kalibrasyon — ne kadar biliyorsun',
+    prompt: `AKTIF MOD: KALİBRASYON. Amaç: kullanıcının "biliyorum" sanısı ile gerçek arasındaki farkı göstermek.
+- İlk mesajında SADECE şunu sor: "Bu konuyu 1-10 arası kaç biliyorsun?" ve dur.
+- Puan gelince 3 soru sor (tek mesajda, numaralı). Zorluk verdiği puana göre ayarlansın.
+- Cevaplar gelince değerlendir ve tahmini ile gerçeği karşılaştır: "10'da 8 dedin, 3 sorunun 1'i tam — bu konu göründüğünden taze değil" gibi.
+- Yargılamadan, veri gibi söyle. Puan düşükse güven ver, yüksek çıkarsa doğrula.`,
+  },
+};
+
+// Chat geçmişinde geriye doğru tarayarak aktif modu bulur (yeni komut eskiyi ezer).
+function detectMetaMode(msgs) {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (!m || m.role !== 'user') continue;
+    const mt = /^\s*\/([a-zA-Z]+)/.exec(m.content || '');
+    if (!mt) continue;
+    const cmd = mt[1].toLowerCase();
+    if (META_MODES[cmd]) return cmd;
+    // Tanınmayan komut modu bitirir (kullanıcı başka bir şeye geçti)
+    return null;
+  }
+  return null;
+}
+
 async function handleChatApi(request, env) {
   const cors = {
     'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
@@ -3074,6 +3233,10 @@ async function handleChatApi(request, env) {
       pfStr = ` Portföy (yaklaşık, son fiyatlarla): ${parts.join('; ')}.`;
     }
 
+    // Meta-öğrenme modu — komut varsa yöntemin kuralları sistem prompt'una eklenir
+    const metaMode = (typeof body.mode === 'string' && META_MODES[body.mode]) ? body.mode : detectMetaMode(msgs);
+    const modeBlock = metaMode ? `\n\n${META_MODES[metaMode].prompt}\n\nBu modda ${name} 16 yaşında lise öğrencisi — Türkiye müfredatı seviyesinde konuş. Cevabı hazır verme; hatırlama çabası öğrenmeyi kalıcı kılar. Mesaj başındaki "/komut" kısmını yok say, konu olarak kalanını al.` : '';
+
     const ctx = `[BAĞLAM — ${name} durumu] Açık görev: ${openCount}. Bugün biten: ${doneToday}.${overdue ? ` Gecikmiş: ${overdue}.` : ''}${mitStr}${pfStr}`;
 
     const sysPrompt = `Sen Aidan'sın — ${name}'in ADHD asistanı ve düşünme ortağı. ${name} 16 yaşında, lise öğrencisi, satranç/strateji seviyor, borsada işlem yapıyor.
@@ -3087,12 +3250,13 @@ KURALLAR:
 - Borsa: betimleyici konuş, AMA "al/sat/tut" yatırım tavsiyesi VERME, fiyat tahmini yapma.
 - Emin değilsen "emin değilim" de, uydurma.
 - Gerektiğinde sor, ama tek soruyla; cevabı boğma.
-${ctx}`;
+${ctx}${modeBlock}`;
 
     const r = await aiRun(env, {
       messages: [{ role: 'system', content: sysPrompt }, ...msgs],
+      tier: metaMode ? 'deep' : 'normal',   // serbest akışlı sohbet ÜCRETLİ modele gitmez
       max_tokens: 700,
-      temperature: 0.5,
+      temperature: metaMode ? 0.35 : 0.5,
     });
     let reply = (r.response || '').trim();
     if (!reply || /^i'?m sorry|^as an ai|your input is not/i.test(reply)) {
@@ -3246,7 +3410,7 @@ async function handlePlanApi(request, env) {
   if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
 
   try {
-    const blocks = await generatePlanBlocks(env, { tasks, from, to, now, busy, insight: body.insight || '' });
+    const blocks = await generatePlanBlocks(env, { tasks, from, to, now, busy, insight: body.insight || '', tier: aiTierForUser(env, user, 'heavy') });
     return jsonCors({ blocks }, 200, cors);
   } catch (e) {
     return jsonCors({ error: e.message }, 500, cors);
@@ -3255,7 +3419,7 @@ async function handlePlanApi(request, env) {
 
 // Plan uretimi — /plan endpoint'i ve sabah otomatik plan cron'u ORTAK kullanir.
 // Girdi tasks: [{i,text,min,pri,mit,due,cat}] → Cikti: [{start,end,label,task,kind}]
-async function generatePlanBlocks(env, { tasks, from, to, now, busy, insight }) {
+async function generatePlanBlocks(env, { tasks, from, to, now, busy, insight, tier }) {
   const taskLines = tasks.map(t => {
     const bits = [`[${t.i}] ${t.text}`];
     if (t.min) bits.push(t.full ? `bugün ~${t.min}dk (toplam ${t.full}dk, son tarihe bölündü)` : `~${t.min}dk`);
@@ -3300,6 +3464,7 @@ async function generatePlanBlocks(env, { tasks, from, to, now, busy, insight }) 
   const userMsg = `Uyanık pencere: ${from} - ${to}.${now ? ` Şu an saat: ${now}.` : ''}${busyLine}${insight || ''}\n\nGörevler (indeks · metin · süre · etiketler):\n${taskLines}\n\nGünü saat saat planla. Sadece JSON dizisi döndür.`;
 
     const r = await aiRun(env, {
+      tier: tier || 'heavy',
       messages: [
         { role: 'system', content: planPrompt },
         { role: 'user', content: userMsg },
@@ -3690,7 +3855,7 @@ async function handleStockNewsApi(request, env) {
     try {
       const r = await aiRun(env, {
         messages: [{ role: 'system', content: sysP }, { role: 'user', content: userM }],
-        max_tokens: 300, temperature: 0.1,
+        tier: 'light', max_tokens: 300, temperature: 0.1,
       });
       let raw = typeof r.response === 'string' ? r.response : JSON.stringify(r.response);
       let arr = [];
@@ -3884,6 +4049,7 @@ Bu verileri 5-8 cümlelik tarafsız teknik özete dök. Haber verildiyse teknik 
 
   try {
     const r = await aiRun(env, {
+      tier: aiTierForUser(env, user, 'heavy'),
       messages: [
         { role: 'system', content: sysPrompt },
         { role: 'user', content: userMsg },
@@ -3988,6 +4154,7 @@ Bu verileri 4-7 cümlelik tarafsız taktik özete dök. Geçen göstergelerin ne
 
   try {
     const r = await aiRun(env, {
+      tier: aiTierForUser(env, user, 'heavy'),
       messages: [
         { role: 'system', content: sysPrompt },
         { role: 'user', content: userMsg },
@@ -5015,6 +5182,7 @@ SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
 Örnek: "60 gram pirinç" -> {"items":[{"name":"pirinç","en":"raw white rice","grams":60,"kcal":216,"protein":4,"carb":47,"fat":1}]}
 Örnek: "200 gram tavuk" -> {"items":[{"name":"çiğ tavuk","en":"chicken breast raw","grams":200,"kcal":240,"protein":46,"carb":0,"fat":5}]}`;
     const r = await aiRun(env, {
+      tier: 'light',
       messages: [
         { role: 'system', content: sys },
         { role: 'user', content: query },
@@ -5075,6 +5243,7 @@ async function visionRun(env, input) {
   const b64 = bytesToBase64(bytes);
   // Gemini multimodal — OCR + Turkce, tek cagri (donus { response } sozlesmesi korunur)
   return await aiRun(env, {
+    tier: 'light',
     messages: [{
       role: 'user',
       content: [

@@ -4688,10 +4688,22 @@ async function sendChat() {
   if (!inp) return;
   const text = inp.value.trim();
   if (!text) return;
+  // Lokal meta-öğrenme komutu (/tekrar, /komutlar) — AI'a gitmez, giriş gerektirmez
+  const _mc = (typeof parseMetaCmd === 'function') ? parseMetaCmd(text) : null;
+  if (_mc && _mc.def.local) {
+    inp.value = '';
+    chatAutoGrow(inp);
+    renderCmdPalette(null);
+    _chatHistory.push({ role: 'user', content: text, local: true });
+    renderChatMessages();
+    handleLocalMetaCmd(text);
+    return;
+  }
   const token = await getSupaToken();
   if (!token) { showToast('Önce Ayarlar' + String.fromCharCode(39) + 'dan giriş yap', 'error'); return; }
   inp.value = '';
   chatAutoGrow(inp);
+  if (typeof renderCmdPalette === 'function') renderCmdPalette(null);
   _chatHistory.push({ role: 'user', content: text });
   _chatBusy = true;
   renderChatMessages();
@@ -4699,7 +4711,7 @@ async function sendChat() {
     const r = await fetch(CHAT_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ messages: _chatHistory.slice(-12) }),
+      body: JSON.stringify({ messages: _chatHistory.filter(m => !m.local).slice(-12) }),
     });
     const j = await r.json().catch(() => ({}));
     _chatBusy = false;
@@ -4714,6 +4726,147 @@ async function sendChat() {
     _chatHistory.push({ role: 'assistant', content: 'Bağlantı kurulamadı. İnternetini kontrol et.' });
     renderChatMessages();
   }
+}
+
+
+// ============================================================
+// META-ÖĞRENME KOMUTLARI — chat'te "/" ile çalışan öğrenme yöntemleri
+// ============================================================
+// Tasarım ilkesi: yöntemlerin çoğu AI modudur (worker.js META_MODES ikizi),
+// ama "/tekrar" ve "/komutlar" TAMAMEN LOKAL çalışır — AI'a hiç gitmez,
+// $0, anında, GEMINI_API_KEY yokken bile çalışır.
+// Aralıklı tekrar mevcut SERİ altyapısını kullanır (seriesId/seriesIndex) —
+// yeni veri modeli eklenmedi.
+const META_CMDS = [
+  { cmd: 'anlat',    arg: 'konu',    desc: 'Feynman — sen anlat, boşlukları Aidan işaretlesin' },
+  { cmd: 'sor',      arg: 'konu',    desc: 'Aktif hatırlama — tek tek 5 soru' },
+  { cmd: 'basit',    arg: 'konu',    desc: 'Öz + günlük hayattan benzetme + sık yapılan hata' },
+  { cmd: 'karistir', arg: 'konular', desc: 'Karışık tekrar — konular arası 6 soru' },
+  { cmd: 'zorla',    arg: 'konu',    desc: 'Zor sorular — ezber değil üretim' },
+  { cmd: 'nasil',    arg: 'konu',    desc: 'Bu konuya hangi yöntemle çalışılır' },
+  { cmd: 'kontrol',  arg: 'konu',    desc: 'Kalibrasyon — bildiğini sandığın kadar biliyor musun' },
+  { cmd: 'tekrar',   arg: 'konu',    desc: 'Aralıklı tekrar — 1/3/7/16/35. güne görev ekler', local: true },
+  { cmd: 'komutlar', arg: '',        desc: 'Bu listeyi göster', local: true },
+];
+
+// Aralıklı tekrar takvimi (gün). Genişleyen aralık — unutma eğrisinin dibine denk gelir.
+const SR_INTERVALS = [1, 3, 7, 16, 35];
+
+let _cmdOpen = false;
+let _cmdIdx = 0;
+
+// Input'ta "/xyz" yazılıyorsa eşleşen komutları döndürür (sadece ilk satır, boşluktan önce)
+function metaCmdMatches(val) {
+  const m = /^\/([a-zA-ZçğıöşüÇĞİÖŞÜ]*)$/.exec(val);
+  if (!m) return null;
+  const q = m[1].toLowerCase();
+  return META_CMDS.filter(c => c.cmd.startsWith(q));
+}
+
+function renderCmdPalette(list) {
+  const box = document.getElementById('chatCmds');
+  if (!box) return;
+  if (!list || !list.length) { box.style.display = 'none'; _cmdOpen = false; return; }
+  if (_cmdIdx >= list.length) _cmdIdx = 0;
+  box.innerHTML = list.map((c, i) =>
+    '<button type="button" class="chat-cmd' + (i === _cmdIdx ? ' sel' : '') + '" onclick="pickCmd(\'' + c.cmd + '\')">' +
+    '<span class="chat-cmd-name">/' + c.cmd + (c.arg ? ' <em>' + c.arg + '</em>' : '') + '</span>' +
+    '<span class="chat-cmd-desc">' + escapeHtml(c.desc) + '</span>' +
+    (c.local ? '<span class="chat-cmd-tag">anında</span>' : '') +
+    '</button>'
+  ).join('');
+  box.style.display = 'block';
+  _cmdOpen = true;
+}
+
+function chatInputChange(el) {
+  chatAutoGrow(el);
+  const list = metaCmdMatches(el.value);
+  if (list && list.length) renderCmdPalette(list);
+  else { _cmdIdx = 0; renderCmdPalette(null); }
+}
+
+function pickCmd(cmd) {
+  const inp = document.getElementById('chatInput');
+  if (!inp) return;
+  const c = META_CMDS.find(x => x.cmd === cmd);
+  inp.value = '/' + cmd + (c && c.arg ? ' ' : '');
+  renderCmdPalette(null);
+  _cmdIdx = 0;
+  inp.focus();
+  chatAutoGrow(inp);
+  if (c && !c.arg) sendChat();   // argümansız komut (/komutlar) doğrudan çalışsın
+}
+
+// Palet açıkken ok tuşları + Enter/Tab seçim yapar; değilse normal gönderme
+function chatKeyNav(e) {
+  const inp = document.getElementById('chatInput');
+  const list = inp ? metaCmdMatches(inp.value) : null;
+  if (_cmdOpen && list && list.length) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); _cmdIdx = (_cmdIdx + 1) % list.length; renderCmdPalette(list); return; }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); _cmdIdx = (_cmdIdx - 1 + list.length) % list.length; renderCmdPalette(list); return; }
+    if (e.key === 'Escape')    { e.preventDefault(); renderCmdPalette(null); return; }
+    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickCmd(list[_cmdIdx].cmd); return; }
+  }
+  chatKey(e);
+}
+
+// "/tekrar organik kimya" → {cmd:'tekrar', rest:'organik kimya'}
+function parseMetaCmd(text) {
+  const m = /^\s*\/([a-zA-ZçğıöşüÇĞİÖŞÜ]+)\s*([\s\S]*)$/.exec(text || '');
+  if (!m) return null;
+  const cmd = m[1].toLowerCase();
+  const def = META_CMDS.find(c => c.cmd === cmd);
+  if (!def) return null;
+  return { cmd, def, rest: (m[2] || '').trim() };
+}
+
+// ---- LOKAL KOMUT: /tekrar — aralıklı tekrar görevleri ----
+function metaSpacedRepetition(topic) {
+  const name = (topic || '').trim().slice(0, 60);
+  if (!name) return 'Neyi tekrar edeceğini yaz: **/tekrar organik kimya**';
+  const sid = 'sr-' + Date.now();
+  const base = today();
+  const lines = [];
+  SR_INTERVALS.forEach((gap, i) => {
+    const due = shiftDateStr(base, gap);
+    const t = makeTask({
+      text: 'Tekrar ' + (i + 1) + '/' + SR_INTERVALS.length + ': ' + name,
+      due,
+      category: 'odev',
+      estimateMin: i === 0 ? 20 : 15,
+    });
+    t.seriesId = sid;
+    t.seriesName = 'Tekrar: ' + name;
+    t.seriesIndex = i + 1;
+    t.seriesTotal = SR_INTERVALS.length;
+    t.notes = 'Aralıklı tekrar — nota BAKMADAN hatırlamaya çalış, sonra kontrol et.';
+    data.tasks.push(t);
+    lines.push('- ' + gap + '. gün (' + due + ')');
+  });
+  save();
+  if (typeof renderTasks === 'function') renderTasks();
+  return '**' + name + '** için aralıklı tekrar kuruldu — 5 görev eklendi:\n' + lines.join('\n') +
+    '\n\nKural: her tekrarda önce **nota bakmadan** hatırlamaya çalış, sonra kontrol et. Zorlanman iyi işaret — beyin o an kaydediyor.';
+}
+
+// ---- LOKAL KOMUT: /komutlar ----
+function metaCmdHelp() {
+  const rows = META_CMDS.map(c => '- **/' + c.cmd + (c.arg ? ' ' + c.arg : '') + '** — ' + c.desc);
+  return 'Öğrenme komutları — chat\'e "/" yazınca liste açılır:\n' + rows.join('\n') +
+    '\n\nMod, yeni bir komut yazana kadar sürer. Örnek: **/sor fotosentez** de, sonra cevaplarını yaz.';
+}
+
+// sendChat içinden çağrılır. Lokal komut işlendiyse true döner (worker'a gidilmez).
+function handleLocalMetaCmd(text) {
+  const p = parseMetaCmd(text);
+  if (!p || !p.def.local) return false;
+  let reply;
+  if (p.cmd === 'tekrar') reply = metaSpacedRepetition(p.rest);
+  else reply = metaCmdHelp();
+  _chatHistory.push({ role: 'assistant', content: reply, local: true });
+  renderChatMessages();
+  return true;
 }
 
 // ============================================================
