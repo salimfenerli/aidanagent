@@ -729,6 +729,7 @@
     <div class="chat-wrap">
       <div class="chat-head">
         <div class="chat-head-title">Aidan'a sor</div>
+        <button class="chat-clear" onclick="openNotes()" title="Kayıtlar" aria-label="Kayıtlar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
         <button class="chat-clear" onclick="clearChat()" title="Sohbeti temizle" aria-label="Temizle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
       </div>
       <div class="chat-messages" id="chatMessages">
@@ -749,6 +750,33 @@
         <button class="chat-send" id="chatSend" onclick="sendChat()" title="Gönder" aria-label="Gönder"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
       </div>
       <div class="chat-foot">Aidan düşünme ortağın — yatırım tavsiyesi vermez. Öğrenme yöntemleri için &quot;/&quot; yaz.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Cevabı kaydet -->
+<div class="modal-overlay" id="saveNoteModal" onclick="if(event.target.id==='saveNoteModal')closeSaveNote()">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-title">Cevabı kaydet</div>
+    <div class="modal-label">Başlık</div>
+    <input type="text" id="snTitle" class="modal-input" placeholder="Örn: Evde antrenman programı" maxlength="80">
+    <div class="modal-label">Nereye</div>
+    <div class="tm-chips" id="snCats"></div>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeSaveNote()">Vazgeç</button>
+      <button onclick="confirmSaveNote()">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<!-- Kayıtlar -->
+<div class="modal-overlay" id="notesModal" onclick="if(event.target.id==='notesModal')closeNotes()">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-title">Kayıtlar</div>
+    <div class="tm-chips" id="notesFilters"></div>
+    <div id="notesList" class="notes-list"></div>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeNotes()">Kapat</button>
     </div>
   </div>
 </div>

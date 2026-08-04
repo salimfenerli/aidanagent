@@ -87,6 +87,13 @@ function pruneOldData(force) {
   // 2) 180 günden eski diyet günleri
   const days = (data.diet && data.diet.days) || null;
   if (days) for (const k of Object.keys(days)) if (k < cutoff) { delete days[k]; removed++; }
+  // 3) 60 günden eski sohbet mesajları (kayıtlara dokunulmaz — onları kullanıcı seçti)
+  if (Array.isArray(data.chat) && data.chat.length) {
+    const chatCut = Date.now() - CHAT_PRUNE_DAYS * 86400000;
+    const b2 = data.chat.length;
+    data.chat = data.chat.filter(m => m && (!m.at || m.at >= chatCut));
+    removed += b2 - data.chat.length;
+  }
   data.settings.lastPrune = t;
   return removed > 0;
 }
@@ -129,6 +136,36 @@ function ensureDiet() {
 // ===== 😴 UYKU TAKİBİ (v7-113) — kural tabanlı, plana bağlanır =====
 // data.sleep = [{date:'YYYY-MM-DD', bedtime:'HH:MM'|null, wake:'HH:MM'|null, hours:Number|null, quality:'bad'|'ok'|'good'}]
 // date = UYANILAN sabah → "dün gece"nin uykusu bugüne yazılır. Son 60 gün tutulur.
+
+// ============================================================
+// SOHBET KALICILIĞI + KAYITLAR (3 Ağu 2026)
+// ============================================================
+// data.chat  = [{role:'user'|'assistant', content, at, local?}]  son CHAT_KEEP mesaj
+// data.notes = [{id, cat, title, text, at}]  chat'ten kaydedilen cevaplar
+// Sohbet buluta senkron olur (Supabase row.data) — telefon ↔ PC ortak.
+const CHAT_KEEP = 60;                      // saklanan mesaj sayısı (~30 KB tavan)
+const CHAT_PRUNE_DAYS = 60;                // bundan eski mesajlar budanır
+const NOTE_CATS = [
+  { id: 'antrenman', label: 'Antrenman' },
+  { id: 'ders',      label: 'Ders' },
+  { id: 'diyet',     label: 'Beslenme' },
+  { id: 'genel',     label: 'Genel' },
+];
+function ensureChat() { if (!Array.isArray(data.chat)) data.chat = []; return data.chat; }
+function ensureNotes() { if (!Array.isArray(data.notes)) data.notes = []; return data.notes; }
+function chatPush(msg) {
+  const arr = ensureChat();
+  arr.push(Object.assign({ at: Date.now() }, msg));
+  if (arr.length > CHAT_KEEP) arr.splice(0, arr.length - CHAT_KEEP);
+  return arr;
+}
+function noteCatLabel(id) { const c = NOTE_CATS.find(x => x.id === id); return c ? c.label : 'Genel'; }
+// Not başlığı: kullanıcı yazmadıysa metnin ilk anlamlı satırından türet
+function noteAutoTitle(text) {
+  const line = String(text || '').split('\n').map(s => s.replace(/[#*>`_-]/g, '').trim()).find(s => s.length > 3) || '';
+  return line.slice(0, 60) || 'Kayıt';
+}
+
 function ensureSleep() { data.sleep = data.sleep || []; return data.sleep; }
 function sleepFor(date) { return ensureSleep().find(s => s.date === date) || null; }
 function hmToMinSafe(hm) {

@@ -16,6 +16,22 @@
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 3 Ağustos 2026 — 💾 KALICI SOHBET + KAYITLAR (v7-127)
+Salim: "hepsini kaydetsin ben boşları silerim; ev antrenman programını antrenman olarak kaydedebileyim." Sohbet bellekteydi — sayfa yenilenince (ve her SW güncellemesinde) uçuyordu.
+
+**1. Sohbet kalıcı — `data.chat[]`.** `{role, content, at, local?}`, **son 60 mesaj** (`CHAT_KEEP`), Supabase'e senkron → telefon ↔ PC ortak. `_chatHistory` adı korundu ama artık `ensureChat()`'in döndürdüğü diziye referans; **`renderChatMessages` her çağrıda referansı tazeler** (buluttan pull `data`'yı yeniden atadığında bayat dizi kalmasın). Her mesajdan sonra `save()`.
+- **Tek mesaj silme** (`deleteChatMsg`) — "hepsini temizle" ADHD'de fazla sert. `clearChat` artık onay ister ve kayıtlara dokunmaz.
+- **Budama:** `pruneOldData`'ya 3. madde — 60 günden eski sohbet mesajı (`CHAT_PRUNE_DAYS`). **Kayıtlara ASLA dokunmaz** (onları kullanıcı bilinçli seçti).
+
+**2. Cevabı kaydet — `data.notes[]`.** AI mesajının altında **Kaydet** → başlık + kategori (**Antrenman / Ders / Beslenme / Genel**) → kalıcı saklanır (son 200). Chat başlığındaki yer-imi ikonu **Kayıtlar** modalını açar (kategori filtresi, katlanır önizleme, sil).
+- **Kategori otomatik tahmin edilir** (metinde "set/tekrar/kas" → antrenman, "kalori/protein/makro" → diyet, "sınav/konu/ders" → ders), kullanıcı değiştirebilir. Başlık `noteAutoTitle` ile ilk anlamlı satırdan türetilir (markdown işaretleri temizlenir).
+- **Neden ayrı katman:** sohbet 60 mesajda budanıyor; kalıcı olması gerekenler (antrenman programı, çalışma planı) budamadan etkilenmemeli.
+
+**UI:** `.chat-row` sarmalayıcı + hover'da beliren Kaydet/Sil (dokunmatikte hep görünür, `@media (hover:none)`). Impeccable uyumlu — yan-şerit yok, tam kenar + tint, `prefers-reduced-motion` var.
+**Doğrulama:** 42 test (chatPush tavanı ve FIFO, bozuk veri onarımı, başlık türetme, kategori tahmini antrenman/diyet, kayıt ekle/sil, geçersiz indeks, budamanın kayıtlara dokunmaması, DOM/CSS/Impeccable kontrolleri).
+**Yeni veri alanları:** `data.chat[]` · `data.notes[]`
+**Cache:** v7-126 → **v7-127**
+
 ### 🔴 3 Ağustos 2026 — 🎓 META-ÖĞRENME KOMUTLARI (v7-125)
 Salim: "meta learning yöntemleriyle yardımcı olsun." Chat'e **slash komut sistemi** eklendi — kanıta dayalı öğrenme yöntemleri.
 

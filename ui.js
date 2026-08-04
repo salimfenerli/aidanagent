@@ -4622,7 +4622,9 @@ setTimeout(() => {
 
 // ============ AIDAN'A SOR — sohbet / düşünme ortağı ============
 const CHAT_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/chat';
-let _chatHistory = [];      // [{role:'user'|'assistant', content}]
+// Sohbet artık KALICI — data.chat'te durur, buluta senkron olur.
+// _chatHistory eski adıyla korunur ama gerçek kaynak data.chat.
+let _chatHistory = (typeof ensureChat === 'function') ? ensureChat() : [];
 let _chatBusy = false;
 
 // Textarea otomatik büyüme (max ~5 satır)
@@ -4643,7 +4645,20 @@ function chatSuggest(text) {
 }
 
 function clearChat() {
-  _chatHistory = [];
+  if (_chatHistory.length && !confirm('Tüm sohbet silinsin mi? (Kayıtlar etkilenmez)')) return;
+  data.chat = [];
+  _chatHistory = ensureChat();
+  save();
+  renderChatMessages();
+}
+
+// Tek mesaj sil — ADHD'de "hepsini temizle" fazla sert, tek tek ayıklamak lazım
+function deleteChatMsg(i) {
+  const arr = ensureChat();
+  if (i < 0 || i >= arr.length) return;
+  arr.splice(i, 1);
+  _chatHistory = arr;
+  save();
   renderChatMessages();
 }
 
@@ -4657,21 +4672,33 @@ function chatFormat(text) {
 }
 
 function renderChatMessages() {
+  // Buluttan pull sonrası `data` yeniden atanmış olabilir -> referansı tazele
+  if (typeof ensureChat === 'function') _chatHistory = ensureChat();
   const box = document.getElementById('chatMessages');
   const empty = document.getElementById('chatEmpty');
   if (!box) return;
   if (!_chatHistory.length && !_chatBusy) {
     if (empty) empty.style.display = 'flex';
-    box.querySelectorAll('.chat-msg, .chat-typing').forEach(n => n.remove());
+    box.querySelectorAll('.chat-row, .chat-msg, .chat-typing').forEach(n => n.remove());
     return;
   }
   if (empty) empty.style.display = 'none';
-  box.querySelectorAll('.chat-msg, .chat-typing').forEach(n => n.remove());
-  _chatHistory.forEach(m => {
+  box.querySelectorAll('.chat-row, .chat-msg, .chat-typing').forEach(n => n.remove());
+  _chatHistory.forEach((m, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'chat-row ' + (m.role === 'user' ? 'me' : 'ai');
     const div = document.createElement('div');
     div.className = 'chat-msg ' + (m.role === 'user' ? 'me' : 'ai');
     div.innerHTML = m.role === 'user' ? escapeHtml(m.content).replace(/\n/g, '<br>') : chatFormat(m.content);
-    box.appendChild(div);
+    wrap.appendChild(div);
+    const acts = document.createElement('div');
+    acts.className = 'chat-acts';
+    let html = '';
+    if (m.role === 'assistant') html += '<button type="button" onclick="openSaveNote(' + i + ')">Kaydet</button>';
+    html += '<button type="button" onclick="deleteChatMsg(' + i + ')">Sil</button>';
+    acts.innerHTML = html;
+    wrap.appendChild(acts);
+    box.appendChild(wrap);
   });
   if (_chatBusy) {
     const t = document.createElement('div');
@@ -4694,9 +4721,11 @@ async function sendChat() {
     inp.value = '';
     chatAutoGrow(inp);
     renderCmdPalette(null);
-    _chatHistory.push({ role: 'user', content: text, local: true });
+    chatPush({ role: 'user', content: text, local: true });
+    _chatHistory = ensureChat();
     renderChatMessages();
     handleLocalMetaCmd(text);
+    save();
     return;
   }
   const token = await getSupaToken();
@@ -4704,7 +4733,8 @@ async function sendChat() {
   inp.value = '';
   chatAutoGrow(inp);
   if (typeof renderCmdPalette === 'function') renderCmdPalette(null);
-  _chatHistory.push({ role: 'user', content: text });
+  chatPush({ role: 'user', content: text });
+  _chatHistory = ensureChat();
   _chatBusy = true;
   renderChatMessages();
   try {
@@ -4716,15 +4746,19 @@ async function sendChat() {
     const j = await r.json().catch(() => ({}));
     _chatBusy = false;
     if (!r.ok || !j.reply) {
-      _chatHistory.push({ role: 'assistant', content: 'Bir sorun oldu (' + (j.error || ('http ' + r.status)) + '). Tekrar dener misin?' });
+      chatPush({ role: 'assistant', content: 'Bir sorun oldu (' + (j.error || ('http ' + r.status)) + '). Tekrar dener misin?' });
     } else {
-      _chatHistory.push({ role: 'assistant', content: j.reply });
+      chatPush({ role: 'assistant', content: j.reply });
     }
+    _chatHistory = ensureChat();
     renderChatMessages();
+    save();
   } catch (e) {
     _chatBusy = false;
-    _chatHistory.push({ role: 'assistant', content: 'Bağlantı kurulamadı. İnternetini kontrol et.' });
+    chatPush({ role: 'assistant', content: 'Bağlantı kurulamadı. İnternetini kontrol et.' });
+    _chatHistory = ensureChat();
     renderChatMessages();
+    save();
   }
 }
 
@@ -4865,9 +4899,115 @@ function handleLocalMetaCmd(text) {
   let reply;
   if (p.cmd === 'tekrar') reply = metaSpacedRepetition(p.rest);
   else reply = metaCmdHelp();
-  _chatHistory.push({ role: 'assistant', content: reply, local: true });
+  chatPush({ role: 'assistant', content: reply, local: true });
+  _chatHistory = ensureChat();
   renderChatMessages();
+  save();
   return true;
+}
+
+
+// ============================================================
+// CEVABI KAYDET + KAYITLAR
+// ============================================================
+// Sohbet 60 mesajda budanır; kalıcı kalması gerekenler buraya taşınır.
+// Kategori sayesinde "evde antrenman programı" ilerde tek yerden bulunur.
+let _saveNoteIdx = null;
+let _saveNoteCat = 'genel';
+let _notesFilter = 'hepsi';
+
+function openSaveNote(i) {
+  const m = ensureChat()[i];
+  if (!m) return;
+  _saveNoteIdx = i;
+  // Kategori tahmini — metinden ipucu ara, kullanıcı yine değiştirebilir
+  const t = (m.content || '').toLowerCase();
+  _saveNoteCat = /antrenman|egzersiz|set|tekrar sayısı|kas|şınav|squat|program.*spor/.test(t) ? 'antrenman'
+    : /kalori|protein|besin|öğün|diyet|makro/.test(t) ? 'diyet'
+    : /konu|soru|sınav|ders|çalış/.test(t) ? 'ders' : 'genel';
+  const ti = document.getElementById('snTitle');
+  if (ti) ti.value = noteAutoTitle(m.content);
+  renderSaveNoteChips();
+  const el = document.getElementById('saveNoteModal');
+  if (el) el.classList.add('active');
+}
+function closeSaveNote() {
+  const el = document.getElementById('saveNoteModal');
+  if (el) el.classList.remove('active');
+  _saveNoteIdx = null;
+}
+function renderSaveNoteChips() {
+  const box = document.getElementById('snCats');
+  if (!box) return;
+  box.innerHTML = NOTE_CATS.map(c =>
+    '<button type="button" class="tm-chip' + (c.id === _saveNoteCat ? ' sel' : '') + '" onclick="pickNoteCat(\'' + c.id + '\')">' + c.label + '</button>'
+  ).join('');
+}
+function pickNoteCat(id) { _saveNoteCat = id; renderSaveNoteChips(); }
+
+function confirmSaveNote() {
+  const m = ensureChat()[_saveNoteIdx];
+  if (!m) { closeSaveNote(); return; }
+  const ti = document.getElementById('snTitle');
+  const title = ((ti && ti.value) || '').trim() || noteAutoTitle(m.content);
+  ensureNotes().unshift({
+    id: Date.now(),
+    cat: _saveNoteCat,
+    title: title.slice(0, 80),
+    text: m.content,
+    at: Date.now(),
+  });
+  if (data.notes.length > 200) data.notes.length = 200;
+  save();
+  closeSaveNote();
+  showToast(noteCatLabel(_saveNoteCat) + ' kayıtlarına eklendi', 'success', 2600);
+}
+
+function openNotes() {
+  _notesFilter = 'hepsi';
+  renderNotes();
+  const el = document.getElementById('notesModal');
+  if (el) el.classList.add('active');
+}
+function closeNotes() {
+  const el = document.getElementById('notesModal');
+  if (el) el.classList.remove('active');
+}
+function pickNotesFilter(id) { _notesFilter = id; renderNotes(); }
+
+function renderNotes() {
+  const fb = document.getElementById('notesFilters');
+  if (fb) {
+    const cats = [{ id: 'hepsi', label: 'Hepsi' }].concat(NOTE_CATS);
+    fb.innerHTML = cats.map(c =>
+      '<button type="button" class="tm-chip' + (c.id === _notesFilter ? ' sel' : '') + '" onclick="pickNotesFilter(\'' + c.id + '\')">' + c.label + '</button>'
+    ).join('');
+  }
+  const box = document.getElementById('notesList');
+  if (!box) return;
+  const all = ensureNotes();
+  const list = _notesFilter === 'hepsi' ? all : all.filter(n => n.cat === _notesFilter);
+  if (!list.length) {
+    box.innerHTML = '<div class="notes-empty">Burada kayıt yok. Sohbette bir cevabın altındaki <b>Kaydet</b>\'e basınca buraya gelir.</div>';
+    return;
+  }
+  box.innerHTML = list.map(n =>
+    '<details class="note-item">' +
+      '<summary>' +
+        '<span class="note-cat">' + escapeHtml(noteCatLabel(n.cat)) + '</span>' +
+        '<span class="note-title">' + escapeHtml(n.title) + '</span>' +
+        '<span class="note-date">' + new Date(n.at).toLocaleDateString('tr-TR') + '</span>' +
+      '</summary>' +
+      '<div class="note-body">' + chatFormat(n.text) + '</div>' +
+      '<div class="note-acts"><button type="button" onclick="deleteNote(' + n.id + ')">Sil</button></div>' +
+    '</details>'
+  ).join('');
+}
+function deleteNote(id) {
+  data.notes = ensureNotes().filter(n => n.id !== id);
+  save();
+  renderNotes();
+  showToast('Kayıt silindi', 'info', 2000);
 }
 
 // ============================================================

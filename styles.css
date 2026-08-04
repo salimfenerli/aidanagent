@@ -3890,3 +3890,27 @@
 .chat-cmd-desc { font-size: 0.8rem; color: var(--text-muted); flex: 1; line-height: 1.35; }
 .chat-cmd-tag { font-size: 0.68rem; font-weight: 700; color: var(--accent-tint); background: var(--accent-soft); border: 1px solid var(--border-soft); padding: 2px 7px; border-radius: var(--radius-pill); white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .chat-cmd { transition: none; } }
+
+/* --- Sohbet mesaj aksiyonları (kaydet / sil) --- */
+.chat-row { display: flex; flex-direction: column; gap: 3px; }
+.chat-row.me { align-items: flex-end; }
+.chat-row.ai { align-items: flex-start; }
+.chat-acts { display: flex; gap: 10px; opacity: 0; transition: opacity .16s cubic-bezier(.22,1,.36,1); padding: 0 4px; }
+.chat-row:hover .chat-acts, .chat-row:focus-within .chat-acts { opacity: 1; }
+.chat-acts button { background: none; border: 0; padding: 0; font: inherit; font-size: 0.72rem; font-weight: 600; color: var(--text-muted); cursor: pointer; }
+.chat-acts button:hover { color: var(--accent-tint); }
+@media (hover: none) { .chat-acts { opacity: 1; } }
+
+/* --- Kayıtlar --- */
+.notes-list { max-height: 46vh; overflow-y: auto; margin: 10px 0 4px; display: flex; flex-direction: column; gap: 6px; }
+.notes-empty { font-size: 0.86rem; color: var(--text-muted); line-height: 1.5; padding: 14px 4px; }
+.note-item { background: var(--surface-mid); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+.note-item summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
+.note-item summary::-webkit-details-marker { display: none; }
+.note-cat { font-size: 0.68rem; font-weight: 700; color: var(--accent-tint); background: var(--accent-soft); border: 1px solid var(--border-soft); padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; }
+.note-title { flex: 1; font-size: 0.88rem; font-weight: 600; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-date { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
+.note-body { font-size: 0.86rem; color: var(--text); line-height: 1.55; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.note-acts { display: flex; justify-content: flex-end; margin-top: 8px; }
+.note-acts button { background: none; border: 0; padding: 0; font: inherit; font-size: 0.74rem; font-weight: 600; color: var(--danger); cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .chat-acts { transition: none; } }
