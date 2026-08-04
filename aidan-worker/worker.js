@@ -169,6 +169,25 @@ async function aiRun(env, opts) {
   });
 
   let resp = await call(body);
+  // 503/500 = model o an aşırı yüklü (geçici). Kısa bekleyip TEK kez tekrar dene.
+  // Google'ın yoğunluğu kullanıcıya hata olarak yansımamalı — bu ücret üretmez.
+  if (!resp.ok && (resp.status === 503 || resp.status === 500)) {
+    await new Promise(r => setTimeout(r, 1500));
+    const rRetry = await call(body);
+    if (rRetry.ok) resp = rRetry;
+    else if (model !== geminiModel(env)) {
+      // PRO hâlâ yoğun -> ücretsiz modele düş, hizmet kesilmesin
+      const freeUrl2 = geminiEndpoint(geminiModel(env)) + '?key=' + encodeURIComponent(key);
+      const rFree2 = await fetch(freeUrl2, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (rFree2.ok) resp = rFree2; else resp = rRetry;
+    } else {
+      resp = rRetry;
+    }
+  }
   // ⚠️ PRO modeli erişilemezse (bakiye bitti / kota doldu / model kapalı) ÜCRETSİZ modele düş.
   // Bakiye bittiğinde kullanıcı "analiz yapılamadı" görmemeli — kalite düşer ama hizmet sürer.
   // 429 kota/bakiye · 402 ödeme · 403 erişim yok · 404 model adı geçersiz.

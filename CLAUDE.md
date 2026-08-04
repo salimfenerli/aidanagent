@@ -43,6 +43,8 @@ Salim: "millet API key çalıp 2000 dolar fatura yiyormuş, öyle bir şeye maru
 
 **2. `heavy` yalnız hesap sahibine açık — `aiTierForUser(env, user, 'heavy')`.** `allowUser` multi-user modunda (`SUPABASE_SERVICE_KEY` tanımlıyken) **herkese izin veriyordu**; Supabase'de hesabı olan biri Salim'in faturasını harcayabilirdi. Artık e-posta `env.AIDAN_EMAIL` değilse istek sessizce `deep`'e düşer — hizmet kesilmez, **ücret üretilemez**. 4 kullanıcı-tetiklemeli çağrının hepsi (health-coach API, stock-analysis, portfolio-technical, /plan) kilitli. `AIDAN_EMAIL` tanımlı değilse (tek-user kurulum) davranış değişmez.
 
+**4. 503/500 (model o an yoğun) → 1.5 sn bekleyip TEK tekrar; PRO'da hâlâ yoğunsa ücretsize düşer.** Salim canlıda `Gemini 503: high demand` hatası gördü — Google'ın anlık yoğunluğu kullanıcıya hata olarak yansımamalı. Ücretsiz modelde ısrarlı 503 hata verir (düşecek yer yok, sonsuz döngü koruması).
+
 **3. Bakiye/kota bitince ÜCRETSİZ modele düşer (sessiz arıza koruması).** PRO modeli 429 (kota/bakiye) · 402 (ödeme) · 403 (erişim) · 404 (model adı) dönerse `aiRun` aynı isteği ücretsiz Flash'a yollar. Bakiye bittiğinde Salim "analiz yapılamadı" görmez — kalite düşer, hizmet sürer. 500 gibi geçici hatalarda fallback YOK (yanlış modele sessizce kaymasın); ücretsiz model zaten kullanılıyorsa tekrar YOK (döngü koruması).
 **Prepaid bakiye (3 Ağu, 1000 TL ≈ $21, KDV sonrası ~$17.5):** heavy istek ≈ $0.04-0.06 → **~300-400 istek**. Sohbet/öğrenme komutları `deep`'te olduğu için bakiyeyi YEMEZ; tüketen tek şey gün planı (günde 1) + elle tetiklenen analizler. Gerçekçi ömür **3-6 ay**.
 
