@@ -4746,6 +4746,7 @@ const META_CMDS = [
   { cmd: 'nasil',    arg: 'konu',    desc: 'Bu konuya hangi yöntemle çalışılır' },
   { cmd: 'kontrol',  arg: 'konu',    desc: 'Kalibrasyon — bildiğini sandığın kadar biliyor musun' },
   { cmd: 'tekrar',   arg: 'konu',    desc: 'Aralıklı tekrar — 1/3/7/16/35. güne görev ekler', local: true },
+  { cmd: 'pro',      arg: 'istek',   desc: 'Bu mesaj için en güçlü modeli kullan (ücretli, tek seferlik)', pro: true },
   { cmd: 'komutlar', arg: '',        desc: 'Bu listeyi göster', local: true },
 ];
 
@@ -4772,7 +4773,7 @@ function renderCmdPalette(list) {
     '<button type="button" class="chat-cmd' + (i === _cmdIdx ? ' sel' : '') + '" onclick="pickCmd(\'' + c.cmd + '\')">' +
     '<span class="chat-cmd-name">/' + c.cmd + (c.arg ? ' <em>' + c.arg + '</em>' : '') + '</span>' +
     '<span class="chat-cmd-desc">' + escapeHtml(c.desc) + '</span>' +
-    (c.local ? '<span class="chat-cmd-tag">anında</span>' : '') +
+    (c.local ? '<span class="chat-cmd-tag">anında</span>' : (c.pro ? '<span class="chat-cmd-tag">güçlü</span>' : '')) +
     '</button>'
   ).join('');
   box.style.display = 'block';

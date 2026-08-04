@@ -3265,6 +3265,10 @@ async function handleChatApi(request, env) {
     }
 
     // Meta-öğrenme modu — komut varsa yöntemin kuralları sistem prompt'una eklenir
+    // "/pro <istek>" = kullanıcının BİLİNÇLİ tek seferlik yükseltmesi (düğmeye basmak gibi).
+    // Sadece SON mesaja bakılır — geriye taranmaz, yani mod gibi yapışıp kalmaz.
+    // Kalıcı kurala uygun: serbest akış varsayılanı hâlâ ücretsiz; PRO ancak açık talep + hesap sahibi.
+    const proOnce = /^\s*\/pro\b/i.test(msgs[msgs.length - 1].content || '');
     const metaMode = (typeof body.mode === 'string' && META_MODES[body.mode]) ? body.mode : detectMetaMode(msgs);
     const modeBlock = metaMode ? `\n\n${META_MODES[metaMode].prompt}\n\nBu modda ${name} 16 yaşında lise öğrencisi — Türkiye müfredatı seviyesinde konuş. Cevabı hazır verme; hatırlama çabası öğrenmeyi kalıcı kılar. Mesaj başındaki "/komut" kısmını yok say, konu olarak kalanını al.` : '';
 
@@ -3281,12 +3285,12 @@ KURALLAR:
 - Borsa: betimleyici konuş, AMA "al/sat/tut" yatırım tavsiyesi VERME, fiyat tahmini yapma.
 - Emin değilsen "emin değilim" de, uydurma.
 - Gerektiğinde sor, ama tek soruyla; cevabı boğma.
-${ctx}${modeBlock}`;
+${ctx}${modeBlock}${proOnce ? '\n\n[/pro] Kullanıcı bu mesaj için DETAYLI cevap istedi. Mesaj başındaki "/pro" kısmını yok say. Kısalık kuralını gevşet: gerekirse tablo, adım adım plan ya da haftalık program gibi yapılandırılmış ve kapsamlı bir cevap ver. Yine de dolgu cümle yazma.' : ''}`;
 
     const r = await aiRun(env, {
       messages: [{ role: 'system', content: sysPrompt }, ...msgs],
-      tier: metaMode ? 'deep' : 'normal',   // serbest akışlı sohbet ÜCRETLİ modele gitmez
-      max_tokens: 700,
+      tier: proOnce ? aiTierForUser(env, user, 'heavy') : (metaMode ? 'deep' : 'normal'),
+      max_tokens: proOnce ? 2200 : 700,
       temperature: metaMode ? 0.35 : 0.5,
     });
     let reply = (r.response || '').trim();

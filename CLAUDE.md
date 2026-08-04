@@ -48,6 +48,8 @@ Salim: "millet API key çalıp 2000 dolar fatura yiyormuş, öyle bir şeye maru
 **3. Bakiye/kota bitince ÜCRETSİZ modele düşer (sessiz arıza koruması).** PRO modeli 429 (kota/bakiye) · 402 (ödeme) · 403 (erişim) · 404 (model adı) dönerse `aiRun` aynı isteği ücretsiz Flash'a yollar. Bakiye bittiğinde Salim "analiz yapılamadı" görmez — kalite düşer, hizmet sürer. 500 gibi geçici hatalarda fallback YOK (yanlış modele sessizce kaymasın); ücretsiz model zaten kullanılıyorsa tekrar YOK (döngü koruması).
 **Prepaid bakiye (3 Ağu, 1000 TL ≈ $21, KDV sonrası ~$17.5):** heavy istek ≈ $0.04-0.06 → **~300-400 istek**. Sohbet/öğrenme komutları `deep`'te olduğu için bakiyeyi YEMEZ; tüketen tek şey gün planı (günde 1) + elle tetiklenen analizler. Gerçekçi ömür **3-6 ay**.
 
+**5. `/pro <istek>` — chat'te tek seferlik PRO (v7-126).** Salim: "sohbette de bazen iyi cevap lazım, evde antrenman programı isteyeceğim." Sohbet varsayılanı ücretsiz kalır; `/pro` yazılan **o mesaj** `heavy`'ye çıkar (`max_tokens` 700→2200, prompt'a "kısalık kuralını gevşet, tablo/program verebilirsin" notu). **Sadece SON mesaja bakılır** (`proOnce`) — `detectMetaMode` gibi geriye taranmaz, yani mod gibi yapışıp her mesajı ücretli yapmaz. `aiTierForUser` ile hesap sahibine kilitli. Kalıcı kurala uygun: bu "kullanıcının düğmeye basması", serbest akış değil.
+
 **Salim'in yapması gerekenler (kod dışı, PRO secret'ından ÖNCE):**
 - Google Cloud Console → APIs & Services → Generative Language API → **Quotas** → günlük istek limitini düşür. **Bütçe uyarısı harcamayı DURDURMAZ, sadece mail atar — mutlak tavan yalnızca kotadır.**
 - Cloudflare + Google hesaplarına **2FA**.
