@@ -16,6 +16,16 @@
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 6 Ağustos 2026 — 🐛 CHAT/SOHBET ÇÖKME BİR (v7-128)
+Salim: "AI'a sor kısmında mesaj gönderilmiyor". Konsol hatasıyla teyit edildi: **core.js sayfa yüklenirken hemen çöküyordu**, chat de dahil hiçbir buton tepki vermiyordu.
+
+**Kök neden — TDZ (temporal dead zone) hatası.** `pruneOldData()` satır 20'de sayfa yüklenir yüklenmez çağrılıyor, ama içindeki `CHAT_PRUNE_DAYS` sabiti dosyanın çok altında (satır 147, 3 Ağustos'taki sohbet kalıcılığı paketiyle eklenmiş) tanımlıydı. `const`/`let` TDZ kuralı gereği ReferenceError fırlatıyor, bu da core.js'in kalanının (`lastUserActivity` dahil) hiç çalışmamasına — dolayısıyla ui.js'te ikinci bir "lastUserActivity is not defined" hatasına ve tüm etkileşimin ölmesine yol açıyordu.
+
+**Çözüm:** `CHAT_KEEP`/`CHAT_PRUNE_DAYS` sabitleri dosyanın en üstüne, `pruneOldData()` çağrılmadan önceye taşındı.
+
+**⚠️ KALICI KURAL:** Dosyanın en üstünde (init sırasında) çağrılan bir fonksiyon YAZIYORSAN, kullandığı tüm `const`/`let` sabitlerinin O ÇAĞRIDAN ÖNCE tanımlanmış olduğunu doğrula — satır sırası önemli, hoisting `const`'u kurtarmaz.
+**Cache:** v7-127 → **v7-128**
+
 ### 🔴 3 Ağustos 2026 — 💾 KALICI SOHBET + KAYITLAR (v7-127)
 Salim: "hepsini kaydetsin ben boşları silerim; ev antrenman programını antrenman olarak kaydedebileyim." Sohbet bellekteydi — sayfa yenilenince (ve her SW güncellemesinde) uçuyordu.
 

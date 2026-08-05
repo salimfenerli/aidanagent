@@ -1,4 +1,8 @@
 
+// Sohbet ayarları (pruneOldData başlangıçta çağrıldığı için en üstte olmalı - TDZ hatası kaynağıydı)
+const CHAT_KEEP = 60;                      // saklanan mesaj sayısı (~30 KB tavan)
+const CHAT_PRUNE_DAYS = 60;                // bundan eski mesajlar budanır
+
 // ============ VERİ ============
 let data = JSON.parse(localStorage.getItem('aidan') || '{}');
 data.tasks = data.tasks || [];
@@ -143,8 +147,6 @@ function ensureDiet() {
 // data.chat  = [{role:'user'|'assistant', content, at, local?}]  son CHAT_KEEP mesaj
 // data.notes = [{id, cat, title, text, at}]  chat'ten kaydedilen cevaplar
 // Sohbet buluta senkron olur (Supabase row.data) — telefon ↔ PC ortak.
-const CHAT_KEEP = 60;                      // saklanan mesaj sayısı (~30 KB tavan)
-const CHAT_PRUNE_DAYS = 60;                // bundan eski mesajlar budanır
 const NOTE_CATS = [
   { id: 'antrenman', label: 'Antrenman' },
   { id: 'ders',      label: 'Ders' },
