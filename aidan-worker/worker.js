@@ -3269,6 +3269,8 @@ async function handleChatApi(request, env) {
     // Sadece SON mesaja bakılır — geriye taranmaz, yani mod gibi yapışıp kalmaz.
     // Kalıcı kurala uygun: serbest akış varsayılanı hâlâ ücretsiz; PRO ancak açık talep + hesap sahibi.
     const proOnce = /^\s*\/pro\b/i.test(msgs[msgs.length - 1].content || '');
+    // Antrenman programı isteği tespiti — /pro ile birlikte yapılandırılmış çıktı kuralı eklenir (formatsız düz metin program okunmuyor).
+    const workoutReq = /antrenman|egzersiz program|spor program|workout|ev sporu|split program|fitness program/i.test(msgs[msgs.length - 1].content || '');
     const metaMode = (typeof body.mode === 'string' && META_MODES[body.mode]) ? body.mode : detectMetaMode(msgs);
     const modeBlock = metaMode ? `\n\n${META_MODES[metaMode].prompt}\n\nBu modda ${name} 16 yaşında lise öğrencisi — Türkiye müfredatı seviyesinde konuş. Cevabı hazır verme; hatırlama çabası öğrenmeyi kalıcı kılar. Mesaj başındaki "/komut" kısmını yok say, konu olarak kalanını al.` : '';
 
@@ -3285,7 +3287,7 @@ KURALLAR:
 - Borsa: betimleyici konuş, AMA "al/sat/tut" yatırım tavsiyesi VERME, fiyat tahmini yapma.
 - Emin değilsen "emin değilim" de, uydurma.
 - Gerektiğinde sor, ama tek soruyla; cevabı boğma.
-${ctx}${modeBlock}${proOnce ? '\n\n[/pro] Kullanıcı bu mesaj için DETAYLI cevap istedi. Mesaj başındaki "/pro" kısmını yok say. Kısalık kuralını gevşet: gerekirse tablo, adım adım plan ya da haftalık program gibi yapılandırılmış ve kapsamlı bir cevap ver. Yine de dolgu cümle yazma.' : ''}`;
+${ctx}${modeBlock}${proOnce ? '\n\n[/pro] Kullanıcı bu mesaj için DETAYLI cevap istedi. Mesaj başındaki "/pro" kısmını yok say. Kısalık kuralını gevşet: gerekirse tablo, adım adım plan ya da haftalık program gibi yapılandırılmış ve kapsamlı bir cevap ver. Yine de dolgu cümle yazma.' : ''}${(proOnce && workoutReq) ? '\n\n[ANTRENMAN PROGRAMI FORMATI] Program iste ise şu yapıyla ver: her gün için başlık (Gün 1: Göğüs+Triceps gibi), altında egzersiz listesi "Egzersiz — set x tekrar — dinlenme" biçiminde, başına 2-3 cümlelik ısınma notu, sonuna "ağrı hissedersen dur, form öncelik" uyarısı. Ekipmansız/ev antrenmanıysa vücut ağırlığı hareketleri seç. Haftalık frekans ve ilerleme (progressive overload — her hafta 1-2 tekrar/set artır) tek cümleyle belirt. Teşhis/sakatlık tedavisi YASAK — ağrı varsa doktora yönlendir.' : ''}`;
 
     const r = await aiRun(env, {
       messages: [{ role: 'system', content: sysPrompt }, ...msgs],
