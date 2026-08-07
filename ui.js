@@ -4627,6 +4627,45 @@ const CHAT_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/chat';
 let _chatHistory = (typeof ensureChat === 'function') ? ensureChat() : [];
 let _chatBusy = false;
 
+// ---- Fotograf eki ----
+// Tam boy (max 1100px) worker'a gider, kucuk thumb (max 220px) sohbette saklanir.
+// Tam boy ASLA data.chat'e yazilmaz -> localStorage/bulut sismez.
+let _chatImgs = [];
+const CHAT_IMG_MAX = 3;
+
+function chatPickPhoto() {
+  const el = document.getElementById('chatPhotoInput');
+  if (el) el.click();
+}
+
+async function chatPhotoPick(ev) {
+  const files = Array.from(ev.target.files || []);
+  ev.target.value = '';
+  if (!files.length) return;
+  const room = CHAT_IMG_MAX - _chatImgs.length;
+  if (room <= 0) { showToast('En fazla ' + CHAT_IMG_MAX + ' fotograf', 'warning'); return; }
+  for (const f of files.slice(0, room)) {
+    try {
+      const full = await resizeImageToDataUrl(f, 1100, 0.8);
+      const thumb = await resizeImageToDataUrl(f, 220, 0.5);
+      _chatImgs.push({ full, thumb });
+    } catch (e) { showToast('Gorsel acilamadi', 'error'); }
+  }
+  renderChatAttach();
+}
+
+function chatRemoveImg(i) { _chatImgs.splice(i, 1); renderChatAttach(); }
+
+function renderChatAttach() {
+  const box = document.getElementById('chatAttach');
+  if (!box) return;
+  box.innerHTML = _chatImgs.map((im, i) =>
+    '<div class="chat-thumb"><img src="' + im.thumb + '" alt="Eklenen fotograf">' +
+    '<button type="button" onclick="chatRemoveImg(' + i + ')" aria-label="Fotografi kaldir">' +
+    '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>').join('');
+  box.style.display = _chatImgs.length ? 'flex' : 'none';
+}
+
 // Textarea otomatik büyüme (max ~5 satır)
 function chatAutoGrow(el) {
   el.style.height = 'auto';
@@ -4689,7 +4728,15 @@ function renderChatMessages() {
     wrap.className = 'chat-row ' + (m.role === 'user' ? 'me' : 'ai');
     const div = document.createElement('div');
     div.className = 'chat-msg ' + (m.role === 'user' ? 'me' : 'ai');
-    div.innerHTML = m.role === 'user' ? escapeHtml(m.content).replace(/\n/g, '<br>') : chatFormat(m.content);
+    let inner = '';
+    if (Array.isArray(m.imgs) && m.imgs.length) {
+      inner += '<div class="chat-imgs">' + m.imgs.map(src =>
+        '<img src="' + escapeHtml(src) + '" alt="Gonderilen fotograf" loading="lazy">').join('') + '</div>';
+    } else if (m.imgDropped) {
+      inner += '<div class="chat-imgdrop">fotograf (yer kazanmak icin silindi)</div>';
+    }
+    if (m.content) inner += m.role === 'user' ? escapeHtml(m.content).replace(/\n/g, '<br>') : chatFormat(m.content);
+    div.innerHTML = inner;
     wrap.appendChild(div);
     const acts = document.createElement('div');
     acts.className = 'chat-acts';
@@ -4714,9 +4761,10 @@ async function sendChat() {
   const inp = document.getElementById('chatInput');
   if (!inp) return;
   const text = inp.value.trim();
-  if (!text) return;
+  if (!text && !_chatImgs.length) return;
   // Lokal meta-öğrenme komutu (/tekrar, /komutlar) — AI'a gitmez, giriş gerektirmez
-  const _mc = (typeof parseMetaCmd === 'function') ? parseMetaCmd(text) : null;
+  // (fotoğraf ekliyken lokal komut çalışmaz — görsel AI'a gitmeli)
+  const _mc = (!_chatImgs.length && typeof parseMetaCmd === 'function') ? parseMetaCmd(text) : null;
   if (_mc && _mc.def.local) {
     inp.value = '';
     chatAutoGrow(inp);
@@ -4733,7 +4781,13 @@ async function sendChat() {
   inp.value = '';
   chatAutoGrow(inp);
   if (typeof renderCmdPalette === 'function') renderCmdPalette(null);
-  chatPush({ role: 'user', content: text });
+  // Fotoğrafları al ve kutuyu boşalt — tam boy sadece isteğe girer, saklanmaz
+  const _imgs = _chatImgs.slice();
+  _chatImgs = [];
+  renderChatAttach();
+  chatPush(_imgs.length
+    ? { role: 'user', content: text, imgs: _imgs.map(o => o.thumb) }
+    : { role: 'user', content: text });
   _chatHistory = ensureChat();
   _chatBusy = true;
   renderChatMessages();
@@ -4741,7 +4795,12 @@ async function sendChat() {
     const r = await fetch(CHAT_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ messages: _chatHistory.filter(m => !m.local).slice(-12) }),
+      body: JSON.stringify({
+        // Sadece rol+metin gider; thumb'lar (imgs) yollanmaz. Görsel yalnız SON mesaja ilistirilir.
+        messages: _chatHistory.filter(m => !m.local).slice(-12)
+          .map(m => ({ role: m.role, content: m.content || '(fotoğraf)' })),
+        images: _imgs.map(o => o.full),
+      }),
     });
     const j = await r.json().catch(() => ({}));
     _chatBusy = false;

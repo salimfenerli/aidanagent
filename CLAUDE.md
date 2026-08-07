@@ -16,6 +16,20 @@
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 7 Ağustos 2026 — 📷 SOHBETE FOTOĞRAF + 🔓 GÜVENLİK FİLTRELERİ KAPALI (v7-129)
+
+**1. Gemini safety filtreleri KAPALI (`GEMINI_SAFETY_OFF`).** 5 kategori de `BLOCK_NONE`, `aiRun` gövdesine her çağrıda eklenir — yani sohbet, sağlık koçu, plan, borsa, OCR hepsi. Gerekçe: sağlık/antrenman/borsa/ders içeriğinde yanlış pozitif engelleme **sessizce boş metin** döndürüyordu (finishReason SAFETY). Mevcut 400 fallback'ine ikinci basamak eklendi: model bir kategoriyi tanımıyorsa `safetySettings`'siz tek deneme.
+
+**2. "Aidan'a sor"a fotoğraf eki.** Input satırında fotoğraf butonu, **max 3 görsel**, seçilenler input üstünde küçük kart olarak önizlenir (tek tek kaldırılabilir). Metin boş olsa bile sadece fotoğrafla gönderilebilir.
+- **İki boy üretilir** (`resizeImageToDataUrl`, stocks.js'ten yeniden kullanıldı): **tam boy 1100px** worker'a gider, **thumb 220px/q0.5 (~8 KB)** sohbette saklanır. **Tam boy ASLA `data.chat`'e yazılmaz** — localStorage/bulut şişmez.
+- **`pruneChatThumbs()` (core.js, `chatPush` içinde):** yalnız **son 6 görselli mesajın** thumb'ı kalır, eskiler düşer ve `imgDropped` işaretiyle "fotoğraf (yer kazanmak için silindi)" rozeti gösterilir. Tavan ~50 KB.
+- **Worker `/chat`:** yeni `body.images[]` — data URL regex + 4 MB tavan + max 3. **Yalnız SON kullanıcı mesajına iliştirilir**, geçmişe eklenmez (her turda tüm görselleri yeniden yollamak token/maliyeti katlardı). Görselli istekte `max_tokens` 700→1100, sistem prompt'una `[FOTOĞRAF]` bloğu (okunmayan yeri uydurma; ders sorusuysa cevabı yapıştırma, adım adım götür).
+- Fotoğraf ekliyken lokal `/` komutları devre dışı (görsel AI'a gitmeli). PWA geçmişi worker'a `{role, content}` olarak sade gider — thumb'lar yollanmaz.
+
+**Yeni veri alanları:** `data.chat[*].imgs[]` (thumb data URL) · `.imgDropped`
+**Doğrulama:** 28 test (safety sabiti+gövde+fallback, görselin sadece son mesajda olması, thumb/tam-boy ayrımı, budama 6 tavanı, data URL regex js:/http reddi, DOM/CSS/Impeccable) · 4 dosya `node --check` temiz · EOL doğrulandı.
+**Cache:** v7-128 → **v7-129**
+
 ### 🔴 6 Ağustos 2026 — 🐛 CHAT/SOHBET ÇÖKME BİR (v7-128)
 Salim: "AI'a sor kısmında mesaj gönderilmiyor". Konsol hatasıyla teyit edildi: **core.js sayfa yüklenirken hemen çöküyordu**, chat de dahil hiçbir buton tepki vermiyordu.
 

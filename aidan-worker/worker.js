@@ -108,6 +108,17 @@ function toGeminiTools(tools) {
 // `pro: true` olan katman, env.GEMINI_MODEL_PRO tanımlıysa o modeli kullanır
 // (ör. gemini-3.1-pro-preview — ücretli). Tanımlı DEĞİLSE ücretsiz Flash +
 // thinking:high ile çalışır. Yani şu an $0; yükseltmek tek secret eklemek.
+// Gemini guvenlik filtreleri KAPALI (7 Agu 2026). Kisisel asistan: saglik,
+// antrenman, borsa ve ders iceriginde yanlis pozitif engelleme cevabi
+// SESSIZCE bosaltiyordu (finishReason SAFETY + bos metin). Hepsi BLOCK_NONE.
+const GEMINI_SAFETY_OFF = [
+  { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_CIVIC_INTEGRITY', threshold: 'BLOCK_NONE' },
+];
+
 const AI_TIERS = {
   light:  { thinking: 'low',    minOut: 2048 },              // sınıflandırma, OCR, ön eleme
   normal: { thinking: 'medium', minOut: 3072 },              // sohbet, özet, yorum (varsayılan)
@@ -159,6 +170,7 @@ async function aiRun(env, opts) {
   const tools = toGeminiTools(opts.tools);
   if (tools) body.tools = tools;
   if (opts.json) body.generationConfig.responseMimeType = 'application/json';
+  body.safetySettings = GEMINI_SAFETY_OFF;   // filtreler kapali (bkz. GEMINI_SAFETY_OFF)
 
   const model = opts.model || geminiModelFor(env, tierName);
   const url = geminiEndpoint(model) + '?key=' + encodeURIComponent(key);
@@ -204,7 +216,14 @@ async function aiRun(env, opts) {
   if (!resp.ok && resp.status === 400) {
     const fb = JSON.parse(JSON.stringify(body));
     delete fb.generationConfig.thinkingConfig;
-    const r2 = await call(fb);
+    let r2 = await call(fb);
+    // Model bir guvenlik kategorisini tanimiyorsa da 400 doner -> safetySettings'siz tek deneme
+    if (!r2.ok) {
+      const fb2 = JSON.parse(JSON.stringify(body));
+      delete fb2.safetySettings;
+      delete fb2.generationConfig.thinkingConfig;
+      r2 = await call(fb2);
+    }
     if (r2.ok) resp = r2;
   }
   if (!resp.ok) {
@@ -3221,7 +3240,15 @@ async function handleChatApi(request, env) {
     .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
     .map(m => ({ role: m.role, content: m.content.slice(0, 2000) }))
     .slice(-12);
-  if (!msgs.length || msgs[msgs.length - 1].role !== 'user') {
+  // Fotograf: yalniz SON kullanici mesajina ilistirilir. Gecmise EKLENMEZ --
+  // her turda tum gorselleri yeniden yollamak token/maliyeti katlar.
+  const chatImgs = (Array.isArray(body.images) ? body.images : [])
+    .filter(u => typeof u === 'string' && /^data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+$/i.test(u) && u.length < 4000000)
+    .slice(0, 3);
+  if ((!msgs.length && !chatImgs.length) || !msgs.length || msgs[msgs.length - 1].role !== 'user') {
+    return jsonCors({ error: 'empty' }, 400, cors);
+  }
+  if (!msgs[msgs.length - 1].content.trim() && !chatImgs.length) {
     return jsonCors({ error: 'empty' }, 400, cors);
   }
 
@@ -3287,12 +3314,26 @@ KURALLAR:
 - Borsa: betimleyici konuş, AMA "al/sat/tut" yatırım tavsiyesi VERME, fiyat tahmini yapma.
 - Emin değilsen "emin değilim" de, uydurma.
 - Gerektiğinde sor, ama tek soruyla; cevabı boğma.
-${ctx}${modeBlock}${proOnce ? '\n\n[/pro] Kullanıcı bu mesaj için DETAYLI cevap istedi. Mesaj başındaki "/pro" kısmını yok say. Kısalık kuralını gevşet: gerekirse tablo, adım adım plan ya da haftalık program gibi yapılandırılmış ve kapsamlı bir cevap ver. Yine de dolgu cümle yazma.' : ''}${(proOnce && workoutReq) ? '\n\n[ANTRENMAN PROGRAMI FORMATI] Program iste ise şu yapıyla ver: her gün için başlık (Gün 1: Göğüs+Triceps gibi), altında egzersiz listesi "Egzersiz — set x tekrar — dinlenme" biçiminde, başına 2-3 cümlelik ısınma notu, sonuna "ağrı hissedersen dur, form öncelik" uyarısı. Ekipmansız/ev antrenmanıysa vücut ağırlığı hareketleri seç. Haftalık frekans ve ilerleme (progressive overload — her hafta 1-2 tekrar/set artır) tek cümleyle belirt. Teşhis/sakatlık tedavisi YASAK — ağrı varsa doktora yönlendir.' : ''}`;
+${ctx}${modeBlock}${proOnce ? '\n\n[/pro] Kullanıcı bu mesaj için DETAYLI cevap istedi. Mesaj başındaki "/pro" kısmını yok say. Kısalık kuralını gevşet: gerekirse tablo, adım adım plan ya da haftalık program gibi yapılandırılmış ve kapsamlı bir cevap ver. Yine de dolgu cümle yazma.' : ''}${(proOnce && workoutReq) ? '\n\n[ANTRENMAN PROGRAMI FORMATI] Program iste ise şu yapıyla ver: her gün için başlık (Gün 1: Göğüs+Triceps gibi), altında egzersiz listesi "Egzersiz — set x tekrar — dinlenme" biçiminde, başına 2-3 cümlelik ısınma notu, sonuna "ağrı hissedersen dur, form öncelik" uyarısı. Ekipmansız/ev antrenmanıysa vücut ağırlığı hareketleri seç. Haftalık frekans ve ilerleme (progressive overload — her hafta 1-2 tekrar/set artır) tek cümleyle belirt. Teşhis/sakatlık tedavisi YASAK — ağrı varsa doktora yönlendir.' : ''}${chatImgs.length ? '\n\n[FOTOĞRAF] Kullanıcı bu mesaja görsel ekledi. Görseldeki metni/veriyi oku ve SORUYA GÖRE yorumla. Okunmayan yer varsa "şurası net değil" de, uydurma. Ders sorusuysa doğrudan cevabı yapıştırma; önce yaklaşımı sor ya da adım adım götür.' : ''}`;
+
+    // Gorsel varsa son kullanici mesaji multimodal parts dizisine cevrilir
+    const aiMsgs = msgs.slice();
+    if (chatImgs.length) {
+      const last = aiMsgs[aiMsgs.length - 1];
+      const txt = (last.content || '').trim() || 'Bu gorselde ne var? Turkce, kisa ve somut anlat.';
+      aiMsgs[aiMsgs.length - 1] = {
+        role: 'user',
+        content: [
+          { type: 'text', text: txt },
+          ...chatImgs.map(u => ({ type: 'image_url', image_url: { url: u } })),
+        ],
+      };
+    }
 
     const r = await aiRun(env, {
-      messages: [{ role: 'system', content: sysPrompt }, ...msgs],
+      messages: [{ role: 'system', content: sysPrompt }, ...aiMsgs],
       tier: proOnce ? aiTierForUser(env, user, 'heavy') : (metaMode ? 'deep' : 'normal'),
-      max_tokens: proOnce ? 2200 : 700,
+      max_tokens: proOnce ? 2200 : (chatImgs.length ? 1100 : 700),
       temperature: metaMode ? 0.35 : 0.5,
     });
     let reply = (r.response || '').trim();

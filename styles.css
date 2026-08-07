@@ -1361,7 +1361,7 @@
   .krn-note { background: var(--accent-soft); border: 1px solid var(--accent-glow); border-radius: var(--radius-sm); padding: 11px 13px; font-size: 0.85em; color: var(--text); margin-top: 14px; line-height: 1.55; }
   .krn-note b { color: var(--accent-light); }
   .krn-footer { display: flex; gap: 14px; justify-content: center; margin-top: 12px; font-size: 0.8em; color: var(--text-muted); }
-  .krn-besthour { display: flex; align-items: center; gap: 11px; background: var(--surface-2, #1b1c23); border: 1px solid var(--border, #2a2c34); border-radius: var(--radius-sm); padding: 11px 13px; margin-top: 14px; font-size: 0.85em; color: var(--text); line-height: 1.5; }
+  .krn-besthour { display: flex; align-items: center; gap: 11px; background: var(--surface, #16171d); border: 1px solid var(--border, #2a2c34); border-radius: var(--radius-sm); padding: 11px 13px; margin-top: 14px; font-size: 0.85em; color: var(--text); line-height: 1.5; }
   .krn-besthour.building { color: var(--text-muted); font-size: 0.82em; }
   .krn-besthour b { color: var(--accent-light); }
   .krn-besthour-icon { font-size: 1.3em; flex-shrink: 0; }
@@ -3914,3 +3914,57 @@
 .note-acts { display: flex; justify-content: flex-end; margin-top: 8px; }
 .note-acts button { background: none; border: 0; padding: 0; font: inherit; font-size: 0.74rem; font-weight: 600; color: var(--danger); cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .chat-acts { transition: none; } }
+
+/* ===== Sohbet fotograf eki (7 Agu 2026) ===== */
+.chat-photo {
+  flex: 0 0 auto;
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--surface, #16171d);
+  color: var(--text, #e7e8ec);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background .18s cubic-bezier(.22,.61,.36,1), border-color .18s cubic-bezier(.22,.61,.36,1);
+}
+.chat-photo:hover { background: var(--surface-hover, #24262e); border-color: var(--accent, #f5a524); }
+.chat-photo .icon { width: 18px; height: 18px; }
+
+.chat-attach {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 8px 8px 0;
+}
+.chat-thumb { position: relative; width: 64px; height: 64px; }
+.chat-thumb img {
+  width: 100%; height: 100%; object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+.chat-thumb button {
+  position: absolute; top: -6px; right: -6px;
+  width: 22px; height: 22px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-hover, #24262e);
+  color: var(--text, #e7e8ec);
+  cursor: pointer;
+}
+.chat-thumb button .icon { width: 12px; height: 12px; }
+
+.chat-imgs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.chat-imgs img {
+  max-width: 160px; max-height: 160px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+.chat-imgdrop {
+  font-size: 12px;
+  color: var(--text-muted, #a4a6b0);
+  font-style: italic;
+  margin-bottom: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-photo { transition: none; }
+}

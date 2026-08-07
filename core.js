@@ -12,6 +12,15 @@ data.journal = data.journal || [];
 data.reminders = data.reminders || [];  // sabit hatırlatıcılar (ilaç/su/ders) — Worker 15dk cron push'lar
 data.watchlist = data.watchlist || [];
 data.portfolioHistory = data.portfolioHistory || [];  // [{date:'YYYY-MM-DD', byCur:{TRY:{value,cost}}}]
+// SAGLAMLIK: bozuk senkron/birlesme sonucu diziye null ya da string sizabiliyor.
+// Eskiden tek bir null gorev init'teki geriye-uyumluluk dongusunu comertip
+// TUM uygulamayi olduruyordu (6 Agu TDZ hatasiyla ayni sinif: veri -> tam olum).
+// Bu yuzden nesne bekleyen her dizi basta suzulur.
+['tasks','dumps','pushLog','journal','reminders','watchlist','portfolioHistory','chat','notes','sleep','trades','templates']
+  .forEach(function (k) {
+    if (!Array.isArray(data[k])) { if (data[k] !== undefined) data[k] = []; return; }
+    data[k] = data[k].filter(function (x) { return x && typeof x === 'object'; });
+  });
 data.pomoToday = data.pomoToday || { date: today(), count: 0 };
 data.settings = data.settings || {};
 if (data.lastWeeklyView === undefined) data.lastWeeklyView = null;
@@ -159,7 +168,22 @@ function chatPush(msg) {
   const arr = ensureChat();
   arr.push(Object.assign({ at: Date.now() }, msg));
   if (arr.length > CHAT_KEEP) arr.splice(0, arr.length - CHAT_KEEP);
+  pruneChatThumbs();
   return arr;
+}
+// Sohbete eklenen fotograf kucuk resimleri (~8 KB) localStorage'i ve bulut
+// senkronunu sismesin diye SADECE son CHAT_IMG_KEEP gorselli mesajda tutulur.
+// Eskiler dusurulur, mesajda 'imgDropped' isareti kalir (UI rozet gosterir).
+const CHAT_IMG_KEEP = 6;
+function pruneChatThumbs(keep = CHAT_IMG_KEEP) {
+  const arr = ensureChat();
+  let seen = 0;
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const m = arr[i];
+    if (!m || !Array.isArray(m.imgs) || !m.imgs.length) continue;
+    seen++;
+    if (seen > keep) { m.imgs = null; m.imgDropped = true; }
+  }
 }
 function noteCatLabel(id) { const c = NOTE_CATS.find(x => x.id === id); return c ? c.label : 'Genel'; }
 // Not başlığı: kullanıcı yazmadıysa metnin ilk anlamlı satırından türet

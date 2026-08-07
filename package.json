@@ -1,0 +1,13 @@
+{
+  "name": "aidan",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aidan - ADHD asistani. Kalici regresyon test suite.",
+  "scripts": {
+    "test": "node --test tests/",
+    "check": "node --check core.js && node --check tasks.js && node --check stocks.js && node --check ui.js && node --check sw.js && node --check aidan-worker/worker.js"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.0"
+  }
+}
