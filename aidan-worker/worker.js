@@ -3843,6 +3843,55 @@ async function getYahooCrumb() {
   return _yahooCrumb;
 }
 
+// Yahoo quoteSummary'den yillik mali tablo serisi cikarir (yeniden eskiye).
+// Gelir tablosu + bilanco + nakit akis ayni yil icin birlestirilir; eksik alan null kalir.
+function buildFundYears(res, raw) {
+  const inc = (res.incomeStatementHistory && res.incomeStatementHistory.incomeStatementHistory) || [];
+  const bal = (res.balanceSheetHistory && res.balanceSheetHistory.balanceSheetStatements) || [];
+  const cfs = (res.cashflowStatementHistory && res.cashflowStatementHistory.cashflowStatements) || [];
+  const yearOf = s => {
+    const e = raw(s && s.endDate);
+    if (e == null || !isFinite(e)) return null;
+    return new Date(e * 1000).getUTCFullYear();
+  };
+  const map = new Map();
+  const slot = y => {
+    if (!map.has(y)) map.set(y, { year: y, revenue: null, netIncome: null, grossProfit: null, operatingIncome: null,
+      equity: null, totalAssets: null, totalLiab: null, longTermDebt: null, shortDebt: null, cash: null, retainedEarnings: null,
+      dna: null, capex: null, dividendsPaid: null, opCashFlow: null });
+    return map.get(y);
+  };
+  for (const s of inc) {
+    const y = yearOf(s); if (y == null) continue;
+    const o = slot(y);
+    o.revenue = raw(s.totalRevenue);
+    o.netIncome = raw(s.netIncome);
+    o.grossProfit = raw(s.grossProfit);
+    o.operatingIncome = raw(s.operatingIncome) != null ? raw(s.operatingIncome) : raw(s.ebit);
+  }
+  for (const s of bal) {
+    const y = yearOf(s); if (y == null) continue;
+    const o = slot(y);
+    o.equity = raw(s.totalStockholderEquity);
+    o.totalAssets = raw(s.totalAssets);
+    o.totalLiab = raw(s.totalLiab);
+    o.longTermDebt = raw(s.longTermDebt);
+    o.shortDebt = raw(s.shortLongTermDebt);
+    o.cash = raw(s.cash);
+    o.retainedEarnings = raw(s.retainedEarnings);
+  }
+  for (const s of cfs) {
+    const y = yearOf(s); if (y == null) continue;
+    const o = slot(y);
+    if (o.netIncome == null) o.netIncome = raw(s.netIncome);
+    o.dna = raw(s.depreciation);
+    o.capex = raw(s.capitalExpenditures);
+    o.dividendsPaid = raw(s.dividendsPaid);
+    o.opCashFlow = raw(s.totalCashFromOperatingActivities);
+  }
+  return Array.from(map.values()).sort((a, b) => b.year - a.year).slice(0, 6);
+}
+
 async function handleStockFundamentalsApi(request, env) {
   const cors = {
     'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
@@ -3861,11 +3910,18 @@ async function handleStockFundamentalsApi(request, env) {
   if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
   try {
     const { crumb, cookie } = await getYahooCrumb();
-    const modules = 'summaryDetail,defaultKeyStatistics,financialData,price';
-    const r = await fetch(
-      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahoo)}?modules=${modules}&crumb=${encodeURIComponent(crumb)}`,
-      { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json', 'Cookie': cookie }, cf: { cacheTtl: 600, cacheEverything: true } }
-    );
+    // Buffett skoru icin gecmis mali tablolar da lazim (yillik, Yahoo genelde 4 donem verir)
+    const modules = 'summaryDetail,defaultKeyStatistics,financialData,price,incomeStatementHistory,balanceSheetHistory,cashflowStatementHistory';
+    const hdr = { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json', 'Cookie': cookie };
+    // 5 yillik aylik kapanis serisi — "1 Dolar Testi" fiyat degisimi icin (bolunme/bedelsiz duzeltilmis)
+    const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahoo)}?range=5y&interval=1mo`;
+    const [r, cr] = await Promise.all([
+      fetch(
+        `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahoo)}?modules=${modules}&crumb=${encodeURIComponent(crumb)}`,
+        { headers: hdr, cf: { cacheTtl: 600, cacheEverything: true } }
+      ),
+      fetch(chartUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, cf: { cacheTtl: 600, cacheEverything: true } }).catch(() => null),
+    ]);
     if (r.status === 401 || r.status === 403) { _yahooCrumb = null; return jsonCors({ error: 'yahoo yetki — tekrar dene' }, 502, cors); }
     if (!r.ok) return jsonCors({ error: `yahoo http ${r.status}` }, 502, cors);
     const j = await r.json();
@@ -3874,6 +3930,36 @@ async function handleStockFundamentalsApi(request, env) {
     const sd = res.summaryDetail || {}, ks = res.defaultKeyStatistics || {}, fd = res.financialData || {}, pr = res.price || {};
     const raw = o => (o && typeof o === 'object' && 'raw' in o) ? o.raw : (typeof o === 'number' ? o : null);
     const pick = (a, b) => { const x = raw(a); return x != null ? x : raw(b); };
+
+    // --- Yillik mali tablo serisi (gelir + bilanco + nakit akis birlestirilir) ---
+    const years = buildFundYears(res, raw);
+
+    // --- Aylik fiyat serisi (1 Dolar Testi) ---
+    let priceHistory = null;
+    try {
+      if (cr && cr.ok) {
+        const cj = await cr.json();
+        const cres = cj && cj.chart && cj.chart.result && cj.chart.result[0];
+        const ts = cres && Array.isArray(cres.timestamp) ? cres.timestamp : null;
+        // adjclose varsa onu kullan — bedelsiz/bolunme duzeltmesi Buffett testinde sarttir
+        const adj = cres && cres.indicators && cres.indicators.adjclose && cres.indicators.adjclose[0]
+          ? cres.indicators.adjclose[0].adjclose : null;
+        const cl = cres && cres.indicators && cres.indicators.quote && cres.indicators.quote[0]
+          ? cres.indicators.quote[0].close : null;
+        // 1 Dolar Testi icin BOLUNME duzeltilmis ama TEMETTU duzeltilmemis seri lazim
+        // (temettuyu ayrica tutulan kardan dusuyoruz - adjclose kullanirsak cift sayardik)
+        const series = (Array.isArray(cl) && cl.some(v => v != null)) ? cl : adj;
+        if (ts && Array.isArray(series) && ts.length === series.length) {
+          const t = [], c = [];
+          for (let k = 0; k < ts.length; k++) {
+            if (series[k] == null || !isFinite(series[k])) continue;
+            t.push(ts[k]); c.push(Math.round(series[k] * 10000) / 10000);
+          }
+          if (t.length >= 2) priceHistory = { t, c, divAdjusted: series === adj };
+        }
+      }
+    } catch {}
+
     return jsonCors({
       ySymbol: yahoo,
       name: pr.longName || pr.shortName || yahoo,
@@ -3892,6 +3978,14 @@ async function handleStockFundamentalsApi(request, env) {
       targetMean: raw(fd.targetMeanPrice),
       numAnalysts: raw(fd.numberOfAnalystOpinions),
       recommendation: fd.recommendationKey || null,
+      // --- Buffett katmani (ham veri; skoru PWA hesaplar) ---
+      sharesOutstanding: pick(ks.sharesOutstanding, ks.impliedSharesOutstanding),
+      totalCash: raw(fd.totalCash),
+      totalDebt: raw(fd.totalDebt),
+      freeCashflow: raw(fd.freeCashflow),
+      operatingCashflow: raw(fd.operatingCashflow),
+      years,
+      priceHistory,
       at: Date.now(),
     }, 200, cors);
   } catch (e) {
@@ -4050,6 +4144,7 @@ async function handleStockAnalysisApi(request, env) {
 
   const symbol = String(body.symbol || '').trim().toUpperCase().slice(0, 20);
   const range = String(body.range || '1mo').trim();
+  const isFund = String(body.mode || 'ta') === 'fund'; // 'fund' = temel analiz odakli yorum
   const facts = body.facts;
   if (!symbol || !facts || typeof facts !== 'object') return jsonCors({ error: 'missing' }, 400, cors);
 
@@ -4064,6 +4159,18 @@ async function handleStockAnalysisApi(request, env) {
   const rangeLabel = rangeLabels[range] || range;
   const currency = String(facts.currency || '').slice(0, 8);
 
+  // Buffett katmani kurallari — sadece temel veri geldiyse prompt'a girer
+  const bfRules = facts.buffett ? `
+
+🧱 BUFFETT KATMANI (temel analiz — PWA hesapladı, ASLA YENİDEN HESAPLAMA):
+- Buffett skoru 0-100'dür; teknik uyum skorunun temel analiz karşılığıdır. Kriter dökümü sana veriliyor — hangi maddeden kaç puan KIRILDIĞINI açıkla, en zayıf 2 maddeyi öne çıkar.
+- Her kriterin NE ÖLÇTÜĞÜNÜ kısaca öğret (${name} öğreniyor): ROE = şirketin kendi sermayesiyle ürettiği kâr · Owner Earnings = Buffett'in 1986 mektubunda tanıttığı "sahip kârı", işletme nakit akışından bakım yatırımı düşülmüş hali; muhasebe kârından daha dürüsttür çünkü makineyi yenilemenin maliyetini saymaya devam eder · 1 Dolar Testi = şirketin dağıtmayıp tuttuğu her 1 birim kârın piyasa değerine en az 1 birim eklemesi beklenir, eklemiyorsa o para temettü olarak dağıtılsaydı daha iyiydi · engel oranı = paranın alternatif getirisi (TR'de mevduat/tahvil faizi).
+- "veri yok" yazan kriter hakkında YORUM YAPMA — sadece eksik olduğunu söyle. Veri kapsamı %70'in altındaysa skoru temkinli sun.
+- BUFFETT'İN REDDETTİKLERİNİ sen de kullanma: FAVÖK/EBITDA'ya dayanma (amortismanı geri eklemek makinelerin bedava yenilendiğini varsaymaktır), beta/oynaklığı "risk" diye sunma (risk = kalıcı sermaye kaybı ihtimalidir, fiyatın oynaması değil), analist hedefini kanıt sayma, faiz/makro tahmini yapma. ${name} sorarsa NEDEN reddedildiğini açıklayabilirsin.
+- Para birimi TRY ise: 2023 sonrası enflasyon muhasebesinin net kârı çarpıttığını, bu yüzden Owner Earnings ve nakde dönüşüm satırının daha güvenilir olduğunu belirt. Nominal 1 Dolar Testi'nin enflasyon ortamında iyimser olabileceğini de söyle.
+- "Ucuz/pahalı", "iyi şirket/kötü yatırım", "al/sat" YİNE YASAK. Bunun yerine sayıyı engel oranıyla karşılaştırarak betimle: "OE getirisi %X, engel oranı %Y — altında kalıyor" gibi.
+- Sayıları verilenden aynen kullan; kriter puanı, skor ya da oran UYDURMA.` : '';
+
   const sysPrompt = `Sen Aidan'sın — ${name}'in asistanı. Sana bir hissenin teknik göstergeleri (PWA hesapladı) veriliyor. Görevin: SADECE BETİMLEYİCİ Türkçe teknik/taktik gözlem yaz. 5-8 cümle.
 
 ✅ İZİN VERİLEN (tarafsız betimleme):
@@ -4074,6 +4181,10 @@ async function handleStockAnalysisApi(request, env) {
 - Taktik sinyaller listesini özetle (zaten nötr dilde verildi)
 - SON HABER başlıkları verilebilir: teknik tabloyu bu haberlerle BİRLİKTE yorumla — sayının arkasındaki olası hikâyeyi/gündemi betimle ("şu tarihte şu haber çıktı, tablo bu dönemde şöyle görünüyor" gibi BAĞ kur), ama haberin fiyatı yükseltip düşüreceğini SÖYLEME. Haber yoksa bu kısmı atla.
 - ${name}'e hitap
+- KOŞULLU SENARYO dili (Analiz v2 — ARTIK SERBEST): "X seviyesinin üstünde günlük kapanış olursa teknik olarak sıradaki seviye Y'dir", "Z altına dönerse bu kurulum geçersizleşir" gibi EĞER-İSE cümleleri kurabilirsin. Bu tahmin değil, seviye haritasıdır — koşulu ve GEÇERSİZLEŞME seviyesini her zaman birlikte söyle. Koşulsuz "yükselir/düşer" cümlesi yine YASAK.
+- UYUM SKORU'nu (0-100, 50 nötr) yorumla: kaç gösterge aynı yöne bakıyor, ADX'e göre bu uyum ne kadar anlamlı. Yatay piyasada (ADX<20) yüksek uyumun bile zayıf sinyal olduğunu söyle.
+- ZAMAN DİLİMİ UYUMU verilmişse mutlaka değin — günlük ile haftalık ters yöndeyse bunu açıkça belirt.
+- OYNAKLIK ARALIĞI (ATR×√5) istatistiksel bir banttır, hedef değildir — öyle tarif et.
 
 📚 ÖĞRETİCİ KURAL (ÇOK ÖNEMLİ — ${name} öğrenmek istiyor):
 Bahsettiğin HER göstergenin NE ANLAMA GELDİĞİNİ kısacık parantez/cümle içinde açıkla. ${name} bu göstergeleri öğreniyor — terimi söyleyip geçme, tanımını ver.
@@ -4085,15 +4196,18 @@ Bahsettiğin HER göstergenin NE ANLAMA GELDİĞİNİ kısacık parantez/cümle 
 Açıklama TANIM düzeyinde kalsın — "bu yüzden yükselir/düşer/alınır" DEME. Göstergenin ne ölçtüğünü öğret, geleceği söyleme.
 
 🚫 MUTLAK YASAK:
-1. AL / SAT / TUT tavsiyesi
-2. Fiyat hedefi / gelecek tahmini ("yükselir", "düşer", "kırılır")
-3. Değer yargısı ("iyi fırsat", "riskli", "ucuz/pahalı", "fiyat düşük kalmış")
-4. Verilenin dışında sayı uydurma
+1. AL / SAT / TUT emri ("al", "sat", "gir", "çık", "topla", "boşalt")
+2. KOŞULSUZ gelecek tahmini ("yükselecek", "düşer", "kırar") — koşullu senaryo serbest, koşulsuz kehanet yasak
+3. Değer yargısı ("iyi fırsat", "ucuz/pahalı", "fiyat düşük kalmış")
+4. Verilenin dışında sayı uydurma — TÜM seviyeler sana verilen listeden gelmeli
 5. İngilizce
-6. Haberden gelecek/fiyat tahmini çıkarma ("bu haber yükseltir/düşürür" DEME — sadece haberin var olduğunu ve tablonun o dönemki halini betimle)
+6. Haberden fiyat yönü çıkarma ("bu haber yükseltir/düşürür" DEME — haberin varlığını ve tablonun o dönemki halini betimle)
+7. Olasılık yüzdesi uydurma ("%70 ihtimalle" DEME — sana verilmedi)
 
-✅ TON: deneyimli grafik okuyucu + sabırlı öğretmen — gözlüyor, tarif ediyor, terimi öğretiyor, ama karar vermiyor.
-Son cümle: "Bu betimleyici bir gözlem — yatırım tavsiyesi değildir" (+ kısa 💜).`;
+✅ TON: deneyimli grafik okuyucu + sabırlı öğretmen — gözlüyor, tarif ediyor, terimi öğretiyor, koşulları kuruyor, ama KARAR VERMİYOR. Kararı ${name} verir.
+Kapanışta dolgu cümle ya da uyarı yazma — arayüzde zaten var. Son cümlen analizin kendisi olsun.${bfRules}${isFund ? `
+
+🎯 BU İSTEK TEMEL ANALİZ ODAKLI: ağırlığı Buffett katmanına ver (yaklaşık 3/4), teknik tabloyu sadece kısa bir bağlam paragrafı olarak kullan. Şirketin İŞ KALİTESİNİ anlat: kârı gerçek mi (nakde dönüyor mu), sermayesini iyi mi kullanıyor, borcu taşınabilir mi, tuttuğu kâr değer yaratmış mı. 10-14 cümle.` : ''}`;
 
   const news = Array.isArray(body.newsHeadlines)
     ? body.newsHeadlines.map(n => (typeof n === 'string' ? { title: n } : n)).filter(n => n && n.title).slice(0, 10)
@@ -4104,6 +4218,49 @@ Son cümle: "Bu betimleyici bir gözlem — yatırım tavsiyesi değildir" (+ k�
   const signalsBlock = Array.isArray(facts.signals) && facts.signals.length
     ? facts.signals.map(s => `- ${s}`).join('\n')
     : '(yok)';
+
+  // Analiz v2 blokları — PWA hesaplar, AI yeniden hesaplamaz
+  const cf = facts.confluence;
+  const confBlock = cf
+    ? `\n\n🧭 UYUM SKORU: ${cf.score}/100 — ${cf.label} (50 = nötr)
+${cf.bull} gösterge yukarı · ${cf.bear} aşağı · ${cf.neutral} nötr (toplam ${cf.total})
+Sinyal güvenilirliği (ADX'e göre): ${cf.reliability}`
+    : '';
+  const sc = facts.scenarios;
+  const lvlLine = (s, dirWord) => s
+    ? `${dirWord}: tetik ${s.trigger} (${s.triggerSrc}, %${s.distPct} uzakta${s.sessions != null ? `, ≈${s.sessions} ortalama seans` : ''}) → sıradaki seviyeler ${s.t1} (${s.t1Src}) ve ${s.t2} (ATR×3) | geçersizleşme ${s.invalidate}`
+    : `${dirWord}: yeterli seviye yok`;
+  const scenBlock = sc
+    ? `\n\n🗺️ KOŞULLU SEVİYE HARİTASI (tahmin değil — PWA hesapladı, sayıları aynen kullan):
+${lvlLine(sc.up, 'YUKARI')}
+${lvlLine(sc.down, 'AŞAĞI')}${sc.band ? `\nSıkışma bandı: ${sc.band.low} – ${sc.band.high} (genişlik %${sc.band.widthPct})` : ''}
+Oynaklık aralığı (5 seans, ATR×√5): ${sc.vol5.low} – ${sc.vol5.high} — istatistiksel band, hedef DEĞİL`
+    : '';
+  const mt = facts.mtf;
+  const mtfBlock = mt
+    ? `\n\n⏳ ZAMAN DİLİMİ UYUMU: ${mt.state} — günlük ${mt.dailyLabel} (${mt.dailyScore}) · haftalık ${mt.weeklyLabel} (${mt.weeklyScore})`
+    : '';
+
+  // Buffett katmani — temel analiz faktlari (PWA hesapladi)
+  const bf = facts.buffett;
+  let bfBlock = '';
+  if (bf) {
+    const rows = (Array.isArray(bf.parts) ? bf.parts : []).map(p =>
+      `- ${p.label}: ${p.pts == null ? 'VERİ YOK' : `${p.pts}/${p.max} puan`} — ${String(p.note || '').slice(0, 240)}`
+    ).join('\n');
+    const dl = bf.dollar
+      ? `\n1 Dolar Testi detayı: ${bf.dollar.from}'den beri hisse başına tutulan kâr ${bf.dollar.retainedPerShare}, fiyat artışı ${bf.dollar.gainPerShare} → oran ${bf.dollar.ratio} (1,00 = eşik)`
+      : '';
+    const fl = (Array.isArray(bf.flags) && bf.flags.length)
+      ? `\nUYARI BAYRAKLARI:\n${bf.flags.map(f => `- ${String(f).slice(0, 200)}`).join('\n')}`
+      : '';
+    bfBlock = bf.score == null
+      ? `\n\n🧱 BUFFETT SKORU: hesaplanamadı — ${String(bf.reason || 'veri yetersiz').slice(0, 200)}\n${rows}`
+      : `\n\n🧱 BUFFETT SKORU: ${bf.score}/100 — ${bf.label} (engel oranı %${bf.hurdlePct}, ${bf.years} yıllık tablo, veri kapsamı %${Math.round((bf.coverage || 0) * 100)})
+KRİTER DÖKÜMÜ:
+${rows}${dl}
+Owner earnings getirisi: ${bf.oeYield != null ? `%${Math.round(bf.oeYield * 1000) / 10}` : '—'} | Sahip kârı/muhasebe kârı: ${bf.oeQuality != null ? `${bf.oeQuality}×` : '—'} | Net borç/özsermaye: ${bf.debtToEquity != null ? `${bf.debtToEquity}×` : '—'}${fl}`;
+  }
 
   const userMsg = `📊 ${symbol} (${rangeLabel}) — teknik göstergeler:
 
@@ -4121,9 +4278,12 @@ Hacim: son/ort ${facts.volRatio ?? '—'}× | OBV akışı: ${facts.obvTrend ?? 
 ${facts.recentChange7d != null ? `Son 7 periyot: ${facts.recentChange7d >= 0 ? '+' : ''}${facts.recentChange7d}%` : ''}
 
 Taktik gözlemler:
-${signalsBlock}${newsBlock}
+${signalsBlock}${confBlock}${scenBlock}${mtfBlock}${bfBlock}${newsBlock}
 
-Bu verileri 5-8 cümlelik tarafsız teknik özete dök. Haber verildiyse teknik tabloyu haberlerle birlikte, akıcı bir 'teknik + hikaye' anlatısı olarak yorumla (yine tavsiye/tahmin YOK). ADX'in trend gücünü, Stochastic'in RSI ile uyumunu/diverjansını, EMA9/21 kesişimini ve pivot konumunu özetle. HER bahsettiğin göstergenin ne anlama geldiğini kısaca açıkla (${name} öğreniyor). Tavsiye YOK, gelecek tahmini YOK.`;
+Bu verileri akıcı bir teknik analize dök (8-12 cümle).
+Yapı: ① tablonun genel hali + uyum skorunun ne dediği ② zaman dilimi uyumu/çatışması ③ YUKARI ve AŞAĞI koşullu senaryoyu tetik + sıradaki seviye + geçersizleşme seviyesiyle birlikte anlat ④ oynaklık aralığının ne anlama geldiği. Haber verildiyse teknik tabloyu haberlerle birlikte, akıcı bir 'teknik + hikaye' anlatısı olarak yorumla (yine tavsiye/tahmin YOK). ADX'in trend gücünü, Stochastic'in RSI ile uyumunu/diverjansını, EMA9/21 kesişimini ve pivot konumunu özetle. HER bahsettiğin göstergenin ne anlama geldiğini kısaca açıkla (${name} öğreniyor). Tavsiye YOK, gelecek tahmini YOK.${bf ? `
+
+🧱 BUFFETT KATMANI da verildi — ${isFund ? 'anlatının merkezine BUNU al' : 'analizin sonuna 2-3 cümlelik bir temel analiz paragrafı ekle'}: skorun ne dediği, hangi kriterden kırık aldığı ve o kriterin ne ölçtüğü. Teknik tabloyla temel tablonun aynı yöne mi ters yöne mi baktığını da söyle (ör. teknik güçlü ama iş kalitesi zayıf, ya da tersi) — bu bir tavsiye değil, iki farklı mercekten aynı şirkete bakmaktır.` : ''}`;
 
   try {
     const r = await aiRun(env, {
@@ -4132,7 +4292,7 @@ Bu verileri 5-8 cümlelik tarafsız teknik özete dök. Haber verildiyse teknik 
         { role: 'system', content: sysPrompt },
         { role: 'user', content: userMsg },
       ],
-      max_tokens: 520,
+      max_tokens: isFund ? 1400 : (facts.buffett ? 1100 : 900),
       temperature: 0.4,
     });
     let analysis = (r.response || '').trim();
@@ -4195,6 +4355,9 @@ async function handlePortfolioTechnicalApi(request, env) {
       f.pivotZone && f.pivotZone !== '—' ? `Pivot: ${f.pivotZone}` : null,
       f.obvTrend ? `OBV ${f.obvTrend}` : null,
       f.atrPct != null ? `ATR% ${f.atrPct}` : null,
+      f.confluence ? `UYUM ${f.confluence.score}/100 (${f.confluence.label}, ${f.confluence.bull}↑/${f.confluence.bear}↓)` : null,
+      (f.scenarios && f.scenarios.up) ? `yukarı tetik ${f.scenarios.up.trigger}` : null,
+      (f.scenarios && f.scenarios.down) ? `aşağı tetik ${f.scenarios.down.trigger}` : null,
     ].filter(Boolean);
     return `- ${sym} (${it.range || '1mo'}): ${parts.join(' · ')}`;
   }).join('\n');
@@ -4204,6 +4367,8 @@ async function handlePortfolioTechnicalApi(request, env) {
 ✅ İZİN VERİLEN (tarafsız betimleme):
 - Portföydeki hisselerin trend dağılımını TARİF et ("3 hisseden 2'si SMA20 üzerinde", "biri aşırı alımda")
 - Genel momentum gözlemi (yukarı/yatay/aşağı eğilim hakim mi)
+- UYUM SKORU (0-100, 50 nötr) verildiyse portföy genelini onunla özetle: kaç hissede göstergeler aynı yöne bakıyor, portföy tek yöne mi yığılmış (yoğunlaşma riski) yoksa dağılmış mı
+- Verilen "tetik" seviyelerini KOŞULLU dille anabilirsin ("X'in üstünde günlük kapanış olursa teknik olarak sıradaki seviye gündeme gelir"); koşulsuz tahmin yine yasak
 - Volatilite (ATR) ve hacim karşılaştırması
 - En dikkat çeken 1-2 hissenin durumu (sayıyla, betimleyici dil)
 - ${name}'e hitap
@@ -4222,7 +4387,7 @@ Açıklama TANIM düzeyinde — "bu yüzden alınır/yükselir" DEME.
 6. İngilizce
 
 ✅ TON: deneyimli grafik okuyucu + sabırlı öğretmen — gözlüyor, tarif ediyor, terimi öğretiyor, karar vermiyor.
-Son cümle: "Bu betimleyici bir gözlem — yatırım tavsiyesi değildir" (+ kısa 💜).`;
+Kapanışta dolgu cümle ya da uyarı yazma — arayüzde zaten var.`;
 
   const userMsg = `📊 ${name}'in portföyü — hisse hisse teknik snapshot:
 

@@ -1242,10 +1242,14 @@
     </div>
     <div class="stock-chart-stats" id="stockChartStats" style="display:none;"></div>
     <div class="stock-ta-panel" id="stockTaPanel" style="display:none;">
+      <div class="stock-conf" id="stockConfluence" style="display:none;"></div>
+      <div class="stock-mtf" id="stockMtf" style="display:none;"></div>
       <div class="stock-ta-title">Teknik göstergeler</div>
       <div class="stock-ta-grid" id="stockTaGrid"></div>
       <div class="stock-ta-title" style="margin-top:4px;">Taktik gözlemler</div>
       <div class="stock-ta-signals" id="stockTaSignals"></div>
+      <div class="stock-ta-title" style="margin-top:4px;">Koşullu senaryolar</div>
+      <div class="stock-scen" id="stockScenarios"></div>
       <div class="stock-ta-title" style="margin-top:4px;">Risk / stop önerisi</div>
       <div class="stock-risk-panel" id="stockRiskPanel"></div>
       <button type="button" class="stock-ta-ai-btn" id="stockTaAiBtn" onclick="aiStockAnalysis()">
@@ -1266,7 +1270,14 @@
       <p class="stock-ta-disclaimer">Haberler Yahoo Finance kaynaklıdır — yatırım tavsiyesi değildir.</p>
     </div>
     <div id="stockFundView" style="display:none;">
+      <div class="buffett-card" id="buffettCard"></div>
+      <div class="stock-ta-title" style="margin-top:4px;">Klasik oranlar</div>
       <div class="stock-ta-grid" id="stockFundGrid"><div class="stock-chart-loading">Yükleniyor…</div></div>
+      <button type="button" class="stock-ta-ai-btn" id="stockFundAiBtn" onclick="aiStockAnalysis('fund')">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/></svg>
+        AI temel yorum
+      </button>
+      <div class="stock-ta-ai-result" id="stockFundAiResult" style="display:none;"></div>
       <p class="stock-ta-disclaimer">Temel veriler Yahoo Finance kaynaklıdır — BIST'te bazı alanlar boş gelebilir. Yatırım tavsiyesi değildir.</p>
     </div>
     <button class="modal-close" onclick="closeStockChart()">Kapat</button>

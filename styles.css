@@ -3968,3 +3968,246 @@
 @media (prefers-reduced-motion: reduce) {
   .chat-photo { transition: none; }
 }
+
+/* ============================================================
+   ANALIZ v2 (7 Agu) — uyum skoru + kosullu senaryolar + zaman dilimi
+   Impeccable: tam kenar + tint, yan-serit YOK, gradient/glass YOK.
+   ============================================================ */
+
+.stock-conf {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: var(--surface-2, #1b1c23);
+}
+.stock-conf .sc-head { display: flex; align-items: center; gap: 12px; }
+.stock-conf .sc-score {
+  flex: 0 0 auto;
+  min-width: 46px;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  padding: 6px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  color: var(--text-strong, #f4f4f7);
+}
+.stock-conf .sc-score.up { border-color: rgba(52, 199, 89, .45); background: rgba(52, 199, 89, .12); color: #4ad168; }
+.stock-conf .sc-score.down { border-color: rgba(239, 68, 68, .45); background: rgba(239, 68, 68, .12); color: #f2706e; }
+.stock-conf .sc-score.mixed { border-color: rgba(245, 165, 36, .45); background: rgba(245, 165, 36, .12); color: var(--accent-light, #fbbf5a); }
+.stock-conf .sc-label { font-size: 15px; font-weight: 700; color: var(--text-strong, #f4f4f7); }
+.stock-conf .sc-sub { font-size: 12px; color: var(--text-muted, #a4a6b0); margin-top: 2px; }
+.stock-conf .sc-bar {
+  position: relative;
+  height: 8px;
+  border-radius: 6px;
+  background: var(--surface-3, #24262e);
+  margin: 10px 0 6px;
+  overflow: hidden;
+}
+.stock-conf .sc-fill { display: block; height: 100%; border-radius: 6px; transition: width 220ms cubic-bezier(.22,1,.36,1); }
+.stock-conf .sc-fill.up { background: #34c759; }
+.stock-conf .sc-fill.down { background: #ef4444; }
+.stock-conf .sc-fill.mixed { background: var(--accent, #f5a524); }
+.stock-conf .sc-mid {
+  position: absolute; left: 50%; top: -2px; bottom: -2px;
+  width: 1px; background: var(--text-muted, #a4a6b0); opacity: .5;
+}
+.stock-conf .sc-rel { font-size: 12px; color: var(--text-muted, #a4a6b0); }
+.stock-conf .sc-det { margin-top: 8px; }
+.stock-conf .sc-det summary {
+  font-size: 12px; color: var(--text-muted, #a4a6b0);
+  cursor: pointer; list-style: none;
+}
+.stock-conf .sc-det summary::-webkit-details-marker { display: none; }
+.stock-conf .sc-det summary::before { content: '▸ '; }
+.stock-conf .sc-det[open] summary::before { content: '▾ '; }
+.stock-conf .sc-votes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.stock-conf .sc-vote {
+  font-size: 11.5px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  color: var(--text, #e7e8ec);
+}
+.stock-conf .sc-vote i { font-style: normal; color: var(--text-muted, #a4a6b0); }
+.stock-conf .sc-vote.up { border-color: rgba(52, 199, 89, .35); background: rgba(52, 199, 89, .08); }
+.stock-conf .sc-vote.down { border-color: rgba(239, 68, 68, .35); background: rgba(239, 68, 68, .08); }
+
+.stock-mtf {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+  color: var(--text, #e7e8ec);
+  background: var(--surface-2, #1b1c23);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.stock-mtf b { font-size: 13px; color: var(--text-strong, #f4f4f7); }
+.stock-mtf .mtf-txt { color: var(--text-muted, #a4a6b0); }
+.stock-mtf.up { border-color: rgba(52, 199, 89, .4); background: rgba(52, 199, 89, .08); }
+.stock-mtf.down { border-color: rgba(239, 68, 68, .4); background: rgba(239, 68, 68, .08); }
+.stock-mtf.conflict { border-color: rgba(245, 165, 36, .45); background: rgba(245, 165, 36, .1); }
+.stock-mtf.mixed { border-color: var(--border); }
+
+.stock-scen { display: flex; flex-direction: column; gap: 8px; }
+.scen-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: var(--surface-2, #1b1c23);
+}
+.scen-card.up { border-color: rgba(52, 199, 89, .38); background: rgba(52, 199, 89, .07); }
+.scen-card.down { border-color: rgba(239, 68, 68, .38); background: rgba(239, 68, 68, .07); }
+.scen-card .scen-h {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 700;
+  color: var(--text-strong, #f4f4f7);
+  margin-bottom: 6px;
+}
+.scen-card .scen-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted, #a4a6b0); }
+.scen-card.up .scen-dot { background: #34c759; }
+.scen-card.down .scen-dot { background: #ef4444; }
+.scen-line {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text, #e7e8ec);
+}
+.scen-line b {
+  display: inline-block;
+  min-width: 118px;
+  font-weight: 600;
+  color: var(--text-muted, #a4a6b0);
+}
+.scen-line u { text-decoration: none; font-weight: 700; color: var(--text-strong, #f4f4f7); }
+.scen-line i { font-style: normal; color: var(--text-muted, #a4a6b0); font-size: 11.5px; }
+.scen-band {
+  font-size: 12.5px;
+  color: var(--text, #e7e8ec);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 12px;
+}
+.scen-band b { font-weight: 600; color: var(--text-muted, #a4a6b0); margin-right: 6px; }
+.scen-band i { font-style: normal; color: var(--text-muted, #a4a6b0); font-size: 11.5px; }
+.scen-note { font-size: 11.5px; color: var(--text-muted, #a4a6b0); font-style: italic; }
+
+@media (max-width: 480px) {
+  .scen-line b { display: block; min-width: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stock-conf .sc-fill { transition: none; }
+}
+
+
+/* ============================================================
+   BUFFETT SKORU — temel analiz kartı (Impeccable: tam kenar + tint, yan-şerit YOK)
+   ============================================================ */
+.buffett-card {
+  border: 1px solid var(--border);
+  background: var(--surface-2, #1b1c23);
+  border-radius: 14px;
+  padding: 14px 14px 12px;
+  margin-bottom: 12px;
+}
+.buffett-card .bf-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+}
+.buffett-card .bf-title {
+  font-size: 0.82em; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.buffett-card .bf-label { font-size: 1.02em; font-weight: 700; margin-top: 2px; color: var(--text); }
+.buffett-card .bf-label.good { color: var(--success); }
+.buffett-card .bf-label.mid { color: var(--accent); }
+.buffett-card .bf-label.bad { color: var(--danger); }
+.buffett-card .bf-score {
+  font-size: 1.9em; font-weight: 800; line-height: 1; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.buffett-card .bf-score span { font-size: 0.45em; font-weight: 600; color: var(--text-muted); margin-left: 2px; }
+.buffett-card .bf-score.good { color: var(--success); }
+.buffett-card .bf-score.mid { color: var(--accent); }
+.buffett-card .bf-score.bad { color: var(--danger); }
+.buffett-card .bf-na { font-size: 0.9em; font-weight: 600; color: var(--text-muted); }
+.buffett-card .bf-bar {
+  height: 7px; border-radius: 4px; background: var(--surface-hover);
+  overflow: hidden; margin: 10px 0 8px;
+}
+.buffett-card .bf-bar i {
+  display: block; height: 100%; border-radius: 4px; background: var(--accent);
+  transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.buffett-card .bf-bar i.good { background: var(--success); }
+.buffett-card .bf-bar i.bad { background: var(--danger); }
+.buffett-card .bf-meta {
+  font-size: 0.8em; color: var(--text-muted); line-height: 1.5;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+}
+.buffett-card .bf-hurdle {
+  background: var(--surface-hover); border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 3px 8px; font: inherit; font-size: 0.95em; cursor: pointer;
+  transition: background 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.buffett-card .bf-hurdle:hover { background: var(--surface-hover); }
+.buffett-card .bf-details { margin-top: 10px; }
+.buffett-card .bf-details > summary {
+  cursor: pointer; font-size: 0.84em; font-weight: 600; color: var(--text-muted);
+  padding: 4px 0; list-style: revert;
+}
+.buffett-card .bf-details > summary:hover { color: var(--text); }
+.buffett-card .bf-row {
+  border-top: 1px solid var(--border);
+  padding: 9px 0 8px;
+}
+.buffett-card .bf-row.skip { opacity: 0.6; }
+.buffett-card .bf-row-top {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+}
+.buffett-card .bf-row-lbl { font-size: 0.88em; font-weight: 600; color: var(--text); }
+.buffett-card .bf-row-pts {
+  font-size: 0.78em; font-weight: 700; color: var(--text-muted); white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.buffett-card .bf-row-pts.good { color: var(--success); }
+.buffett-card .bf-row-pts.mid { color: var(--accent); }
+.buffett-card .bf-row-pts.bad { color: var(--danger); }
+.buffett-card .bf-row-bar {
+  height: 4px; border-radius: 3px; background: var(--surface-hover);
+  overflow: hidden; margin: 6px 0 5px;
+}
+.buffett-card .bf-row-bar i {
+  display: block; height: 100%; border-radius: 3px; background: var(--accent);
+  transition: width 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.buffett-card .bf-row-bar i.good { background: var(--success); }
+.buffett-card .bf-row-bar i.bad { background: var(--danger); }
+.buffett-card .bf-row-note { font-size: 0.79em; color: var(--text-muted); line-height: 1.5; }
+.buffett-card .bf-flags {
+  margin: 10px 0 0; padding: 9px 11px; list-style: none;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--danger-soft);
+}
+.buffett-card .bf-flags li {
+  font-size: 0.8em; color: var(--text); line-height: 1.5; padding-left: 14px; position: relative;
+}
+.buffett-card .bf-flags li + li { margin-top: 5px; }
+.buffett-card .bf-flags li::before {
+  content: ''; position: absolute; left: 2px; top: 0.55em;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--danger);
+}
+.buffett-card .bf-note {
+  margin: 10px 0 0; font-size: 0.76em; color: var(--text-muted); line-height: 1.55;
+}
+.buffett-card .bf-note b { color: var(--text); font-weight: 700; }
+@media (prefers-reduced-motion: reduce) {
+  .buffett-card .bf-bar i,
+  .buffett-card .bf-row-bar i,
+  .buffett-card .bf-hurdle { transition: none; }
+}

@@ -16,6 +16,7 @@ let _stockNewsLoaded = false;   // haber sekmesi bu açılışta çekildi mi
 let _stockNewsItems = [];       // [{title,publisher,link,time}] — AI özet için
 let _stockFundLoaded = false;   // temel veri bu açılışta çekildi mi
 let _stockFundData = null;      // {trailingPE, priceToBook, ...}
+let _stockBuffett = null;       // son hesaplanan Buffett skoru (AI faktlarına da gider)
 // Teknik analiz sadece hisselerde (BIST + ABD) anlamlı — döviz/kripto'da panel gizli
 const TA_MARKETS = new Set(['bist', 'abd']);
 
@@ -935,6 +936,7 @@ function closeStockChart() {
   _stockNewsItems = [];
   _stockFundLoaded = false;
   _stockFundData = null;
+  _stockBuffett = null;
 }
 
 // Grafik ↔ Haberler görünüm geçişi
@@ -974,10 +976,96 @@ async function loadStockFundamentals() {
   }
 }
 
+// ——— Buffett skoru kartı (temel analiz paneli başı) ———
+function bfCls(v) { return v >= 0.7 ? 'good' : (v >= 0.45 ? 'mid' : 'bad'); }
+
+function renderBuffettCard(el, bf, d) {
+  if (!el) return;
+  if (!bf) { el.innerHTML = ''; el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  const tr = n => n.toLocaleString('tr-TR');
+  const cur = escapeHtml(String(bf.currency || ''));
+  const hurBtn = `<button type="button" class="bf-hurdle" onclick="setBuffettHurdle()">engel oranı %${tr(bf.hurdlePct)} · değiştir</button>`;
+
+  if (bf.score == null) {
+    el.innerHTML = `<div class="bf-head"><div class="bf-title">Buffett skoru</div><div class="bf-na">hesaplanamadı</div></div>
+      <div class="bf-meta">${escapeHtml(bf.reason || 'Veri yetersiz.')} ${hurBtn}</div>
+      ${bf.parts && bf.parts.length ? bfRows(bf) : ''}
+      <p class="bf-note">Yahoo, BIST hisselerinde mali tabloları her zaman vermiyor. ABD hisselerinde bu skor genelde dolu gelir.</p>`;
+    return;
+  }
+
+  const cls = bf.score >= 70 ? 'good' : (bf.score >= 45 ? 'mid' : 'bad');
+  const flags = (bf.flags || []).map(f => `<li>${escapeHtml(f)}</li>`).join('');
+  el.innerHTML = `
+    <div class="bf-head">
+      <div>
+        <div class="bf-title">Buffett skoru</div>
+        <div class="bf-label ${cls}">${escapeHtml(bf.label)}</div>
+      </div>
+      <div class="bf-score ${cls}">${tr(bf.score)}<span>/100</span></div>
+    </div>
+    <div class="bf-bar"><i class="${cls}" style="width:${Math.max(2, Math.min(100, bf.score))}%"></i></div>
+    <div class="bf-meta">${tr(bf.years)} yıllık tablo · veri kapsamı %${tr(Math.round(bf.coverage * 100))}${cur ? ' · ' + cur : ''} ${hurBtn}</div>
+    ${bfRows(bf)}
+    ${flags ? `<ul class="bf-flags">${flags}</ul>` : ''}
+    <p class="bf-note">FAVÖK (EBITDA), beta/oynaklık, analist hedefleri ve teknik göstergeler bu skora <b>kasıtlı olarak girmez</b> — Buffett dördünü de reddeder. Skor tarafsız bir kalite ölçüsüdür, al/sat sinyali değildir.</p>`;
+}
+
+function bfRows(bf) {
+  const tr = n => n.toLocaleString('tr-TR');
+  const rows = (bf.parts || []).map(p => {
+    if (p.score == null) {
+      return `<div class="bf-row skip">
+        <div class="bf-row-top"><span class="bf-row-lbl">${escapeHtml(p.label)}</span><span class="bf-row-pts">veri yok</span></div>
+        <div class="bf-row-note">${escapeHtml(p.note || '')}</div></div>`;
+    }
+    const pts = Math.round(p.score * p.weight * 10) / 10;
+    const c = bfCls(p.score);
+    return `<div class="bf-row">
+      <div class="bf-row-top"><span class="bf-row-lbl">${escapeHtml(p.label)}</span><span class="bf-row-pts ${c}">${tr(pts)} / ${tr(p.weight)} puan</span></div>
+      <div class="bf-row-bar"><i class="${c}" style="width:${Math.max(2, Math.round(p.score * 100))}%"></i></div>
+      <div class="bf-row-note">${escapeHtml(p.note || '')}</div></div>`;
+  }).join('');
+  return `<details class="bf-details"><summary>Kriter dökümü — hangi maddeden kırık aldı</summary>${rows}</details>`;
+}
+
+// Engel oranı (hurdle rate) — TR'de mevduat/tahvil nominal getirisi ana rakip
+async function setBuffettHurdle() {
+  const cur = (_stockBuffett && _stockBuffett.currency) || 'TRY';
+  const now = buffettHurdle(cur);
+  const v = await aidanPrompt(
+    'Engel oranı (' + cur + ')',
+    'Şirketin aşması gereken yıllık getiri, % olarak. TR için mevduat/tahvil faizini yaz — %15 ROE, %37 mevduat varken iyi değildir.',
+    String(now)
+  );
+  if (v == null) return;
+  const n = Number(String(v).replace(',', '.').replace('%', '').trim());
+  if (!isFinite(n) || n <= 0 || n >= 200) { showToast('Geçerli bir yüzde gir (1-199)', 'error'); return; }
+  data.settings = data.settings || {};
+  if (!data.settings.buffettHurdle || typeof data.settings.buffettHurdle !== 'object') data.settings.buffettHurdle = {};
+  data.settings.buffettHurdle[String(cur).toUpperCase()] = n;
+  save();
+  if (_stockFundData) {
+    const w = (data.watchlist || [])[_stockChartIdx] || {};
+    renderStockFundamentals(_stockFundData, w);
+  }
+  showToast(`${cur} engel oranı %${n} yapıldı`, 'success');
+}
+
 function renderStockFundamentals(d, w) {
   const grid = document.getElementById('stockFundGrid');
+  const bfEl = document.getElementById('buffettCard');
   if (!grid) return;
-  if (!d) { grid.innerHTML = '<div class="stock-chart-loading">Veri yok.</div>'; return; }
+  if (!d) {
+    grid.innerHTML = '<div class="stock-chart-loading">Veri yok.</div>';
+    _stockBuffett = null;
+    if (bfEl) { bfEl.innerHTML = ''; bfEl.style.display = 'none'; }
+    return;
+  }
+  // Buffett skoru — sayıyı PWA hesaplar, AI uydurmaz (teknik uyum skoruyla aynı kalıp)
+  _stockBuffett = buffettScore(d, buffettHurdle(d.currency || w.currency));
+  renderBuffettCard(bfEl, _stockBuffett, d);
   const cur = d.currency || w.currency || '';
   const c = cur ? ' ' + cur : '';
   const tr = n => n.toLocaleString('tr-TR');
@@ -1184,6 +1272,7 @@ async function loadStockHistory(range) {
     if (taOk) {
       renderStockTA(ta, cur);
       renderStockRisk(ta, w, cur);
+      loadStockMtf(w, range, j);
       taPanel.style.display = 'block';
       document.getElementById('stockTaAiBtn').disabled = false;
     } else {
@@ -1544,13 +1633,17 @@ function computeStockTA(j) {
     current, sma20, sma50, ema9, ema21, rsi, macd, bb, bbPosition, volRatio, sr, trend,
     stoch, stochZone, adx, adxZone, obv, pivots, pivotZone,
   });
-  return {
+  const out = {
     current, sma20, sma50, ema9, ema21, rsi, rsiZone: taRsiZone(rsi), macd, bb, sr, atrPct, volRatio,
     stoch, stochZone, adx, adxZone, obv, pivots, pivotZone,
     trend, bbPosition, priceVsSma20, recentChange7d,
     sma20Series, sma50Series, ema9Series, ema21Series, signals,
     changePct: j.changePct, min: j.min, max: j.max,
   };
+  // Analiz v2 — uyum skoru + kosullu senaryolar (lokal, kural tabanli)
+  out.confluence = taConfluence(out);
+  out.scenarios = taScenarios(out, j);
+  return out;
 }
 
 function buildTacticalSignals(ta) {
@@ -1622,6 +1715,298 @@ function renderStockTA(ta, cur) {
       : /Hacim ortalamanın|üst banda|Direnç/i.test(s) ? 'warn' : '';
     return `<span class="stock-ta-sig ${cls}">${escapeHtml(s)}</span>`;
   }).join('') || '<span class="stock-ta-sig">Yeterli veri yok — 3 ay veya 6 ay dene</span>';
+  renderConfluence(ta);
+  renderScenarios(ta, cur);
+}
+
+// ============================================================
+// ANALIZ v2 (7 Agu) — uyum skoru + kosullu senaryolar + coklu zaman dilimi
+// Hepsi LOKAL ve kural tabanli ($0, AI yok). Tahmin URETMEZ:
+// "su seviyenin ustunde gunluk kapanis olursa su bolge teknik olarak gundeme
+// gelir" biciminde KOSULLU seviye haritasi cikarir + gecersizlesme seviyesi verir.
+// ============================================================
+
+// ——— 1) Uyum skoru: gostergelerin kaci ayni yone bakiyor ———
+// Her gosterge +1 (yukari) / -1 (asagi) / 0 (notr) oy verir. Agirlik = gostergenin
+// YON bilgisi tasima gucu: ortalama kesisimleri momentum osilatorlerinden agir.
+// ADX oy VERMEZ — yonsuzdur; skorun guvenilirligini nitelemekte kullanilir.
+function taConfluence(ta) {
+  if (!ta) return null;
+  const votes = [];
+  const add = (name, w, v, note) => { if (v === 0 || v === 1 || v === -1) votes.push({ name, w, v, note: note || '' }); };
+  const cmp = (a, b) => (a == null || b == null) ? null : (a > b ? 1 : a < b ? -1 : 0);
+
+  add('Trend', 2, ta.trend === 'yukarı' ? 1 : ta.trend === 'aşağı' ? -1 : ta.trend === 'yatay' ? 0 : null, ta.trend);
+  add('Fiyat / SMA20', 1.5, cmp(ta.current, ta.sma20), ta.priceVsSma20);
+  add('SMA20 / SMA50', 2, cmp(ta.sma20, ta.sma50),
+      ta.sma20 != null && ta.sma50 != null ? (ta.sma20 > ta.sma50 ? 'kısa vade üstte' : ta.sma20 < ta.sma50 ? 'kısa vade altta' : 'eşit') : '');
+  add('EMA9 / EMA21', 1.5, cmp(ta.ema9, ta.ema21),
+      ta.ema9 != null && ta.ema21 != null ? (ta.ema9 > ta.ema21 ? 'hızlı ortalama üstte' : 'hızlı ortalama altta') : '');
+  add('MACD histogram', 1.5, ta.macd ? (ta.macd.histogram > 0 ? 1 : ta.macd.histogram < 0 ? -1 : 0) : null,
+      ta.macd ? String(ta.macd.histogram) : '');
+  add('MACD sıfır çizgisi', 1, ta.macd ? (ta.macd.line > 0 ? 1 : ta.macd.line < 0 ? -1 : 0) : null,
+      ta.macd ? (ta.macd.line > 0 ? 'sıfır üstü' : 'sıfır altı') : '');
+  add('RSI momentum', 1, ta.rsi == null ? null : (ta.rsi >= 55 ? 1 : ta.rsi <= 45 ? -1 : 0),
+      ta.rsi == null ? '' : String(Math.round(ta.rsi)));
+  add('Stochastic %K/%D', 1, ta.stoch ? (ta.stoch.k > ta.stoch.d ? 1 : ta.stoch.k < ta.stoch.d ? -1 : 0) : null, ta.stochZone);
+  add('OBV para akışı', 1.5, ta.obv ? (ta.obv.trend === 'yukarı' ? 1 : ta.obv.trend === 'aşağı' ? -1 : 0) : null,
+      ta.obv ? ta.obv.trend : '');
+  add('Bollinger konumu', 1,
+      ta.bbPosition === 'üst banda yakın' ? 1 : ta.bbPosition === 'alt banda yakın' ? -1 : ta.bbPosition === 'orta bölge' ? 0 : null,
+      ta.bbPosition === '—' ? '' : ta.bbPosition);
+  const pz = ta.pivotZone;
+  add('Pivot konumu', 1,
+      (pz === 'R2 üstünde' || pz === 'R1-R2 arası' || pz === 'PP-R1 arası') ? 1
+        : (pz === 'S1-PP arası' || pz === 'S2-S1 arası' || pz === 'S2 altında') ? -1 : null,
+      pz === '—' ? '' : pz);
+  add('Son 7 periyot', 1, ta.recentChange7d == null ? null : (ta.recentChange7d > 1 ? 1 : ta.recentChange7d < -1 ? -1 : 0),
+      ta.recentChange7d == null ? '' : (ta.recentChange7d >= 0 ? '+' : '') + ta.recentChange7d + '%');
+
+  if (votes.length < 4) return null;
+  const wSum = votes.reduce((a, b) => a + b.w, 0);
+  const net = votes.reduce((a, b) => a + b.w * b.v, 0);
+  const score = Math.max(0, Math.min(100, Math.round(50 + 50 * net / wSum)));
+  const bull = votes.filter(v => v.v > 0).length;
+  const bear = votes.filter(v => v.v < 0).length;
+  const neutral = votes.filter(v => v.v === 0).length;
+  let label, dir;
+  if (score >= 72) { label = 'güçlü yukarı uyum'; dir = 'up'; }
+  else if (score >= 58) { label = 'yukarı eğilimli'; dir = 'up'; }
+  else if (score > 42) { label = 'karışık / kararsız'; dir = 'mixed'; }
+  else if (score > 28) { label = 'aşağı eğilimli'; dir = 'down'; }
+  else { label = 'güçlü aşağı uyum'; dir = 'down'; }
+  const reliability = ta.adx == null ? 'bilinmiyor' : ta.adx >= 25 ? 'yüksek' : ta.adx >= 20 ? 'orta' : 'düşük';
+  return { score, label, dir, bull, bear, neutral, total: votes.length, reliability, adx: ta.adx, votes };
+}
+
+// ——— 2) Kosullu senaryolar: seviye haritasi + gecersizlesme ———
+// Aday seviyeler: 20 periyot destek/direnc, klasik pivotlar, Bollinger bantlari,
+// donem min/max. %0.4 icinde olanlar tek seviyeye birlestirilir (grafikte ayni cizgi).
+function taMergeLevels(list, price) {
+  const clean = list.filter(x => x && x.v != null && isFinite(x.v) && x.v > 0);
+  const out = [];
+  clean.sort((a, b) => a.v - b.v);
+  clean.forEach(x => {
+    const last = out[out.length - 1];
+    if (last && Math.abs(x.v - last.v) / price < 0.004) { if (!last.src.includes(x.src)) last.src.push(x.src); }
+    else out.push({ v: Math.round(x.v * 100) / 100, src: [x.src] });
+  });
+  return out;
+}
+
+function taScenarios(ta, j) {
+  const price = ta && ta.current;
+  if (price == null || !(price > 0)) return null;
+  // ATR mutlak degeri — yoksa Bollinger genisliginin 1/4'u, o da yoksa fiyatin %2'si
+  let atrAbs = null;
+  if (ta.atrPct != null && ta.atrPct > 0) atrAbs = price * ta.atrPct / 100;
+  else if (ta.bb && ta.bb.upper > ta.bb.lower) atrAbs = (ta.bb.upper - ta.bb.lower) / 4;
+  else atrAbs = price * 0.02;
+  const atrPct = Math.round(atrAbs / price * 10000) / 100;
+
+  const cand = [
+    { v: ta.sr && ta.sr.resistance, src: 'direnç' }, { v: ta.sr && ta.sr.support, src: 'destek' },
+    { v: ta.pivots && ta.pivots.r1, src: 'R1' }, { v: ta.pivots && ta.pivots.r2, src: 'R2' },
+    { v: ta.pivots && ta.pivots.s1, src: 'S1' }, { v: ta.pivots && ta.pivots.s2, src: 'S2' },
+    { v: ta.pivots && ta.pivots.pp, src: 'PP' },
+    { v: ta.bb && ta.bb.upper, src: 'BB üst' }, { v: ta.bb && ta.bb.lower, src: 'BB alt' },
+    { v: j && j.max, src: 'dönem zirvesi' }, { v: j && j.min, src: 'dönem dibi' },
+  ];
+  const all = taMergeLevels(cand, price);
+  const above = all.filter(x => x.v > price * 1.001);
+  const below = all.filter(x => x.v < price * 0.999).reverse();
+
+  const round = v => Math.round(v * 100) / 100;
+  const distPct = v => Math.round(Math.abs(v - price) / price * 10000) / 100;
+  // Tetige kac ortalama seansta ulasilir — mesafe / gunluk ortalama hareket (ATR)
+  const sessions = v => atrPct > 0 ? Math.round(distPct(v) / atrPct * 10) / 10 : null;
+
+  const mk = (dir, lv, next) => {
+    if (!lv) return null;
+    const sign = dir === 'up' ? 1 : -1;
+    const t1 = next ? next.v : round(lv.v + sign * 1.5 * atrAbs);
+    const t2 = round(lv.v + sign * 3 * atrAbs);
+    return {
+      dir,
+      trigger: lv.v,
+      triggerSrc: lv.src.join(' + '),
+      distPct: distPct(lv.v),
+      sessions: sessions(lv.v),
+      t1: round(t1),
+      t1Src: next ? next.src.join(' + ') : 'ATR×1.5',
+      t2,
+      invalidate: round(lv.v - sign * 1 * atrAbs),
+    };
+  };
+
+  const up = mk('up', above[0], above[1]);
+  const down = mk('down', below[0], below[1]);
+
+  const band = (above[0] && below[0]) ? {
+    low: below[0].v, high: above[0].v,
+    widthPct: Math.round((above[0].v - below[0].v) / price * 10000) / 100,
+  } : null;
+
+  // Oynaklik bandi — ATR×sqrt(gun). Tahmin degil: gecmis oynakligin istatistiksel araligi.
+  const vol5 = { low: round(price - atrAbs * Math.sqrt(5)), high: round(price + atrAbs * Math.sqrt(5)) };
+
+  return { price, atrAbs: round(atrAbs), atrPct, up, down, band, vol5, levelsUp: above.slice(0, 3), levelsDown: below.slice(0, 3) };
+}
+
+// ——— 3) Coklu zaman dilimi: gunluk bar -> haftalik bar ———
+// Sondan geriye 5'erli gruplar (son hafta yarim olsa da kullanilir).
+function taResample(j, size) {
+  const cl = (j && j.closes) || [];
+  if (cl.length < size * 8) return null;
+  const hi = j.highs || cl, lo = j.lows || cl, op = j.opens || cl, vo = j.volumes || [];
+  const out = { closes: [], highs: [], lows: [], opens: [], volumes: [], timestamps: [], currency: j.currency, name: j.name };
+  for (let end = cl.length; end > 0; end -= size) {
+    const s = Math.max(0, end - size);
+    const cs = cl.slice(s, end).filter(v => v != null);
+    if (!cs.length) continue;
+    const hs = hi.slice(s, end).filter(v => v != null);
+    const ls = lo.slice(s, end).filter(v => v != null);
+    const vs = vo.slice(s, end).filter(v => v != null);
+    out.closes.unshift(cs[cs.length - 1]);
+    out.opens.unshift((op.slice(s, end).filter(v => v != null))[0] ?? cs[0]);
+    out.highs.unshift(hs.length ? Math.max(...hs) : cs[cs.length - 1]);
+    out.lows.unshift(ls.length ? Math.min(...ls) : cs[cs.length - 1]);
+    out.volumes.unshift(vs.length ? vs.reduce((a, b) => a + b, 0) : null);
+    out.timestamps.unshift((j.timestamps || [])[end - 1] ?? null);
+  }
+  if (out.closes.length < 8) return null;
+  out.min = Math.round(Math.min(...out.lows) * 100) / 100;
+  out.max = Math.round(Math.max(...out.highs) * 100) / 100;
+  const f = out.closes[0], l = out.closes[out.closes.length - 1];
+  out.changePct = f > 0 ? Math.round((l - f) / f * 10000) / 100 : 0;
+  return out;
+}
+
+// Gunluk ile haftalik uyum skorlarini karsilastirir.
+function taMtfCompare(daily, weekly) {
+  const d = daily && daily.confluence, w = weekly && weekly.confluence;
+  if (!d || !w) return null;
+  let state, cls, text;
+  if (d.dir === 'mixed' || w.dir === 'mixed') {
+    state = 'kısmi'; cls = 'mixed';
+    text = 'bir zaman dilimi kararsız — tek başına zayıf sinyal';
+  } else if (d.dir === w.dir) {
+    state = 'uyumlu'; cls = d.dir;
+    text = d.dir === 'up'
+      ? 'kısa vade ve ana eğilim aynı yönde — göstergeler birbirini destekliyor'
+      : 'kısa vade ve ana eğilim aynı yönde (aşağı) — göstergeler birbirini destekliyor';
+  } else {
+    state = 'çatışıyor'; cls = 'conflict';
+    text = 'kısa vade ile ana eğilim ters yönde — bu dönemlerde yanlış sinyal oranı yükselir';
+  }
+  return {
+    state, cls, text,
+    daily: { score: d.score, label: d.label },
+    weekly: { score: w.score, label: w.label },
+  };
+}
+
+// ——— Render: uyum skoru ———
+function renderConfluence(ta) {
+  const el = document.getElementById('stockConfluence');
+  if (!el) return;
+  const c = ta && ta.confluence;
+  if (!c) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  const cls = c.dir === 'up' ? 'up' : c.dir === 'down' ? 'down' : 'mixed';
+  const relNote = {
+    'yüksek': `ADX ${c.adx} — piyasa trendli, uyum sinyali daha anlamlı`,
+    'orta': `ADX ${c.adx} — trend yeni kuruluyor, uyum sinyali orta güçte`,
+    'düşük': `ADX ${c.adx} — piyasa yatay, uyum sinyali zayıf (yatay piyasada göstergeler sık yanıltır)`,
+    'bilinmiyor': 'ADX hesaplanamadı — sinyal gücü niteliği bilinmiyor',
+  }[c.reliability];
+  el.innerHTML = `
+    <div class="sc-head">
+      <span class="sc-score ${cls}">${c.score}</span>
+      <div class="sc-txt">
+        <div class="sc-label">${escapeHtml(c.label)}</div>
+        <div class="sc-sub">${c.bull} gösterge yukarı · ${c.bear} aşağı · ${c.neutral} nötr — toplam ${c.total}</div>
+      </div>
+    </div>
+    <div class="sc-bar"><span class="sc-fill ${cls}" style="width:${c.score}%"></span><i class="sc-mid"></i></div>
+    <div class="sc-rel">${escapeHtml(relNote)}</div>
+    <details class="sc-det"><summary>Oy dökümü (${c.total} gösterge)</summary>
+      <div class="sc-votes">${c.votes.map(v => `<span class="sc-vote ${v.v > 0 ? 'up' : v.v < 0 ? 'down' : ''}">${escapeHtml(v.name)} ${v.v > 0 ? '↑' : v.v < 0 ? '↓' : '·'}${v.note ? ` <i>${escapeHtml(v.note)}</i>` : ''}</span>`).join('')}</div>
+    </details>`;
+}
+
+// ——— Render: kosullu senaryolar ———
+function renderScenarios(ta, cur) {
+  const el = document.getElementById('stockScenarios');
+  if (!el) return;
+  const s = ta && ta.scenarios;
+  if (!s || (!s.up && !s.down)) { el.innerHTML = '<span class="stock-ta-sig">Senaryo için yeterli seviye verisi yok — 3 ay veya 1 yıl dene</span>'; return; }
+  const f = v => formatStockPrice(v);
+  const c = escapeHtml(cur || '');
+  const card = (sc, title) => {
+    if (!sc) return '';
+    const sess = sc.sessions != null ? ` ≈ ${sc.sessions} ortalama seans` : '';
+    return `
+    <div class="scen-card ${sc.dir}">
+      <div class="scen-h"><span class="scen-dot"></span>${title}</div>
+      <div class="scen-line"><b>Tetik</b> günlük kapanış <u>${f(sc.trigger)} ${c}</u> ${sc.dir === 'up' ? 'üstünde' : 'altında'} <i>(${escapeHtml(sc.triggerSrc)} · %${sc.distPct} uzakta${sess})</i></div>
+      <div class="scen-line"><b>Sonraki seviyeler</b> ${f(sc.t1)} <i>(${escapeHtml(sc.t1Src)})</i> → ${f(sc.t2)} <i>(ATR×3)</i></div>
+      <div class="scen-line"><b>Geçersizleşir</b> fiyat ${f(sc.invalidate)} ${sc.dir === 'up' ? 'altına dönerse' : 'üstüne dönerse'} — tetik yanlış çıkmış demektir</div>
+    </div>`;
+  };
+  const bandLine = s.band
+    ? `<div class="scen-band"><b>Sıkışma bandı</b> ${f(s.band.low)} – ${f(s.band.high)} ${c} <i>(genişlik %${s.band.widthPct})</i></div>` : '';
+  const volLine = `<div class="scen-band"><b>Oynaklık aralığı (5 seans)</b> ${f(s.vol5.low)} – ${f(s.vol5.high)} ${c} <i>(ATR×√5 — geçmiş oynaklığın istatistiksel bandı, tahmin değil)</i></div>`;
+  el.innerHTML = card(s.up, 'Yukarı senaryo') + card(s.down, 'Aşağı senaryo') + bandLine + volLine +
+    `<div class="scen-note">Bunlar tahmin değil, koşullu seviye haritasıdır: tetik gerçekleşmezse senaryo başlamaz.</div>`;
+}
+
+// ——— Coklu zaman dilimi: 1y veriyi haftaliga cevirip gunlukle karsilastir ———
+let _stockMtf = null;
+const _stockMtfCache = {};   // ySymbol -> {at, j}
+let _stockMtfReq = 0;
+
+async function loadStockMtf(w, range, jCur) {
+  const el = document.getElementById('stockMtf');
+  if (!el) return;
+  _stockMtf = null;
+  el.style.display = 'none';
+  const req = ++_stockMtfReq;
+  const sym = w.symbol;
+  try {
+    const ySymbol = w.ySymbol || legacyYSymbol(w);
+    let j1y = null;
+    if (range === '1y' && jCur && (jCur.closes || []).length >= 60) j1y = jCur;
+    else {
+      const cached = _stockMtfCache[ySymbol];
+      if (cached && Date.now() - cached.at < 30 * 60 * 1000) j1y = cached.j;
+      else {
+        const token = window._supa ? (await window._supa.auth.getSession()).data.session?.access_token : null;
+        if (!token) return;
+        const r = await fetch(STOCK_HISTORY_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ ySymbol, range: '1y' }),
+        });
+        if (!r.ok) return;
+        j1y = await r.json();
+        _stockMtfCache[ySymbol] = { at: Date.now(), j: j1y };
+      }
+    }
+    if (req !== _stockMtfReq) return;                       // kullanici araligi degistirdi
+    if (!_stockChartPayload || _stockChartPayload.symbol !== sym) return;
+    const jw = taResample(j1y, 5);
+    if (!jw) return;
+    const weekly = computeStockTA(jw);
+    const cmp = taMtfCompare(_stockChartPayload.ta, weekly);
+    if (!cmp) return;
+    _stockMtf = { weekly, cmp };
+    el.style.display = 'block';
+    el.className = 'stock-mtf ' + cmp.cls;
+    el.innerHTML = `<b>Zaman dilimi uyumu — ${escapeHtml(cmp.state)}</b>
+      <span>Günlük: ${escapeHtml(cmp.daily.label)} (${cmp.daily.score}) · Haftalık: ${escapeHtml(cmp.weekly.label)} (${cmp.weekly.score})</span>
+      <span class="mtf-txt">${escapeHtml(cmp.text)}</span>`;
+  } catch {}
 }
 
 // ——— Risk / stop-loss önerisi (Tem 11) ———
@@ -1761,6 +2146,229 @@ function setStopAlarm(stop) {
   showToast(`${w.symbol}: ${formatStockPrice(stop)} altına inince bildirim gelecek`, 'success', 3000);
 }
 
+// ============================================================
+// BUFFETT SKORU — temel analiz karsiligi (teknik uyum skorunun esi)
+// ============================================================
+// Kaynak ayrimi: 1 Dolar Testi + Owner Earnings dogrudan Buffett'in mektuplarindan;
+// sayisal esikler yorumculardan damitildi (Buffett rakam vermez, tarz verir).
+// KASITLI OLARAK DISARIDA: FAVOK/EBITDA (Buffett acikca reddediyor), beta/volatilite,
+// analist hedefi, "duzeltilmis" kar, tum teknik gostergeler.
+// ---
+// Skor 0-100, agirlikli. Veri gelmeyen kriter ATLANIR (uydurma puan yok),
+// kapsama orani ayrica raporlanir; kapsama %50'nin altindaysa skor null doner.
+
+const BUFFETT_HURDLE_DEFAULT = { TRY: 35, USD: 10, EUR: 8, GBP: 8 };
+
+function bfClamp01(v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+function bfLin(v, lo, hi) { return (hi === lo) ? 0 : bfClamp01((v - lo) / (hi - lo)); }
+function bfMedian(a) {
+  if (!a.length) return null;
+  const s = a.slice().sort((x, y) => x - y), m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+function bfR(v, d) { return (v == null || !isFinite(v)) ? null : Math.round(v * Math.pow(10, d)) / Math.pow(10, d); }
+
+// Engel orani (hurdle rate) — Buffett'in "sermaye maliyetinin ustunde" olcusunun TR karsiligi.
+// TR'de %15 ROE iyi degil: mevduat/tahvil nominal getirisi cok yuksek.
+function buffettHurdle(cur) {
+  const c = String(cur || 'TRY').toUpperCase();
+  const ov = (typeof data !== 'undefined' && data.settings) ? data.settings.buffettHurdle : null;
+  if (ov && typeof ov === 'object') {
+    const v = Number(ov[c]);
+    if (isFinite(v) && v > 0 && v < 200) return v;
+  }
+  return BUFFETT_HURDLE_DEFAULT[c] != null ? BUFFETT_HURDLE_DEFAULT[c] : 10;
+}
+
+// f = /stock-fundamentals cevabi · hurdlePct = nominal engel orani (%)
+function buffettScore(f, hurdlePct) {
+  if (!f || typeof f !== 'object') return null;
+  const hur = (isFinite(hurdlePct) && hurdlePct > 0) ? hurdlePct / 100 : 0.10;
+  const cur = String(f.currency || 'TRY').toUpperCase();
+  const isTRY = cur === 'TRY';
+  const ys = (Array.isArray(f.years) ? f.years : []).filter(y => y && isFinite(y.year))
+    .sort((a, b) => b.year - a.year); // yeniden eskiye
+  const parts = [], flags = [];
+  const add = (key, label, weight, score, note) => parts.push({ key, label, weight, score, note });
+
+  if (ys.length < 2) {
+    return { score: null, label: 'yetersiz veri', parts: [], flags: [], coverage: 0,
+      hurdlePct: Math.round(hur * 1000) / 10, years: ys.length, currency: cur,
+      reason: 'Yahoo bu sembol için yıllık mali tablo döndürmedi (BIST hisselerinde sık).' };
+  }
+
+  // --- Borc/ozsermaye (once hesaplanir; ROE'nin kaldiracli olup olmadigini bilmek icin) ---
+  const b0 = ys.find(y => y.equity != null && y.equity > 0) || null;
+  let de = null, netDe = null, deSrc = null;
+  if (b0 && (b0.longTermDebt != null || b0.shortDebt != null)) {
+    const debt = (b0.longTermDebt || 0) + (b0.shortDebt || 0);
+    de = debt / b0.equity; deSrc = 'bilanco ' + b0.year;
+    if (b0.cash != null) netDe = Math.max(0, debt - b0.cash) / b0.equity;
+  } else if (b0 && f.totalDebt != null) {
+    de = f.totalDebt / b0.equity; deSrc = 'toplam borc';
+    if (f.totalCash != null) netDe = Math.max(0, f.totalDebt - f.totalCash) / b0.equity;
+  } else if (f.debtToEquity != null && isFinite(f.debtToEquity)) {
+    de = f.debtToEquity / 100; deSrc = 'Yahoo oran';
+  }
+  const deUse = netDe != null ? netDe : de;
+
+  // --- 1) ROE seviyesi + istikrari (Buffett'in ana filtresi) ---
+  const roes = ys.filter(y => y.netIncome != null && y.equity != null && y.equity > 0)
+    .map(y => ({ year: y.year, v: y.netIncome / y.equity }));
+  if (roes.length >= 2) {
+    const vals = roes.map(r => r.v);
+    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const above = vals.filter(v => v >= hur * 0.8).length;
+    const anyNeg = vals.some(v => v < 0);
+    const lvl = bfLin(mean / hur, 0.7, 1.6);
+    let cons = above / vals.length;
+    if (anyNeg) cons = Math.min(cons, 0.3);
+    let sc = 0.6 * lvl + 0.4 * cons;
+    let lev = '';
+    // Kaldiracla sisirilmis ROE saymaz — yuksek borcta iskonto
+    if (deUse != null && deUse > (isTRY ? 1.0 : 1.5) && sc > 0) {
+      sc *= 0.7; lev = ' · borçla şişirilmiş (iskonto uygulandı)';
+    }
+    add('roe', 'Özsermaye kârlılığı (ROE)', 2.0, bfClamp01(sc),
+      `Ort. %${bfR(mean * 100, 1)} · ${above}/${vals.length} yıl engelin (%${bfR(hur * 100, 0)}) üzerinde${anyNeg ? ' · zarar eden yıl var' : ''}${lev}`);
+    if (anyNeg) flags.push('Dönem içinde özsermaye kârlılığı negatif olan yıl var.');
+  } else {
+    add('roe', 'Özsermaye kârlılığı (ROE)', 2.0, null, 'Yıllık özsermaye/net kâr verisi yetersiz.');
+  }
+
+  // --- 2) Borcsuzluk ("iyi is, borca ihtiyac duymaz") ---
+  if (deUse != null && isFinite(deUse)) {
+    const dLo = isTRY ? 0.30 : 0.50, dHi = isTRY ? 1.00 : 2.00;
+    const sc = 1 - bfLin(deUse, dLo, dHi);
+    add('debt', 'Borç / Özsermaye', 2.0, sc,
+      `${netDe != null ? 'Net borç' : 'Borç'}/özsermaye ${bfR(deUse, 2)}× (${deSrc}) · ${isTRY ? 'TR eşiği 0,30–1,00 — yüksek faizde borç öldürücü' : 'eşik 0,50–2,00'}`);
+    if (deUse > (isTRY ? 1.0 : 2.0)) flags.push('Borç/özsermaye eşiğin üstünde — yüksek faiz ortamında kırılgan.');
+  } else {
+    add('debt', 'Borç / Özsermaye', 2.0, null, 'Borç verisi gelmedi.');
+  }
+
+  // --- 3) Net kar marji: seviye + istikrar + trend (fiyatlama gucunun kaniti) ---
+  const mgs = ys.filter(y => y.netIncome != null && y.revenue != null && y.revenue > 0)
+    .map(y => ({ year: y.year, v: y.netIncome / y.revenue }));
+  if (mgs.length >= 2) {
+    const vals = mgs.map(m => m.v);
+    const med = bfMedian(vals);
+    const spread = Math.max.apply(null, vals) - Math.min.apply(null, vals);
+    const lvl = bfLin(med, 0.02, 0.20);
+    const stab = 1 - bfClamp01(spread / 0.20);
+    const trend = vals[0] - vals[vals.length - 1]; // yeni - eski
+    const tr = bfLin(trend, -0.05, 0.05);
+    const sc = 0.5 * lvl + 0.3 * stab + 0.2 * tr;
+    add('margin', 'Net kâr marjı', 1.5, sc,
+      `Medyan %${bfR(med * 100, 1)} · dalgalanma ${bfR(spread * 100, 1)} puan · trend ${trend >= 0 ? '+' : ''}${bfR(trend * 100, 1)} puan`);
+  } else {
+    add('margin', 'Net kâr marjı', 1.5, null, 'Yıllık ciro/net kâr verisi yetersiz.');
+  }
+
+  // --- 4) 1 Dolar Testi (Buffett'in en sevdigi sinav) ---
+  let dollar = null;
+  const shares = (f.sharesOutstanding != null && f.sharesOutstanding > 0) ? f.sharesOutstanding : null;
+  const ph = f.priceHistory;
+  const niY = ys.filter(y => y.netIncome != null);
+  if (shares && ph && Array.isArray(ph.t) && Array.isArray(ph.c) && ph.t.length >= 2 && niY.length >= 2) {
+    const oldestYear = niY[niY.length - 1].year;
+    const t0 = Date.UTC(oldestYear, 0, 1) / 1000;
+    let i0 = -1;
+    for (let i = 0; i < ph.t.length; i++) { if (ph.t[i] >= t0) { i0 = i; break; } }
+    const divKnown = niY.some(y => y.dividendsPaid != null);
+    const retained = niY.reduce((s, y) => s + y.netIncome - Math.abs(y.dividendsPaid || 0), 0);
+    const retPerShare = retained / shares;
+    if (i0 >= 0 && i0 < ph.c.length - 1 && retPerShare > 0) {
+      const p0 = ph.c[i0], p1 = ph.c[ph.c.length - 1];
+      const gain = p1 - p0;
+      const ratio = gain / retPerShare;
+      const sc = bfLin(ratio, 0, 2.0);
+      dollar = { years: niY.length, from: oldestYear, p0: bfR(p0, 2), p1: bfR(p1, 2),
+        retainedPerShare: bfR(retPerShare, 2), gainPerShare: bfR(gain, 2), ratio: bfR(ratio, 2), divKnown };
+      add('dollar', '1 Dolar Testi', 2.0, sc,
+        `Tutulan her 1 birim kâr ${bfR(ratio, 2)} birim piyasa değeri yarattı (${oldestYear}'den beri) · tutulan ${bfR(retPerShare, 2)} vs fiyat artışı ${bfR(gain, 2)}${divKnown ? '' : ' · temettü verisi yok, tutulan kâr yüksek tahmin edilmiş olabilir'}`);
+      if (ratio < 1) flags.push('1 Dolar Testi başarısız: tutulan kâr piyasa değerine dönüşmemiş — sermaye dağıtımı zayıf.');
+    } else if (retPerShare <= 0) {
+      add('dollar', '1 Dolar Testi', 2.0, null, 'Dönemde net birikmiş kâr yok (zarar ya da tümü temettü) — test uygulanamaz.');
+    } else {
+      add('dollar', '1 Dolar Testi', 2.0, null, 'Fiyat geçmişi mali tablo dönemini kapsamıyor.');
+    }
+  } else {
+    add('dollar', '1 Dolar Testi', 2.0, null, 'Hisse adedi veya fiyat geçmişi gelmedi.');
+  }
+
+  // --- 5) Kar istikrari ("donusumler nadiren doner") ---
+  const nis = niY.map(y => y.netIncome);
+  if (nis.length >= 3) {
+    const pos = nis.filter(v => v > 0).length / nis.length;
+    let up = 0;
+    for (let i = nis.length - 1; i > 0; i--) if (nis[i - 1] > nis[i]) up++;
+    const upR = up / (nis.length - 1);
+    let sc = 0.5 * pos + 0.5 * upR;
+    if (nis.some(v => v <= 0)) sc = Math.min(sc, 0.5);
+    add('stability', 'Kâr istikrarı', 1.5, sc,
+      `${nis.filter(v => v > 0).length}/${nis.length} yıl kârlı · ${up}/${nis.length - 1} yıl bir önceki yılı geçmiş`);
+  } else {
+    add('stability', 'Kâr istikrarı', 1.5, null, 'En az 3 yıllık kâr serisi gerekli.');
+  }
+
+  // --- 6) Owner Earnings kalitesi (kagit kar mi, nakit kar mi) ---
+  // OE ≈ isletme nakit akisi − bakim capex'i (bakim ≈ min(capex, amortisman))
+  let oeLatest = null, oeQ = null;
+  const oeY = ys.filter(y => y.opCashFlow != null && y.capex != null && y.dna != null && y.netIncome != null)
+    .map(y => {
+      const maint = Math.min(Math.abs(y.capex), Math.abs(y.dna));
+      return { year: y.year, oe: y.opCashFlow - maint, ni: y.netIncome };
+    });
+  if (oeY.length >= 1) {
+    oeLatest = oeY[0].oe;
+    const qs = oeY.filter(o => o.ni > 0).map(o => o.oe / o.ni);
+    if (qs.length) {
+      oeQ = qs.reduce((a, b) => a + b, 0) / qs.length;
+      const sc = bfLin(oeQ, 0.4, 1.0);
+      add('owner', 'Owner Earnings kalitesi', 1.5, sc,
+        `Sahip kârı / muhasebe kârı ort. ${bfR(oeQ, 2)}× · ${oeQ < 0.7 ? 'kâr büyük ölçüde kâğıt üzerinde' : 'kâr nakde dönüşüyor'}`);
+      if (oeQ < 0.5) flags.push('Muhasebe kârı nakde dönüşmüyor (owner earnings net kârın çok altında).');
+    } else {
+      add('owner', 'Owner Earnings kalitesi', 1.5, null, 'Kârlı yıl yok — oran hesaplanamadı.');
+    }
+  } else {
+    add('owner', 'Owner Earnings kalitesi', 1.5, null, 'Nakit akış tablosu (işletme akışı / capex / amortisman) gelmedi.');
+  }
+
+  // --- 7) Fiyat cazibesi: Owner Earnings getirisi vs engel orani ---
+  let oeYield = null;
+  if (oeLatest != null && f.marketCap != null && f.marketCap > 0) {
+    oeYield = oeLatest / f.marketCap;
+    const sc = bfLin(oeYield / hur, 0.3, 1.0);
+    add('value', 'Fiyat cazibesi (OE getirisi)', 1.0, sc,
+      `Owner earnings getirisi %${bfR(oeYield * 100, 1)} · engel oranı %${bfR(hur * 100, 0)} — ${oeYield >= hur ? 'engelin üstünde' : 'engelin altında'}`);
+  } else {
+    add('value', 'Fiyat cazibesi (OE getirisi)', 1.0, null, 'Owner earnings ya da piyasa değeri yok.');
+  }
+
+  // --- Toplam ---
+  const totW = parts.reduce((s, p) => s + p.weight, 0);
+  const have = parts.filter(p => p.score != null);
+  const haveW = have.reduce((s, p) => s + p.weight, 0);
+  const coverage = totW ? haveW / totW : 0;
+  if (coverage < 0.5) {
+    return { score: null, label: 'yetersiz veri', parts, flags, coverage: bfR(coverage, 2),
+      hurdlePct: bfR(hur * 100, 0), years: ys.length, currency: cur, oeYield: bfR(oeYield, 4), dollar,
+      reason: 'Kriterlerin yarısından fazlası için veri yok — skor üretmek uydurma olurdu.' };
+  }
+  const raw = have.reduce((s, p) => s + p.score * p.weight, 0) / haveW;
+  const score = Math.round(raw * 100);
+  const label = score >= 75 ? 'güçlü kalite' : score >= 60 ? 'iyi' : score >= 45 ? 'karışık'
+    : score >= 30 ? 'zayıf' : 'filtreden geçmiyor';
+  if (isTRY) flags.push('BIST notu: 2023 sonrası enflasyon muhasebesi net kârı çarpıtır — Owner Earnings satırına daha çok güven.');
+  return {
+    score, label, parts, flags, coverage: bfR(coverage, 2), hurdlePct: bfR(hur * 100, 0),
+    years: ys.length, currency: cur, oeYield: bfR(oeYield, 4), oeQuality: bfR(oeQ, 2),
+    debtToEquity: bfR(deUse, 2), dollar,
+  };
+}
+
 function buildStockAnalysisFacts(ta, j) {
   return {
     currency: j.currency || '',
@@ -1801,19 +2409,59 @@ function buildStockAnalysisFacts(ta, j) {
     pivotZone: ta.pivotZone,
     recentChange7d: ta.recentChange7d,
     signals: ta.signals || [],
+    // Analiz v2 — PWA hesaplar, AI uydurmaz
+    confluence: ta.confluence ? {
+      score: ta.confluence.score, label: ta.confluence.label,
+      bull: ta.confluence.bull, bear: ta.confluence.bear, neutral: ta.confluence.neutral,
+      total: ta.confluence.total, reliability: ta.confluence.reliability,
+    } : null,
+    scenarios: ta.scenarios ? {
+      atrPct: ta.scenarios.atrPct,
+      up: ta.scenarios.up, down: ta.scenarios.down,
+      band: ta.scenarios.band, vol5: ta.scenarios.vol5,
+    } : null,
+    mtf: (_stockMtf && _stockMtf.cmp) ? {
+      state: _stockMtf.cmp.state,
+      dailyScore: _stockMtf.cmp.daily.score, dailyLabel: _stockMtf.cmp.daily.label,
+      weeklyScore: _stockMtf.cmp.weekly.score, weeklyLabel: _stockMtf.cmp.weekly.label,
+    } : null,
+    // Buffett katmanı — temel analiz; PWA hesaplar, AI yeniden hesaplamaz
+    buffett: _stockBuffett ? {
+      score: _stockBuffett.score,
+      label: _stockBuffett.label,
+      hurdlePct: _stockBuffett.hurdlePct,
+      coverage: _stockBuffett.coverage,
+      years: _stockBuffett.years,
+      currency: _stockBuffett.currency,
+      reason: _stockBuffett.reason || null,
+      oeYield: _stockBuffett.oeYield ?? null,
+      oeQuality: _stockBuffett.oeQuality ?? null,
+      debtToEquity: _stockBuffett.debtToEquity ?? null,
+      dollar: _stockBuffett.dollar || null,
+      flags: _stockBuffett.flags || [],
+      parts: (_stockBuffett.parts || []).map(p => ({
+        label: p.label,
+        pts: p.score == null ? null : Math.round(p.score * p.weight * 10) / 10,
+        max: p.weight,
+        note: p.note || '',
+      })),
+    } : null,
   };
 }
 
-async function aiStockAnalysis() {
+async function aiStockAnalysis(mode) {
+  const isFund = mode === 'fund';
   if (!_stockChartPayload) return;
-  const btn = document.getElementById('stockTaAiBtn');
-  const resEl = document.getElementById('stockTaAiResult');
+  const btn = document.getElementById(isFund ? 'stockFundAiBtn' : 'stockTaAiBtn');
+  const resEl = document.getElementById(isFund ? 'stockFundAiResult' : 'stockTaAiResult');
   btn.disabled = true;
   resEl.style.display = 'block';
-  resEl.textContent = 'AI teknik yorum hazırlanıyor…';
+  resEl.textContent = isFund ? 'AI temel yorum hazırlanıyor…' : 'AI teknik yorum hazırlanıyor…';
   try {
     const token = window._supa ? (await window._supa.auth.getSession()).data.session?.access_token : null;
     if (!token) throw new Error('giriş yapılmamış');
+    // Temel yorumda Buffett skoru şart — panel açılmadan basıldıysa sessizce çek
+    if (isFund && !_stockFundData) { await loadStockFundamentals(); }
     const facts = buildStockAnalysisFacts(_stockChartPayload.ta, _stockChartPayload.j);
     // Haber katmanı (teknik + hikaye): açık sekmeden varsa onu kullan, yoksa sessizce çek
     let newsHeadlines = [];
@@ -1839,6 +2487,7 @@ async function aiStockAnalysis() {
       body: JSON.stringify({
         symbol: _stockChartPayload.symbol,
         range: _stockChartPayload.range,
+        mode: isFund ? 'fund' : 'ta',
         facts,
         newsHeadlines,
       }),
@@ -1953,6 +2602,10 @@ async function openPfTechModal() {
       badges.push(`<span class="pf-tech-badge ${bbCls}">BB: ${escapeHtml(ta.bbPosition)}</span>`);
     }
     badges.push(`<span class="pf-tech-badge">trend ${escapeHtml(ta.trend)}</span>`);
+    if (ta.confluence) {
+      const cCls = ta.confluence.dir === 'up' ? 'up' : ta.confluence.dir === 'down' ? 'down' : 'warn';
+      badges.push(`<span class="pf-tech-badge ${cCls}">uyum ${ta.confluence.score}</span>`);
+    }
     _pfTechItems.push({ symbol: w.symbol, range, facts: rs.facts });
     return `<div class="pf-tech-row ${dir}">
       <div class="pf-tech-sym">${escapeHtml(w.symbol)} <span class="px">${formatStockPrice(ta.current)} ${escapeHtml(rs.j.currency || w.currency || '')}</span></div>

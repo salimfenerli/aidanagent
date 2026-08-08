@@ -11,10 +11,61 @@
 **Deployed büyük paketler (hepsi CANLI — detay CHANGELOG.md):**
 - **AI sağlık koçu (v7-117):** uyku + Hevy antrenman + beslenme BİRLİKTE — lokal desen tespiti ($0) + `/health-coach` (Gemini) + Pazar otomatik rapor. Diyet sekmesi üstünde şerit.
 - **Diyet:** barkod tarayıcı (html5-qrcode + Open Food Facts), Türk besin DB, USDA+AI arama, özel besin/tarif, takviye takibi, BMR/TDEE (`calcGoals`), çoklu+haftalık program, makro grafik.
-- **Borsa:** 15 göstergeli teknik analiz, mum grafik, Fibonacci, temel analiz paneli (`/stock-fundamentals`), AI taktik, BIST100 kıyas, risk/stop/pozisyon-boyutu paneli, işlem alarmı, portföy görselden ekleme.
+- **Borsa (Analiz v2, v7-130):** uyum skoru 0-100 + koşullu senaryolar (tetik/hedef/geçersizleşme) + günlük↔haftalık zaman dilimi uyumu; 15 göstergeli teknik analiz, mum grafik, Fibonacci, temel analiz paneli (`/stock-fundamentals`), AI taktik, BIST100 kıyas, risk/stop/pozisyon-boyutu paneli, işlem alarmı, portföy görselden ekleme.
 - **Görev/Plan:** otomatik gün planı + blok bildirimleri (v7-109), planlama zekası — geçmişten öğrenen `planHistory`/`planProfile` + otomatik toparlama (v7-110), haftalık sabit program (`fixedSchedule`).
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
+
+### 🔴 8 Ağustos 2026 — 🧱 BUFFETT SKORU (v7-131)
+
+Salim: "Buffett göstergelerini sistemde kullanalım — temel analiz paneline 0-100 skor, hangi maddeden kırık aldığını göstersin." **Teknik uyum skorunun (v7-130) temel analiz karşılığı.** Skoru **PWA hesaplar, AI uydurmaz** — portföy yorumu/TA kalıbının aynısı.
+
+**1. Veri katmanı — `/stock-fundamentals` genişletildi.** Eskiden sadece anlık oranlar (`summaryDetail,defaultKeyStatistics,financialData,price`) çekiliyordu; skorun tamamı **geçmiş** ister. Eklenen modüller: `incomeStatementHistory,balanceSheetHistory,cashflowStatementHistory` (Yahoo genelde **4 yıllık** verir). Yeni `buildFundYears()` üç tabloyu yıl bazında tek diziye birleştirir (`{year, revenue, netIncome, equity, longTermDebt, shortDebt, cash, dna, capex, dividendsPaid, opCashFlow, …}`), eksik alan `null` kalır. Ayrıca **5 yıllık aylık kapanış serisi** (`priceHistory`) aynı istekte gelir.
+- ⚠️ **`adjclose` DEĞİL `close` kullanılır.** adjclose temettüyü de geriye düzeltir; 1 Dolar Testi'nde temettüyü zaten tutulan kârdan düşüyoruz → adjclose kullanmak **çift sayardı**. `close` bölünme/bedelsiz düzeltilmiş ama temettü düzeltilmemiştir — BIST'te bedelsiz sık olduğu için bu ayrım şart.
+
+**2. `buffettScore(f, hurdlePct)` — saf fonksiyon (stocks.js), 7 kriter / toplam ağırlık 11,5.**
+
+| Kriter | Ağırlık | Ne ölçer |
+|---|---|---|
+| ROE seviyesi + istikrarı | 2.0 | Ana filtre. **Kaldıraçla şişirilmiş ROE saymaz** — D/E eşiği aşarsa puana ×0.7 iskonto |
+| Borç / Özsermaye | 2.0 | Nakit varsa **net borç**. TRY eşiği 0,30–1,00 (USD 0,50–2,00) — %35 faizde borç öldürücü |
+| Net kâr marjı | 1.5 | Medyan seviye (0,5) + dalgalanma (0,3) + trend (0,2) — fiyatlama gücü |
+| **1 Dolar Testi** | 2.0 | Tutulan her 1 birim kâr ≥1 birim piyasa değeri yarattı mı |
+| Kâr istikrarı | 1.5 | Kârlı yıl oranı + bir öncekini geçen yıl oranı; zarar varsa 0,5 tavanı |
+| **Owner Earnings kalitesi** | 1.5 | Sahip kârı / muhasebe kârı — kâr kâğıt üstünde mi, nakde mi dönüyor |
+| Fiyat cazibesi (OE getirisi) | 1.0 | Owner earnings / piyasa değeri, **engel oranına** karşı |
+
+- **Owner Earnings formülü:** `işletme nakit akışı − min(|capex|, amortisman)`. Klasik `net kâr + D&A − bakım capex` yazımı, bakım capex'i D&A ile yaklaştırınca **net kâra sadeleşir ve hiçbir bilgi taşımaz** — o yüzden OCF tabanlı yazım seçildi (işletme sermayesi değişimi de içinde). `opCashFlow` yoksa kriter **atlanır**, uydurulmaz.
+- **Engel oranı (hurdle):** Buffett'in "sermaye maliyetinin üstünde" ölçüsünün TR karşılığı. Varsayılan **TRY %35** / USD %10; `data.settings.buffettHurdle[CUR]` ile kart üstünden değiştirilebilir. Salim'in tespiti kodda: %15 ROE, mevduat %37 iken iyi değildir.
+- **Veri yoksa UYDURMA:** kriter atlanır, kapsama oranı raporlanır; **kapsama <%50 → skor `null`** + gerekçe (taConfluence'ın <4 gösterge kuralının eşi). Yahoo BIST'te mali tablo vermeyebilir — kart bunu açıkça söyler.
+
+**3. Kasıtlı olarak DIŞARIDA (Buffett'in reddettikleri):** FAVÖK/EBITDA · beta/oynaklık ("risk = kalıcı sermaye kaybı, fiyat oynaması değil") · analist hedefleri · "düzeltilmiş" kârlar · tüm teknik göstergeler. Bu hem skorda hem AI prompt'unda yasak; kart altında kullanıcıya da yazılı.
+
+**4. UI:** temel analiz sekmesinin başında `#buffettCard` — skor + bar + **katlanır kriter dökümü** (her madde: kaç/kaç puan, mini bar, tek satır gerekçe), uyarı bayrakları, engel oranı düğmesi. Klasik oranlar tablosu altta kaldı. Impeccable: tam kenar + tint, yan-şerit yok, ease-out, `prefers-reduced-motion` var.
+
+**5. AI:** `/stock-analysis` yeni `mode:'fund'` alır (yeni endpoint YOK). `facts.buffett` geldiğinde prompt'a **BUFFETT KATMANI** bloğu girer: kriter dökümünü açıkla, en zayıf 2 maddeyi öne çıkar, her kriterin ne ölçtüğünü öğret (Owner Earnings'in 1986 mektubu kökeni dahil), reddedilenleri kullanma, TRY'de enflasyon muhasebesi uyarısı. **Tavsiye/kehanet/"ucuz-pahalı" yasağı aynen korundu** — sayı engel oranıyla karşılaştırılarak betimlenir. `max_tokens` fund modunda 1400. Temel panelde "AI temel yorum" düğmesi.
+
+**Yeni veri alanı:** `data.settings.buffettHurdle` (opsiyonel, `{TRY:35}` gibi). localStorage/Supabase şişmez — skor her açılışta yeniden hesaplanır, saklanmaz.
+**Doğrulama:** 30 test (skor uçları · kapsama <%50 → null · eksik kriter atlama · bozuk girdi · 1 Dolar Testi oranı/atlanma/bayrak · net borç · kaldıraç iskontosu · hurdle etkisi ve ayar override · TRY-USD eşik farkı · owner earnings bakım capex tavanı · TRY enflasyon notu · ağırlık sözleşmesi 7/11,5 · DOM render + XSS + NaN sızıntısı · facts sözleşmesi · worker prompt yasakları · `heavy` maliyet kilidi · Impeccable CSS · EOL) · `node --check` stocks/worker/sw temiz · styles.css LF, diğerleri CRLF doğrulandı.
+**⚠️ Bilinen sınır:** Yahoo 4 yıl verir, Buffett 10 yıl ister — skor "10 yıllık istikrar" maddesini tam ölçemez, kart yıl sayısını gösterir. BIST'te mali tablo boş gelirse skor `null` döner (ABD hisselerinde genelde dolu).
+**Cache:** v7-130 → **v7-131**
+
+### 🔴 7 Ağustos 2026 — 📐 BORSA ANALİZ v2 (v7-130)
+
+Salim: "borsa analiz yapılabilsin." Denetimde asıl darboğaz **veri değil prompt** çıktı: 15 gösterge hesaplanıyordu ama `/stock-analysis` sistem prompt'u AI'a *"sadece betimle, hiçbir çıkarım yapma"* diyordu → çıktı gösterge sözlüğü gibi okunuyordu, **analiz değildi**. Üç katman eklendi, üçü de **lokal ve kural tabanlı** (AI'a giden faktları PWA üretir).
+
+**1. Uyum skoru (`taConfluence`) — 0-100, 50 nötr.** 12 gösterge +1/-1/0 oy verir, ağırlıklı ortalama. Ağırlıklar yön bilgisi taşıma gücüne göre: SMA20/50 ve trend 2.0, EMA9/21 + MACD histogram + OBV 1.5, momentum osilatörleri 1.0. **ADX oy VERMEZ** — yönsüzdür; skorun *güvenilirliğini* niteler (ADX<20 = yatay piyasa, yüksek uyum bile zayıf sinyal). <4 gösterge varsa `null` döner — uydurma skor yok. UI'da bar + katlanır oy dökümü.
+
+**2. Koşullu senaryolar (`taScenarios`) — tahmin değil, seviye haritası.** Aday seviyeler (20 periyot destek/direnç, klasik pivot PP/R1/R2/S1/S2, Bollinger bantları, dönem min/max) toplanır; **%0.4 içindekiler tek seviyede birleştirilir** (grafikte zaten aynı çizgi). Her yön için: **tetik** (fiyatın üstündeki/altındaki ilk seviye) + kaynağı + %mesafe + **≈kaç ortalama seans** (mesafe ÷ ATR%) + sıradaki 2 seviye + **geçersizleşme seviyesi** (tetik ∓1×ATR). Ayrıca sıkışma bandı ve **ATR×√5 oynaklık aralığı** (istatistiksel band, hedef DEĞİL). ATR yoksa Bollinger genişliği/4'e düşer.
+
+**3. Çoklu zaman dilimi (`taResample` + `taMtfCompare`).** 1 yıllık veri **5'erli gruplarla haftalık bara** çevrilir (sondan geriye — son hafta yarım olsa da korunur), aynı `computeStockTA` ondan da geçer, günlük ile haftalık uyum skorları karşılaştırılır: **uyumlu / çatışıyor / kısmi**. Çatışma en değerli sinyal — kısa vade ile ana eğilim ters yöndeyse yanlış sinyal oranı yükselir. 1y veri **ySymbol başına 30 dk cache**'lenir, seçili aralık zaten 1y ise ek istek atılmaz. Yarış koşulu koruması: `_stockMtfReq` sayacı + sembol kontrolü (kullanıcı aralığı hızlı değiştirirse bayat sonuç ekrana basılmaz).
+
+**AI prompt'u koşullu dile açıldı.** Yeni izin: *"X'in üstünde günlük kapanış olursa teknik olarak sıradaki seviye Y'dir"* — **koşul ve geçersizleşme seviyesi birlikte söylenmek zorunda**. Yasaklar korundu/keskinleştirildi: al-sat **emri**, **koşulsuz** kehanet ("yükselecek"), değer yargısı, verilmeyen sayı, **uydurma olasılık yüzdesi**. Zorunlu kapanış disclaimer cümlesi kaldırıldı (arayüzde zaten sabit not var). `max_tokens` 520 → 900, hedef 8-12 cümle. Portföy teknik özeti de uyum skorunu ve tetik seviyelerini alır (portföy tek yöne yığılmış mı = yoğunlaşma riski).
+
+**Yeni veri alanı yok** — hepsi TA'dan türetiliyor, localStorage/Supabase şişmiyor. Yeni endpoint yok (`/stock-history` yeniden kullanıldı). Yeni cron yok.
+**Doğrulama:** 31 test (uyum skoru uçları/ADX bağımsızlığı/yetersiz veri · senaryo tetik yönü + geçersizleşme tarafı + seviye birleştirme + tek taraflı seviye + ATR fallback · resample OHLC/hacim toplama + tam bölünmeyen seri · MTF 3 durum · computeStockTA regresyonu 28 eski alan · facts sözleşmesi · DOM render + XSS · worker prompt sözleşmesi + `heavy` maliyet kilidi · Impeccable CSS denetimi) · `node --check` stocks/worker temiz · styles.css LF, diğerleri CRLF doğrulandı.
+**⚠️ Bilinen (bu paketten ÖNCE de vardı):** `07-hygiene` ölü dosya testi kırmızı — `app.js`, `app.js.bak`, `asistan.html.bak`, `aidan-worker/worker.js.pre-llama4`, `netlify.toml` repoda duruyor. **Sandbox `rm` yapamaz**, Salim'in silmesi gerekiyor.
+**Cache:** v7-129 → **v7-130**
 
 ### 🔴 7 Ağustos 2026 — 📷 SOHBETE FOTOĞRAF + 🔓 GÜVENLİK FİLTRELERİ KAPALI (v7-129)
 
