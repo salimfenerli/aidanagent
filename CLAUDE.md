@@ -16,6 +16,22 @@
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 8 Ağustos 2026 — 💬 SOHBETE SAĞLIK BAĞLAMI (v7-133)
+
+Salim: "Aidan'a sor kısmına bir şey yazdığımda benim antrenman/beslenme verilerime erişebiliyor mu?" **Hayırdı.** `/chat` bağlamı yalnızca görev sayıları + MIT + portföy özeti gönderiyordu; uyku, antrenman, beslenme, kilo/yağ hiç gitmiyordu. Veri de vardı, özetleyen kod da (`buildHealthFactsSrv` → paylaşılan `hcBuildFacts`) — sohbet sadece çağırmıyordu.
+
+**İki kademeli bağlam (kasıtlı).** Tam sağlık bloğu **ölçüldü: ~2836 karakter ≈ 886 token**. Her mesaja eklemek sistem promptunu ~400 token'dan 3 katına çıkarırdı. Sohbet ücretsiz katmanda (`normal` tier) olduğu için **maliyet para değil DİKKAT** — ödev sorusu sorulurken arka planda uyku borcu taşımak cevabın odağını dağıtır.
+- **Kısa özet (`chatHealthShort`, ~150 token) — HER sohbete girer:** son kayıtlı gece uykusu + kalite, birikmiş uyku borcu (>0,5sa ise), son antrenman tarihi + son 7 gün seans sayısı, bugünün kcal/protein'i (hedefe göre, öğün sayısıyla), son tartı + yağ oranı. Sadece SON durum — geçmiş seri yok.
+- **Tam blok (~886 token) — SADECE `CHAT_HEALTH_RE` eşleşirse** ve `hasHealthDataSrv` doluysa. Regex antrenman/protein/kalori/uyku/kilo/tartı/takviye gibi terimleri yakalar; "matematik ödevim", "THYAO" gibi mesajlarda tetiklenmez (teste bağlandı). Blok 4000 karakterle sınırlı, `max_tokens` 700 → 900.
+
+**⚠️ 16 yaş güvenlik sınırları sohbete de taşındı (`CHAT_HEALTH_GUARD`).** Sağlık sayıları bağlamdaysa — **kısa özet yeterli** — teşhis/ilaç/takviye önerisi, **kalori kısıtlaması ve kilo verme diyeti**, vücut şekli yorumu, yağ oranı için "ideal sayı", aşırı antrenman teşviki YASAK. Tam blok geldiğinde ayrıca okuma kuralları (`CHAT_HEALTH_RULES`) girer: "eksik-log varsa yetersizlik yorumu yapma", "yağsız kütle düşüyorsa çözüm daha az yemek değil", "en fazla 2 öneri". Sağlık koçu prompt'unun sohbet özeti — **gevşetilmemeli**.
+
+**Maliyet kuralı korundu:** sohbet varsayılanı hâlâ ücretsiz katman; `heavy` yalnız `/pro` ile ve hesap sahibine. Teste bağlandı.
+**Paylaşılan `hc*` çekirdeğine DOKUNULMADI** — yeni kod çekirdeğin dışında (ikizlik testi byte-byte karşılaştırıyor, 25/25 geçti).
+**Yeni veri alanı yok · yeni endpoint yok · frontend değişmedi** (worker veriyi Supabase'ten kendi çekiyor).
+**Doğrulama:** 10 yeni test (`tests/10-chat-health.test.js` — kısa özet 4 başlık, boş veri, bozuk kayıtta NaN sızıntısı, hedefsiz format, 9 tetikleyen + 4 tetiklemeyen cümle, prompt sözleşmesi, guard kuralları, maliyet kilidi, çekirdek dokunulmazlığı) · 02-twins 25/25 · 05-chat + 06-security 30/30 · `node --check` temiz.
+**Cache:** v7-132 → **v7-133**
+
 ### 🔴 8 Ağustos 2026 — ✂️ GÖSTERGE SADELEŞTİRME (v7-132)
 
 Salim: "Buffett göstergelerini sistemde kullanalım" isteğinin ardından borsa modülünün denetiminde asıl bulgu farklı çıktı — **uyum skoru (`taConfluence`, v7-130) uyumu değil momentumu ölçüyordu.** 12 oyun ağırlıkça %78'i (9/12) aynı şeyi ölçüyordu: fiyatın son dönem yönü. `Trend`, `EMA9/EMA21`, `MACD sıfır çizgisi`, `Stochastic %K/%D`, `Bollinger konumu`, `Pivot konumu`, `Son 7 periyot` — hepsi fiyat serisinin farklı yumuşatmaları, tek bir sinyalin 9 farklı kılıkta oy kullanmasıydı. Skor "kaç bağımsız gösterge aynı yöne bakıyor" demek yerine "fiyat son zamanda ne yaptı" diyordu — yanıltıcı.

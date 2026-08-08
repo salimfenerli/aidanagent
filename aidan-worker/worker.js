@@ -3222,6 +3222,78 @@ function detectMetaMode(msgs) {
   return null;
 }
 
+// ============================================================
+// SOHBETE SAGLIK BAGLAMI (8 Agu 2026)
+// ============================================================
+// Iki kademe:
+//  1) KISA ozet (~150 token) — HER sohbete girer. "dun 5 saat uyumussun" diyebilmesi icin yeter.
+//  2) TAM blok (~900 token, buildHealthFactsSrv) — SADECE mesajda saglik konusu gecerse.
+// Neden kademeli: tam blok her mesaja girerse odev sorusu sorulurken de tasinir,
+// sistem promptu 3 katina cikar ve cevabin odagi dagilir. Token parasi degil (sohbet
+// ucretsiz katmanda), maliyet DIKKAT.
+const CHAT_HEALTH_RE = /antrenman|egzersiz|spor|workout|fitness|hipertrofi|kardiyo|koşu|protein|kalori|kcal|makro|beslen|diyet|öğün|kilo|zayıfla|yağ oran|tartı|uyku|uyudu|uyuya|takviye|vitamin|kreatin|1rm|hevy/i;
+
+// 16 yas siniri — saglik sayilari baglamda oldugu HER durumda gecerli (kisa ozet dahil).
+const CHAT_HEALTH_GUARD = (name) => `
+[SAĞLIK VERİSİ KURALI] Yukarıdaki sağlık sayıları uygulamadan geldi, doğrudur — verilmeyen sayıyı UYDURMA, veri yoksa "kaydın yok" de. ${name} 16 yaşında: teşhis koyma, hastalık adı verme, ilaç/takviye önerme, kalori kısıtlaması ya da kilo verme diyeti önerme, vücut şekli/görünümü hakkında yorum yapma, yağ oranı için "ideal sayı" verme, aşırı antrenman teşvik etme.`;
+
+// Tam blok geldiginde eklenen okuma kurallari (saglik kocu prompt'unun sohbet ozeti)
+const CHAT_HEALTH_RULES = `
+[SAĞLIK VERİSİ OKUMA] "kısmi gün" = beslenme kaydı eksik gün, ortalamaya zaten katılmadı, tekrar düzeltme yapma. "eksik-log" varsa kalori/protein sayıları olduğundan DÜŞÜKTÜR — "yetersiz besleniyorsun" deme, kaydı tamamlamayı öner. Yağ oranı tek ölçümü ±%3-5 sapar, sadece EĞİLİMİ yorumla. Yağsız kütle düşüyorsa çözüm daha az yemek değil, protein ve uykudur. Güç durgunluğunda önce uyku/yemeğe bak, daha ağır kaldırmayı önerme. Bir sayı verilmemişse o konuda konuşma. En fazla 2 öneri ver — ADHD'de fazla seçenek felç eder.`;
+
+// Kisa saglik ozeti — sadece son durum, gecmis seri YOK (kasten kucuk tutuldu).
+function chatHealthShort(data) {
+  const d = (data && data.diet) || {};
+  const t = trToday();
+  const out = [];
+  const r1 = v => Math.round(v * 10) / 10;
+
+  // Uyku — son kayitli gece + (varsa) birikmis borc
+  const sleeps = ((data && data.sleep) || [])
+    .filter(x => x && x.date && x.hours != null)
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  if (sleeps.length) {
+    const last = sleeps[0];
+    const q = { bad: 'kötü', ok: 'orta', good: 'iyi' }[last.quality] || '';
+    const when = last.date === trDate(0) ? 'dün gece' : last.date === trDate(-1) ? 'önceki gece' : last.date;
+    out.push(`${when} ${r1(last.hours)} saat uyku${q ? ' (' + q + ')' : ''}`);
+    try {
+      const goalH = ((data.settings && data.settings.sleepGoal) || {}).targetH || 8;
+      const sd = sleepDebtSrv(data, goalH);
+      if (sd && sd.debt > 0.5) out.push(`uyku borcu ${fmtSleepHoursSrv(sd.debt)} (${SLEEP_BAND_LABEL_SRV[sd.band] || ''})`);
+    } catch {}
+  }
+
+  // Antrenman — son seans + son 7 gun
+  const ws = (((data && data.hevy) || {}).workouts || [])
+    .filter(x => x && x.date)
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  if (ws.length) {
+    const from7 = trDate(-6);
+    const n7 = ws.filter(x => x.date >= from7).length;
+    out.push(`son antrenman ${ws[0].date}, son 7 günde ${n7} seans`);
+  }
+
+  // Bugunun beslenmesi
+  const day = (d.days || {})[t];
+  const meals = (day && day.meals) || [];
+  if (meals.length) {
+    let kcal = 0, pro = 0;
+    meals.forEach(m => { kcal += Number(m && m.kcal) || 0; pro += Number(m && m.protein) || 0; });
+    out.push(`bugün ${Math.round(kcal)}${d.kcalGoal ? '/' + Math.round(d.kcalGoal) : ''} kcal, protein ${Math.round(pro)}${d.proteinGoal ? '/' + Math.round(d.proteinGoal) : ''} g (${meals.length} öğün)`);
+  }
+
+  // Son tarti
+  const wts = (d.weights || [])
+    .filter(x => x && x.date && x.kg != null)
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  if (wts.length) {
+    out.push(`son tartı ${r1(wts[0].kg)} kg${wts[0].fat != null ? `, yağ %${r1(wts[0].fat)}` : ''} (${wts[0].date})`);
+  }
+
+  return out.length ? ` Sağlık: ${out.join(' · ')}.` : '';
+}
+
 async function handleChatApi(request, env) {
   const cors = {
     'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
@@ -3301,7 +3373,18 @@ async function handleChatApi(request, env) {
     const metaMode = (typeof body.mode === 'string' && META_MODES[body.mode]) ? body.mode : detectMetaMode(msgs);
     const modeBlock = metaMode ? `\n\n${META_MODES[metaMode].prompt}\n\nBu modda ${name} 16 yaşında lise öğrencisi — Türkiye müfredatı seviyesinde konuş. Cevabı hazır verme; hatırlama çabası öğrenmeyi kalıcı kılar. Mesaj başındaki "/komut" kısmını yok say, konu olarak kalanını al.` : '';
 
-    const ctx = `[BAĞLAM — ${name} durumu] Açık görev: ${openCount}. Bugün biten: ${doneToday}.${overdue ? ` Gecikmiş: ${overdue}.` : ''}${mitStr}${pfStr}`;
+    // Saglik baglami — kisa ozet her zaman, tam blok sadece konu acilinca
+    const healthShort = chatHealthShort(d);
+    const lastMsg = msgs[msgs.length - 1].content || '';
+    const healthTopic = CHAT_HEALTH_RE.test(lastMsg);
+    let healthFull = '';
+    if (healthTopic && hasHealthDataSrv(d, 14)) {
+      try { healthFull = `\n\n[SAĞLIK VERİSİ — son dönem, uygulama hesapladı]\n${String(buildHealthFactsSrv(d, 14)).slice(0, 4000)}`; } catch {}
+    }
+    const healthGuard = (healthShort || healthFull) ? CHAT_HEALTH_GUARD(name) : '';
+    const healthRules = healthFull ? CHAT_HEALTH_RULES : '';
+
+    const ctx = `[BAĞLAM — ${name} durumu] Açık görev: ${openCount}. Bugün biten: ${doneToday}.${overdue ? ` Gecikmiş: ${overdue}.` : ''}${mitStr}${pfStr}${healthShort}${healthFull}${healthGuard}${healthRules}`;
 
     const sysPrompt = `Sen Aidan'sın — ${name}'in ADHD asistanı ve düşünme ortağı. ${name} 16 yaşında, lise öğrencisi, satranç/strateji seviyor, borsada işlem yapıyor.
 
@@ -3333,7 +3416,7 @@ ${ctx}${modeBlock}${proOnce ? '\n\n[/pro] Kullanıcı bu mesaj için DETAYLI cev
     const r = await aiRun(env, {
       messages: [{ role: 'system', content: sysPrompt }, ...aiMsgs],
       tier: proOnce ? aiTierForUser(env, user, 'heavy') : (metaMode ? 'deep' : 'normal'),
-      max_tokens: proOnce ? 2200 : (chatImgs.length ? 1100 : 700),
+      max_tokens: proOnce ? 2200 : (chatImgs.length ? 1100 : (healthFull ? 900 : 700)),
       temperature: metaMode ? 0.35 : 0.5,
     });
     let reply = (r.response || '').trim();
