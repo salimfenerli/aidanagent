@@ -1345,9 +1345,9 @@ function acceptMitSuggestion(id) {
   toggleMit(id);
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
+// escapeHtml → core.js'e tasindi (8 Agu 2026). Tanim orada, ilk yuklenen
+// dosyada olmali; burada durdugu surece core.js'in kullanimi yukleme sirasina
+// bagliydi. Bu satiri geri getirme — tests/07-hygiene bunu kilitliyor.
 
 // Tekrarlı görevleri yeni günde reset et
 function checkRepeatingTasks() {
@@ -2748,6 +2748,42 @@ function genCalendarToken() {
 function calendarUrl() {
   const tok = data.settings && data.settings.calendarToken;
   return tok ? CALENDAR_ICS_BASE + '?token=' + tok : '';
+}
+
+// ===== DEPOLAMA BILGISI (8 Agu 2026) =====
+// Tum veri tek JSON blob'da; tarayici tavani ~5 MB. Eskiden bu sayi hicbir
+// yerde gorunmuyordu — kota dolana kadar sessizdi, dolunca da is bozuluyordu.
+// Ayarlar sekmesi acilinca hesaplanir (her save'de degil: JSON.stringify pahali).
+const STORAGE_ETIKET = {
+  tasks: 'Görevler', chat: 'Sohbet', notes: 'Kayıtlar', diet: 'Diyet günlüğü',
+  hevy: 'Antrenman', sleep: 'Uyku', journal: 'Günlük', trades: 'İşlem günlüğü',
+  watchlist: 'Borsa listesi', portfolioHistory: 'Portföy geçmişi',
+  pushLog: 'Bildirim geçmişi', dumps: 'Zihin boşalt', reminders: 'Hatırlatıcılar',
+  coach: 'Sağlık koçu', templates: 'Şablonlar', settings: 'Ayarlar', dayPlan: 'Gün planı',
+};
+
+function renderStorageInfo() {
+  const bar = document.querySelector('.storage-bar');
+  const fill = document.getElementById('storageFill');
+  const info = document.getElementById('storageInfo');
+  const parts = document.getElementById('storageParts');
+  if (!fill || !info) return;
+  const r = dataSizeReport();
+  fill.style.width = Math.min(100, r.pct) + '%';
+  if (bar) {
+    bar.classList.toggle('warn', r.pct >= LS_WARN_PCT && r.pct < LS_ALARM_PCT);
+    bar.classList.toggle('alarm', r.pct >= LS_ALARM_PCT);
+  }
+  const kalan = fmtBytes(Math.max(0, LS_LIMIT_CHARS - r.chars));
+  info.textContent = fmtBytes(r.chars) + ' kullanılıyor · %' + r.pct +
+    ' dolu · ' + kalan + ' boş' +
+    (r.pct >= LS_ALARM_PCT ? ' — yedek al, eski kayıtları temizle.'
+     : r.pct >= LS_WARN_PCT ? ' — göz kulak ol.' : '');
+  if (!parts) return;
+  parts.innerHTML = r.parts.slice(0, 8).map(x =>
+    '<div class="sp-row"><span>' + escapeHtml(STORAGE_ETIKET[x.key] || x.key) +
+    '</span><b>' + fmtBytes(x.chars) + '</b></div>').join('') ||
+    '<div class="sp-row"><span>Henüz veri yok</span></div>';
 }
 
 function renderCalendarSync() {

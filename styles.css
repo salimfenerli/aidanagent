@@ -4211,3 +4211,26 @@
   .buffett-card .bf-row-bar i,
   .buffett-card .bf-hurdle { transition: none; }
 }
+
+
+/* ===== DEPOLAMA DOLULUK CUBUGU (8 Agu 2026) =====
+   Impeccable: tam kenar + tint, yan-serit yok, ease-out, reduced-motion var. */
+.storage-bar {
+  height: 8px; border-radius: 999px; overflow: hidden;
+  background: var(--surface-3, #24262e);
+  border: 1px solid rgba(244,244,247,0.10);
+  margin: 2px 0 8px;
+}
+.storage-bar > span {
+  display: block; height: 100%; width: 0;
+  background: var(--success, #34c759);
+  transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1), background-color 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.storage-bar.warn > span { background: var(--accent, #f5a524); }
+.storage-bar.alarm > span { background: var(--danger, #ef4444); }
+#storageParts { line-height: 1.7; }
+#storageParts .sp-row { display: flex; justify-content: space-between; gap: 12px; }
+#storageParts .sp-row b { color: var(--text); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) {
+  .storage-bar > span { transition: none; }
+}

@@ -22,6 +22,7 @@ function showTab(name, btn) {
     renderCountdownManage();
     loadInviteSection();
     renderCalendarSync();
+    renderStorageInfo();   // depolama doluluk çubuğu (8 Ağu 2026)
     // Yedek details açıldığında otomatik yükle (bir kez bağlanır)
     const bd = document.getElementById('backupDetails');
     if (bd && !bd._hooked) {

@@ -8,7 +8,7 @@
  * Kritik davranis: veri yoksa UYDURMA. Eksik kriter atlanir, kapsama %50'nin
  * altina duserse skor null doner.
  */
-const { test } = require('node:test');
+const { test, after } = require('node:test');
 const assert = require('node:assert');
 const { loadApp } = require('./helpers/load');
 const { readText } = require('./helpers/src');
@@ -43,10 +43,18 @@ function fund(over = {}, yearOver = {}) {
   }, over);
 }
 
-// jsdom yuklemesi ~30 sn surer — TEK ORNEK acilir, tum testler paylasir.
+// jsdom yuklemesi pahali — TEK ORNEK acilir, tum testler paylasir.
 const A = loadApp({ seed: {} });
 const W = A.window;
-process.on('exit', () => { try { A.close(); } catch {} });
+
+// ⚠️ 8 Agu 2026: burada `process.on('exit', ...)` vardi ve DOSYA HIC BITMIYORDU.
+// Uygulama yuklenirken setInterval kuruyor (saat, borsa yenileme...). jsdom
+// penceresi kapanmadikca bu timer'lar Node'un event loop'unu ayakta tutar;
+// tum testler gectikten sonra bile process asili kalir, `exit` olayi da hicbir
+// zaman tetiklenmez — yani temizlik kendi kosulunu bekliyordu (deadlock).
+// Diger test dosyalari her testte `app.close()` cagirdigi icin bu ortaya cikmadi.
+// Cozum: node:test'in `after` kancasi — testler bitince pencere kapanir.
+after(() => { try { A.close(); } catch (_) {} });
 
 function app() { return A; }
 function score(f, h = 10) { return W.buffettScore(f, h); }

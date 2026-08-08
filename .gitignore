@@ -36,3 +36,7 @@ build/
 # Faz B: app.js 4 parçaya bölündü (core/tasks/stocks/ui), eski tek dosya + yedekler commit edilmesin
 app.js
 *.bak
+
+# 8 Ağu 2026: sandbox rm yapamadığı için ölü dosyalar buraya taşındı.
+# Salim klasörü Gezgin'den silecek — commit'e girmesinler.
+SILINECEK-DOSYALAR/

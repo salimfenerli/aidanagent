@@ -16,6 +16,33 @@
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 8 Ağustos 2026 — 🧹 TAM DENETİM: 6 EKSİK KAPATILDI (v7-134)
+
+Salim: "bi tamamını inceleyip detaylıca artılar eksiler neler söylesen" → ardından "eksiklerin hepsini düzelt". **Yeni özellik eklenmedi; bulunan eksikler kapatıldı.** Riskli iki madde (stocks.js tembel yükleme · CSP `unsafe-inline` kaldırma) Salim'in kararıyla **ayrı pakete bırakıldı** — ikisi de çalışma zamanı davranışını değiştiriyor.
+
+**1. 🐛 `09-buffett.test.js` HİÇ BİTMİYORDU (gerçek bug).** Dosya jsdom penceresini tek sefer açıp `process.on('exit', () => A.close())` ile kapatmaya çalışıyordu. Ama uygulama yüklenirken `setInterval` kuruyor (saat, borsa yenileme…); pencere kapanmadıkça bu timer'lar Node'un event loop'unu ayakta tutar → **process asılı kalır → `exit` olayı hiç tetiklenmez.** Temizlik kendi koşulunu bekliyordu (deadlock). Diğer test dosyaları her testte `app.close()` çağırdığı için ortaya çıkmamıştı. Çözüm: `node:test`'in `after()` kancası. Şimdi 30/30 geçiyor ve **çıkıyor.**
+- **⚠️ KALICI KURAL:** jsdom penceresini paylaşan test dosyası `after(() => A.close())` kullanır. `process.on('exit')` ASLA — asılı kalır.
+
+**2. `npm test` komutu bozuktu.** `node --test tests/` Node 22'de `MODULE_NOT_FOUND` veriyordu; yani "test çalıştır" deyince testler değil komut kırmızı oluyordu. → `node --test "tests/*.test.js"`.
+
+**3. 🔒 `escapeHtml` yanlış dosyadaydı (sessiz bomba).** Tanım `ui.js`'teydi ama `core.js`/`tasks.js`/`stocks.js` **145 yerde** çağırıyordu. Çalışmasının tek sebebi `ui.js`'in EN SON yüklenmesiydi — yani kaza. core.js init sırasında render eden tek bir satır yazılsaydı `escapeHtml is not defined` ile **6 Ağu TDZ çöküşünün aynısı** yaşanırdı (uygulamanın tamamı ölür). → `core.js`'in en üstüne taşındı; `tests/07-hygiene.test.js`'e "paylaşılan yardımcı, kendisini kullanan dosyadan önce tanımlı olmalı" testi eklendi.
+
+**4. 📊 Depolama ölçümü (yeni, `core.js`).** Tüm veri TEK JSON blob ve tarayıcı tavanı ~5 MB; budama vardı ama **toplam boyut hiçbir yerde ölçülmüyordu** — duvara çarpılana kadar sinyal yoktu.
+- `dataSizeReport()` → `{chars, pct, parts[]}`, hangi alanın ne kadar yer kapladığı (büyükten küçüğe).
+- `checkDataSize(json)` `saveLocal()` içinden çağrılır; **%65 uyarı / %85 alarm**, ama **günde EN FAZLA bir toast** (`settings.lastSizeWarn`) — ADHD'de tekrar eden bildirim körleştirir.
+- **Maliyet sıfır:** `saveLocal` zaten `JSON.stringify` yapıyordu; sonuç yeniden kullanıldı, ikinci stringify YOK (teste bağlandı).
+- Ayarlar → **Depolama**: doluluk çubuğu + "neyin ne kadar yer kapladığı" katlanır dökümü. Impeccable uyumlu (tam kenar, yan-şerit yok, ease-out, `prefers-reduced-motion`).
+- Yeni veri alanı: `data.settings.lastSizeWarn`.
+
+**5. 🗑️ Ölü dosyalar → `SILINECEK-DOSYALAR/`.** ~1.5 MB: `app.js`, `app.js.bak`, `asistan.html.bak`, `worker.js.pre-llama4`, `netlify.toml`, `blackjack.html`, `probe.txt`. **Sandbox `rm` yapamıyor** (`mv` yapabiliyor) → klasöre taşındılar, `.gitignore`'a eklendi, içine `OKU-VE-SIL.txt` konuldu. `07-hygiene`'e "SILINECEK-DOSYALAR klasörü boşaltılmış" testi eklendi — **Salim klasörü silene kadar kırmızı kalır** (hatırlatıcı görevi görür).
+
+**6. 📄 Doküman kayması düzeltildi.** CLAUDE.md'de **9 cron'luk eski tablo** duruyordu (gerçek: tek `*/5` + `scheduled()` dağıtımı, 2 Ağu'dan beri) → gerçek dağıtım tablosuyla değiştirildi. Endpoint listesinde **16 endpoint eksikti** (`/chat`, `/health-coach`, `/plan`, `/suggest`, `/stock-*`, `/body`, `/config`, `/signup`, `/invite/*` …) → eklendi, auth durumu yazıldı.
+
+**Denetimin doğruladıkları (değişiklik gerekmedi):** 25 endpoint'in 23'ü auth'lu, kalan 2'si tasarımca açık ve gizli veri döndürmüyor · repoda secret/JWT sızıntısı **yok**, `.env` gitignore'da · `hc*` paylaşılan çekirdek iki dosyada hâlâ özdeş (02-twins 25/25) · AI maliyet kilitleri yerinde.
+**⚠️ Düzeltilmedi, bilinçli:** ilk yükleme 291 KB gzip / 7 kritik istek · 674 global fonksiyon, ES module yok · CSP `unsafe-inline` (247 inline `onclick`).
+**Doğrulama:** yeni `tests/11-storage.test.js` **20 test** (rapor sıralaması, dairesel veride NaN sızıntısı, eşik altı sessizlik, günde tek uyarı, ertesi gün yeniden açılma, toast tipi, DOM render + XSS kaçışı, saveLocal regresyonu, çift stringify yasağı, Impeccable CSS, LF kontrolü) · `07-hygiene` +3 test · **11 dosya toplam 202 test geçiyor**, tek kırmızı kasıtlı (SILINECEK-DOSYALAR hatırlatıcısı) · `node --check` 6 dosya temiz · EOL doğrulandı (styles.css LF, diğerleri CRLF).
+**Cache:** v7-133 → **v7-134**
+
 ### 🔴 8 Ağustos 2026 — 💬 SOHBETE SAĞLIK BAĞLAMI (v7-133)
 
 Salim: "Aidan'a sor kısmına bir şey yazdığımda benim antrenman/beslenme verilerime erişebiliyor mu?" **Hayırdı.** `/chat` bağlamı yalnızca görev sayıları + MIT + portföy özeti gönderiyordu; uyku, antrenman, beslenme, kilo/yağ hiç gitmiyordu. Veri de vardı, özetleyen kod da (`buildHealthFactsSrv` → paylaşılan `hcBuildFacts`) — sohbet sadece çağırmıyordu.
@@ -614,18 +641,29 @@ Görevler · 🎧 Odak · 📈 Borsa · ⚙️ Ayarlar
 
 URL: `aidan-pusher.fenerlisalim04.workers.dev`
 
-### Cron schedules (UTC)
-| Cron | TR saati | İş |
+### Cron — TEK tetikleyici (2 Ağu 2026'dan beri)
+⚠️ **Cloudflare ücretsiz plan worker başına EN FAZLA 3 cron kabul eder.** Eskiden 9 cron gönderiliyordu, fazlası sessizce kaydolmadı ve **6 özellik aylarca ölü kaldı.** Artık `wrangler.toml`/`deploy.py`'de tek satır var:
+
+```
+crons = [ "*/5 * * * *" ]
+```
+
+İş dağıtımını `worker.js` → `scheduled()` TR saatine göre yapar (`at(h,m)` = 5 dk pencere). **Yeni zamanlı iş `wrangler.toml`'a DEĞİL, `scheduled()` içine `if (at(h,m))` satırı olarak eklenir.**
+
+| TR saati | Koşul (`scheduled()` içinde) | İş |
 |---|---|---|
-| `0 5 * * *` | 08:00 | 🌅 Sabah brifingi |
-| `0 6 * * *` | 09:00 | ⏰ Deadline uyarısı |
-| `0 9 * * *` | 12:00 | ☀️ Öğle check-in |
-| `0 18 * * *` | 21:00 | 🌙 Akşam özet |
-| `0 18 * * SUN` | Pazar 21:00 | 💜 Haftalık review |
-| `*/30 7-15 * * 1-5` | Hafta içi 10-18 | 📈 Borsa alarm kontrol |
-| `30 15 * * 1-5` | Hafta içi 18:30 | 💼 Akşam portföy özeti |
-| `*/15 * * * *` | Sürekli (15 dk) | ⏰ Sabit hatırlatıcı kontrolü (`data.reminders`) |
-| `0 0 * * 1` | Pazartesi 03:00 | 💾 Haftalık veri yedeği (`aidan_backups` tablosu, son 12 saklanır) |
+| Her tur (5 dk) | — | ⏰ Sabit hatırlatıcı + takviye nag (`runFixedReminders`) |
+| Her tur (5 dk) | — | 📋 Gün planı blok bildirimleri (`runPlanBlockPings`) |
+| 08:00 | `at(8,0)` | 🌅 Sabah brifingi → güvenlik ağı gün planı |
+| 09:00 | `at(9,0)` | ⏰ Deadline uyarısı |
+| 12:00 | `at(12,0)` | ☀️ Öğle check-in |
+| 18:30 | hafta içi + `at(18,30)` | 💼 Akşam portföy özeti |
+| 21:00 | `at(21,0)` | 🌙 Akşam özeti → Hevy senkron → YARININ planı |
+| Pazar 21:00 | `dow===0` + `at(21,0)` | 📅 Haftalık review → 🫀 haftalık sağlık raporu |
+| Hafta içi 10:00–18:00 | 30 dk'da bir | 📈 Borsa alarm kontrolü |
+| Pazartesi 03:00 | `dow===1` + `at(3,0)` | 💾 Haftalık veri yedeği (`aidan_backups`, son 12) |
+
+Günde 288 istek (limit 100K). `Promise.allSettled` — bir iş patlarsa diğerleri devam eder.
 
 ### Endpoint'ler
 - `GET /?type=morning|noon|evening|deadline|weekly|stocks|portfolio|reminders|backup&secret=<WEBHOOK_SECRET>` — manuel cron test. **Secret zorunlu** (spam koruması). Eksik/yanlış secret → 404.
@@ -637,6 +675,25 @@ URL: `aidan-pusher.fenerlisalim04.workers.dev`
 - `POST /stocks` — Yahoo fiyat proxy (`{entries:[{display,yahoo}]}` veya eski `{symbols}`).
 - `POST /stock-history` — tek hisse geçmiş close serisi: `{ySymbol, range:'1mo'|'3mo'|'1y'}` → `{timestamps, closes, min, max, first, last, changePct, currency, name}`. Yahoo chart endpoint proxy'si, 5dk CF cache, auth + CORS, tool yok. PWA mini grafik modali kullanır.
 - `POST /portfolio-image` — portföy görseli → Gemini multimodal → sembol/adet/maliyet/son fiyat JSON. `visionRun` (aiRun'a gider), `parseNum` (Türk sayı formatı).
+
+**8 Ağu 2026 denetiminde eksik olduğu görülen ve eklenen endpoint'ler** (kod aylardır canlıydı, doküman geride kalmıştı):
+- `POST /chat` — "Aidan'a sor". Meta-öğrenme modları + `/pro` tek seferlik heavy + fotoğraf eki (max 3) + iki kademeli sağlık bağlamı.
+- `POST /health-coach` — uyku + Hevy + beslenme birlikte AI analizi (`hcBuildFacts`).
+- `POST /plan` — AI gün planlayıcı (saat saat blok dizisi).
+- `POST /suggest` — "şu an ne yapayım?" AI önerisi.
+- `POST /stock-analysis` — teknik analiz yorumu; `mode:'fund'` ile Buffett katmanı.
+- `POST /portfolio-technical` — tüm pozisyonların TA snapshot özeti.
+- `POST /stock-fundamentals` — Yahoo temel veri + 4 yıllık mali tablo + 5y aylık kapanış (Buffett skorunun girdisi).
+- `POST /stock-news` — Yahoo haber proxy + opsiyonel AI ön eleme.
+- `POST /food-macros` — besin makro arama (USDA + AI).
+- `POST /diet-plan-image` · `POST /classroom-image` — görsel OCR (diyet programı / Classroom ödevi).
+- `POST /hevy-sync` — Hevy antrenman proxy (⚠️ Hevy Pro şart).
+- `POST /body` — iOS Kısayol tartı girişi. Kimlik **`X-Aidan-Secret` header'ı** (Supabase token DEĞİL — Kısayol token yenileyemez).
+- `GET /calendar.ics?token=` — takvim aboneliği (iOS/Google).
+- `GET /config` — PWA bootstrap (Supabase URL + anon key + VAPID public key). **Auth yok, tasarımca** — üçü de zaten public.
+- `POST /signup` · `POST /invite/create` · `POST /invite/list` — davet kodlu multi-user. `/signup` auth'suz ama **davet kodu + service key doğrulaması** var.
+
+**Auth denetimi (8 Ağu 2026):** 25 endpoint'in 23'ü Supabase token ya da secret istiyor. Auth'suz kalan 2'si (`/config`, `/signup`) tasarım gereği; ikisi de gizli veri döndürmüyor.
 
 ### Telegram (EMEKLİ — kod silindi, Haz 10 Faz 4)
 Bot/webhook/sesli mesaj akışı worker'dan tamamen kaldırıldı (detay CHANGELOG.md). `aiInterpret` + `TOOL_HANDLERS` + `TOOL_SCHEMAS` DURUYOR — PWA `/ai` endpoint'i kullanıyor, silme.

@@ -131,6 +131,44 @@ describe('deploy tutarliligi', () => {
   });
 });
 
+describe('yukleme sirasi bagimliligi', () => {
+  // 5 dosya TEK global scope'ta, sirayla yuklenir: core -> tasks -> stocks -> ui.
+  // Erken yuklenen bir dosya, gec yuklenen bir dosyada tanimli fonksiyonu
+  // MODUL GOVDESINDE (init sirasinda) cagirirsa "not defined" ile comer —
+  // 6 Agu 2026 TDZ cokusunun ayni sinifi. escapeHtml tam bu durumdaydi:
+  // tanim ui.js'te, 145 cagrinin cogu core/tasks/stocks icinde.
+  const SIRA = ['core.js', 'tasks.js', 'stocks.js', 'ui.js'];
+
+  test('escapeHtml core.js\'te tanimli (ui.js\'te DEGIL)', () => {
+    assert.ok(/function escapeHtml\s*\(/.test(readText('core.js')),
+      'escapeHtml core.js\'te tanimli olmali — ilk yuklenen dosya');
+    for (const f of ['tasks.js', 'stocks.js', 'ui.js']) {
+      assert.ok(!/function escapeHtml\s*\(/.test(readText(f)),
+        f + ' escapeHtml\'i yeniden tanimliyor — ayni isim iki kez, sonuncusu sessizce kazanir');
+    }
+  });
+
+  test('paylasilan yardimcilar erken dosyada tanimli', () => {
+    // Cok dosyadan cagrilan saf yardimcilar. Her biri, kendisini KULLANAN en
+    // erken dosyada ya da ondan once tanimlanmis olmali.
+    const YARDIMCILAR = ['escapeHtml', 'isoLocal', 'today', 'shiftDateStr'];
+    const kaynak = Object.fromEntries(SIRA.map((f) => [f, readText(f)]));
+    const ihlal = [];
+    for (const fn of YARDIMCILAR) {
+      const tanimSira = SIRA.findIndex((f) =>
+        new RegExp('function\\s+' + fn + '\\s*\\(').test(kaynak[f]));
+      if (tanimSira === -1) continue;  // baska yerde tanimliysa bu test kapsam disi
+      const ilkKullanim = SIRA.findIndex((f) =>
+        new RegExp('[^\\w.]' + fn + '\\s*\\(').test(kaynak[f]));
+      if (ilkKullanim !== -1 && ilkKullanim < tanimSira) {
+        ihlal.push(fn + ': ' + SIRA[ilkKullanim] + ' kullaniyor ama tanim ' + SIRA[tanimSira]);
+      }
+    }
+    assert.deepStrictEqual(ihlal, [],
+      'yardimci fonksiyon kendisini kullanan dosyadan SONRA tanimlanmis');
+  });
+});
+
 describe('sozdizimi', () => {
   for (const f of ['core.js', 'tasks.js', 'stocks.js', 'ui.js', 'sw.js', 'aidan-worker/worker.js']) {
     test('node --check ' + f, () => {
@@ -144,10 +182,20 @@ describe('olu dosya birikmesi', () => {
     // Temmuz 2026\'da iki kopya repo karisikligi bir seansin yanlis tabana
     // yazilmasina yol acti. Olu kopyalar diskte durursa tekrar eder.
     const olu = ['app.js', 'app.js.bak', 'asistan.html.bak',
-                 'aidan-worker/worker.js.pre-llama4', 'netlify.toml'];
+                 'aidan-worker/worker.js.pre-llama4', 'netlify.toml',
+                 // 8 Agu 2026 denetiminde bulunanlar
+                 'blackjack.html',  // deploy listesinde yok, _redirects 404'e yolluyor
+                 'probe.txt'];
     const duran = olu.filter((f) => fs.existsSync(path.join(ROOT, f)));
     assert.deepStrictEqual(duran, [],
       'olu dosyalar silinmeli (deploy edilmiyorlar ama karisiklik uretiyorlar)');
+  });
+
+  test('SILINECEK-DOSYALAR klasoru bosaltilmis', () => {
+    // Sandbox `rm` yapamadigi icin olu dosyalar buraya tasindi. Salim klasoru
+    // silene kadar bu test kirmizi kalir — hatirlatici gorevi gorur.
+    assert.ok(!fs.existsSync(path.join(ROOT, 'SILINECEK-DOSYALAR')),
+      'SILINECEK-DOSYALAR klasorunu sil (icindeki OKU-VE-SIL.txt aciklıyor)');
   });
 
   test('.gitignore hassas dosyalari kapsiyor', () => {

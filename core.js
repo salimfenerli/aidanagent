@@ -1,4 +1,14 @@
 
+// escapeHtml — HTML enjeksiyonuna karsi TEK savunma hatti.
+// ⚠️ 8 Agu 2026: tanim ui.js'teydi ama core.js/tasks.js/stocks.js 145 yerde
+// cagiriyordu. Calisiyor olmasinin tek sebebi ui.js'in EN SON yuklenmesiydi —
+// yani kaza. core.js init sirasinda render eden bir kod yazilsaydi
+// 'escapeHtml is not defined' ile 6 Agu TDZ cokusunun aynisi yasanirdi.
+// Artik ilk yuklenen dosyada, ilk kullanimdan once tanimli.
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 // Sohbet ayarları (pruneOldData başlangıçta çağrıldığı için en üstte olmalı - TDZ hatası kaynağıydı)
 const CHAT_KEEP = 60;                      // saklanan mesaj sayısı (~30 KB tavan)
 const CHAT_PRUNE_DAYS = 60;                // bundan eski mesajlar budanır
@@ -59,12 +69,59 @@ function isoLocal(d) {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 function today() { return isoLocal(new Date()); }
+// ===== DEPOLAMA ÖLÇÜMÜ (8 Ağu 2026) =====
+// Tüm veri TEK JSON blob. Budama var (180 gün / 60 mesaj / thumb tavanı) ama
+// toplam boyut hiçbir yerde ölçülmüyordu — duvara çarpılana kadar sessizdi.
+// Tarayıcı tavanı ~5 MB ve KARAKTER sayar (byte değil), ölçü de öyle.
+const LS_LIMIT_CHARS = 5 * 1024 * 1024;
+const LS_WARN_PCT = 65;    // buradan sonra günde bir kez uyar
+const LS_ALARM_PCT = 85;   // buradan sonra sert uyar
+
+// Hangi alan ne kadar yer kaplıyor — büyükten küçüğe.
+function dataSizeReport(json) {
+  let s;
+  try { s = json || JSON.stringify(data); } catch (_) { return { chars: 0, pct: 0, parts: [] }; }
+  const parts = Object.keys(data).map(k => {
+    let n = 0;
+    try { n = JSON.stringify(data[k]).length; } catch (_) {}
+    return { key: k, chars: n };
+  }).filter(x => x.chars > 0).sort((a, b) => b.chars - a.chars);
+  return { chars: s.length, pct: Math.round(s.length / LS_LIMIT_CHARS * 100), parts };
+}
+
+function fmtBytes(n) {
+  if (!(n > 0)) return '0 KB';
+  return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB';
+}
+
+// saveLocal içinden çağrılır. Günde EN FAZLA bir uyarı — ADHD'de tekrar eden
+// bildirim körleştirir, bu yüzden eşik aşılsa bile günde bir kez konuşur.
+function checkDataSize(json) {
+  const pct = Math.round(json.length / LS_LIMIT_CHARS * 100);
+  if (pct < LS_WARN_PCT) return pct;
+  data.settings = data.settings || {};
+  const t = today();
+  if (data.settings.lastSizeWarn === t) return pct;
+  data.settings.lastSizeWarn = t;
+  if (typeof showToast !== 'function') return pct;
+  const en = (dataSizeReport(json).parts[0] || {}).key || '';
+  if (pct >= LS_ALARM_PCT) {
+    showToast('Depolama %' + pct + ' dolu (' + fmtBytes(json.length) + '). En büyük alan: ' + en +
+      '. Ayarlar → Depolama bölümüne bak, yedek al.', 'error', 9000);
+  } else {
+    showToast('Depolama %' + pct + ' dolu. Ayarlar → Depolama bölümünde detay var.', 'warning', 6000);
+  }
+  return pct;
+}
+
 // ===== localStorage KOTA KORUMASI (v7-120) =====
 // Önceden 6 yerde çıplak setItem vardı; kota dolduğunda istisna fırlatıp
 // o an yapılan işlemi (görev ekleme, öğün kaydı...) sessizce bozuyordu.
 function saveLocal() {
   try {
-    localStorage.setItem('aidan', JSON.stringify(data));
+    const json = JSON.stringify(data);
+    localStorage.setItem('aidan', json);
+    checkDataSize(json);   // duvara çarpmadan ÖNCE haber ver
     return true;
   } catch (e) {
     const quota = e && (e.name === 'QuotaExceededError' ||
