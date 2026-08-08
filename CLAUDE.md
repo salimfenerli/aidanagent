@@ -16,6 +16,31 @@
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 8 Ağustos 2026 — ✂️ GÖSTERGE SADELEŞTİRME (v7-132)
+
+Salim: "Buffett göstergelerini sistemde kullanalım" isteğinin ardından borsa modülünün denetiminde asıl bulgu farklı çıktı — **uyum skoru (`taConfluence`, v7-130) uyumu değil momentumu ölçüyordu.** 12 oyun ağırlıkça %78'i (9/12) aynı şeyi ölçüyordu: fiyatın son dönem yönü. `Trend`, `EMA9/EMA21`, `MACD sıfır çizgisi`, `Stochastic %K/%D`, `Bollinger konumu`, `Pivot konumu`, `Son 7 periyot` — hepsi fiyat serisinin farklı yumuşatmaları, tek bir sinyalin 9 farklı kılıkta oy kullanmasıydı. Skor "kaç bağımsız gösterge aynı yöne bakıyor" demek yerine "fiyat son zamanda ne yaptı" diyordu — yanıltıcı.
+
+**Yeni set — 5 oy, her biri BAĞIMSIZ bir faktör ölçüyor:**
+
+| Oy | Ağırlık | Bağımsız faktör |
+|---|---|---|
+| Fiyat / SMA20 | 1.5 | konum |
+| SMA20 / SMA50 | 2.0 | ana yön |
+| MACD histogram | 1.5 | momentumun DEĞİŞİMİ (ivme) |
+| RSI momentum | 1.0 | aşırılık |
+| OBV para akışı | 1.0 | hacim onayı |
+
+Ağırlık toplamı 7.0. Eşik `votes.length < 4` → **`< 3`** (artık en fazla 5 oy var, eski eşik neredeyse her zaman skoru öldürürdü). ADX hâlâ oy VERMEZ — skorun güvenilirlik niteleyicisi olarak kaldı, buna dokunulmadı.
+
+**Korunanlar (silinmedi, sadece uyum skorundaki OYLARI gitti):** ADX (güvenilirlik niteleyicisi) · ATR/atrPct (stop hesabı + senaryo mesafesi) · Bollinger bantları (`ta.bb`, seviye haritasında kullanılıyor) · Pivotlar (`ta.pivots`, seviye haritasında kullanılıyor) · destek/direnç, trend etiketi, `recentChange7d` (panel/AI metninde duruyor) · Fibonacci.
+
+**Tamamen silinen ölü kod:** `taStoch()` hesap fonksiyonu (başka tüketicisi kalmadı) · `computeStockTA` içindeki `out.stoch`/`out.stochZone`/`out.ema9`/`out.ema21`/`out.ema9Series`/`out.ema21Series` atamaları (ema9Series/ema21Series de hiçbir grafikte kullanılmıyordu, sadece ema9/ema21'i türetiyordu) · `renderStockTA` içindeki kullanılmayan `emaCross`/`stochCls`/`obvCls` değişkenleri · portföy teknik özet panelindeki ölü Stoch rozeti. `taEmaSeries()` genel fonksiyonu KALDI — MACD (`taMacd`) hâlâ kullanıyor.
+
+**AI fakt sözleşmesi (`buildStockAnalysisFacts`, stocks.js):** `stochK`/`stochD`/`stochZone`/`ema9`/`ema21` alanları çıkarıldı. **Worker prompt'u (`aidan-worker/worker.js`):** `/stock-analysis` sistem promptundaki Stochastic/EMA9/EMA21 satırları ve kapanış talimatındaki atıf kaldırıldı; `/portfolio-technical` özet satırlarındaki Stoch/EMA9-21 rozetleri kaldırıldı. Buffett katmanı (`bfRules`/`bfBlock`, `mode:'fund'`) ve tavsiye/kehanet yasakları hiç dokunulmadı.
+
+**Doğrulama:** `tests/08-stock-analysis.test.js` yeni sete göre güncellendi — eşik testi `<3`'e çekildi, "karışık tablo" testi 5 oyluk sette gerçek bir çelişki üretecek şekilde yeniden kuruldu, `computeStockTA` alan regresyon listesinden `stoch`/`stochZone`/`ema9`/`ema21`/`ema9Series`/`ema21Series` çıkarıldı, 2 yeni test eklendi (oy listesi tam 5 + isim sözleşmesi · güçlü tek yönlü gerçek fiyat serisinde skorun hâlâ >70/<30 uca gidebildiği). `node --check` stocks.js/worker.js temiz. EOL doğrulandı (styles.css LF, stocks.js/worker.js/sw.js/CLAUDE.md CRLF).
+**Cache:** v7-131 → **v7-132**
+
 ### 🔴 8 Ağustos 2026 — 🧱 BUFFETT SKORU (v7-131)
 
 Salim: "Buffett göstergelerini sistemde kullanalım — temel analiz paneline 0-100 skor, hangi maddeden kırık aldığını göstersin." **Teknik uyum skorunun (v7-130) temel analiz karşılığı.** Skoru **PWA hesaplar, AI uydurmaz** — portföy yorumu/TA kalıbının aynısı.

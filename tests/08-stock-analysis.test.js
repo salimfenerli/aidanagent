@@ -107,17 +107,12 @@ test('uyum skoru: 0-100 disina cikmaz, sayimlar toplami = total', () => {
 
 test('uyum skoru: karisik tablo notr bolgede kalir (42-58)', () => {
   const a = app();
-  // Yari yukari yari asagi: trend yukari ama ortalamalar/momentum asagi
+  // 5 oyluk sette gercek bir celiski: fiyat SMA20 ustunde + MACD yukari (2 up)
+  // ama SMA20 SMA50'nin altinda + OBV asagi (2 down), RSI tam notr (1 notr).
   a.window.__t = taOf('up', {
-    sma20: 103, sma50: 106,                 // SMA20 < SMA50 -> asagi
-    ema9: 99, ema21: 101,                   // asagi
-    macd: { line: -0.5, signal: -0.2, histogram: -0.3 },
-    obv: { trend: 'aşağı' },
-    bbPosition: 'orta bölge',
-    recentChange7d: 0.2,
-    rsi: 50,
-    stoch: { k: 40, d: 45 },
-    pivotZone: 'S1-PP arası',
+    sma50: 101,               // sma20 (97) < sma50 (101) -> SMA20/SMA50 asagi oyu
+    obv: { trend: 'aşağı' },  // OBV asagi oyu
+    rsi: 50,                  // RSI notr oyu (45-55 arasi)
   });
   const c = a.evalIn('taConfluence(window.__t)');
   assert.ok(c.score > 20 && c.score < 60, 'karisik tabloda uc skor beklenmiyor: ' + c.score);
@@ -125,11 +120,16 @@ test('uyum skoru: karisik tablo notr bolgede kalir (42-58)', () => {
   a.close();
 });
 
-test('uyum skoru: 4 gostergeden az veri -> null (uydurma skor yok)', () => {
+test('uyum skoru: 3 gostergeden az veri -> null (uydurma skor yok)', () => {
   const a = app();
-  a.window.__t = { current: 100, trend: 'belirsiz' };  // neredeyse hicbir gosterge yok
+  a.window.__t = { current: 100, trend: 'belirsiz' };  // hicbir oy yok
   assert.strictEqual(a.evalIn('taConfluence(window.__t)'), null);
   assert.strictEqual(a.evalIn('taConfluence(null)'), null);
+  // Sinir: tam 2 oy -> null, 3. oy eklenince skor doner (5 oyluk sette esik 3)
+  a.window.__two = { current: 100, sma20: 97, macd: { line: 1, signal: 0.5, histogram: 0.5 } };
+  assert.strictEqual(a.evalIn('taConfluence(window.__two)'), null, '2 oyla skor uretilmemeli');
+  a.window.__three = Object.assign({}, a.window.__two, { rsi: 60 });
+  assert.ok(a.evalIn('taConfluence(window.__three)') !== null, '3 oyla skor uretilmeli');
   a.close();
 });
 
@@ -146,6 +146,27 @@ test('uyum skoru: ADX guvenilirligi dogru etiketlenir, ADX oy VERMEZ', () => {
   // ADX yonsuz: degismesi skoru DEGISTIRMEMELI
   assert.strictEqual(rel(35).score, rel(12).score, 'ADX skoru etkilememeli');
   assert.ok(!rel(35).votes.some(v => /ADX/i.test(v.name)), 'ADX oy vermemeli');
+  a.close();
+});
+
+test('uyum skoru: oy listesi tam 5 oydan olusur, isimler sabit (Gosterge Sadelestirme v7-132)', () => {
+  const a = app();
+  a.window.__t = taOf('up');
+  const c = a.evalIn('taConfluence(window.__t)');
+  assert.strictEqual(c.votes.length, 5, 'oy sayisi 5 olmali (5 bagimsiz faktor)');
+  const names = c.votes.map(v => v.name).join(',');
+  assert.strictEqual(names, 'Fiyat / SMA20,SMA20 / SMA50,MACD histogram,RSI momentum,OBV para akışı');
+  a.close();
+});
+
+test('uyum skoru: 5 oyluk sette de guclu tek yonlu gercek seride skor uca gidebiliyor (>70 / <30)', () => {
+  const a = app();
+  a.window.__up = series(200, 100, 0.006, 0.2);
+  a.window.__dn = series(200, 200, -0.006, 0.2);
+  const up = a.evalIn('computeStockTA(window.__up).confluence');
+  const dn = a.evalIn('computeStockTA(window.__dn).confluence');
+  assert.ok(up.score > 70, 'guclu yukselen seride skor >70 bekleniyor: ' + up.score);
+  assert.ok(dn.score < 30, 'guclu dusen seride skor <30 bekleniyor: ' + dn.score);
   a.close();
 });
 
@@ -291,12 +312,16 @@ test('computeStockTA: yeni alanlar geldi, ESKI alanlar bozulmadi', () => {
   // yeni
   assert.ok(ta.confluence && typeof ta.confluence.score === 'number', 'confluence eksik');
   assert.ok(ta.scenarios && ta.scenarios.price > 0, 'scenarios eksik');
-  // eski (regresyon)
-  for (const k of ['current', 'sma20', 'sma50', 'ema9', 'ema21', 'rsi', 'rsiZone', 'macd', 'bb',
-                   'sr', 'atrPct', 'volRatio', 'stoch', 'stochZone', 'adx', 'adxZone', 'obv',
+  // eski (regresyon) — Gosterge Sadelestirme'de (v7-132) stoch/stochZone/ema9/ema21/
+  // ema9Series/ema21Series kasitli kaldirildi, listeden cikarildi.
+  for (const k of ['current', 'sma20', 'sma50', 'rsi', 'rsiZone', 'macd', 'bb',
+                   'sr', 'atrPct', 'volRatio', 'adx', 'adxZone', 'obv',
                    'pivots', 'pivotZone', 'trend', 'bbPosition', 'priceVsSma20', 'recentChange7d',
-                   'sma20Series', 'sma50Series', 'ema9Series', 'ema21Series', 'signals']) {
+                   'sma20Series', 'sma50Series', 'signals']) {
     assert.ok(k in ta, 'eski TA alani kayboldu: ' + k);
+  }
+  for (const k of ['stoch', 'stochZone', 'ema9', 'ema21', 'ema9Series', 'ema21Series']) {
+    assert.ok(!(k in ta), 'sadelestirmede silinmesi gereken alan hala duruyor: ' + k);
   }
   assert.ok(Array.isArray(ta.signals) && ta.signals.length > 0, 'taktik sinyaller bozuldu');
   a.close();

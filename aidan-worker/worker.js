@@ -4267,9 +4267,7 @@ Owner earnings getirisi: ${bf.oeYield != null ? `%${Math.round(bf.oeYield * 1000
 Fiyat: ${facts.current} ${currency} | Aralık: ${facts.min} → ${facts.max} | Değişim: ${facts.changePct >= 0 ? '+' : ''}${facts.changePct}%
 Trend: ${facts.trend} | ADX: ${facts.adx ?? '—'} (${facts.adxZone ?? '—'}) | Volatilite (ATR%): ${facts.atrPct ?? '—'}
 SMA20: ${facts.sma20 ?? '—'} | SMA50: ${facts.sma50 ?? '—'} | Fiyat/SMA20: ${facts.priceVsSma20 ?? '—'}
-EMA9: ${facts.ema9 ?? '—'} | EMA21: ${facts.ema21 ?? '—'} (kısa vade hızlı ortalamalar)
 RSI(14): ${facts.rsi ?? '—'} (${facts.rsiZone ?? '—'})
-Stochastic %K/%D: ${facts.stochK ?? '—'} / ${facts.stochD ?? '—'} (${facts.stochZone ?? '—'})
 MACD: çizgi ${facts.macdLine ?? '—'}, sinyal ${facts.macdSignal ?? '—'}, histogram ${facts.macdHist ?? '—'}
 Bollinger: alt ${facts.bbLower ?? '—'} | orta ${facts.bbMid ?? '—'} | üst ${facts.bbUpper ?? '—'} | konum ${facts.bbPosition ?? '—'}
 Pivot (klasik): PP ${facts.pivotPP ?? '—'} | R1 ${facts.pivotR1 ?? '—'} | S1 ${facts.pivotS1 ?? '—'} | R2 ${facts.pivotR2 ?? '—'} | S2 ${facts.pivotS2 ?? '—'} | konum ${facts.pivotZone ?? '—'}
@@ -4281,7 +4279,7 @@ Taktik gözlemler:
 ${signalsBlock}${confBlock}${scenBlock}${mtfBlock}${bfBlock}${newsBlock}
 
 Bu verileri akıcı bir teknik analize dök (8-12 cümle).
-Yapı: ① tablonun genel hali + uyum skorunun ne dediği ② zaman dilimi uyumu/çatışması ③ YUKARI ve AŞAĞI koşullu senaryoyu tetik + sıradaki seviye + geçersizleşme seviyesiyle birlikte anlat ④ oynaklık aralığının ne anlama geldiği. Haber verildiyse teknik tabloyu haberlerle birlikte, akıcı bir 'teknik + hikaye' anlatısı olarak yorumla (yine tavsiye/tahmin YOK). ADX'in trend gücünü, Stochastic'in RSI ile uyumunu/diverjansını, EMA9/21 kesişimini ve pivot konumunu özetle. HER bahsettiğin göstergenin ne anlama geldiğini kısaca açıkla (${name} öğreniyor). Tavsiye YOK, gelecek tahmini YOK.${bf ? `
+Yapı: ① tablonun genel hali + uyum skorunun ne dediği ② zaman dilimi uyumu/çatışması ③ YUKARI ve AŞAĞI koşullu senaryoyu tetik + sıradaki seviye + geçersizleşme seviyesiyle birlikte anlat ④ oynaklık aralığının ne anlama geldiği. Haber verildiyse teknik tabloyu haberlerle birlikte, akıcı bir 'teknik + hikaye' anlatısı olarak yorumla (yine tavsiye/tahmin YOK). ADX'in trend gücünü ve pivot konumunu özetle. HER bahsettiğin göstergenin ne anlama geldiğini kısaca açıkla (${name} öğreniyor). Tavsiye YOK, gelecek tahmini YOK.${bf ? `
 
 🧱 BUFFETT KATMANI da verildi — ${isFund ? 'anlatının merkezine BUNU al' : 'analizin sonuna 2-3 cümlelik bir temel analiz paragrafı ekle'}: skorun ne dediği, hangi kriterden kırık aldığı ve o kriterin ne ölçtüğü. Teknik tabloyla temel tablonun aynı yöne mi ters yöne mi baktığını da söyle (ör. teknik güçlü ama iş kalitesi zayıf, ya da tersi) — bu bir tavsiye değil, iki farklı mercekten aynı şirkete bakmaktır.` : ''}`;
 
@@ -4347,9 +4345,7 @@ async function handlePortfolioTechnicalApi(request, env) {
       `trend ${f.trend || '—'}`,
       f.adx != null ? `ADX ${f.adx} (${f.adxZone || '—'})` : null,
       `RSI ${f.rsi ?? '—'} (${f.rsiZone || '—'})`,
-      f.stochK != null ? `Stoch %K ${f.stochK} (${f.stochZone || '—'})` : null,
       f.sma20 != null && f.sma50 != null ? `SMA20/50 ${f.sma20 > f.sma50 ? '↑' : '↓'}` : null,
-      f.ema9 != null && f.ema21 != null ? `EMA9/21 ${f.ema9 > f.ema21 ? '↑' : '↓'}` : null,
       f.macdHist != null ? `MACD hist ${f.macdHist >= 0 ? '+' : ''}${f.macdHist}` : null,
       f.bbPosition ? `BB: ${f.bbPosition}` : null,
       f.pivotZone && f.pivotZone !== '—' ? `Pivot: ${f.pivotZone}` : null,

@@ -1438,26 +1438,6 @@ function taAtrPct(highs, lows, closes, period = 14) {
   return last > 0 ? Math.round((atr / last) * 10000) / 100 : null;
 }
 
-// ——— Yeni indikatörler (Haz 13) ———
-// Stochastic %K (lookback) + %D (k SMA) — momentum osilatörü, RSI'a alternatif
-// %K = ((C - LL) / (HH - LL)) * 100 — son lookback periyodu içinde fiyatın konumu
-function taStoch(highs, lows, closes, kPeriod = 14, dPeriod = 3) {
-  if (closes.length < kPeriod + dPeriod) return null;
-  const kArr = [];
-  for (let i = kPeriod - 1; i < closes.length; i++) {
-    const hs = highs.slice(i - kPeriod + 1, i + 1).filter(v => v != null);
-    const ls = lows.slice(i - kPeriod + 1, i + 1).filter(v => v != null);
-    if (!hs.length || !ls.length) { kArr.push(null); continue; }
-    const hh = Math.max(...hs), ll = Math.min(...ls), c = closes[i];
-    kArr.push(hh === ll ? 50 : ((c - ll) / (hh - ll)) * 100);
-  }
-  const kLast = kArr[kArr.length - 1];
-  const kValid = kArr.slice(-dPeriod).filter(v => v != null);
-  if (kLast == null || kValid.length < dPeriod) return null;
-  const dLast = kValid.reduce((a, b) => a + b, 0) / kValid.length;
-  return { k: Math.round(kLast * 10) / 10, d: Math.round(dLast * 10) / 10 };
-}
-
 // ADX (14) — trend gücü. <20 trendsiz/yatay, 20-25 zayıf, 25-50 güçlü, >50 çok güçlü trend.
 // +DI / -DI yön sinyalleri kullanılır ama gücün netliği ADX'tir.
 function taAdx(highs, lows, closes, period = 14) {
@@ -1573,17 +1553,11 @@ function computeStockTA(j) {
   const current = closes[closes.length - 1];
   const sma20 = taSma(closes, 20);
   const sma50 = taSma(closes, 50);
-  // EMA9 / EMA21 — kısa vade hızlı tepkili ortalamalar (trader klasiği)
-  const ema9Series = taEmaSeries(closes, 9);
-  const ema21Series = taEmaSeries(closes, 21);
-  const ema9 = ema9Series.length ? ema9Series[ema9Series.length - 1] : null;
-  const ema21 = ema21Series.length ? ema21Series[ema21Series.length - 1] : null;
   const rsi = taRsi(closes, 14);
   const macd = taMacd(closes);
   const bb = taBollinger(closes, 20, 2);
   const sr = taSupportResistance(closes, highs, lows, 20);
   const atrPct = taAtrPct(highs, lows, closes, 14);
-  const stoch = taStoch(highs, lows, closes, 14, 3);
   const adx = taAdx(highs, lows, closes, 14);
   const obv = taObv(closes, volumes);
   const pivots = taPivots(highs, lows, closes);
@@ -1613,8 +1587,7 @@ function computeStockTA(j) {
     const d = ((current - sma20) / sma20) * 100;
     priceVsSma20 = (d >= 0 ? '+' : '') + d.toFixed(1) + '%';
   }
-  // Stochastic + ADX zone etiketleri
-  const stochZone = stoch == null ? '—' : (stoch.k >= 80 ? 'aşırı alım' : stoch.k <= 20 ? 'aşırı satım' : 'nötr');
+  // ADX zone etiketi
   const adxZone = adx == null ? '—' : (adx >= 50 ? 'çok güçlü trend' : adx >= 25 ? 'güçlü trend' : adx >= 20 ? 'zayıf trend' : 'yatay/trendsiz');
   // Pivot konumu — fiyat hangi pivot seviyesinde
   let pivotZone = '—';
@@ -1630,14 +1603,14 @@ function computeStockTA(j) {
   const sma50Series = taSmaSeries(closes, 50);
   const trend = taTrend(closes);
   const signals = buildTacticalSignals({
-    current, sma20, sma50, ema9, ema21, rsi, macd, bb, bbPosition, volRatio, sr, trend,
-    stoch, stochZone, adx, adxZone, obv, pivots, pivotZone,
+    current, sma20, sma50, rsi, macd, bb, bbPosition, volRatio, sr, trend,
+    adx, adxZone, obv, pivots, pivotZone,
   });
   const out = {
-    current, sma20, sma50, ema9, ema21, rsi, rsiZone: taRsiZone(rsi), macd, bb, sr, atrPct, volRatio,
-    stoch, stochZone, adx, adxZone, obv, pivots, pivotZone,
+    current, sma20, sma50, rsi, rsiZone: taRsiZone(rsi), macd, bb, sr, atrPct, volRatio,
+    adx, adxZone, obv, pivots, pivotZone,
     trend, bbPosition, priceVsSma20, recentChange7d,
-    sma20Series, sma50Series, ema9Series, ema21Series, signals,
+    sma20Series, sma50Series, signals,
     changePct: j.changePct, min: j.min, max: j.max,
   };
   // Analiz v2 — uyum skoru + kosullu senaryolar (lokal, kural tabanli)
@@ -1685,12 +1658,7 @@ function renderStockTA(ta, cur) {
   const grid = document.getElementById('stockTaGrid');
   const sigEl = document.getElementById('stockTaSignals');
   const fmt = v => v == null ? '—' : (typeof v === 'number' ? formatStockPrice(v) : v);
-  const emaCross = ta.ema9 != null && ta.ema21 != null
-    ? (ta.ema9 > ta.ema21 ? 'EMA9 ↑' : 'EMA9 ↓')
-    : '—';
-  const stochCls = ta.stoch == null ? '' : (ta.stoch.k >= 80 ? 'warn' : ta.stoch.k <= 20 ? 'down' : '');
   const adxCls = ta.adx == null ? '' : (ta.adx >= 25 ? 'up' : ta.adx >= 20 ? 'warn' : '');
-  const obvCls = ta.obv == null ? '' : (ta.obv.trend === 'yukarı' ? 'up' : ta.obv.trend === 'aşağı' ? 'down' : '');
   const cells = [
     { lbl: 'RSI (14)', val: ta.rsi != null ? ta.rsi.toFixed(1) : '—', sub: ta.rsiZone, cls: ta.rsi != null ? (ta.rsi >= 70 ? 'warn' : (ta.rsi <= 30 ? 'down' : '')) : '' },
     { lbl: 'ADX (14)', val: ta.adx != null ? ta.adx.toFixed(1) : '—', sub: ta.adxZone, cls: adxCls },
@@ -1727,8 +1695,19 @@ function renderStockTA(ta, cur) {
 // ============================================================
 
 // ——— 1) Uyum skoru: gostergelerin kaci ayni yone bakiyor ———
-// Her gosterge +1 (yukari) / -1 (asagi) / 0 (notr) oy verir. Agirlik = gostergenin
-// YON bilgisi tasima gucu: ortalama kesisimleri momentum osilatorlerinden agir.
+// Eskiden 12 oy vardi; denetimde ağırlıkça %78'inin (9/12) aynı şeyi ölçtüğü
+// görüldü — hepsi son dönem fiyat serisinin farklı yumuşatmaları (Trend,
+// EMA9/21, MACD sıfır çizgisi, Stochastic, Bollinger konumu, Pivot konumu,
+// Son 7 periyot hepsi "fiyat son zamanda nereye gitti" sorusunu tekrar
+// tekrar soruyordu). Sonuç "uyum" değil, tek bir momentum sinyalinin 9 farklı
+// kılıkta oy kullanmasıydı — skor yanıltıcı biçimde yüksek/düşük çıkabiliyordu.
+// Şimdi 5 oy, HER BİRİ BAĞIMSIZ bir faktörü ölçüyor:
+//   Fiyat / SMA20   → konum (fiyat kısa ortalamaya göre nerede)
+//   SMA20 / SMA50   → ana yön (kısa vade uzun vadenin neresinde)
+//   MACD histogram  → momentumun DEĞİŞİMİ (ivme, konum değil)
+//   RSI momentum    → aşırılık (aşırı alım/satım bölgesi)
+//   OBV para akışı  → hacim onayı (fiyat hareketinin arkasında para var mı)
+// Her gosterge +1 (yukari) / -1 (asagi) / 0 (notr) oy verir, agirlikli ortalama.
 // ADX oy VERMEZ — yonsuzdur; skorun guvenilirligini nitelemekte kullanilir.
 function taConfluence(ta) {
   if (!ta) return null;
@@ -1736,33 +1715,17 @@ function taConfluence(ta) {
   const add = (name, w, v, note) => { if (v === 0 || v === 1 || v === -1) votes.push({ name, w, v, note: note || '' }); };
   const cmp = (a, b) => (a == null || b == null) ? null : (a > b ? 1 : a < b ? -1 : 0);
 
-  add('Trend', 2, ta.trend === 'yukarı' ? 1 : ta.trend === 'aşağı' ? -1 : ta.trend === 'yatay' ? 0 : null, ta.trend);
   add('Fiyat / SMA20', 1.5, cmp(ta.current, ta.sma20), ta.priceVsSma20);
   add('SMA20 / SMA50', 2, cmp(ta.sma20, ta.sma50),
       ta.sma20 != null && ta.sma50 != null ? (ta.sma20 > ta.sma50 ? 'kısa vade üstte' : ta.sma20 < ta.sma50 ? 'kısa vade altta' : 'eşit') : '');
-  add('EMA9 / EMA21', 1.5, cmp(ta.ema9, ta.ema21),
-      ta.ema9 != null && ta.ema21 != null ? (ta.ema9 > ta.ema21 ? 'hızlı ortalama üstte' : 'hızlı ortalama altta') : '');
   add('MACD histogram', 1.5, ta.macd ? (ta.macd.histogram > 0 ? 1 : ta.macd.histogram < 0 ? -1 : 0) : null,
       ta.macd ? String(ta.macd.histogram) : '');
-  add('MACD sıfır çizgisi', 1, ta.macd ? (ta.macd.line > 0 ? 1 : ta.macd.line < 0 ? -1 : 0) : null,
-      ta.macd ? (ta.macd.line > 0 ? 'sıfır üstü' : 'sıfır altı') : '');
   add('RSI momentum', 1, ta.rsi == null ? null : (ta.rsi >= 55 ? 1 : ta.rsi <= 45 ? -1 : 0),
       ta.rsi == null ? '' : String(Math.round(ta.rsi)));
-  add('Stochastic %K/%D', 1, ta.stoch ? (ta.stoch.k > ta.stoch.d ? 1 : ta.stoch.k < ta.stoch.d ? -1 : 0) : null, ta.stochZone);
-  add('OBV para akışı', 1.5, ta.obv ? (ta.obv.trend === 'yukarı' ? 1 : ta.obv.trend === 'aşağı' ? -1 : 0) : null,
+  add('OBV para akışı', 1, ta.obv ? (ta.obv.trend === 'yukarı' ? 1 : ta.obv.trend === 'aşağı' ? -1 : 0) : null,
       ta.obv ? ta.obv.trend : '');
-  add('Bollinger konumu', 1,
-      ta.bbPosition === 'üst banda yakın' ? 1 : ta.bbPosition === 'alt banda yakın' ? -1 : ta.bbPosition === 'orta bölge' ? 0 : null,
-      ta.bbPosition === '—' ? '' : ta.bbPosition);
-  const pz = ta.pivotZone;
-  add('Pivot konumu', 1,
-      (pz === 'R2 üstünde' || pz === 'R1-R2 arası' || pz === 'PP-R1 arası') ? 1
-        : (pz === 'S1-PP arası' || pz === 'S2-S1 arası' || pz === 'S2 altında') ? -1 : null,
-      pz === '—' ? '' : pz);
-  add('Son 7 periyot', 1, ta.recentChange7d == null ? null : (ta.recentChange7d > 1 ? 1 : ta.recentChange7d < -1 ? -1 : 0),
-      ta.recentChange7d == null ? '' : (ta.recentChange7d >= 0 ? '+' : '') + ta.recentChange7d + '%');
 
-  if (votes.length < 4) return null;
+  if (votes.length < 3) return null;
   const wSum = votes.reduce((a, b) => a + b.w, 0);
   const net = votes.reduce((a, b) => a + b.w * b.v, 0);
   const score = Math.max(0, Math.min(100, Math.round(50 + 50 * net / wSum)));
@@ -2379,14 +2342,9 @@ function buildStockAnalysisFacts(ta, j) {
     trend: ta.trend,
     sma20: ta.sma20,
     sma50: ta.sma50,
-    ema9: ta.ema9 != null ? Math.round(ta.ema9 * 100) / 100 : null,
-    ema21: ta.ema21 != null ? Math.round(ta.ema21 * 100) / 100 : null,
     priceVsSma20: ta.priceVsSma20,
     rsi: ta.rsi,
     rsiZone: ta.rsiZone,
-    stochK: ta.stoch?.k ?? null,
-    stochD: ta.stoch?.d ?? null,
-    stochZone: ta.stochZone,
     adx: ta.adx,
     adxZone: ta.adxZone,
     macdLine: ta.macd?.line ?? null,
@@ -2592,10 +2550,6 @@ async function openPfTechModal() {
     if (ta.adx != null) {
       const cls = ta.adx >= 25 ? 'up' : (ta.adx >= 20 ? 'warn' : '');
       badges.push(`<span class="pf-tech-badge ${cls}">ADX ${ta.adx.toFixed(0)}</span>`);
-    }
-    if (ta.stoch != null) {
-      const sCls = ta.stoch.k >= 80 ? 'warn' : ta.stoch.k <= 20 ? 'down' : '';
-      badges.push(`<span class="pf-tech-badge ${sCls}">Stoch ${ta.stoch.k.toFixed(0)}</span>`);
     }
     if (ta.bbPosition && ta.bbPosition !== '—') {
       const bbCls = ta.bbPosition.includes('üst') ? 'warn' : ta.bbPosition.includes('alt') ? 'down' : '';
