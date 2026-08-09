@@ -1,5 +1,19 @@
+// Tembel modul indirilirken sekme icinde iskelet goster (bos ekran yerine).
+function setModuleLoading(tab, on, failed) {
+  const panel = document.getElementById(tab);
+  if (!panel) return;
+  let el = panel.querySelector('.mod-loading');
+  if (on || failed) {
+    if (!el) { el = document.createElement('div'); el.className = 'mod-loading'; panel.prepend(el); }
+    el.innerHTML = failed
+      ? `<span class="mod-loading-dot err"></span><span>Bolum yuklenemedi.</span>`
+        + ` <button class="mod-retry" onclick="showTab('${tab}')">Tekrar dene</button>`
+      : '<span class="mod-loading-dot"></span><span>Bolum yukleniyor…</span>';
+  } else if (el) { el.remove(); }
+}
+
 // ============ TAB ============
-function showTab(name, btn) {
+async function showTab(name, btn) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(name).classList.add('active');
@@ -7,13 +21,25 @@ function showTab(name, btn) {
   else { const _dt = document.querySelector(`[data-tab="${name}"]`); if (_dt) _dt.classList.add('active'); }
   // Borsa modu: borsa sekmesi açıkken body.stocks-mode → tam ekran terminal hissi
   document.body.classList.toggle('stocks-mode', name === 'stocks');
-  if (name === 'stocks') tickStocksModeHeader();
   // Sekme değişiminde hamburger drawer'ı kapat (açık kalmasın)
   const _sm = document.getElementById('stocksMenu');
   if (_sm) { _sm.classList.remove('open'); document.getElementById('stocksMenuBackdrop').classList.remove('open'); }
   // Global app-bar başlığı + drawer aktif vurgusu + global drawer'ı kapat
   syncAppHeader(name);
   toggleAppMenu(false);
+  // --- Tembel modul: sekme ilk acilista indirilir (ilk yukleme 55 KB gzip hafifledi) ---
+  if (name === 'stocks' || name === 'diet') {
+    const mod = name === 'stocks' ? 'stocks' : 'program';
+    if (!moduleLoaded(mod)) {
+      setModuleLoading(name, true);
+      try { await loadModule(mod); }
+      catch (e) { setModuleLoading(name, false, mod); return; }
+      setModuleLoading(name, false);
+    }
+    // Kullanici beklerken baska sekmeye gectiyse render etme
+    if (!document.getElementById(name).classList.contains('active')) return;
+  }
+  if (name === 'stocks') tickStocksModeHeader();
   if (name === 'settings') {
     updateEstimateStats();
     renderNotifSettings();
@@ -150,7 +176,7 @@ function tickStocksModeHeader() {
 // Sayfa tekrar görünür olunca (kilidi açınca): borsayı tazele + pomodoro'yu gerçek zamana eşitle
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
-  if (document.getElementById('stocks').classList.contains('active') && (data.watchlist || []).length) refreshStocks();
+  if (moduleLoaded('stocks') && document.getElementById('stocks').classList.contains('active') && (data.watchlist || []).length) refreshStocks();
   if (running) tickTimer(); // arka planda interval durmuş olabilir → kalan süreyi anında düzelt
 });
 
@@ -1522,3 +1548,338 @@ function journalVoice() {
   try { rec.start(); } catch (err) { cleanup(); showToast('Mikrofon başlatılamadı', 'error', 3000); }
 }
 
+// ===== GOREV FONKSIYONLARI ===== stocks.js'ten tasindi (9 Agu 2026, tembel yukleme paketi) =====
+
+function addTask() {
+  const text = document.getElementById('taskInput').value.trim();
+  if (!text) return;
+  const task = {
+    id: Date.now(),
+    text,
+    done: false,
+    doneDate: null,
+    subtasks: [],
+    created: timeStr(),
+    priority: document.getElementById('taskPriority').value,
+    category: document.getElementById('taskCategory').value || null,
+    due: document.getElementById('taskDue').value || null,
+    estimateMin: parseInt(document.getElementById('taskEstimate').value) || null,
+    actualMin: null,
+    repeat: document.getElementById('taskRepeatNew').value || null,
+    reminderTime: document.getElementById('taskReminder').value || null,
+    lastReminded: null,
+    mitDate: null,
+    seriesId: null,
+    seriesName: null,
+    seriesIndex: null,
+    seriesTotal: null,
+    notes: null
+  };
+  data.tasks.push(task);
+  document.getElementById('taskInput').value = '';
+  document.getElementById('taskDue').value = '';
+  document.getElementById('taskEstimate').value = '';
+  document.getElementById('taskPriority').value = 'normal';
+  document.getElementById('taskCategory').value = '';
+  document.getElementById('taskRepeatNew').value = '';
+  document.getElementById('taskReminder').value = '';
+  save(); renderTasks();
+}
+
+async function splitTask() {
+  const text = document.getElementById('taskInput').value.trim();
+  if (!text) { showToast('Önce büyük görevi yaz, sonra "Böl" bas.', 'warning'); return; }
+  const parts = await aidanPrompt(
+    `"${text}" görevini böl`,
+    'Her satıra bir adım yaz:',
+    "1. adım\n2. adım\n3. adım",
+    true
+  );
+  if (parts === null || !parts.trim()) return;
+  const subs = parts.split('\n').map(s => s.trim()).filter(s => s).map(s => ({ text: s, done: false }));
+  if (subs.length === 0) return;
+  data.tasks.push({
+    id: Date.now(), text, done: false, doneDate: null, subtasks: subs, created: timeStr(),
+    priority: document.getElementById('taskPriority').value,
+    category: document.getElementById('taskCategory').value || null,
+    due: document.getElementById('taskDue').value || null,
+    estimateMin: parseInt(document.getElementById('taskEstimate').value) || null,
+    actualMin: null,
+    repeat: document.getElementById('taskRepeatNew').value || null,
+    reminderTime: document.getElementById('taskReminder').value || null,
+    lastReminded: null,
+    mitDate: null,
+    seriesId: null,
+    seriesName: null,
+    seriesIndex: null,
+    seriesTotal: null
+  });
+  document.getElementById('taskInput').value = '';
+  document.getElementById('taskReminder').value = '';
+  save(); renderTasks();
+  showToast(`Görev ${subs.length} adıma bölündü`, 'success');
+}
+
+function toggleTask(id) {
+  const t = data.tasks.find(x => x.id === id);
+  const wasDone = t.done;
+  const oldDoneDate = t.doneDate;
+  const oldActualMin = t.actualMin;
+  t.done = !t.done;
+  t.doneDate = t.done ? today() : null;
+  const justFinished = t.done && !wasDone;
+
+  if (t.done && t.estimateMin && currentFocusTaskId === id && focusStartTime) {
+    // Focus modunda otomatik ölç
+    const elapsed = Math.round((Date.now() - focusStartTime) / 60000);
+    t.actualMin = elapsed;
+    const diff = elapsed - t.estimateMin;
+    setTimeout(() => {
+      if (diff > 5) showToast(`Tahmin ${t.estimateMin}dk, gerçek ${elapsed}dk — ${diff}dk fazla`, 'info', 4000);
+      else if (diff < -5) showToast(`${elapsed}dk'da bitti — tahminden hızlı! `, 'success', 4000);
+      else showToast(`${elapsed}dk — tahmin neredeyse tam`, 'success', 4000);
+    }, 200);
+  }
+
+  // MIT kutlaması: bugünün 3'ünü tamamladıysa
+  let mitFullCelebration = false;
+  if (t.done && t.mitDate === today()) {
+    const mit = data.tasks.filter(x => x.mitDate === today());
+    const mitDone = mit.filter(x => x.done).length;
+    if (mit.length === 3 && mitDone === 3) {
+      mitFullCelebration = true;
+    }
+  }
+
+  if (justFinished && typeof recordDoneHour === 'function') recordDoneHour();
+
+  save(); renderTasks();
+
+  // Done dopamine — DOM güncellendikten sonra
+  if (justFinished) {
+    setTimeout(() => celebrateDone(id), 30);
+    // Undo: yanlışlıkla bittiyse 5sn geri alma şansı
+    const preview = (t.text || '').slice(0, 28);
+    showUndoToast(`"${preview}" bitti`, () => {
+      const tt = data.tasks.find(x => x.id === id);
+      if (!tt) return;
+      tt.done = false;
+      tt.doneDate = oldDoneDate;
+      tt.actualMin = oldActualMin;
+      save(); renderTasks();
+      showToast('Geri alındı', 'info', 2000);
+    });
+  }
+  if (mitFullCelebration) {
+    setTimeout(() => {
+      // Daha büyük kutlama: birden çok konfeti
+      const stats = document.querySelector('.stats') || document.querySelector('.mit-box');
+      if (stats) {
+        confettiBurst(stats);
+        setTimeout(() => confettiBurst(stats), 200);
+        setTimeout(() => confettiBurst(stats), 400);
+      }
+      showToast('Bugünün 3\'ünü TAMAMLADIN! Bonus her şey hediye. ', 'success', 7000);
+    }, 500);
+  }
+}
+
+function toggleSub(tid, idx) {
+  const t = data.tasks.find(x => x.id === tid);
+  t.subtasks[idx].done = !t.subtasks[idx].done;
+  if (t.subtasks.every(s => s.done)) {
+    if (!t.done && typeof recordDoneHour === 'function') recordDoneHour();
+    t.done = true;
+    t.doneDate = today();
+  }
+  save(); renderTasks();
+}
+
+function deleteTask(id) {
+  const idx = data.tasks.findIndex(x => x.id === id);
+  if (idx < 0) return;
+  const taskCopy = JSON.parse(JSON.stringify(data.tasks[idx]));
+  data.tasks.splice(idx, 1);
+  save(); renderTasks();
+  const preview = (taskCopy.text || '').slice(0, 30);
+  showUndoToast(`"${preview}" silindi`, () => {
+    data.tasks.splice(Math.min(idx, data.tasks.length), 0, taskCopy);
+    save(); renderTasks();
+    showToast('Geri yüklendi', 'success', 2000);
+  });
+}
+
+async function postponeTask(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t || t.done) return;
+  closePostponeMenu();
+  const menu = document.createElement('div');
+  menu.id = 'postponeMenu';
+  menu.className = 'postpone-menu';
+  const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return isoLocal(d); })();
+  const in3 = (() => { const d = new Date(); d.setDate(d.getDate() + 3); return isoLocal(d); })();
+  const nextWeek = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return isoLocal(d); })();
+  menu.innerHTML = `
+    <div class="postpone-title">"${escapeHtml((t.text||'').slice(0,40))}" ertele</div>
+    <button onclick="applyPostpone(${id}, '${tomorrow}')">⏭️ Yarın</button>
+    <button onclick="applyPostpone(${id}, '${in3}')">+3 gün</button>
+    <button onclick="applyPostpone(${id}, '${nextWeek}')">Haftaya</button>
+    <button onclick="applyPostponePick(${id})">Tarih seç</button>
+    <button class="secondary" onclick="closePostponeMenu()">İptal</button>
+  `;
+  document.body.appendChild(menu);
+  setTimeout(() => menu.classList.add('open'), 10);
+  // Dışarı tıklayınca kapat
+  setTimeout(() => {
+    document.addEventListener('click', _postponeOutsideClick, { once: true });
+  }, 100);
+}
+
+function _postponeOutsideClick(e) {
+  if (!e.target.closest('#postponeMenu')) closePostponeMenu();
+}
+
+function closePostponeMenu() {
+  const m = document.getElementById('postponeMenu');
+  if (m) m.remove();
+}
+
+function applyPostpone(id, dateIso) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  const oldDue = t.due;
+  t.due = dateIso;
+  t.postponeCount = (t.postponeCount || 0) + 1; // erteleme farkındalığı için say
+  // Yarına atıldıysa bugünün MIT'inden çıkar
+  if (t.mitDate === today() && dateIso !== today()) t.mitDate = null;
+  save();
+  renderTasks();
+  closePostponeMenu();
+  const fmt = new Date(dateIso).toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' });
+  showToast(`${fmt}'e ertelendi · sorun değil `, 'success');
+}
+
+async function applyPostponePick(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  closePostponeMenu();
+  const inp = await aidanPrompt('Tarih seç', 'YYYY-MM-DD veya "salı", "yarın":', t.due || '');
+  if (inp === null) return;
+  const parsed = parseDateInput(inp.trim());
+  if (!parsed) { showToast('Tarih anlaşılamadı', 'warning'); return; }
+  applyPostpone(id, parsed);
+}
+
+// Erteleme farkındalığı — çok ertelenen görev için nazik müdahale (utançsız)
+function postponeNudge(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  closePostponeMenu();
+  const menu = document.createElement('div');
+  menu.id = 'postponeMenu';
+  menu.className = 'postpone-menu';
+  menu.innerHTML = `
+    <div class="postpone-title">Bu görevi ${t.postponeCount} kez erteledin</div>
+    <div style="font-size:0.82em;color:var(--text-muted);padding:2px 4px 10px;line-height:1.5;">Belki çok büyük ya da belirsiz geliyor. Utanç yok — birlikte kolaylaştıralım </div>
+    <button onclick="nudgeSplit(${id})">Küçük adımlara böl</button>
+    <button onclick="nudgeTry(${id})">Şimdi 2 dakika dene</button>
+    <button class="secondary" onclick="nudgeDismiss(${id})">Tamam, böyle kalsın</button>
+  `;
+  document.body.appendChild(menu);
+  setTimeout(() => menu.classList.add('open'), 10);
+  setTimeout(() => document.addEventListener('click', _postponeOutsideClick, { once: true }), 100);
+}
+function nudgeSplit(id) { closePostponeMenu(); addSubtask(id); }
+function nudgeTry(id) { closePostponeMenu(); startTaskNow(id, true); }
+function nudgeDismiss(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (t) { t.nudgeDismissed = true; save(); renderTasks(); }
+  closePostponeMenu();
+  showToast('Tamam, baskı yok. Hazır olunca ', 'info', 2500);
+}
+
+async function addSubtask(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  const txt = await aidanPrompt('Alt görev ekle', `"${t.text}" için bir adım:`, '');
+  if (txt === null) return;
+  const trimmed = txt.trim();
+  if (!trimmed) return;
+  t.subtasks.push({ text: trimmed, done: false });
+  // Eğer ana görev tamamlandıysa ve yeni subtask eklendi, ana görevi geri aç
+  if (t.done) { t.done = false; t.doneDate = null; }
+  save(); renderTasks();
+  showToast('Alt görev eklendi', 'success');
+}
+
+async function deleteSubtask(tid, idx) {
+  const t = data.tasks.find(x => x.id === tid);
+  if (!t || !t.subtasks[idx]) return;
+  t.subtasks.splice(idx, 1);
+  save(); renderTasks();
+}
+
+async function editTask(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  const yeni = await aidanPrompt('Görev düzenle', 'Görev metni:', t.text);
+  if (yeni === null) return; // iptal — notlar adımına da geçme
+  const trimmed = yeni.trim();
+  if (!trimmed) {
+    if (confirm('Boş bıraktın. Görevi silmek mi istedin?')) {
+      data.tasks = data.tasks.filter(x => x.id !== id);
+      save(); renderTasks();
+    }
+    return;
+  }
+  let changed = false;
+  if (trimmed !== t.text) { t.text = trimmed; changed = true; }
+
+  // Notlar adımı (opsiyonel — boş bırakılabilir, iptal = atla)
+  const notesIn = await aidanPrompt('Notlar (opsiyonel)', 'Detay, link, açıklama — boş bırakırsan not eklenmez', t.notes || '', true);
+  if (notesIn !== null) {
+    const n = notesIn.trim();
+    const newNotes = n || null;
+    if ((t.notes || null) !== newNotes) { t.notes = newNotes; changed = true; }
+  }
+  if (changed) { save(); renderTasks(); showToast('Görev güncellendi', 'success'); }
+}
+
+function toggleMit(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  const todayStr = today();
+  if (t.mitDate === todayStr) {
+    t.mitDate = null;
+    showToast('Bugünün 3\'ünden çıkarıldı', 'info');
+  } else {
+    const currentMit = data.tasks.filter(x => x.mitDate === todayStr).length;
+    if (currentMit >= 3) {
+      showToast('Bugünün 3\'ü dolu! Önce birinin ★\'ını kaldır. 3 sınırı kasıtlı — odak için.', 'warning', 5000);
+      return;
+    }
+    t.mitDate = todayStr;
+    showToast('Bugünün 3\'üne eklendi', 'success');
+  }
+  save(); renderTasks();
+}
+
+function startTaskNow(id, quickTry) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  const mins = quickTry ? 2 : (t.estimateMin || 25);
+  setTimer(mins, quickTry ? 1 : 5);  // resetTimer çağırır, currentFocusTaskId'i null'lar
+  currentFocusTaskId = id;            // sonra set et
+  focusStartTime = Date.now();
+  const focusEl = document.getElementById('focusTask');
+  focusEl.textContent = (quickTry ? 'Sadece 2 dakika dene — başlaman yeter: ' : '') + t.text;
+  focusEl.classList.remove('empty');
+  showTab('focus');
+  setTimeout(() => startTimer(), 200);
+  updateActiveTaskBanner();
+  renderTasks();
+  if (quickTry) showToast('2 dakika. Bitince devam edip etmeme kararını sonra ver.', 'info', 4000);
+}
+
+let currentFocusTaskId = null;
+let focusStartTime = null;

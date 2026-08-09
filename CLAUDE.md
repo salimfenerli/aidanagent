@@ -2,7 +2,10 @@
 
 ## 🔴 GÜNCEL DURUM (özet — detaylı seans günlükleri: CHANGELOG.md)
 
-**Mimari:** `asistan.html` tek dosya DEĞİL — 6 modül sırayla yüklenir: `supabase.js` → `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → `tasks.js` (sekme/gün planı/quick-capture/journal/dump) → `stocks.js` (borsa) → `ui.js` (görev render/timer/ayarlar/auth/takvim/chat) → `program.js` (antrenman programı üreteci). (`app.js` eski bundle'ı repodan kalkmış — 25 Tem'de doğrulandı.)
+**Mimari:** `asistan.html` tek dosya DEĞİL — **4 modül statik + 2 modül TEMBEL** yüklenir.
+Statik sıra: `supabase.js` → `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → `tasks.js` (sekme/gün planı/quick-capture/journal/dump) → `stocks.js` (borsa) → `ui.js` (görev render/timer/ayarlar/auth/takvim/chat).
+**Tembel (sekmesi ilk açılınca iner, `core.js` → `loadModule`):** `stocks.js` (borsa) · `program.js` (antrenman programı üreteci).
+⚠️ `stocks.js` ve `tasks.js` arasındaki eski karışıklık 9 Ağu'da çözüldü — görev fonksiyonları artık `tasks.js`'te, paylaşılan yardımcılar `core.js`'te. (`app.js` eski bundle'ı repodan kalkmış — 25 Tem'de doğrulandı.)
 
 **⚠️ DÜZENLEME KURALI:** Büyük dosyalarda Edit riskli + sandbox `rm` YOK (`mv` var). Düzenleme = **Python byte-replace + `node --check`**; **.bak OLUŞTURMA**; rollback = `git checkout <dosya>`. EOL eşle: **styles.css TEK BAŞINA LF** · diğer HEPSİ CRLF (core.js/ui.js/tasks.js/stocks.js/supabase.js/sw.js/asistan.html/worker.js/CLAUDE.md). ⚠️ 25 Tem'de doğrulandı — eski not yanlıştı, byte-replace'te `assert b'\r\n' in b` ile kontrol et.
 
@@ -15,6 +18,30 @@
 - **Görev/Plan:** otomatik gün planı + blok bildirimleri (v7-109), planlama zekası — geçmişten öğrenen `planHistory`/`planProfile` + otomatik toparlama (v7-110), haftalık sabit program (`fixedSchedule`).
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
+
+### 🔴 9 Ağustos 2026 — ⚡ TEMBEL MODÜL YÜKLEME + stocks.js ÇÖZÜLDÜ (v7-136)
+
+Salim: "bana şimdi siteyi anlat daha verimli hale getirebiliriz." Denetimde ilk yükleme ölçüldü: **8 dosya / 302 KB gzip**, bunun **55 KB'i (stocks.js 44 + program.js 11)** kullanıcının o an açmadığı iki sekmeye aitti.
+
+**🔴 ASIL BULGU — `stocks.js` sadece borsa değildi.** İçinde 334 satır **temel görev kodu** (`addTask`/`toggleTask`/`deleteTask`/`editTask`/`addSubtask`/`deleteSubtask`/`toggleSub`/`toggleMit`/`postponeTask`/`startTaskNow`/`splitTask` + erteleme menüsü + nudge) ve **4 paylaşılan yardımcı** (`donutChart`/`lineChart`/`sparkline`/`resizeImageToDataUrl`) duruyordu. `resizeImageToDataUrl`'ü sohbet fotoğrafı ve diyet OCR'ı çağırıyordu, `sparkline`'ı kilo kartı.
+- **8 Ağustos `escapeHtml` olayının aynı sınıfı:** dosya adı yalan söylüyordu, çalışmasının tek sebebi yükleme sırasıydı. Bu haliyle stocks.js tembel yüklenemezdi — **varsayılan sekme (Görevler) borsa modülünün inmesini beklerdi**, inmezse hiçbir görev butonu çalışmazdı.
+- **Çözüm:** görev bloğu → `tasks.js`, paylaşılan 4 yardımcı → `core.js`. `stocks.js` artık gerçekten sadece borsa (3311 → 2898 satır).
+
+**Tembel yükleyici (`core.js` en üstü — TDZ kuralı gereği `data` init'inden ÖNCE).** `LAZY_MODULES = { stocks, program }` + `loadModule(name)` + `moduleLoaded(name)`. html5-qrcode'da kanıtlanmış kalıp; **söz (promise) önbelleklenir → aynı modül iki kez inmez**, hata olursa `_moduleLoads[name]` sıfırlanır ve tekrar denenebilir.
+- `showTab` **async** oldu, `syncAppHeader`'dan sonra modülü `await` eder. Sekme geçişinin görsel kısmı (panel/chip) **beklemeden** olur — sadece render bekler.
+- İnerken `.mod-loading` iskeleti (Impeccable: tam kenar + tint, yan-şerit yok, ease-out, `prefers-reduced-motion`). **Hata sessiz kalmaz** — "Bölüm yüklenemedi + Tekrar dene" düğmesi.
+- Kullanıcı beklerken başka sekmeye geçtiyse render **atlanır** (yarış koşulu koruması).
+- `visibilitychange` handler'ı `moduleLoaded('stocks')` ile korundu (kilit açılınca modül yokken `refreshStocks` patlardı).
+
+**Sonuç:** ilk yükleme **302 → 253 KB gzip (−49 KB, %16)**, kritik istek **8 → 6**. (55 değil 49: yardımcıların 6 KB'i zaten her zaman gerekliydi, silinmedi — taşındı.)
+
+**⚠️ Yeni tembel modül eklersen 5 yeri güncelle:** `LAZY_MODULES` · `sw.js` ASSETS · `aidan-pages-deploy.py` INCLUDE · Actions `paths` · `tests/07-hygiene`. (İkisi de deploy listesinde kaldı — **404 olursa bölüm hiç açılmaz, sessiz arıza**; 07-hygiene'e bunu kilitleyen 2 test eklendi.)
+
+**Doğrulama:** yeni `tests/13-lazy.test.js` **43 test**. En değerlisi: **`loadApp({scripts:['core.js','tasks.js','ui.js']})` ile GERÇEK ilk yükleme senaryosu** — diğer 12 test dosyası 5 modülü birlikte yüklediği için tembel yüklemeden önce/sonra aynı ortamı görür; bir görev fonksiyonu stocks.js'e geri kayarsa **kırmızı olacak tek yer burası**. Ayrıca: yükleme bütçesi ≤260 KB, çift indirme yasağı, iskelet + hata yolu, Impeccable CSS, 15 regresyon kilidi (hangi fonksiyon hangi dosyada). `07-hygiene` +2, `12-program` script-tag testi tembel yüklemeye çevrildi.
+**13 dosya toplam 277 test geçiyor**, tek kırmızı kasıtlı (SILINECEK-DOSYALAR hatırlatıcısı) · `node --check` 7 dosya temiz · EOL doğrulandı.
+**⚠️ `npm test` tek seferde 120 sn'i aşıyor** (13 jsdom penceresi) — dosya dosya çalıştır ya da CI timeout'unu izle.
+
+**Sonraki paket (Salim onayı bekliyor, kasıtlı ayrıldı):** `supabase.js` 50 KB gzip — kullanılan yalnız 2 tablo + 1 realtime kanal + 4 auth çağrısı. Tembel yüklemek auth/senkron/çakışma mantığına dokunur (25 Tem'de sertleştirilen en hassas alt sistem), o yüzden ayrı pakete bırakıldı.
 
 ### 🔴 9 Ağustos 2026 — 🏋️ ANTRENMAN PROGRAMI ÜRETECİ (v7-135)
 

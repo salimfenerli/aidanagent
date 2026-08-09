@@ -1,3 +1,26 @@
+// ===== TEMBEL MODUL YUKLEYICI (9 Agu 2026) =====
+// Borsa (44 KB gzip) ve antrenman programi (11 KB) ilk yuklemede INMEZ;
+// sekmesi ilk acildiginda gelir. html5-qrcode'da kanitlanmis kalip.
+// Ayni modul iki kez indirilmez — soz (promise) onbelleklenir.
+// ⚠️ Yeni modul eklersen 5 yeri guncelle: LAZY_MODULES · sw.js ASSETS ·
+//    aidan-pages-deploy.py INCLUDE · Actions paths · tests/07-hygiene.
+const LAZY_MODULES = { stocks: '/stocks.js', program: '/program.js' };
+const _moduleLoads = {};
+function moduleLoaded(name) { return !!(_moduleLoads[name] && _moduleLoads[name]._done); }
+function loadModule(name) {
+  const src = LAZY_MODULES[name];
+  if (!src) return Promise.reject(new Error('bilinmeyen modul: ' + name));
+  if (_moduleLoads[name]) return _moduleLoads[name];
+  const p = new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = src;
+    sc.onload = () => { p._done = true; res(); };
+    sc.onerror = () => { _moduleLoads[name] = null; rej(new Error(name + ' yuklenemedi')); };
+    document.head.appendChild(sc);
+  });
+  _moduleLoads[name] = p;
+  return p;
+}
 
 // escapeHtml — HTML enjeksiyonuna karsi TEK savunma hatti.
 // ⚠️ 8 Agu 2026: tanim ui.js'teydi ama core.js/tasks.js/stocks.js 145 yerde
@@ -2487,4 +2510,89 @@ function copyMealToNextDay() {
   data.diet.days[nextKey].meals = data.diet.days[nextKey].meals || [];
   data.diet.days[nextKey].meals.push({ id: Date.now() + Math.floor(Math.random() * 10000), slot: m.slot, name: m.name, kcal: m.kcal, protein: m.protein != null ? m.protein : null, carb: m.carb != null ? m.carb : null, fat: m.fat != null ? m.fat : null });
   save(); closeMealEdit(); showToast('Ertesi güne kopyalandı', 'success');
+}
+
+// ===== PAYLASILAN YARDIMCILAR ===== stocks.js'ten tasindi (9 Agu 2026, tembel yukleme paketi) =====
+
+// SVG donut chart — stroke-dasharray tekniği (segments: [{val,color}])
+function donutChart(segments, size) {
+  size = size || 140;
+  const r = size / 2 - 11;
+  const cx = size / 2, cy = size / 2;
+  const C = 2 * Math.PI * r;
+  const total = segments.reduce((s, x) => s + x.val, 0) || 1;
+  let offset = 0;
+  const arcs = segments.map(seg => {
+    const len = (seg.val / total) * C;
+    const c = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${seg.color}" stroke-width="13" stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    offset += len;
+    return c;
+  }).join('');
+  return `<svg class="pf-donut" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">${arcs}</svg>`;
+}
+
+// Basit line chart (sparkline/portföy geçmişi için — TA overlay yok)
+function lineChart(values, isDown) {
+  if (!values || values.length < 2) return '';
+  const w = 420, h = 140, padX = 8, padY = 10;
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = (max - min) || 1;
+  const pts = values.map((v, i) => {
+    const x = padX + (i / (values.length - 1)) * (w - 2 * padX);
+    const y = padY + (1 - (v - min) / range) * (h - 2 * padY);
+    return [x, y];
+  });
+  const line = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const area = line + ` L${pts[pts.length-1][0].toFixed(1)},${(h-padY).toFixed(1)} L${pts[0][0].toFixed(1)},${(h-padY).toFixed(1)} Z`;
+  const up = values[values.length - 1] >= values[0];
+  const color = up ? '#34c759' : '#ef4444';
+  const fillId = 'lc-fill-' + (up ? 'u' : 'd');
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+    <defs><linearGradient id="${fillId}" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="${color}" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+    </linearGradient></defs>
+    <path d="${area}" fill="url(#${fillId})" stroke="none"/>
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+// Basit SVG sparkline — değer dizisinden tek çizgi (son ≥ ilk → yeşil, değilse kırmızı)
+function sparkline(values) {
+  if (!values || values.length < 2) return '';
+  const w = 300, h = 46, pad = 4;
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = (max - min) || 1;
+  const pts = values.map((v, i) => {
+    const x = pad + (i / (values.length - 1)) * (w - 2 * pad);
+    const y = pad + (1 - (v - min) / range) * (h - 2 * pad);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const up = values[values.length - 1] >= values[0];
+  const color = up ? '#34c759' : '#ef4444';
+  return `<svg class="pf-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+// Seçilen fotoğrafı canvas ile küçült (max kenar 1280px), jpeg base64 döndür — yükleme küçük kalsın
+function resizeImageToDataUrl(file, maxSide = 1100, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > maxSide || height > maxSide) {
+        const scale = maxSide / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('görsel açılamadı')); };
+    img.src = url;
+  });
 }

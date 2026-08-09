@@ -403,7 +403,11 @@ describe('kaynak sozlesmesi', () => {
   test('asistan.html program bolumunu ve modali iceriyor', () => {
     assert.ok(/id="programSection"/.test(html));
     assert.ok(/id="programModal"/.test(html));
-    assert.ok(/src="program\.js"/.test(html));
+    // 9 Agu 2026: program.js artik <script> etiketiyle GELMIYOR — Diyet sekmesi
+    // ilk acildiginda core.js loadModule ile tembel yukleniyor (bkz. 13-lazy).
+    const coreSrc = fs.readFileSync(path.join(ROOT, 'core.js'), 'utf8');
+    assert.ok(/const LAZY_MODULES = \{[^}]*program:\s*'\/program\.js'/.test(coreSrc),
+      'program.js ne script etiketinde ne LAZY_MODULES\'te — bolum hic yuklenmez');
   });
 
   test('Impeccable: yan-serit yok, glass/gradyan yok, reduced-motion var', () => {

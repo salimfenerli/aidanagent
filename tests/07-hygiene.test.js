@@ -94,10 +94,36 @@ describe('deploy tutarliligi', () => {
 
   test('asistan.html\'in yukledigi her script deploy listesinde var', () => {
     const scriptler = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1].replace(/^\//, ''));
-    assert.ok(scriptler.length >= 5, 'script etiketi bulunamadi');
+    assert.ok(scriptler.length >= 4, 'script etiketi bulunamadi');
     const eksik = scriptler.filter((s) => !deploy.includes('"' + s + '"'));
     assert.deepStrictEqual(eksik, [],
       'bu dosyalar deploy INCLUDE listesinde YOK — canlida 404 verir');
+  });
+
+  // 9 Agu 2026: stocks.js + program.js artik <script> etiketiyle GELMIYOR,
+  // core.js LAZY_MODULES uzerinden tembel yukleniyor. Deploy listesinde
+  // olmazlarsa sekme acilinca 404 -> bolum hic acilmaz (sessiz ariza).
+  test('tembel yuklenen her modul deploy listesinde var', () => {
+    const blok = /const LAZY_MODULES = \{([^}]*)\}/.exec(readText('core.js'));
+    assert.ok(blok, 'core.js LAZY_MODULES bulunamadi');
+    const yollar = (blok[1].match(/'([^']+)'/g) || []).map((s) => s.slice(1, -1).replace(/^\//, ''));
+    assert.ok(yollar.length >= 2, 'LAZY_MODULES bos');
+    assert.deepStrictEqual(yollar.filter((p) => !deploy.includes('"' + p + '"')), [],
+      'tembel modul deploy edilmiyor — sekme acilinca 404');
+    assert.deepStrictEqual(yollar.filter((p) => !fs.existsSync(path.join(ROOT, p))), [],
+      'tembel modul diskte yok');
+  });
+
+  // Toplam sozlesme: statik + tembel = uygulamanin 6 modulu. Biri sessizce
+  // dusesse (script etiketi silinip LAZY_MODULES'e eklenmezse) burasi kirmizi.
+  test('6 modulun hepsi ya statik ya tembel yukleniyor', () => {
+    const statik = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1].replace(/^\//, ''));
+    const blok = /const LAZY_MODULES = \{([^}]*)\}/.exec(readText('core.js'));
+    const tembel = (blok[1].match(/'([^']+)'/g) || []).map((s) => s.slice(1, -1).replace(/^\//, ''));
+    const hepsi = new Set([...statik, ...tembel]);
+    for (const m of ['supabase.js', 'core.js', 'tasks.js', 'ui.js', 'stocks.js', 'program.js']) {
+      assert.ok(hepsi.has(m), m + ' hicbir yerden yuklenmiyor — ne script etiketi ne LAZY_MODULES');
+    }
   });
 
   test('asistan.html\'in yukledigi her stylesheet deploy listesinde var', () => {
