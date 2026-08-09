@@ -2,7 +2,7 @@
 
 ## 🔴 GÜNCEL DURUM (özet — detaylı seans günlükleri: CHANGELOG.md)
 
-**Mimari:** `asistan.html` tek dosya DEĞİL — 5 modül sırayla yüklenir: `supabase.js` → `core.js` (diyet + uyku + ortak helper) → `tasks.js` (sekme/gün planı/quick-capture/journal/dump) → `stocks.js` (borsa) → `ui.js` (görev render/timer/ayarlar/auth/takvim/chat). (`app.js` eski bundle'ı repodan kalkmış — 25 Tem'de doğrulandı.)
+**Mimari:** `asistan.html` tek dosya DEĞİL — 6 modül sırayla yüklenir: `supabase.js` → `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → `tasks.js` (sekme/gün planı/quick-capture/journal/dump) → `stocks.js` (borsa) → `ui.js` (görev render/timer/ayarlar/auth/takvim/chat) → `program.js` (antrenman programı üreteci). (`app.js` eski bundle'ı repodan kalkmış — 25 Tem'de doğrulandı.)
 
 **⚠️ DÜZENLEME KURALI:** Büyük dosyalarda Edit riskli + sandbox `rm` YOK (`mv` var). Düzenleme = **Python byte-replace + `node --check`**; **.bak OLUŞTURMA**; rollback = `git checkout <dosya>`. EOL eşle: **styles.css TEK BAŞINA LF** · diğer HEPSİ CRLF (core.js/ui.js/tasks.js/stocks.js/supabase.js/sw.js/asistan.html/worker.js/CLAUDE.md). ⚠️ 25 Tem'de doğrulandı — eski not yanlıştı, byte-replace'te `assert b'\r\n' in b` ile kontrol et.
 
@@ -15,6 +15,42 @@
 - **Görev/Plan:** otomatik gün planı + blok bildirimleri (v7-109), planlama zekası — geçmişten öğrenen `planHistory`/`planProfile` + otomatik toparlama (v7-110), haftalık sabit program (`fixedSchedule`).
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
+
+### 🔴 9 Ağustos 2026 — 🏋️ ANTRENMAN PROGRAMI ÜRETECİ (v7-135)
+
+Salim: "programımı ve hedefimi yazayım, buna göre bi program yapsın." Hevy senkronu, e1RM takibi, kas grubu dağılımı zaten vardı; **eksik olan hedeften programa giden yoldu.**
+
+**Yeni dosya: `program.js` (33 KB, 6. modül).** ui.js zaten 279 KB; özellik kendi içinde kapalı (kütüphane + motor + render), dışarıya sadece `renderProgram()` / `openProgramSetup()` veriyor. İleride tembel yüklemeye en uygun parça.
+
+**⚠️ AI ÇAĞRISI YOK — motor tamamen kural tabanlı.** Split seçimi, hacim dağılımı, başlangıç ağırlıkları ve progresyon deterministik; $0, teste bağlanabilir. Bu, "sayıyı PWA hesaplar, AI uydurmaz" ilkesinin antrenman karşılığı. `program.js`'te `fetch` bulunması teste bağlandı — **ağ isteği eklenmemeli.**
+
+**Girdi:** hedef (kas/güç/form/dayanıklılık) · haftada kaç gün ağırlık · seans süresi · ortam (salon / ev-dambıl / vücut ağırlığı, çoklu seçim) · **dövüş antrenmanı günleri** · ağrıyan bölge.
+**Çıktı:** haftalık bölünme + gün gün hareket listesi (set × tekrar × kg) + kas grubu hacim dökümü + değişiklik geçmişi.
+
+**Bölünme:** ≤3 gün full body · 4 gün upper/lower · 5 gün PPL. Seans başına hareket sayısı süreden türetilir (dinlenme + 45 sn/set, 3 set, 8 dk ısınma).
+
+**⚠️ 16 YAŞ GÜVENLİK SINIRLARI (`PROGRAM_LIMITS`, gevşetilmemeli — her biri ayrı teste bağlı):**
+- **1RM denemesi ASLA önerilmez.** Ağırlık, Hevy'deki e1RM tahmininden Epley tersiyle hedef tekrara çevrilir, sonra **×0.9** ile güvenli tarafa çekilir, 2.5 kg adımına yuvarlanır. **Geçmiş veri yoksa `kg: null` kalır — UYDURULMAZ**, kart "ilk hafta kendine göre ayarla" der.
+- **Kas grubu haftalık set tavanı 20.** Rapor etmek yetmez → `programEnforceVolumeCap()` **motorda zorlar**. (Test 5 günlük PPL'de göğüs 22 / sırt 27 set bulmuştu; izolasyondan başlayarak deterministik kırpma yapılır, 2 setin altına inilmez, program boşaltılmaz.)
+- **Dövüş günleri AĞIR sayılır.** Güç + dövüş toplamı 6'yı geçemez; aşarsa güç günü otomatik düşer ve **kullanıcıya sebebi yazılır**. Güç günü dövüş gününe denk getirilmez. **Ağır bacak günü dövüşün ertesi/öncesi güne konmaz** (`programLegClash`).
+- Haftada en az 1 tam dinlenme günü kalır.
+- Ağrıyan bölge seçilirse o kası çalıştıran hareketler **havuzdan tamamen elenir**.
+- Kartta sabit not: "başlangıç noktasıdır, antrenörlük değildir; ağrı hissedersen dur".
+
+**Haftalık progresyon (`advanceProgram`) — sıraya dikkat, ilk eşleşen kazanır:**
+1. **Seans kaçırıldıysa** (planlanan güç gününün yarısından azı) → **hacim ARTIRILMAZ**, durgunluk sayacı da artmaz. "Yetişemediğin programı ağırlaştırmak" en sık hata.
+2. Hedef tekrar aralığının üstüne çıkıldıysa → ağırlık bir adım artar (hedefe göre %1.25–2.5).
+3. 2 hafta üst üste ilerleme yoksa → **deload**, set sayısı ×0.6.
+4. Hiçbiri değilse → ağırlık sabit, "bir tekrar daha ekle" hedefi.
+
+**Yeni veri alanı:** `data.program` (tek obje, `history` son 12). Ağırlıklar her hafta yeniden hesaplanmaz, saklanır.
+**UI:** Diyet sekmesinde Hevy bloğunun ÜSTÜNDE `#programSection` + `#programModal`. Yeni sekme YOK (ADHD: karar sayısı artmasın). Impeccable uyumlu.
+**Deploy zinciri 5 yere de bağlandı:** `asistan.html` script tag · `sw.js` ASSETS · `aidan-pages-deploy.py` INCLUDE · Actions `paths` · `07-hygiene` CRLF+syntax+yükleme-sırası listeleri. (`07-hygiene`'in deploy tutarlılık testi zaten bunu kilitliyordu.)
+
+**🔧 Aynı pakette: CI artık test çalıştırıyor.** `.github/workflows/deploy.yml`'e `npm ci` → `npm test` → `npm run check` adımları eklendi; **kırmızı testle deploy artık mümkün değil.** `timeout-minutes` 5 → 15. `paths` filtresinde eksik olan `supabase.js` ve `html5-qrcode.min.js` de eklendi — o dosyalar değişince deploy hiç tetiklenmiyordu.
+
+**Doğrulama:** yeni `tests/12-program.test.js` **35 test** (bölünme seçimi, gün dağılımı, üst/alt denge regresyonu, izolasyonun gün odağına uyması, 3 ekipman filtresi, 8 güvenlik sınırı, ağırlık uydurmama + bozuk veride NaN sızıntısı, 6 progresyon senaryosu, DOM render + XSS, AI çağrısı yasağı, kütüphane tutarlılığı, Impeccable CSS) · **12 dosya toplam 239 test geçiyor**, tek kırmızı kasıtlı (SILINECEK-DOSYALAR hatırlatıcısı) · `node --check` 7 dosya temiz · EOL doğrulandı.
+**Cache:** v7-134 → **v7-135**
 
 ### 🔴 8 Ağustos 2026 — 🧹 TAM DENETİM: 6 EKSİK KAPATILDI (v7-134)
 

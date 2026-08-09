@@ -562,6 +562,7 @@
     </details>
 
     <!-- 💪 ANTRENMAN (Hevy) -->
+    <div id="programSection"></div>
     <div id="hevySection"></div>
   </div>
 
@@ -768,6 +769,18 @@
 </div>
 
 <!-- Cevabı kaydet -->
+<!-- Antrenman programı kurulumu -->
+<div class="modal-overlay" id="programModal" onclick="if(event.target.id==='programModal')closeProgramSetup()">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-title">Program kur</div>
+    <div id="programSetupBody"></div>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeProgramSetup()">Vazgeç</button>
+      <button onclick="saveProgramSetup()">Programı üret</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="saveNoteModal" onclick="if(event.target.id==='saveNoteModal')closeSaveNote()">
   <div class="modal" style="max-width:420px;">
     <div class="modal-title">Cevabı kaydet</div>
@@ -1308,5 +1321,6 @@
 <script defer src="tasks.js"></script>
 <script defer src="stocks.js"></script>
 <script defer src="ui.js"></script>
+<script defer src="program.js"></script>
 </body>
 </html>

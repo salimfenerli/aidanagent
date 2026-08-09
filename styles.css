@@ -4234,3 +4234,91 @@
 @media (prefers-reduced-motion: reduce) {
   .storage-bar > span { transition: none; }
 }
+
+
+/* ===== ANTRENMAN PROGRAMI (9 Agu 2026) =====
+   Impeccable: tam kenar + tint, yan-serit YOK, ic ice kart YOK,
+   radius 12-16, ease-out 180-220ms, prefers-reduced-motion var. */
+.prog-wrap {
+  border: 1px solid rgba(244,244,247,0.10);
+  border-radius: 14px;
+  background: var(--surface-2, #1b1c23);
+  padding: 16px;
+  margin: 0 0 16px;
+}
+.prog-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.prog-head h3 { margin: 0; font-size: 1.02em; font-weight: 700; color: var(--text-strong, #f4f4f7); }
+.prog-week { font-size: 0.8em; font-weight: 600; color: var(--accent, #f5a524); }
+.prog-meta { margin-top: 4px; font-size: 0.82em; color: var(--text-muted); }
+.prog-lead { margin: 8px 0 12px; font-size: 0.88em; line-height: 1.6; color: var(--text); }
+.prog-note {
+  margin-top: 10px; padding: 9px 11px; border-radius: 10px;
+  border: 1px solid rgba(245,165,36,0.30);
+  background: rgba(245,165,36,0.08);
+  font-size: 0.8em; line-height: 1.55; color: var(--text);
+}
+.prog-note.prog-warn { border-color: rgba(239,68,68,0.40); background: rgba(239,68,68,0.09); }
+
+.prog-days { margin-top: 14px; display: grid; gap: 10px; }
+.prog-day { border-top: 1px solid rgba(244,244,247,0.08); padding-top: 10px; }
+.prog-day:first-child { border-top: 0; padding-top: 0; }
+.pd-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.pd-dow { font-size: 0.74em; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+.pd-name { font-size: 0.9em; font-weight: 600; color: var(--text-strong, #f4f4f7); }
+.pd-list { display: grid; gap: 3px; }
+.pd-ex { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: baseline; font-size: 0.85em; }
+.pe-name { color: var(--text); }
+.pe-sets { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.pe-kg { min-width: 58px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-strong, #f4f4f7); }
+.prog-day-fight .pd-name { color: var(--info, #5aa2ff); }
+.pd-note { font-size: 0.78em; line-height: 1.5; color: var(--text-muted); }
+
+.prog-volume { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px; }
+.prog-vol {
+  font-size: 0.74em; padding: 3px 8px; border-radius: 999px;
+  border: 1px solid rgba(244,244,247,0.12); color: var(--text-muted);
+}
+.prog-vol b { color: var(--text); font-weight: 700; }
+.prog-vol.over { border-color: rgba(239,68,68,0.45); color: var(--danger, #ef4444); }
+.prog-vol.over b { color: var(--danger, #ef4444); }
+
+.prog-actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+.prog-hist { margin-top: 12px; }
+.prog-hist summary { cursor: pointer; font-size: 0.8em; color: var(--text-muted); padding: 4px 0; }
+.ph-row { font-size: 0.78em; line-height: 1.6; color: var(--text-muted); }
+.ph-row b { color: var(--text); font-weight: 600; }
+.prog-disc { margin-top: 12px; font-size: 0.74em; line-height: 1.55; color: var(--text-muted); }
+
+/* --- kurulum modali --- */
+.prog-f { margin-bottom: 14px; }
+.prog-f > label {
+  display: block; margin-bottom: 6px;
+  font-size: 0.78em; font-weight: 600; letter-spacing: 0.02em; color: var(--text-muted);
+}
+.prog-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.prog-chip {
+  font-size: 0.8em; padding: 6px 11px; border-radius: 999px; cursor: pointer;
+  border: 1px solid rgba(244,244,247,0.14);
+  background: transparent; color: var(--text);
+  transition: background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+              color 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.prog-chip:hover { border-color: rgba(244,244,247,0.28); }
+.prog-chip.on {
+  background: var(--accent, #f5a524);
+  border-color: var(--accent, #f5a524);
+  color: var(--on-accent, #1c1206);
+  font-weight: 600;
+}
+.prog-hint { margin-top: 5px; font-size: 0.74em; line-height: 1.5; color: var(--text-muted); }
+.prog-sum {
+  margin-top: 4px; padding: 9px 11px; border-radius: 10px;
+  border: 1px solid rgba(244,244,247,0.12);
+  font-size: 0.8em; color: var(--text);
+}
+.prog-sum.over { border-color: rgba(239,68,68,0.40); background: rgba(239,68,68,0.09); }
+
+@media (prefers-reduced-motion: reduce) {
+  .prog-chip { transition: none; }
+}

@@ -9,6 +9,9 @@ on:
       - 'tasks.js'
       - 'stocks.js'
       - 'ui.js'
+      - 'program.js'
+      - 'supabase.js'
+      - 'html5-qrcode.min.js'
       - 'styles.css'
       - '404.html'
       - 'sw.js'
@@ -22,6 +25,8 @@ on:
       - 'aidan-pages-deploy.py'
       - 'aidan-worker/worker.js'
       - 'aidan-worker/deploy.py'
+      - 'tests/**'
+      - 'package.json'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
@@ -32,9 +37,24 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15   # test adimi eklendi (jsdom yuklemeleri sure alir)
     steps:
       - uses: actions/checkout@v4
+
+      # ⚠️ 9 Agu 2026: eskiden testler CI'da HIC calismiyordu — 200+ test yazilmis
+      # ama kirmizi testle canliya cikilabiliyordu. Artik test gecmeden deploy YOK.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install test deps
+        run: npm ci || npm install
+
+      - name: Run tests
+        run: npm test
+
+      - name: Syntax check
+        run: npm run check
 
       - uses: actions/setup-python@v5
         with:

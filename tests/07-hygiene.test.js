@@ -21,7 +21,7 @@ const { ROOT, readRaw, readText } = require('./helpers/src');
 
 const LF_DOSYALAR = ['styles.css'];
 const CRLF_DOSYALAR = [
-  'core.js', 'ui.js', 'tasks.js', 'stocks.js', 'sw.js', 'asistan.html',
+  'core.js', 'ui.js', 'tasks.js', 'stocks.js', 'program.js', 'sw.js', 'asistan.html',
   'aidan-worker/worker.js', 'CLAUDE.md',
 ];
 
@@ -137,12 +137,12 @@ describe('yukleme sirasi bagimliligi', () => {
   // MODUL GOVDESINDE (init sirasinda) cagirirsa "not defined" ile comer —
   // 6 Agu 2026 TDZ cokusunun ayni sinifi. escapeHtml tam bu durumdaydi:
   // tanim ui.js'te, 145 cagrinin cogu core/tasks/stocks icinde.
-  const SIRA = ['core.js', 'tasks.js', 'stocks.js', 'ui.js'];
+  const SIRA = ['core.js', 'tasks.js', 'stocks.js', 'ui.js', 'program.js'];
 
   test('escapeHtml core.js\'te tanimli (ui.js\'te DEGIL)', () => {
     assert.ok(/function escapeHtml\s*\(/.test(readText('core.js')),
       'escapeHtml core.js\'te tanimli olmali — ilk yuklenen dosya');
-    for (const f of ['tasks.js', 'stocks.js', 'ui.js']) {
+    for (const f of ['tasks.js', 'stocks.js', 'ui.js', 'program.js']) {
       assert.ok(!/function escapeHtml\s*\(/.test(readText(f)),
         f + ' escapeHtml\'i yeniden tanimliyor — ayni isim iki kez, sonuncusu sessizce kazanir');
     }
@@ -170,7 +170,7 @@ describe('yukleme sirasi bagimliligi', () => {
 });
 
 describe('sozdizimi', () => {
-  for (const f of ['core.js', 'tasks.js', 'stocks.js', 'ui.js', 'sw.js', 'aidan-worker/worker.js']) {
+  for (const f of ['core.js', 'tasks.js', 'stocks.js', 'ui.js', 'program.js', 'sw.js', 'aidan-worker/worker.js']) {
     test('node --check ' + f, () => {
       execFileSync(process.execPath, ['--check', path.join(ROOT, f)], { stdio: 'pipe' });
     });
