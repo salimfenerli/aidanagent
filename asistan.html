@@ -591,6 +591,25 @@
     </div>
 
     <div class="settings-row">
+      <label>Talimatlar</label>
+      <div class="settings-help" style="margin-bottom:8px;">
+        Aidan'ın her cevabında uyacağı kalıcı kurallar. Sohbet, gün planı, sağlık koçu,
+        borsa yorumu — hepsi bunu okur. Serbest yaz.
+      </div>
+      <textarea id="aiInstructions" class="instr-box" rows="7" maxlength="2000"
+        placeholder="Örnek:&#10;- Kısa yaz, klişe giriş cümlesi kurma&#10;- Önce sonucu söyle, gerekçeyi sonra&#10;- Emin değilsen 'emin değilim' de&#10;- Madde madde yaz, uzun paragraf kurma"
+        oninput="instrChanged()"></textarea>
+      <div class="instr-foot">
+        <button class="small" id="instrSaveBtn" onclick="saveInstructions()">Kaydet</button>
+        <span class="instr-count" id="instrCount">0 / 2000</span>
+      </div>
+      <div class="settings-help">
+        ⚠️ Güvenlik kuralları talimatla değiştirilemez: teşhis/ilaç/takviye önerisi,
+        kalori kısıtlaması, al/sat tavsiyesi ve fiyat tahmini her durumda kapalı kalır.
+      </div>
+    </div>
+
+    <div class="settings-row">
       <label>🗓️ Otomatik gün planı</label>
       <label class="settings-check"><input type="checkbox" id="autoPlanChk" onchange="setAutoPlan(this.checked)"><span>Sabah 08:00'de günümü kendisi planlasın</span></label>
       <label class="settings-check"><input type="checkbox" id="planPingsChk" onchange="setPlanPings(this.checked)"><span>Her blok başlarken bildirim gönder</span></label>

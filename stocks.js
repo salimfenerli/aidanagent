@@ -1174,7 +1174,7 @@ async function aiStockNews() {
     const r = await fetch(STOCK_NEWS_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ summarize: true, symbol: w ? w.symbol : '', headlines }),
+      body: JSON.stringify({ summarize: true, symbol: w ? w.symbol : '', headlines, instructions: aiInstructions() }),
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || `http ${r.status}`);
@@ -2432,6 +2432,7 @@ async function aiStockAnalysis(mode) {
         mode: isFund ? 'fund' : 'ta',
         facts,
         newsHeadlines,
+        instructions: aiInstructions(),
       }),
     });
     const j = await r.json().catch(() => ({}));
@@ -2572,7 +2573,7 @@ async function aiPortfolioTechnical() {
     const r = await fetch(PF_TECHNICAL_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ items: _pfTechItems }),
+      body: JSON.stringify({ items: _pfTechItems, instructions: aiInstructions() }),
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || `http ${r.status}`);

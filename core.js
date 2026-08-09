@@ -32,6 +32,17 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// Kullanici talimatlari — Ayarlar > Talimatlar. TUM prose ureten AI cagrilarina
+// eklenir; worker sistem promptunun sonuna koyar. ⚠️ Guvenlik kurallarini EZEMEZ
+// (worker tarafinda instructionsBlock icinde acikca yaziyor ve teste bagli).
+// Makine sozlesmeli cagrilara (JSON donduren /split, /food-macros, OCR) GONDERILMEZ —
+// usluba dair talimat oradaki cikti sozlesmesini bozar.
+const AI_INSTR_MAX = 2000;
+function aiInstructions() {
+  const t = (data && data.settings && data.settings.instructions) || '';
+  return String(t).slice(0, AI_INSTR_MAX).trim();
+}
+
 // Sohbet ayarları (pruneOldData başlangıçta çağrıldığı için en üstte olmalı - TDZ hatası kaynağıydı)
 const CHAT_KEEP = 60;                      // saklanan mesaj sayısı (~30 KB tavan)
 const CHAT_PRUNE_DAYS = 60;                // bundan eski mesajlar budanır

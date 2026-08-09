@@ -49,6 +49,7 @@ async function showTab(name, btn) {
     loadInviteSection();
     renderCalendarSync();
     renderStorageInfo();   // depolama doluluk çubuğu (8 Ağu 2026)
+    renderInstructions();  // kalıcı AI talimatları (9 Ağu 2026)
     // Yedek details açıldığında otomatik yükle (bir kez bağlanır)
     const bd = document.getElementById('backupDetails');
     if (bd && !bd._hooked) {
@@ -1110,7 +1111,7 @@ async function aiCommentPortfolio() {
     const r = await fetch(PF_COMMENT_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ facts }),
+      body: JSON.stringify({ facts, instructions: aiInstructions() }),
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || ('sunucu hatası ' + r.status));
@@ -1465,7 +1466,7 @@ async function submitJournal() {
     const r = await fetch(JOURNAL_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, instructions: aiInstructions() }),
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || ('sunucu hatası ' + r.status));

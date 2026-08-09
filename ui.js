@@ -387,7 +387,7 @@ async function aiSuggestTask() {
     const r = await fetch(SUGGEST_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ energy, hour, doneToday, pomoToday, tasks: taskSummaries }),
+      body: JSON.stringify({ energy, hour, doneToday, pomoToday, tasks: taskSummaries, instructions: aiInstructions() }),
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.taskId) {
@@ -5934,7 +5934,7 @@ async function runHealthCoach() {
     const r = await fetch(HEALTH_COACH_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ facts: buildHealthFacts(14) })
+      body: JSON.stringify({ facts: buildHealthFacts(14), instructions: aiInstructions() })
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.comment) {
@@ -5969,4 +5969,38 @@ function openCoachReport(text, loading) {
 function closeCoachReport() {
   const m = document.getElementById('coachReportModal');
   if (m) m.classList.remove('active');
+}
+
+// ===== Talimatlar (9 Agu 2026) — Claude'un CLAUDE.md'sinin karsiligi =====
+// Tek serbest metin. Her prose ureten AI cagrisina worker tarafinda eklenir.
+// ⚠️ Guvenlik kurallarini EZEMEZ — worker'daki instructionsBlock acikca yaziyor.
+function renderInstructions() {
+  const ta = document.getElementById('aiInstructions');
+  if (!ta) return;
+  ta.value = (data.settings && data.settings.instructions) || '';
+  instrChanged(true);
+}
+function instrChanged(sessiz) {
+  const ta = document.getElementById('aiInstructions');
+  const c = document.getElementById('instrCount');
+  const b = document.getElementById('instrSaveBtn');
+  if (!ta) return;
+  const n = ta.value.length;
+  if (c) {
+    c.textContent = n + ' / ' + AI_INSTR_MAX;
+    c.classList.toggle('over', n > AI_INSTR_MAX * 0.9);
+  }
+  const kayitli = (data.settings && data.settings.instructions) || '';
+  if (b) b.disabled = sessiz ? true : (ta.value === kayitli);
+}
+function saveInstructions() {
+  const ta = document.getElementById('aiInstructions');
+  if (!ta) return;
+  data.settings = data.settings || {};
+  data.settings.instructions = ta.value.slice(0, AI_INSTR_MAX).trim();
+  save();
+  instrChanged(true);
+  showToast(data.settings.instructions
+    ? 'Talimatlar kaydedildi — bundan sonraki tüm AI cevaplarında geçerli.'
+    : 'Talimatlar temizlendi.', 'success', 3500);
 }
