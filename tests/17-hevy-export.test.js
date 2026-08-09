@@ -105,6 +105,37 @@ describe('Hevy şema uyumu', () => {
     assert.strictEqual(H.hevyEquipment(bul('legpress')), 'machine');
     assert.strictEqual(H.hevyEquipment(bul('pushup')), 'none');
   });
+
+  test('⚠️ adında ekipman GEÇMEYEN hareketler de doğru sınıflanıyor', () => {
+    // 'Hang Power Clean' barbell'dir ama adinda 'barbell' yok. Duz arama
+    // bunlari 'none' birakiyordu -> Hevy'de kilo alani hic cikmazdi.
+    const bul = (id) => M.PROGRAM_EXERCISES.find((x) => x.id === id);
+    assert.strictEqual(H.hevyEquipment(bul('hangclean')), 'barbell', 'olimpik turev none kalmis');
+    assert.strictEqual(H.hevyEquipment(bul('farmer')), 'dumbbell', 'yuklu tasima none kalmis');
+    assert.strictEqual(H.hevyEquipment(bul('neckharn')), 'other');
+  });
+
+  test('vücut ağırlığı hareketleri bodyweight_reps alıyor', () => {
+    // Eskiden hic var olmayan bir `e.bw` alani okunuyordu — olu daldi,
+    // sinav/barfiks 'weight_reps' olarak olusturuluyordu (Hevy kilo sorardi).
+    const bul = (id) => M.PROGRAM_EXERCISES.find((x) => x.id === id);
+    assert.strictEqual(H.hevyExerciseType(bul('pushup')), 'bodyweight_reps');
+    assert.strictEqual(H.hevyExerciseType(bul('pullup')), 'bodyweight_reps');
+  });
+
+  test('yüklü süreli hareket weight_duration (düz duration değil)', () => {
+    const bul = (id) => M.PROGRAM_EXERCISES.find((x) => x.id === id);
+    assert.strictEqual(H.hevyExerciseType(bul('farmer')), 'weight_duration',
+      'farmer carry duration olarak gidiyor — Hevy kilo sormaz');
+    assert.strictEqual(H.hevyExerciseType(bul('neckiso')), 'duration');
+  });
+
+  test('kütüphanede olmayan alan OKUNMUYOR (ölü dal yasağı)', () => {
+    const i = worker.indexOf('function hevyExerciseType');
+    const blok = worker.slice(i, i + 700);
+    assert.ok(!/e\.bw\b/.test(blok),
+      'var olmayan e.bw alani okunuyor — dal hic calismaz, sessizce yanlis tip uretir');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -139,6 +170,18 @@ describe('rutin gövdesi', () => {
     assert.strictEqual(h.sets[0].rep_range.start, aralikli.repMin);
     assert.strictEqual(h.sets[0].rep_range.end, aralikli.repMax);
     assert.strictEqual(h.sets[0].reps, null, 'hem reps hem rep_range gonderilmis');
+  });
+
+  test('⚠️ sıçramaya kg SIZMIYOR (reps_only kilo kabul etmez)', () => {
+    for (const e of GUN.exercises) {
+      if (!(e.explosive && e.metric !== 'kg')) continue;
+      const h = ex.find((x) => x.exercise_template_id === TPL[e.id]);
+      if (!h) continue;
+      for (const st of h.sets) {
+        assert.ok(st.weight_kg == null,
+          e.tr + ': olcusu ' + e.metric + ' olan harekete kilo yazilmis');
+      }
+    }
   });
 
   test('süreli hareket duration_seconds ile gidiyor', () => {
@@ -199,6 +242,15 @@ describe('worker uç noktası sözleşmesi', () => {
     const blok = worker.slice(i, i + 1600);
     assert.ok(/verifyUser\(env, userToken\)/.test(blok), 'token dogrulamasi yok');
     assert.ok(/allowUser\(env, user\)/.test(blok), 'kullanici yetkisi kontrol edilmiyor');
+  });
+
+  test('429\'da bir kez geri çekilip tekrar deniyor', () => {
+    const i = worker.indexOf('async function hevyCall');
+    const blok = worker.slice(i, i + 900);
+    assert.ok(/setTimeout\(res, 2000\)/.test(blok),
+      'tek yazimda ~35 istek gidiyor; 429 geri cekilmesi yoksa program YARIM yazilir');
+    assert.ok(/hevyCall\(key, yol, opts, true\)/.test(blok), 'tekrar denemesi yok');
+    assert.ok(/r\.status === 429 && !tekrar/.test(blok), 'sonsuz tekrar korumasi yok');
   });
 
   test('403 iki farklı durumu AYIRIYOR (rutin limiti / Pro yok)', () => {

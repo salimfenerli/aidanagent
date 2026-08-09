@@ -6559,9 +6559,16 @@ function hevyHeaders(key) {
   return { 'api-key': key, 'Accept': 'application/json', 'Content-Type': 'application/json' };
 }
 
-async function hevyCall(key, yol, opts) {
+// ⚠️ Tek yazimda ~35 istek gidiyor (sablon sayfalari + ozel hareketler + rutinler).
+// Hevy 429 verirse TEK sefer 2 sn bekleyip tekrar dener — yoksa yarim yazilmis
+// bir program kaliyordu (bazi gunler yazildi, bazilari yazilamadi).
+async function hevyCall(key, yol, opts, tekrar) {
   const r = await fetch(`${HEVY_API}${yol}`, Object.assign({ headers: hevyHeaders(key) }, opts || {}));
   if (r.status === 401) throw new Error('Hevy anahtarı kabul edilmedi — Hevy Pro gerekiyor ya da anahtar iptal edilmiş.');
+  if (r.status === 429 && !tekrar) {
+    await new Promise(res => setTimeout(res, 2000));
+    return hevyCall(key, yol, opts, true);
+  }
   if (r.status === 429) throw new Error('Hevy çok fazla istek dedi, birkaç dakika sonra tekrar dene.');
   if (!r.ok) {
     let ek = '';
@@ -6609,21 +6616,32 @@ async function hevyTemplateMap(key) {
   return map;
 }
 
-/** Hevy exercise_type — hareketin nasil kaydedilecegini belirler. */
+/**
+ * Hevy exercise_type — hareketin nasil kaydedilecegini belirler.
+ * ⚠️ Sadece OZEL hareket olustururken kullanilir; Hevy'de zaten olan
+ * hareketler eslesir ve tipini kendi tasir.
+ * Sira onemli: olcusu cm/m olanlar ONCE elenir (Hevy kilo sormasin).
+ */
 function hevyExerciseType(e) {
-  if (e.sure) return 'duration';                       // plank, boyun izometrik, carry
-  if (e.explosive && e.metric !== 'kg') return 'reps_only';  // sicrama/atis: kg yok
-  if (e.bw) return 'bodyweight_reps';
+  if (e.explosive && e.metric !== 'kg') return 'reps_only';   // sicrama/atis: olcu cm/m
+  if (e.sure) return e.metric === 'kg' ? 'weight_duration' : 'duration';  // carry vs plank
+  const yuklu = /barbell|dumbbell|kettlebell|machine|cable|medicine ball|harness|clean|press|walk|thrust/i
+    .test(String(e.en || ''));
+  if (!yuklu && (e.places || []).indexOf('bw') >= 0) return 'bodyweight_reps';
   return 'weight_reps';
 }
 
+// ⚠️ Ad icinde ekipman gecmeyen hareketler var — 'Hang Power Clean' barbell'dir,
+// 'Farmers Walk' dambil, 'Neck Harness' ozel alet. Duz 'barbell' aramasi
+// bunlari 'none' birakiyordu (Hevy'de kilo alani hic cikmazdi).
 function hevyEquipment(e) {
   const ad = String(e.en || '').toLowerCase();
-  if (ad.indexOf('barbell') >= 0) return 'barbell';
-  if (ad.indexOf('dumbbell') >= 0) return 'dumbbell';
-  if (ad.indexOf('kettlebell') >= 0) return 'kettlebell';
-  if (ad.indexOf('machine') >= 0 || ad.indexOf('cable') >= 0 || ad.indexOf('pulldown') >= 0) return 'machine';
-  if (ad.indexOf('medicine ball') >= 0) return 'other';
+  if (/barbell|clean|snatch|deadlift/.test(ad)) return 'barbell';
+  if (/dumbbell|farmer/.test(ad)) return 'dumbbell';
+  if (/kettlebell/.test(ad)) return 'kettlebell';
+  if (/machine|cable|pulldown|leg press|leg extension|leg curl/.test(ad)) return 'machine';
+  if (/band/.test(ad)) return 'resistance_band';
+  if (/medicine ball|harness/.test(ad)) return 'other';
   return 'none';
 }
 
@@ -6664,8 +6682,9 @@ function hevyBuildExercises(gun, tplIds, restSec) {
       } else {
         st.reps = Number(e.repMin) || 8;
       }
-      if (e.kg != null && !e.explosive) st.weight_kg = Number(e.kg);
-      else if (e.kg != null) st.weight_kg = Number(e.kg);
+      // ⚠️ reps_only tipindeki harekete (sicrama/atis) kilo YAZILMAZ —
+      // Hevy o alani gostermez, olcu cm/m. Yalniz kg ile ilerleyenler alir.
+      if (e.kg != null && !(e.explosive && e.metric !== 'kg')) st.weight_kg = Number(e.kg);
       sets.push(st);
     }
     // ⚠️ Kalite kurallari Hevy'de ZORLANAMAZ — notlara yaziliyor ki

@@ -41,9 +41,16 @@ Salim: "hevy pro var zaten, uygulama hevy içine program yazabilir mi." Evet —
 **Yeni veri alanı:** `data.program.hevy = { folderId, routines:{dow:id}, tplMap:{exId:tplId}, syncedAt, week }`. Kartta rozet: hafta ilerlediyse "rutinler N. haftaya ait, tekrar yaz" uyarısı.
 **⚠️ `program.js` artık `fetch` içeriyor** (tek uç: `HEVY_ROUTINES_ENDPOINT`). Motor hâlâ AI'sız ve deterministik — 3 test dosyasındaki "fetch yasağı" sözleşmesi **daraltıldı**: AI ucuna bağlanmak yasak, izinli tek istek Hevy aktarımı.
 
-**Doğrulama:** yeni `tests/17-hevy-export.test.js` **29 test** (enum uyumu 5 · rutin gövdesi 9 — sıra korunuyor, rep_range, duration, 180 sn, notlar, bozuk girdi · worker sözleşmesi 7 — auth, 403 ayrımı, klasör tekrarı, tplMap önbelleği, PUT kurtarma, dövüş günü hariç · PWA 5 · Impeccable 2). **18 dosya toplam 421 test geçiyor**, tek kırmızı kasıtlı.
+**🔧 Denetimde bulunan 4 eksik (aynı gün kapatıldı, v7-142):**
+- **Ölü dal:** `hevyExerciseType` var olmayan bir `e.bw` alanını okuyordu → şınav/barfiks `weight_reps` olarak oluşuyordu (Hevy kilo sorardı). Artık `places` üzerinden `bodyweight_reps`.
+- **Ekipman türetimi adına bakıyordu:** `Hang Power Clean` barbell'dir ama adında "barbell" geçmez → `none` kalıyordu, Hevy'de kilo alanı hiç çıkmazdı. `clean/snatch/deadlift` → barbell, `farmer` → dumbbell, `harness` → other eklendi.
+- **Yüklü süreli hareket:** Farmer Carry düz `duration` gidiyordu → **`weight_duration`**.
+- **Sıçramaya kg sızması:** ölü `if/else` (iki dal aynı şeyi yapıyordu) `reps_only` harekete kilo yazabiliyordu. Artık ölçüsü cm/m olan hareket kilo ALMAZ (teste bağlı).
+- **429 geri çekilmesi yoktu:** tek yazımda ~35 istek gidiyor; Hevy sınır koyarsa program **yarım yazılıyordu** (bazı günler yazıldı, bazıları yazılamadı). Tek sefer 2 sn bekleyip tekrar deniyor, sonsuz döngü koruması var.
+
+**Doğrulama:** `tests/17-hevy-export.test.js` **35 test** (enum uyumu 5 · rutin gövdesi 9 — sıra korunuyor, rep_range, duration, 180 sn, notlar, bozuk girdi · worker sözleşmesi 7 — auth, 403 ayrımı, klasör tekrarı, tplMap önbelleği, PUT kurtarma, dövüş günü hariç · PWA 5 · Impeccable 2). **18 dosya toplam 427 test geçiyor**, tek kırmızı kasıtlı.
 **⚠️ Test notu:** vm bağlamından dönen dizide `deepStrictEqual` KULLANMA — farklı realm, prototip eşleşmez, yanlış kırmızı verir. `strictEqual(x.length, 0)` kullan.
-**Cache:** v7-140 → **v7-141**
+**Cache:** v7-140 → **v7-142**
 
 ### 🔴 9 Ağustos 2026 — 🔌 supabase.js TEMBEL YÜKLEME (v7-140)
 
