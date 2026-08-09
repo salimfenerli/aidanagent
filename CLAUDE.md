@@ -19,6 +19,46 @@ Statik sıra: `supabase.js` → `core.js` (diyet + uyku + `escapeHtml` + depolam
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 9 Ağustos 2026 — 🥊 ATLETİK KATMAN / PATLAYICILIK (v7-137)
+
+Salim: "kickboks ve ağırlık yapıcam, atletizm önemli patlayıcılık — iyi bilimsel program yapabilecek mi, araştırma seviyesi ne." **Dürüst cevap hayırdı.** Motor iyi bir salon şablonu üreticisiydi ama dövüş sporcusu için yanlış araçtı. Denetimde 4 gerçek eksik çıktı, dördü de kapatıldı.
+
+**Bulunan eksikler:** ① hedef listesinde patlayıcılık yoktu — `guc` **maksimal kuvvet** demek, kuvvet-hız eğrisinin ağır ucu; patlayıcılık ortasında (%30-60 1RM, maksimum hız) ② 45 hareketin tamamı kontrollü tempo işiydi, tek patlayıcı hareket yoktu ③ **rotasyonel güç hiç yoktu** — vuruş gücü gövde dönüşüyle aktarılır, havuzdaki tek ilgili hareket Pallof press'ti, o da **anti-rotasyon** (dönüşe direnç, dönüş üretimi değil) ④ dövüş günü sadece takvim engeliydi, **yük hesabına girmiyordu**.
+
+**🔴 ANA FİKİR — patlayıcı iş hacimle değil TEMAS ile yönetilir.** 3 tekrarlık derinlik sıçraması ile 3 tekrarlık leg extension aynı "set" değil; biri sinir sistemi işi, diğeri hipertrofi uyaranı. Bu yüzden patlayıcı iş `maxSetsPerMuscleWeek` sayımından **tamamen çıkarıldı** (`programWeeklySets` `e.explosive` atlar) ve ayrı bir `PLYO_LIMITS` bütçesine bağlandı: seans 60 temas · hafta 180 temas · seans başına en fazla 2 patlayıcı hareket.
+
+**🥊 EN KRİTİK SATIR — kickboks zaten plyometrik iştir, bütçeden DÜŞÜLÜR.** `fightEquiv: 40` (bir dövüş antrenmanı ≈ 40 temas; **literatür değeri değil, muhafazakâr tahmin** — kod yorumunda böyle yazıyor). Bu satır olmasa motor "haftada 3 gün sıçrama" yazar, Salim zaten 4 gün kickboks yapar, toplam eklem yükü katlanırdı.
+- Doğrulandı: **4 gün kickboks + 2 gün ağırlık** senaryosunda bütçe 160/180'e çıkıyor ve motor **yere temaslı sıçrama hiç vermiyor** — yerine sağlık topu / kettlebell (0 temas) koyuyor ve sebebini kullanıcıya yazıyor. Doğru davranış bu.
+- 2 gün kickboks + 4 gün ağırlık: 80 dövüş + 26 ağırlık = 106/180, sıçrama serbest.
+
+**Seans içi sıra motorda zorlanıyor (`order: 0`).** Patlayıcı iş ısınmadan hemen sonra, ağır setten **önce**. Ağır squat'tan sonra yapılan sıçrama patlayıcılık geliştirmez — üretilen güç düşer, adaptasyon yön değiştirir. Teste bağlandı: her güç gününde ilk patlayıcı hareketin indeksi ilk normal hareketten küçük olmalı.
+
+**Kütüphaneye 18 hareket eklendi**, yeni alanlarla: `explosive` · `contact` (tekrar başına yere temas) · `metric` (ilerleme neyle ölçülür) · `pRep` (kendi tekrar aralığı) · `level` (1 temel / 2 orta / 3 şok yüklemesi).
+- **Rotasyonel:** sağlık topu rotasyonel atış / kürek atışı / yere vuruş — dönüş **üreten** ilk hareketler
+- **Üst güç:** göğüs atışı, patlayıcı şınav, push press, hang power clean, kettlebell swing
+- **Alt plyo:** pogo, dikey sıçrama, kutu sıçraması, uzun atlama, makas sıçrama, bound, derinlik sıçraması
+- **Boyun:** izometrik (4 yön) + harness — dövüş sporunda kafa hızlanmasını azaltır. Otomatik programda **yalnız izometrik**, haftada 1 gün üst güne.
+
+**⚠️ 16 YAŞ KAPILARI (motorda zorlanıyor, her biri ayrı teste bağlı):**
+- **Şok yüklemesi (derinlik sıçraması) `advancedFromWeek: 9`'dan önce AÇILMAZ.** Eksantrik yükü katlar, teknik oturmadan verilmez.
+- **İlk 2 hafta TEKNİK haftası** (`teachWeeks`): set 2, tekrar aralığın alt ucu, yükseklik/mesafe zorlanmaz. Kart bunu açıkça yazar.
+- Level 2 (tek bacak, olimpik türev, harness) teknik haftalarından sonra açılır.
+- Ağrıyan bölge patlayıcı havuzdan da elenir · haftada en az 1 tam dinlenme korunur.
+
+**Progresyon: çıktı ile, ağırlıkla DEĞİL.** Sıçramada "bir tekrar daha yaptın, kilo ekleyelim" yanlıştır — ilerleme daha yüksek/uzak sıçramaktır, ölçüsü cm/m. `advanceProgram`'a ayrı dal eklendi:
+- `metric: 'kg'` olanlar (push press, hang clean, kb swing) normal Hevy progresyonundan geçer
+- Diğerleri `p.measures[id]` serisinden okunur (`programExplosiveTrend`): **çıktı %5+ düşerse bu durgunluk değil YORGUNLUK sinyali** → hacim artırılmaz, **azaltılır**
+- Ölçüm yoksa **sessiz kalmaz**, kullanıcıya "ölç" der. Hevy bu sayıyı vermiyor — elle giriliyor (`programMeasure`, kartta "ölç" düğmesi).
+- **Sıçramaya asla kg yazılmaz** (teste bağlandı).
+
+**Yeni veri alanı:** `data.program.measures = { [hareketId]: [{week, v, at}] }` (son 12).
+**UI:** patlayıcı satırlar rozetli + "ölç" düğmesi · atletik hedefte **haftalık sıçrama yükü çubuğu** (dövüş payı ayrı yazılı). Yeni sekme/modal YOK. Impeccable uyumlu.
+**AI çağrısı YOK** — motor tamamen kural tabanlı, deterministik, $0. `program.js`'te `fetch` yasağı teste bağlı.
+
+**Doğrulama:** yeni `tests/14-athletic.test.js` **36 test** (sıra zorlaması, temas bütçesi 4 senaryo, dövüş mahsubu, 5 güvenlik kapısı, hacim muhasebesi ayrımı, 7 progresyon senaryosu, NaN sızıntısı, determinizm, bozuk girdi, Impeccable CSS). **14 dosya toplam 321 test geçiyor**, tek kırmızı kasıtlı · `node --check` temiz · EOL doğrulandı.
+**⚠️ Test kancası notu:** top-level `const` vm bağlamına yazılmaz (tarayıcıdaki global lexical scope davranışının aynısı) — `14-athletic` sabitleri kaynağa eklenen tek satırla dışarı verir.
+**Cache:** v7-136 → **v7-137**
+
 ### 🔴 9 Ağustos 2026 — ⚡ TEMBEL MODÜL YÜKLEME + stocks.js ÇÖZÜLDÜ (v7-136)
 
 Salim: "bana şimdi siteyi anlat daha verimli hale getirebiliriz." Denetimde ilk yükleme ölçüldü: **8 dosya / 302 KB gzip**, bunun **55 KB'i (stocks.js 44 + program.js 11)** kullanıcının o an açmadığı iki sekmeye aitti.

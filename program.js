@@ -30,18 +30,46 @@ const PROGRAM_LIMITS = {
   deloadVolumeFactor: 0.6,
 };
 
+/**
+ * PATLAYICI IS SINIRLARI — hacimle degil TEMAS (ground contact) ile olculur.
+ *
+ * Neden ayri butce: plyometrik is hipertrofi uyarani degil, sinir sistemi isidir.
+ * Kas basina 20 set tavaniyla yonetilemez — 5 tekrarlik derinlik sicramasi ile
+ * 5 tekrarlik leg extension ayni 'set' degildir. Olcu birimi yere temas sayisi.
+ *
+ * ⚠️ KICKBOKS ZATEN PLYOMETRIK IS. Ip atlama, adim calismasi, tekme — hepsi
+ * temas uretir. Dovus gunu butceden DUSULUR; yoksa motor 'haftada 3 gun sicrama'
+ * yazar, cocuk zaten 3 gun kickboks yapiyordur ve toplam yuk iki katina cikar.
+ * fightEquiv bir TAHMINDIR (literatur degeri degil) — muhafazakar secildi.
+ */
+const PLYO_LIMITS = {
+  maxContactsSession: 60,     // tek seansta yuksek siddetli temas tavani
+  maxContactsWeek: 180,       // haftalik toplam (dovus gunleri DAHIL)
+  fightEquiv: 40,             // 1 dovus antrenmani ~ bu kadar temas sayilir (tahmin)
+  maxPowerPerSession: 2,      // seans basina en fazla 2 patlayici hareket
+  teachWeeks: 2,              // ilk 2 hafta TEKNIK: dusuk tekrar, yuk/yukseklik yok
+  advancedFromWeek: 9,        // sok yuklemesi (derinlik sicramasi) bundan once ACILMAZ
+  dropPctDeload: 5,           // olculen cikti %5 duserse yorgunluk sinyali
+};
+
 // Hedefe gore tekrar araligi / hacim / dinlenme / artis adimi
 const PROGRAM_GOALS = {
   kas:  { ad: 'Kas kütlesi',   repMin: 8,  repMax: 12, setsLow: 12, setsHigh: 18, restSec: 90,  stepPct: 2.5 },
   guc:  { ad: 'Güç',           repMin: 4,  repMax: 6,  setsLow: 10, setsHigh: 15, restSec: 180, stepPct: 2.5 },
   form: { ad: 'Genel form',    repMin: 10, repMax: 15, setsLow: 9,  setsHigh: 14, restSec: 60,  stepPct: 2.5 },
   daya: { ad: 'Dayanıklılık',  repMin: 15, repMax: 20, setsLow: 8,  setsHigh: 12, restSec: 45,  stepPct: 1.25 },
+  // ⚠️ Atletik hedef DIGERLERINDEN FARKLI CALISIR (9 Agu 2026).
+  // Maksimal kuvvet (guc) ile patlayicilik ayni sey DEGIL: guc, kuvvet-hiz
+  // egrisinin agir ucudur; patlayicilik ortasindadir (%30-60 1RM, maksimum HIZ).
+  // Bu hedef secilince seansin BASINA patlayici blok girer ve hacim degil
+  // TEMAS BUTCESI ile yonetilir (bkz. PLYO_LIMITS).
+  atletik: { ad: 'Atletik güç / patlayıcılık', repMin: 3, repMax: 6, setsLow: 8, setsHigh: 14, restSec: 180, stepPct: 2.5, athletic: true },
 };
 
 const PROGRAM_MUSCLES = {
   chest: 'Göğüs', back: 'Sırt', quads: 'Ön bacak', hams: 'Arka bacak',
   glutes: 'Kalça', shoulders: 'Omuz', biceps: 'Biseps', triceps: 'Triseps',
-  core: 'Karın/Core', calves: 'Baldır',
+  core: 'Karın/Core', calves: 'Baldır', neck: 'Boyun',
 };
 
 // ---------- Egzersiz kutuphanesi ----------
@@ -108,6 +136,42 @@ const PROGRAM_EXERCISES = [
 
   // --- Baldir ---
   { id: 'calfraise', tr: 'Baldır Kaldırış',          en: 'Standing Calf Raise',        muscle: 'calves', pattern: 'iso', compound: false, places: ['gym', 'home', 'bw'] },
+
+  // ============ PATLAYICI KATMAN (9 Agu 2026) ============
+  // Ek alanlar: explosive · contact (tekrar basina yere temas) · metric (ilerleme
+  // NEYLE olculur) · pRep (kendi tekrar araligi — hedefin 3-6'si her harekete uymaz)
+  // · level (1 temel · 2 orta · 3 sok yuklemesi, hafta 9'dan once acilmaz).
+  // ⚠️ metric 'cm'/'m' olanlarda ilerleme AGIRLIKLA OLCULMEZ. Hevy bu sayiyi
+  // vermez; kullanici elle olcer. Olcum yoksa program agirlik UYDURMAZ.
+
+  // --- Rotasyonel guc: vurus gucunun kaynagi ---
+  // Bacaktan gelen kuvvet govde donusuyle aktarilir. Havuzdaki Pallof press
+  // ANTI-rotasyondur (donuse direnc); donus URETEN tek is bunlar.
+  { id: 'mbrot',     tr: 'Sağlık Topu Rotasyonel Atış', en: 'Medicine Ball Rotational Throw', muscle: 'core', pattern: 'rot',   compound: true,  places: ['gym', 'home'], explosive: true, contact: 0, metric: 'm',  pRep: [4, 6],   level: 1 },
+  { id: 'mbscoop',   tr: 'Sağlık Topu Kürek Atışı',     en: 'Medicine Ball Scoop Toss',       muscle: 'core', pattern: 'rot',   compound: true,  places: ['gym', 'home'], explosive: true, contact: 0, metric: 'm',  pRep: [4, 6],   level: 1 },
+  { id: 'mbslam',    tr: 'Sağlık Topu Yere Vuruş',      en: 'Medicine Ball Slam',             muscle: 'core', pattern: 'rot',   compound: true,  places: ['gym', 'home'], explosive: true, contact: 0, metric: 'kg', pRep: [5, 8],   level: 1 },
+
+  // --- Ust govde patlayiciligi ---
+  { id: 'mbchest',   tr: 'Sağlık Topu Göğüs Atışı',     en: 'Medicine Ball Chest Pass',       muscle: 'chest',     pattern: 'power', compound: true, places: ['gym', 'home'], explosive: true, contact: 0, metric: 'm',  pRep: [4, 6], level: 1 },
+  { id: 'plyopush',  tr: 'Patlayıcı Şınav',             en: 'Plyometric Push Up',             muscle: 'chest',     pattern: 'power', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 1, metric: 'reps', pRep: [3, 5], level: 2 },
+  { id: 'pushpress', tr: 'Push Press',                  en: 'Push Press (Barbell)',           muscle: 'shoulders', pattern: 'power', compound: true, places: ['gym'], explosive: true, contact: 0, metric: 'kg', pRep: [3, 5], level: 2 },
+  { id: 'hangclean', tr: 'Hang Power Clean',            en: 'Hang Power Clean',               muscle: 'back',      pattern: 'power', compound: true, places: ['gym'], explosive: true, contact: 0, metric: 'kg', pRep: [3, 5], level: 2 },
+  { id: 'kbswing',   tr: 'Kettlebell Swing',            en: 'Kettlebell Swing',               muscle: 'glutes',    pattern: 'power', compound: true, places: ['gym', 'home'], explosive: true, contact: 0, metric: 'kg', pRep: [8, 12], level: 1 },
+
+  // --- Alt govde plyometrik (TEMAS URETIR) ---
+  { id: 'pogo',      tr: 'Ayak Bileği Sıçraması',       en: 'Pogo Hops',                      muscle: 'calves', pattern: 'plyo', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 1, metric: 'reps', pRep: [10, 15], level: 1 },
+  { id: 'cmj',       tr: 'Dikey Sıçrama',               en: 'Countermovement Jump',           muscle: 'quads',  pattern: 'plyo', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 1, metric: 'cm', pRep: [3, 5],   level: 1 },
+  { id: 'boxjump',   tr: 'Kutu Sıçraması',              en: 'Box Jump',                       muscle: 'quads',  pattern: 'plyo', compound: true, places: ['gym', 'home'],       explosive: true, contact: 1, metric: 'cm', pRep: [3, 5],   level: 1 },
+  { id: 'broadjump', tr: 'Uzun Atlama',                 en: 'Broad Jump',                     muscle: 'quads',  pattern: 'plyo', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 1, metric: 'm',  pRep: [3, 5],   level: 1 },
+  { id: 'splitjump', tr: 'Makas Sıçrama',               en: 'Split Squat Jump',               muscle: 'quads',  pattern: 'plyo', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 2, metric: 'reps', pRep: [4, 6],  level: 2 },
+  { id: 'bound',     tr: 'Tek Bacak Sıçrama (Bound)',   en: 'Single Leg Bound',               muscle: 'hams',   pattern: 'plyo', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 2, metric: 'm',  pRep: [3, 5],   level: 2 },
+  { id: 'depthjump', tr: 'Derinlik Sıçraması',          en: 'Depth Jump',                     muscle: 'quads',  pattern: 'plyo', compound: true, places: ['gym'],               explosive: true, contact: 1, metric: 'cm', pRep: [3, 5],   level: 3 },
+
+  // --- Boyun: dovus sporunda kafa hizlanmasini azaltir ---
+  // Otomatik programda YALNIZ izometrik. Harness/koprü level 2, teknik ister.
+  { id: 'neckiso',   tr: 'Boyun İzometrik (4 yön)',     en: 'Neck Isometric Hold',            muscle: 'neck', pattern: 'neck', compound: false, places: ['gym', 'home', 'bw'], sure: true, metric: 'reps', level: 1 },
+  { id: 'neckharn',  tr: 'Boyun Harness',               en: 'Neck Harness Extension',         muscle: 'neck', pattern: 'neck', compound: false, places: ['gym'], metric: 'kg', level: 2 },
+  { id: 'farmer',    tr: 'Farmer Carry',                en: "Farmers Walk",                   muscle: 'core', pattern: 'carry', compound: true, places: ['gym', 'home'], sure: true, metric: 'kg', level: 1 },
 ];
 
 // Bolunmedeki her gunun hangi kaliplari isteyecegi
@@ -306,6 +370,8 @@ function buildProgram(cfg, workouts) {
       dow,
       type: 'strength',
       name: sab.ad,
+      agirBacak: !!sab.agirBacak,
+      odak: odak || null,
       exercises: secilenler.map(s => ({
         id: s.ex.id, tr: s.ex.tr, en: s.ex.en, muscle: s.ex.muscle,
         sets: s.sets,
@@ -346,8 +412,12 @@ function buildProgram(cfg, workouts) {
     p.notes.push('Dövüş günlerin yoğun olduğu için ağır bacak gününe çatışmasız bir gün ' +
       'kalmadı. O gün bacağı biraz hafif tut ya da dövüş günlerinden birini kaydır.');
   }
+  if (G.athletic) programAddExplosive(p);   // patlayici blok seansin BASINA
   programEnforceVolumeCap(p);   // 16 yas tavani: rapor degil, ZORLA
-  const eksikKg = days.reduce((n, d) => n + d.exercises.filter(e => e.kg == null).length, 0);
+  programEnforceContacts(p);    // temas butcesi: dovus gunleri dahil
+  // Patlayici olcum hareketlerinde kg ZATEN olmaz (cm/m ile olculur) — sayma.
+  const eksikKg = days.reduce((n, d) => n +
+    d.exercises.filter(e => e.kg == null && !(e.explosive && e.metric !== 'kg')).length, 0);
   if (eksikKg) {
     p.notes.push(eksikKg + ' harekette geçmiş veri yok — ağırlık yazılmadı. ' +
       'İlk hafta kendine göre ayarla, Aidan sonraki haftadan itibaren Hevy verisinden takip eder.');
@@ -358,10 +428,14 @@ function buildProgram(cfg, workouts) {
 // ---------- Hacim denetimi ----------
 
 // Kas grubu basina haftalik set sayisi
+// ⚠️ Patlayici is bu sayima GIRMEZ. 3 tekrarlik sicrama ile 3 tekrarlik leg
+// extension ayni 'set' degil; biri sinir sistemi isi, digeri hipertrofi uyarani.
+// Patlayici is PLYO_LIMITS temas butcesiyle yonetilir (programContactBudget).
 function programWeeklySets(p) {
   const out = {};
   for (const d of (p && p.days) || []) {
     for (const e of d.exercises || []) {
+      if (e.explosive) continue;
       out[e.muscle] = (out[e.muscle] || 0) + (Number(e.sets) || 0);
     }
   }
@@ -441,6 +515,226 @@ function programEnforceVolumeCap(p) {
  *   3) 2 hafta ust uste ilerleme yoksa → DELOAD (hacim %60'a iner, 1 hafta).
  *   4) Hicbiri degilse → ayni agirlik, "tekrar ekle" hedefi.
  */
+// ============================================================================
+// ATLETIK KATMAN — patlayicilik / dovus sporcusu motoru (9 Agu 2026)
+// ============================================================================
+
+/**
+ * Patlayici hareket havuzu. Seviye kapisi 16 yas icin motorda ZORLANIR:
+ *   level 1 — her zaman acik (sicrama, saglik topu, izometrik boyun)
+ *   level 2 — teknik haftalari bittikten SONRA (tek bacak, olimpik turev, harness)
+ *   level 3 — sok yuklemesi (derinlik sicramasi). advancedFromWeek'ten once ACILMAZ.
+ * Gerekce: sok yuklemesi eksantrik yuku katlar; teknik oturmadan verilmez.
+ */
+function programExplosivePool(places, avoidMuscles, week) {
+  const w = Number(week) || 1;
+  const izin = w >= PLYO_LIMITS.advancedFromWeek ? 3 : (w > PLYO_LIMITS.teachWeeks ? 2 : 1);
+  return programExercisePool(places, avoidMuscles)
+    .filter(e => (e.explosive || e.pattern === 'neck') && (e.level || 1) <= izin);
+}
+
+/** Tek hareket ornedinin haftalik temas katkisi (set x tekrar x temas). */
+function programContacts(e) {
+  const c = Number(e.contact) || 0;
+  if (!c) return 0;
+  return (Number(e.sets) || 0) * (Number(e.repMax) || Number(e.repMin) || 0) * c;
+}
+
+/**
+ * Haftalik temas butcesi.
+ * ⚠️ EN ONEMLI SATIR: dovus gunleri butceden DUSULUR. Kickboks zaten yuksek
+ * hacimli plyometrik istir (ip, adim, tekme). Bu satir olmasa motor "haftada
+ * 3 gun sicrama" yazar, sporcu zaten 4 gun kickboks yapar, toplam yuk katlanir.
+ * Cok dovus gunu varsa kalan butce SIFIRA iner — o zaman motor yalnizca temassiz
+ * patlayici is (saglik topu, olimpik turev) verir. Bu dogru davranistir.
+ */
+function programContactBudget(p) {
+  const dovus = (p && Array.isArray(p.fightDays) ? p.fightDays : []).length;
+  const dovusYuku = dovus * PLYO_LIMITS.fightEquiv;
+  let kullanilan = 0;
+  for (const d of (p && p.days) || []) {
+    for (const e of d.exercises || []) kullanilan += programContacts(e);
+  }
+  const tavan = PLYO_LIMITS.maxContactsWeek;
+  return {
+    tavan,
+    dovusYuku,
+    kullanilan,
+    toplam: dovusYuku + kullanilan,
+    kalan: Math.max(0, tavan - dovusYuku - kullanilan),
+    doluluk: Math.min(100, Math.round(((dovusYuku + kullanilan) / tavan) * 100)),
+  };
+}
+
+/**
+ * Patlayici blogu seanslarin BASINA ekler.
+ *
+ * ⚠️ SIRA BILIMSEL OLARAK ZORUNLU, kozmetik degil: patlayici is dinlenmis sinir
+ * sistemiyle yapilir. Agir squat'tan sonra yapilan sicrama patlayicilik degil
+ * yorgunluk antrenmanidir — uretilen guc duser, adaptasyon yon degistirir.
+ * Bu yuzden order:0 verilir ve render/kayit her yerde ona gore siralanir.
+ */
+function programAddExplosive(p) {
+  const hafta = Number(p.week) || 1;
+  const havuz = programExplosivePool(p.places, p.avoid, hafta);
+  if (!havuz.length) return p;
+  const gucGunler = (p.days || []).filter(d => d.type === 'strength');
+  if (!gucGunler.length) return p;
+
+  const teknik = hafta <= PLYO_LIMITS.teachWeeks;
+  const dovusYuku = (Array.isArray(p.fightDays) ? p.fightDays.length : 0) * PLYO_LIMITS.fightEquiv;
+  let kalanTemas = Math.max(0, PLYO_LIMITS.maxContactsWeek - dovusYuku);
+  const temassizOldu = [];
+  const kullanilan = new Set();
+
+  gucGunler.forEach((d, idx) => {
+    // Alt gun -> sicrama. Ust gun -> ust govde patlayiciligi.
+    // Full body gununde odak YOK: gunler arasi donusumlu ver, yoksa sicrama
+    // hic gelmez (3 gun ve alti programlarda tum gunler full body'dir).
+    const altGun = !!d.agirBacak;
+    const sira = altGun ? ['plyo', 'rot']
+      : (d.odak ? ['power', 'rot'] : (idx % 2 === 0 ? ['plyo', 'rot'] : ['power', 'rot']));
+    const secilenler = [];
+
+    for (const pat of sira) {
+      if (secilenler.length >= PLYO_LIMITS.maxPowerPerSession) break;
+      const uygun = (e) => e.pattern === pat && !secilenler.some(x => x.id === e.id);
+      let aday = havuz.find(e => uygun(e) && !kullanilan.has(e.id)) || havuz.find(uygun);
+      if (!aday) continue;
+
+      const sets = teknik ? 2 : 3;
+      const [rMin, rMax] = aday.pRep || [3, 5];
+      const reps = teknik ? rMin : rMax;
+      const temas = (Number(aday.contact) || 0) * sets * reps;
+
+      // Butce yetmiyorsa TEMAS URETEN hareketi atla, temassiz alternatif ara.
+      if (temas > kalanTemas) {
+        if (Number(aday.contact) || 0) temassizOldu.push(aday.tr);
+        const alt = havuz.find(e => uygun(e) && !(Number(e.contact) || 0));
+        if (!alt) continue;
+        aday = alt;
+      }
+      const gercekTemas = (Number(aday.contact) || 0) * sets * reps;
+      kalanTemas -= gercekTemas;
+      kullanilan.add(aday.id);
+      secilenler.push({
+        id: aday.id, tr: aday.tr, en: aday.en, muscle: aday.muscle,
+        sets, repMin: teknik ? rMin : rMin, repMax: reps,
+        kg: aday.metric === 'kg' ? null : undefined,
+        explosive: true, pattern: aday.pattern, contact: Number(aday.contact) || 0,
+        metric: aday.metric || 'reps', order: 0,
+      });
+    }
+
+    for (const e of (d.exercises || [])) if (e.order == null) e.order = 1;
+    d.exercises = secilenler.concat(d.exercises || []);
+  });
+
+  // Boyun: dovus sporunda kafa hizlanmasini azaltir. Haftada 1 gun, UST gunune.
+  const boyun = havuz.find(e => e.pattern === 'neck');
+  if (boyun) {
+    const hedefGun = gucGunler.find(d => !d.agirBacak) || gucGunler[0];
+    if (hedefGun && !(hedefGun.exercises || []).some(e => e.muscle === 'neck')) {
+      hedefGun.exercises.push({
+        id: boyun.id, tr: boyun.tr, en: boyun.en, muscle: 'neck',
+        sets: 3, repMin: 15, repMax: 25, kg: null, sure: !!boyun.sure,
+        metric: boyun.metric || 'reps', order: 2,
+      });
+    }
+  }
+
+  if (teknik) {
+    p.notes.push('İlk ' + PLYO_LIMITS.teachWeeks + ' hafta patlayıcı işte TEKNİK haftası: ' +
+      'set ve tekrar düşük, yükseklik/mesafe zorlanmaz. Amaç iniş kontrolü ve ' +
+      'hareketin oturması — sayı kovalamak değil.');
+  }
+  if (temassizOldu.length) {
+    p.notes.push('Dövüş günlerin haftalık sıçrama bütçesinin çoğunu kullanıyor, o yüzden ' +
+      'yere temaslı sıçrama azaltıldı (' + temassizOldu.slice(0, 3).join(', ') + '). ' +
+      'Yerine sağlık topu / bar hızı işi kondu — patlayıcılık kalır, eklem yükü artmaz.');
+  }
+  p.notes.push('Patlayıcı hareketler seansın EN BAŞINDA, ısınmadan hemen sonra yapılır. ' +
+    'Ağır setten sonra yapılan sıçrama patlayıcılık geliştirmez. Setler arası tam dinlen ' +
+    '(2-3 dk); hız düştüğü an o hareketi bitir.');
+  return p;
+}
+
+/**
+ * Temas butcesi zorlamasi — rapor degil, KIRPMA (hacim tavaninin esi).
+ * Once tekrari, sonra seti duser; hala asiyorsa temas ureten hareketi cikarir.
+ */
+function programEnforceContacts(p) {
+  const dovus = (Array.isArray(p.fightDays) ? p.fightDays.length : 0) * PLYO_LIMITS.fightEquiv;
+  const tavan = PLYO_LIMITS.maxContactsWeek;
+  let kirpildi = false;
+
+  for (let tur = 0; tur < 80; tur++) {
+    const b = programContactBudget(p);
+    if (b.toplam <= tavan) break;
+    const adaylar = [];
+    for (const d of p.days || []) {
+      for (const e of d.exercises || []) if (programContacts(e) > 0) adaylar.push({ d, e });
+    }
+    if (!adaylar.length) break;
+    adaylar.sort((a, x) => programContacts(x.e) - programContacts(a.e));
+    const { d, e } = adaylar[0];
+    if (e.repMax > e.repMin) { e.repMax -= 1; kirpildi = true; continue; }
+    if (e.sets > 2) { e.sets -= 1; kirpildi = true; continue; }
+    const i = d.exercises.indexOf(e);
+    if (i >= 0) d.exercises.splice(i, 1);
+    kirpildi = true;
+  }
+
+  // Seans basina tavan
+  for (const d of p.days || []) {
+    let seans = (d.exercises || []).reduce((a, e) => a + programContacts(e), 0);
+    while (seans > PLYO_LIMITS.maxContactsSession) {
+      const hedef = (d.exercises || []).filter(e => programContacts(e) > 0)
+        .sort((a, b) => programContacts(b) - programContacts(a))[0];
+      if (!hedef) break;
+      if (hedef.repMax > hedef.repMin) hedef.repMax -= 1;
+      else if (hedef.sets > 2) hedef.sets -= 1;
+      else d.exercises.splice(d.exercises.indexOf(hedef), 1);
+      kirpildi = true;
+      seans = d.exercises.reduce((a, e) => a + programContacts(e), 0);
+    }
+  }
+
+  if (kirpildi) {
+    p.notes.push('Sıçrama hacmi haftalık temas tavanına (' + tavan + ') göre kırpıldı. ' +
+      'Dövüş antrenmanların bunun ' + dovus + ' kadarını zaten kullanıyor.');
+  }
+  return p;
+}
+
+/** Olculen cikti gecmisi: { [hareketId]: [{week, v, at}] } */
+function programMeasures(p, id) {
+  if (!p.measures || typeof p.measures !== 'object') p.measures = {};
+  if (!Array.isArray(p.measures[id])) p.measures[id] = [];
+  return p.measures[id];
+}
+
+/**
+ * Patlayici ilerleme degerlendirmesi — AGIRLIKLA DEGIL CIKTIYLA.
+ * Sicramada "bir tekrar daha" ilerleme degildir; ilerleme daha YUKSEK/UZAK
+ * sicramaktir. Cikti duserse bu durgunluk degil YORGUNLUK sinyalidir — bu
+ * durumda hacim artirilmaz, AZALTILIR (ters yon: klasik deload'un tersi degil,
+ * ayni yon ama farkli tetikleyici).
+ */
+function programExplosiveTrend(p, id) {
+  const seri = (p.measures && p.measures[id]) || [];
+  if (seri.length < 2) return { durum: 'veri-yok', n: seri.length };
+  const son = Number(seri[seri.length - 1].v);
+  const onceki = Number(seri[seri.length - 2].v);
+  if (!Number.isFinite(son) || !Number.isFinite(onceki) || onceki <= 0) {
+    return { durum: 'veri-yok', n: seri.length };
+  }
+  const pct = ((son - onceki) / onceki) * 100;
+  if (pct <= -PLYO_LIMITS.dropPctDeload) return { durum: 'dusus', pct, son, onceki };
+  if (pct > 0) return { durum: 'artis', pct, son, onceki };
+  return { durum: 'sabit', pct, son, onceki };
+}
+
 function advanceProgram(p, workouts, todayStr) {
   if (!p || !Array.isArray(p.days)) return null;
   const t = todayStr || (typeof today === 'function' ? today() : null);
@@ -470,6 +764,10 @@ function advanceProgram(p, workouts, todayStr) {
   const G = PROGRAM_GOALS[p.goal] || PROGRAM_GOALS.kas;
   for (const d of yeni.days) {
     for (const e of d.exercises || []) {
+      // ⚠️ Patlayici is bu daldan GECMEZ. Sicramada "bir tekrar daha yaptin,
+      // kilo ekleyelim" mantigi yanlistir — ilerleme daha YUKSEK/UZAK sicramaktir,
+      // olcusu de metre/santim. Asagida ayri dalda ele alinir.
+      if (e.explosive && e.metric !== 'kg') continue;
       const gercek = programLastPerformance(e, sonHafta);
       if (!gercek) continue;
       if (gercek.reps > e.repMax && e.kg != null) {
@@ -484,6 +782,30 @@ function advanceProgram(p, workouts, todayStr) {
       }
     }
   }
+
+  // 2b) PATLAYICI IS — olculen ciktiya gore, agirliga gore DEGIL.
+  // Cikti dusuyorsa bu "durgunluk" degil YORGUNLUK sinyalidir: sinir sistemi
+  // toparlamamis demektir. Cevap hacmi artirmak degil AZALTMAK.
+  const patNot = [];
+  for (const d of yeni.days) {
+    for (const e of d.exercises || []) {
+      if (!e.explosive || e.metric === 'kg') continue;
+      const t = programExplosiveTrend(yeni, e.id);
+      if (t.durum === 'dusus') {
+        if (e.sets > 2) e.sets -= 1;
+        patNot.push(e.tr + ': çıktı %' + Math.abs(Math.round(t.pct)) + ' düştü → hacim azaltıldı');
+      } else if (t.durum === 'artis') {
+        ilerleyen++;
+        degisiklikler.push(e.tr + ' → ' + t.son + (e.metric === 'cm' ? ' cm' : e.metric === 'm' ? ' m' : ''));
+      } else if (t.durum === 'veri-yok') {
+        if (!patNot.some(x => x.indexOf('ölçüm') >= 0)) {
+          patNot.push('Patlayıcı hareketlerde ölçüm girmedin — sıçrama/atış mesafeni ' +
+            'yazmadan ilerleme takip edilemez. Kartta "ölç" düğmesi var.');
+        }
+      }
+    }
+  }
+  if (patNot.length) degisiklikler.push.apply(degisiklikler, patNot.slice(0, 3));
 
   // 3) Durgunluk / deload
   yeni.stall = ilerleyen > 0 ? 0 : (Number(p.stall) || 0) + 1;
@@ -534,8 +856,38 @@ function programLastPerformance(e, workouts) {
 function programDayLabel(dow) { return PROGRAM_GUNLER[dow] || '—'; }
 
 function programRepText(e) {
-  if (e.sure) return e.sets + ' × ' + e.repMin + '-' + e.repMax + ' sn';
-  return e.sets + ' × ' + e.repMin + '-' + e.repMax;
+  const tek = Number(e.repMin) === Number(e.repMax);
+  const aralik = tek ? String(e.repMin) : (e.repMin + '-' + e.repMax);
+  if (e.sure) return e.sets + ' × ' + aralik + ' sn';
+  return e.sets + ' × ' + aralik;
+}
+
+/**
+ * Patlayici hareket ciktisini elle kaydet (sicrama cm, atis m).
+ * Hevy bu sayiyi vermez — olcum olmadan patlayici ilerleme takip EDILEMEZ.
+ * Bu yuzden kart "olc" der ve advanceProgram olcum yoksa acikca soyler.
+ */
+async function programMeasure(id) {
+  const p = ensureProgram();
+  if (!p) return;
+  let ex = null;
+  for (const d of p.days || []) for (const e of d.exercises || []) if (e.id === id) ex = e;
+  if (!ex) return;
+  const br = ex.metric === 'cm' ? 'santim' : (ex.metric === 'm' ? 'metre' : 'tekrar');
+  const seri = programMeasures(p, id);
+  const son = seri.length ? String(seri[seri.length - 1].v) : '';
+  const cev = await aidanPrompt(ex.tr, 'En iyi denemen kaç ' + br + '?', son);
+  if (cev == null) return;
+  const v = Number(String(cev).replace(',', '.').trim());
+  if (!Number.isFinite(v) || v <= 0) { showToast('Geçerli bir sayı yaz.', 'warning'); return; }
+  seri.push({ week: p.week, v, at: Date.now() });
+  p.measures[id] = seri.slice(-12);
+  save();
+  renderProgram();
+  const t = programExplosiveTrend(p, id);
+  if (t.durum === 'artis') showToast('Kayıt alındı — önceki ölçümden %' + Math.round(t.pct) + ' daha iyi.', 'success');
+  else if (t.durum === 'dusus') showToast('Kayıt alındı. Çıktı düştü — bu yorgunluk sinyali, hafta ilerletince hacim azalacak.', 'info', 5000);
+  else showToast('Kayıt alındı.', 'success');
 }
 
 function renderProgram() {
@@ -566,11 +918,24 @@ function renderProgram() {
         '<div class="pd-note">Teknik çalışma antrenörünün işi — Aidan buraya karışmaz, ' +
         'sadece yükü planlarken hesaba katar.</div></div>';
     }
-    const satirlar = (d.exercises || []).map(e =>
-      '<div class="pd-ex"><span class="pe-name">' + escapeHtml(e.tr) + '</span>' +
-      '<span class="pe-sets">' + escapeHtml(programRepText(e)) + '</span>' +
-      '<span class="pe-kg">' + (e.kg != null ? escapeHtml(String(e.kg)) + ' kg' : '—') + '</span></div>'
-    ).join('');
+    // Patlayici is HER ZAMAN once gosterilir — sira bilimsel olarak zorunlu.
+    const sirali = (d.exercises || []).slice()
+      .sort((a, b) => ((a.order == null ? 1 : a.order) - (b.order == null ? 1 : b.order)));
+    const satirlar = sirali.map(e => {
+      const olcum = (e.explosive && e.metric !== 'kg')
+        ? (function () {
+            const seri = (p.measures && p.measures[e.id]) || [];
+            const son = seri.length ? seri[seri.length - 1].v : null;
+            const br = e.metric === 'cm' ? ' cm' : (e.metric === 'm' ? ' m' : '');
+            return '<button class="pe-measure" onclick="programMeasure(\'' + e.id + '\')">' +
+              (son != null ? escapeHtml(String(son)) + br : 'ölç') + '</button>';
+          })()
+        : '<span class="pe-kg">' + (e.kg != null ? escapeHtml(String(e.kg)) + ' kg' : '—') + '</span>';
+      return '<div class="pd-ex' + (e.explosive ? ' pd-ex-pow' : '') + '">' +
+        (e.explosive ? '<span class="pe-badge">patlayıcı</span>' : '') +
+        '<span class="pe-name">' + escapeHtml(e.tr) + '</span>' +
+        '<span class="pe-sets">' + escapeHtml(programRepText(e)) + '</span>' + olcum + '</div>';
+    }).join('');
     return '<div class="prog-day">' +
       '<div class="pd-head"><span class="pd-dow">' + escapeHtml(programDayLabel(d.dow)) + '</span>' +
       '<span class="pd-name">' + escapeHtml(d.name) + '</span></div>' +
@@ -591,6 +956,16 @@ function renderProgram() {
       flags.map(f => escapeHtml(PROGRAM_MUSCLES[f.muscle] || f.muscle) + ' ' + f.sets).join(', ') +
       '. Tavan ' + PROGRAM_LIMITS.maxSetsPerMuscleWeek + ' set.</div>' : '') +
     '<div class="prog-days">' + gunlerHtml + '</div>' +
+    (G.athletic ? (function () {
+      const b = programContactBudget(p);
+      return '<div class="prog-plyo">' +
+        '<div class="pp-head"><span>Haftalık sıçrama yükü</span>' +
+        '<b>' + b.toplam + ' / ' + b.tavan + '</b></div>' +
+        '<div class="pp-bar"><i style="width:' + b.doluluk + '%"></i></div>' +
+        '<div class="pp-legend">Dövüş antrenmanı ' + b.dovusYuku + ' · ağırlık günü ' +
+        b.kullanilan + ' temas. Kickboks zaten plyometrik iş — bütçeden düşülüyor.</div>' +
+        '</div>';
+    })() : '') +
     '<div class="prog-volume">' + hacimHtml + '</div>' +
     '<div class="prog-actions">' +
     '<button class="small" onclick="runProgramAdvance()">Haftayı ilerlet</button>' +
