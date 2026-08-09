@@ -13,7 +13,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script defer src="supabase.js"></script>
 <title>Aidan - ADHD Asistanım</title>
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -1339,7 +1338,8 @@
 <script defer src="core.js"></script>
 <script defer src="tasks.js"></script>
 <script defer src="ui.js"></script>
-<!-- stocks.js + program.js BURADA YOK — tembel yuklenir (core.js loadModule).
-     Sekmesi ilk acildiginda iner; ilk yukleme 55 KB gzip hafifledi. -->
+<!-- supabase.js + stocks.js + program.js BURADA YOK — tembel yuklenir (core.js loadModule).
+     supabase init sirasinda, digerleri sekmesi ilk acilinca iner.
+     Ilk yukleme ~105 KB gzip hafifledi. -->
 </body>
 </html>

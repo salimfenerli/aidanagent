@@ -303,8 +303,14 @@ describe('progresyon — cikti ile, agirlikla DEGIL', () => {
 describe('dayaniklilik ve sozlesmeler', () => {
   test('AI cagrisi YOK — motor deterministik kalir', () => {
     const src = fs.readFileSync(path.join(ROOT, 'program.js'), 'utf8');
-    assert.ok(!/\bfetch\s*\(/.test(src),
-      'program.js ag istegi yapiyor — motor kural tabanli ve $0 kalmali');
+    // ⚠️ 9 Agu: program.js'te artik TEK bir fetch var — Hevy'ye rutin yazma
+    // (disa aktarim, AI degil). Motorun kendisi hala kural tabanli ve $0.
+    // Sozlesme daraltildi: AI ucuna baglanmak YASAK, izinli tek uc Hevy.
+    assert.ok(!/\/chat|\/plan|\/health-coach|aiRun/.test(src),
+      'program.js bir AI ucuna baglanmis — motor kural tabanli ve $0 kalmali');
+    const fetchler = [...new Set(src.match(/fetch\(([A-Z_]+)/g) || [])];
+    assert.deepStrictEqual(fetchler, ['fetch(HEVY_ROUTINES_ENDPOINT'],
+      'program.js beklenmeyen bir uca istek atiyor: ' + fetchler.join(', '));
   });
 
   test('ayni girdi ayni programi verir (deterministik)', () => {

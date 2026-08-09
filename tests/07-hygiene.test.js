@@ -94,7 +94,7 @@ describe('deploy tutarliligi', () => {
 
   test('asistan.html\'in yukledigi her script deploy listesinde var', () => {
     const scriptler = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1].replace(/^\//, ''));
-    assert.ok(scriptler.length >= 4, 'script etiketi bulunamadi');
+    assert.ok(scriptler.length >= 3, 'script etiketi bulunamadi');
     const eksik = scriptler.filter((s) => !deploy.includes('"' + s + '"'));
     assert.deepStrictEqual(eksik, [],
       'bu dosyalar deploy INCLUDE listesinde YOK — canlida 404 verir');

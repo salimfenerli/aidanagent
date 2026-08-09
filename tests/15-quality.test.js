@@ -309,7 +309,12 @@ describe('bozulmayanlar (regresyon)', () => {
   });
 
   test('AI cagrisi yok', () => {
-    assert.ok(!/\bfetch\s*\(/.test(fs.readFileSync(path.join(ROOT, 'program.js'), 'utf8')));
+    // ⚠️ 9 Agu: program.js'te artik TEK bir fetch var — Hevy'ye rutin yazma
+    // (disa aktarim, AI degil). Motorun kendisi hala kural tabanli ve $0.
+    // Sozlesme daraltildi: AI ucuna baglanmak YASAK, izinli tek uc Hevy.
+    const src = fs.readFileSync(path.join(ROOT, 'program.js'), 'utf8');
+    assert.ok(!/\/chat|\/plan|\/health-coach|aiRun/.test(src),
+      'program.js bir AI ucuna baglanmis');
   });
 });
 

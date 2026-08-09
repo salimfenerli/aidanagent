@@ -4447,3 +4447,15 @@
 }
 .instr-count.over { color: var(--accent, #f5a524); }
 @media (prefers-reduced-motion: reduce) { .instr-box { transition: none; } }
+
+/* ===== Hevy'ye yazildi rozeti (9 Agu 2026) ===== */
+.prog-hevy {
+  margin-top: 10px; padding: 10px 12px;
+  border: 1px solid var(--border, #2a2c35); border-radius: 10px;
+  background: color-mix(in srgb, var(--success, #34c759) 9%, transparent);
+  font-size: 12.5px; line-height: 1.5; color: var(--text, #e7e8ec);
+}
+.prog-hevy.stale {
+  background: color-mix(in srgb, var(--accent, #f5a524) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent, #f5a524) 30%, transparent);
+}

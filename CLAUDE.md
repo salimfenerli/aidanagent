@@ -3,8 +3,8 @@
 ## 🔴 GÜNCEL DURUM (özet — detaylı seans günlükleri: CHANGELOG.md)
 
 **Mimari:** `asistan.html` tek dosya DEĞİL — **4 modül statik + 2 modül TEMBEL** yüklenir.
-Statik sıra: `supabase.js` → `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → `tasks.js` (sekme/gün planı/quick-capture/journal/dump) → `stocks.js` (borsa) → `ui.js` (görev render/timer/ayarlar/auth/takvim/chat).
-**Tembel (sekmesi ilk açılınca iner, `core.js` → `loadModule`):** `stocks.js` (borsa) · `program.js` (antrenman programı üreteci).
+Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → `tasks.js` (sekme/gün planı/quick-capture/journal/dump) → `stocks.js` (borsa) → `ui.js` (görev render/timer/ayarlar/auth/takvim/chat).
+**Tembel (`core.js` → `loadModule`):** `supabase.js` (init'te, çizimi beklemeden) · `stocks.js` (borsa sekmesi) · `program.js` (diyet sekmesi).
 ⚠️ `stocks.js` ve `tasks.js` arasındaki eski karışıklık 9 Ağu'da çözüldü — görev fonksiyonları artık `tasks.js`'te, paylaşılan yardımcılar `core.js`'te. (`app.js` eski bundle'ı repodan kalkmış — 25 Tem'de doğrulandı.)
 
 **⚠️ DÜZENLEME KURALI:** Büyük dosyalarda Edit riskli + sandbox `rm` YOK (`mv` var). Düzenleme = **Python byte-replace + `node --check`**; **.bak OLUŞTURMA**; rollback = `git checkout <dosya>`. EOL eşle: **styles.css TEK BAŞINA LF** · diğer HEPSİ CRLF (core.js/ui.js/tasks.js/stocks.js/supabase.js/sw.js/asistan.html/worker.js/CLAUDE.md). ⚠️ 25 Tem'de doğrulandı — eski not yanlıştı, byte-replace'te `assert b'\r\n' in b` ile kontrol et.
@@ -18,6 +18,57 @@ Statik sıra: `supabase.js` → `core.js` (diyet + uyku + `escapeHtml` + depolam
 - **Görev/Plan:** otomatik gün planı + blok bildirimleri (v7-109), planlama zekası — geçmişten öğrenen `planHistory`/`planProfile` + otomatik toparlama (v7-110), haftalık sabit program (`fixedSchedule`).
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
+
+### 🔴 9 Ağustos 2026 — 🏋️ HEVY'YE PROGRAM YAZMA (v7-141)
+
+Salim: "hevy pro var zaten, uygulama hevy içine program yazabilir mi." Evet — `POST /hevy-routines` uç noktası eklendi.
+
+**🔴 MİMARİ KARAR — TEK YÖNLÜ dışa aktarım.** Hevy bir **kayıt defteri, antrenör değil.** Motorun kalite koruyucularının çoğu Hevy'de temsil EDİLEMEZ: seans içi sıra orada sadece liste sırası olur, temas bütçesi hiç görünmez, "çıktı düşerse hacmi azalt" mantığı yok. Doğru iş bölümü: **karar Aidan'da, uygulama kâğıdı Hevy'de.** Hevy'den program GERİ OKUNMAZ (teste bağlı).
+
+**Akış:** "Aidan" klasörünü bul/oluştur → hazır şablon kütüphanesini çek (ad → id) → eşleşmeyen hareketi **özel olarak oluştur** → güç günü başına rutin yaz.
+- **Özel hareket oluşturma kritikti:** sağlık topu rotasyonel atışı, pogo, boyun izometriği Hevy kütüphanesinde YOK. `POST /v1/exercise_templates` bunu çözüyor.
+- **Mükerrer koruması iki katmanlı:** klasör önce aranır sonra oluşturulur · oluşturulan özel hareketler `p.hevy.tplMap`'te saklanır, ikinci yazımda yeniden yaratılmaz (yoksa Hevy kütüphanesi kirlenirdi).
+- **Güncelleme:** rutin id'leri `p.hevy.routines`'da; ikinci yazım `PUT` eder. PUT patlarsa (kullanıcı Hevy'den silmiştir) sessizce yeniden oluşturur.
+- **Dövüş günü Hevy'ye YAZILMAZ** — teknik çalışma antrenörün işi (teste bağlı).
+
+**Alan eşleşmesi:** `rep_range:{start,end}` ↔ `repMin/repMax` (aralık varsa `reps: null`) · `duration_seconds` ↔ süreli hareketler (plank, boyun izometriği) · `rest_seconds` hedeften, patlayıcıda sabit **180** · `weight_kg` yalnız veri varsa.
+**Hevy şema eşlemeleri:** `HEVY_MUSCLE` (11 kasımız → Hevy `MuscleGroup` enum'u, `neck` dahil) · `hevyExerciseType` (süreli → `duration`, sıçrama/atış → **`reps_only`** çünkü ölçü cm/m, Hevy kilo sorar) · `hevyEquipment` (İngilizce addan türetiliyor). Üçü de enum dışına çıkmama testine bağlı.
+
+**⚠️ Zorlanamayan kurallar NOTA yazılıyor** — kullanıcı salonda okusun diye. Patlayıcı harekete: "maksimum hızla yap, hız düştüğü an seti bitir, ısınmadan hemen sonra ağır setten ÖNCE". Ana kaldırışa: "2 ısınma seti yap, sayıya katma". Rutin notuna da ısınma reçetesi giriyor.
+
+**Hata mesajları ayrıştırıldı:** `403` iki farklı şey olabilir — rutin limiti dolu (→ "kullanmadığın rutinleri sil") ya da Pro yok (→ "aboneliğin aktif mi"). `401` anahtar geçersiz, `429` çok istek. Hepsi Türkçe ve eyleme dönük.
+
+**Yeni veri alanı:** `data.program.hevy = { folderId, routines:{dow:id}, tplMap:{exId:tplId}, syncedAt, week }`. Kartta rozet: hafta ilerlediyse "rutinler N. haftaya ait, tekrar yaz" uyarısı.
+**⚠️ `program.js` artık `fetch` içeriyor** (tek uç: `HEVY_ROUTINES_ENDPOINT`). Motor hâlâ AI'sız ve deterministik — 3 test dosyasındaki "fetch yasağı" sözleşmesi **daraltıldı**: AI ucuna bağlanmak yasak, izinli tek istek Hevy aktarımı.
+
+**Doğrulama:** yeni `tests/17-hevy-export.test.js` **29 test** (enum uyumu 5 · rutin gövdesi 9 — sıra korunuyor, rep_range, duration, 180 sn, notlar, bozuk girdi · worker sözleşmesi 7 — auth, 403 ayrımı, klasör tekrarı, tplMap önbelleği, PUT kurtarma, dövüş günü hariç · PWA 5 · Impeccable 2). **18 dosya toplam 421 test geçiyor**, tek kırmızı kasıtlı.
+**⚠️ Test notu:** vm bağlamından dönen dizide `deepStrictEqual` KULLANMA — farklı realm, prototip eşleşmez, yanlış kırmızı verir. `strictEqual(x.length, 0)` kullan.
+**Cache:** v7-140 → **v7-141**
+
+### 🔴 9 Ağustos 2026 — 🔌 supabase.js TEMBEL YÜKLEME (v7-140)
+
+Tembel yükleme paketinin (v7-136) **kasıtlı olarak ayrılmış** ikinci yarısı. `supabase.js` 50 KB gzip ile ilk yüklemenin en büyük tek parçasıydı ve `<head>` içinde `defer` ile duruyordu; auth/senkron/çakışma mantığına dokunduğu için (25 Tem'de sertleştirilen en hassas alt sistem) ayrı pakete bırakılmıştı.
+
+**Kilit gözlem:** `autoConnectFromConfig()` zaten `/config`'e **ağ isteği** atıp öyle `initSupabase()` çağırıyordu — yani supabase senkron olarak hiç gerekmiyordu. Script etiketi sadece bant genişliği ve `DOMContentLoaded` geciktiriyordu.
+
+**Değişiklik:** `LAZY_MODULES`'e `supabase` eklendi (aynı kanıtlanmış yükleyici). `initSupabase()` ikiye ayrıldı — dışarıdan senkron çağrılabilen sarmalayıcı + `_initSupabaseAsync()`. Başlatma sözü **`window._supaReady`**'de tutuluyor.
+
+**🔴 KRİTİK KAPI — `supaReady()`.** Kütüphane inerken (~ilk saniye) tetiklenen her yol buradan geçiyor. Olmasaydı: kullanıcı açılışta hemen "Aidan'a sor"a yazsa `getSupaToken()` `null` döner, **"oturum bulunamadı, tekrar giriş yap"** hatası alırdı — hesabı gayet açıkken. 4 giriş noktası bağlandı (`getSupaToken` + 3 giriş yolu).
+- `supaReady()` başlatma hiç yapılmadıysa (credentials yok) **hemen döner, asılı kalmaz**.
+- `getSession().then(...)` → `await` oldu, akış tek yerde toplandı.
+
+**Veri kaybı riski yok — mevcut koruma yetiyor.** İlk saniyede yapılan değişiklik `save()` içinde `markLocalDirty()` ile işaretleniyor, `schedulePush` atlansa bile auth oturunca `pullFromCloud` kirli bayrağı görüp push ediyor (25 Tem çakışma paketi). Teste bağlandı.
+
+**Sonuç — bugünün toplamı:**
+| | Sabah | Şimdi |
+|---|---|---|
+| İlk yükleme | 302 KB gzip | **204 KB** |
+| Kritik istek | 8 | **5** |
+
+**−98 KB (%32).** Tembel inen: supabase 50 + stocks 40 + program 20 KB.
+
+**Doğrulama:** `tests/13-lazy.test.js` 43 → **49 test** (yeni: `supaReady` sözleşmesi, `getSupaToken` beklemesi, giriş yollarının beklemesi, `save()` kirli işaretlemesi, `createClient` tembel yüklemeden önce çağrılmıyor, kritik istek ≤5, bütçe ≤215 KB). `07-hygiene` script eşiği 3'e çekildi. **17 dosya 392 test geçiyor**, tek kırmızı kasıtlı.
+**Cache:** v7-139 → **v7-140**
 
 ### 🔴 9 Ağustos 2026 — 📜 KULLANICI TALİMATLARI (v7-139)
 
@@ -71,7 +122,7 @@ Salim: "hevy uygulamasına programı yazabilir mi **program kalitesi de önemli*
 **🔧 Bulunan yan bug:** `programBalanceVolume` hacmi kırpıyor ama **kullanıcıya söylemiyordu** — `12-program`'ın "hacim düşürüldü ama söylenmemiş" testi yakaladı. Not eklendi.
 **Cache:** v7-137 → **v7-138**
 
-### 📋 Hevy'ye program yazma — araştırıldı, YAPILABİLİR (sonraki paket)
+### 📋 Hevy'ye program yazma — YAPILDI (v7-141, aşağıda). Araştırma notları:
 Hevy Public API (`api.hevyapp.com/docs`) gerekli her şeyi veriyor:
 - `POST /v1/routines` — rutin oluştur · `PUT /v1/routines/{id}` — hafta ilerleyince güncelle
 - `POST /v1/routine_folders` — "Aidan" klasörü

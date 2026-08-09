@@ -2073,7 +2073,7 @@ function welcomeStatus(msg, color) {
 }
 
 async function welcomeLogin() {
-  if (!window._supa) { welcomeStatus('Bağlantı kurulamadı, sayfayı yenile.', '#ff5555'); return; }
+  if (!window._supa && !(await supaReady())) { welcomeStatus('Bağlantı kurulamadı, sayfayı yenile.', '#ff5555'); return; }
   const email = document.getElementById('wEmail').value.trim();
   const password = document.getElementById('wPassword').value;
   if (!email || !password) { welcomeStatus('Email ve şifre gerekli.', '#ffb86c'); return; }
@@ -2085,7 +2085,7 @@ async function welcomeLogin() {
 }
 
 async function welcomeSignup() {
-  if (!window._supa) { welcomeStatus('Bağlantı kurulamadı.', '#ff5555'); return; }
+  if (!window._supa && !(await supaReady())) { welcomeStatus('Bağlantı kurulamadı.', '#ff5555'); return; }
   const email = document.getElementById('wEmail').value.trim();
   const password = document.getElementById('wPassword').value;
   const code = (document.getElementById('wCode').value || '').trim().toUpperCase();
@@ -3793,7 +3793,7 @@ const INVITE_CREATE_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/
 const INVITE_LIST_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/invite/list';
 
 async function getSupaToken() {
-  if (!window._supa) return null;
+  if (!window._supa && !(await supaReady())) return null;
   const { data } = await window._supa.auth.getSession();
   return data?.session?.access_token || null;
 }
@@ -3878,7 +3878,7 @@ function copyInviteCode(code) {
 }
 
 async function signUpUser() {
-  if (!window._supa) { showSupaStatus('Önce Supabase\'e bağlan.', '#ffb86c'); return; }
+  if (!window._supa && !(await supaReady())) { showSupaStatus('Önce Supabase\'e bağlan.', '#ffb86c'); return; }
   const email = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
   const code = (document.getElementById('inviteCode')?.value || '').trim().toUpperCase();
@@ -3912,7 +3912,7 @@ async function signUpUser() {
 }
 
 async function signInUser() {
-  if (!window._supa) { showSupaStatus('Önce Supabase\'e bağlan.', '#ffb86c'); return; }
+  if (!window._supa && !(await supaReady())) { showSupaStatus('Önce Supabase\'e bağlan.', '#ffb86c'); return; }
   const email = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
   if (!email || !password) { showSupaStatus('Email ve şifre gerekli.', '#ffb86c'); return; }
@@ -3959,10 +3959,24 @@ function disconnectSupabase() {
   showSupaStatus('Bağlantı kesildi.', '#6272a4');
 }
 
+// ⚠️ 9 Agu 2026: supabase.js artik <script> etiketiyle GELMIYOR (50 KB gzip
+// kritik yoldan cikti). initSupabase once kutuphaneyi indirir.
+// Baslatma sozu window._supaReady'de tutulur — kutuphane inmeden AI cagrisi
+// yapilirsa supaReady() onu bekler, "oturum bulunamadi" demez.
 function initSupabase() {
+  window._supaReady = _initSupabaseAsync();
+  return window._supaReady;
+}
+async function _initSupabaseAsync() {
   const url = data.settings.supaUrl;
   const key = data.settings.supaKey;
   if (!url || !key) return;
+  try {
+    await loadModule('supabase');
+  } catch (e) {
+    showSupaStatus('Supabase kütüphanesi yüklenemedi (internet?).', '#ff5555');
+    return;
+  }
   if (!window.supabase) { showSupaStatus('Supabase kütüphanesi yüklenemedi (internet?).', '#ff5555'); return; }
 
   try {
@@ -3987,16 +4001,26 @@ function initSupabase() {
     }
   });
 
-  window._supa.auth.getSession().then(({data: {session}}) => {
-    if (session && session.user) {
-      window._user = session.user;
-      hideWelcome();
-      onLoginSuccess();
-    } else {
-      renderAuthBox();
-      renderWelcome();
-    }
-  });
+  const { data: { session } } = await window._supa.auth.getSession();
+  if (session && session.user) {
+    window._user = session.user;
+    hideWelcome();
+    onLoginSuccess();
+  } else {
+    renderAuthBox();
+    renderWelcome();
+  }
+}
+
+/**
+ * Supabase hazir olana kadar bekle. Kutuphane tembel indigi icin, ilk
+ * saniyelerde tetiklenen her yol (AI cagrisi, giris, senkron) buradan gecer.
+ * Baslatma hic yapilmadiysa (credentials yok) hemen doner — asili kalmaz.
+ */
+async function supaReady() {
+  if (window._supa) return true;
+  if (window._supaReady) { try { await window._supaReady; } catch (e) {} }
+  return !!window._supa;
 }
 
 async function logoutUser() {

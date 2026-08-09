@@ -6534,6 +6534,268 @@ function newHevyPRs(oldPrs, newPrs, sinceDate) {
 
 // PWA'dan senkron: {key} → normalize antrenmanlar. Anahtari FRONTEND gonderir,
 // worker sadece proxy'dir (CORS + anahtarin Hevy'ye gitmesi icin).
+// ============================================================================
+// HEVY'YE PROGRAM YAZMA (9 Agu 2026)
+//
+// Mimari karar: Hevy bir KAYIT DEFTERI, antrenor degil. Aidan'in kalite
+// koruyucularinin cogu Hevy'de temsil EDILEMEZ — seans ici sira orada sadece
+// liste sirasi olur, temas butcesi hic gorunmez. Dogru is bolumu:
+// KARAR Aidan'da, UYGULAMA KAGIDI Hevy'de. O yuzden bu tek yonlu bir DISA
+// AKTARIM: program Aidan'da uretilir/guncellenir, sonra Hevy'ye yazilir.
+//
+// ⚠️ Tum API Hevy Pro ister. 403 iki farkli sey olabilir: anahtar gecersiz
+// (Pro yok) ya da RUTIN LIMITI dolu — ikisi ayri mesaj veriyor.
+// ============================================================================
+const HEVY_FOLDER = 'Aidan';
+
+// Bizim kas adlari -> Hevy MuscleGroup enum'u
+const HEVY_MUSCLE = {
+  chest: 'chest', back: 'lats', shoulders: 'shoulders', biceps: 'biceps',
+  triceps: 'triceps', quads: 'quadriceps', hams: 'hamstrings', glutes: 'glutes',
+  calves: 'calves', core: 'abdominals', neck: 'neck',
+};
+
+function hevyHeaders(key) {
+  return { 'api-key': key, 'Accept': 'application/json', 'Content-Type': 'application/json' };
+}
+
+async function hevyCall(key, yol, opts) {
+  const r = await fetch(`${HEVY_API}${yol}`, Object.assign({ headers: hevyHeaders(key) }, opts || {}));
+  if (r.status === 401) throw new Error('Hevy anahtarı kabul edilmedi — Hevy Pro gerekiyor ya da anahtar iptal edilmiş.');
+  if (r.status === 429) throw new Error('Hevy çok fazla istek dedi, birkaç dakika sonra tekrar dene.');
+  if (!r.ok) {
+    let ek = '';
+    try { const j = await r.json(); ek = j && j.error ? ' — ' + j.error : ''; } catch {}
+    if (r.status === 403) {
+      throw new Error(yol.indexOf('/routines') === 0
+        ? 'Hevy rutin limitin dolu görünüyor. Hevy\'den kullanmadığın rutinleri sil, tekrar dene.' + ek
+        : 'Hevy izin vermedi (403) — Hevy Pro aboneliğin aktif mi?' + ek);
+    }
+    throw new Error('Hevy sunucu hatası ' + r.status + ek);
+  }
+  try { return await r.json(); } catch { return {}; }
+}
+
+/** "Aidan" klasorunu bul, yoksa olustur. */
+async function hevyEnsureFolder(key) {
+  for (let page = 1; page <= 5; page++) {
+    const j = await hevyCall(key, `/routine_folders?page=${page}&pageSize=10`);
+    const list = Array.isArray(j.routine_folders) ? j.routine_folders : [];
+    const bulunan = list.find(f => f && String(f.title).trim() === HEVY_FOLDER);
+    if (bulunan) return bulunan.id;
+    if (!list.length) break;
+    if (j.page_count && page >= j.page_count) break;
+  }
+  const yeni = await hevyCall(key, '/routine_folders', {
+    method: 'POST',
+    body: JSON.stringify({ routine_folder: { title: HEVY_FOLDER } }),
+  });
+  const f = yeni.routine_folder || yeni;
+  return f && f.id != null ? f.id : null;
+}
+
+/** Hevy'nin hazir hareket kutuphanesi: normalize edilmis ad -> id */
+async function hevyTemplateMap(key) {
+  const map = {};
+  for (let page = 1; page <= 10; page++) {
+    const j = await hevyCall(key, `/exercise_templates?page=${page}&pageSize=100`);
+    const list = Array.isArray(j.exercise_templates) ? j.exercise_templates : [];
+    for (const tp of list) {
+      if (tp && tp.id && tp.title) map[String(tp.title).trim().toLowerCase()] = tp.id;
+    }
+    if (!list.length) break;
+    if (j.page_count && page >= j.page_count) break;
+  }
+  return map;
+}
+
+/** Hevy exercise_type — hareketin nasil kaydedilecegini belirler. */
+function hevyExerciseType(e) {
+  if (e.sure) return 'duration';                       // plank, boyun izometrik, carry
+  if (e.explosive && e.metric !== 'kg') return 'reps_only';  // sicrama/atis: kg yok
+  if (e.bw) return 'bodyweight_reps';
+  return 'weight_reps';
+}
+
+function hevyEquipment(e) {
+  const ad = String(e.en || '').toLowerCase();
+  if (ad.indexOf('barbell') >= 0) return 'barbell';
+  if (ad.indexOf('dumbbell') >= 0) return 'dumbbell';
+  if (ad.indexOf('kettlebell') >= 0) return 'kettlebell';
+  if (ad.indexOf('machine') >= 0 || ad.indexOf('cable') >= 0 || ad.indexOf('pulldown') >= 0) return 'machine';
+  if (ad.indexOf('medicine ball') >= 0) return 'other';
+  return 'none';
+}
+
+/** Hevy'de olmayan hareketi ozel olarak olustur (saglik topu, pogo vb). */
+async function hevyCreateCustom(key, e) {
+  const j = await hevyCall(key, '/exercise_templates', {
+    method: 'POST',
+    body: JSON.stringify({
+      exercise: {
+        title: String(e.en || e.tr).slice(0, 60),
+        exercise_type: hevyExerciseType(e),
+        equipment_category: hevyEquipment(e),
+        muscle_group: HEVY_MUSCLE[e.muscle] || 'other',
+      },
+    }),
+  });
+  const tp = j.exercise_template || j;
+  return tp && tp.id ? tp.id : null;
+}
+
+/** Bir gunun egzersizlerini Hevy rutin govdesine cevir. */
+function hevyBuildExercises(gun, tplIds, restSec) {
+  const sirali = (gun.exercises || []).slice()
+    .sort((a, b) => ((a.order == null ? 1 : a.order) - (b.order == null ? 1 : b.order)));
+  const out = [];
+  for (const e of sirali) {
+    const tid = tplIds[e.id];
+    if (!tid) continue;                       // eslesmedi -> sessizce atla, rapor edilir
+    const setSayisi = Math.max(1, Math.min(10, Number(e.sets) || 3));
+    const sets = [];
+    for (let i = 0; i < setSayisi; i++) {
+      const st = { type: 'normal' };
+      if (e.sure) {
+        st.duration_seconds = Number(e.repMin) || 30;
+      } else if (Number(e.repMax) > Number(e.repMin)) {
+        st.reps = null;
+        st.rep_range = { start: Number(e.repMin), end: Number(e.repMax) };
+      } else {
+        st.reps = Number(e.repMin) || 8;
+      }
+      if (e.kg != null && !e.explosive) st.weight_kg = Number(e.kg);
+      else if (e.kg != null) st.weight_kg = Number(e.kg);
+      sets.push(st);
+    }
+    // ⚠️ Kalite kurallari Hevy'de ZORLANAMAZ — notlara yaziliyor ki
+    // kullanici salonda okusun. Sira da liste sirasiyla korunuyor.
+    let not = '';
+    if (e.explosive) {
+      not = 'PATLAYICI — maksimum hızla yap. Hız düştüğü an seti bitir. ' +
+        'Setler arası tam dinlen (2-3 dk). Isınmadan hemen sonra, ağır setten ÖNCE.';
+      if (e.metric === 'cm' || e.metric === 'm') {
+        not += ' İlerleme kiloyla değil ' + (e.metric === 'cm' ? 'yükseklikle' : 'mesafeyle') +
+          ' ölçülür — en iyi denemeni Aidan\'a gir.';
+      }
+    } else if (e.tier === 1) {
+      not = 'Ana kaldırış — önce 2 ısınma seti yap, sayıya katma.';
+    }
+    out.push({
+      exercise_template_id: tid,
+      superset_id: null,
+      rest_seconds: e.explosive ? 180 : (Number(restSec) || 90),
+      notes: not || null,
+      sets,
+    });
+  }
+  return out;
+}
+
+async function handleHevyRoutinesApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
+
+  const key = String(body.key || '').trim();
+  const p = body.program;
+  if (!key) return jsonCors({ error: 'Hevy anahtarı boş — Ayarlar\'dan gir.' }, 400, cors);
+  if (!p || !Array.isArray(p.days)) return jsonCors({ error: 'Program yok' }, 400, cors);
+
+  const gunler = p.days.filter(d => d && d.type === 'strength' && (d.exercises || []).length);
+  if (!gunler.length) return jsonCors({ error: 'Programda güç günü yok' }, 400, cors);
+
+  try {
+    const folderId = await hevyEnsureFolder(key);
+    const hazir = await hevyTemplateMap(key);
+    const onceki = (body.tplMap && typeof body.tplMap === 'object') ? body.tplMap : {};
+
+    // Hareket -> Hevy sablon id eslemesi. Once hazir kutuphane, sonra daha once
+    // olusturulmus ozel hareket, en son yeni ozel hareket.
+    const tplIds = {};
+    const yeniOzel = [];
+    const eslesmeyen = [];
+    for (const d of gunler) {
+      for (const e of d.exercises || []) {
+        if (tplIds[e.id]) continue;
+        const ad = String(e.en || '').trim().toLowerCase();
+        if (ad && hazir[ad]) { tplIds[e.id] = hazir[ad]; continue; }
+        if (onceki[e.id]) { tplIds[e.id] = onceki[e.id]; continue; }
+        try {
+          const yeni = await hevyCreateCustom(key, e);
+          if (yeni) { tplIds[e.id] = yeni; yeniOzel.push(e.tr); }
+          else eslesmeyen.push(e.tr);
+        } catch (err) {
+          eslesmeyen.push(e.tr + ' (' + err.message + ')');
+        }
+      }
+    }
+
+    const G = (p.goal === 'guc' || p.goal === 'atletik') ? 180 : (p.goal === 'daya' ? 45 : 90);
+    const eski = (body.routines && typeof body.routines === 'object') ? body.routines : {};
+    const routines = {};
+    const olusan = [], guncellenen = [];
+
+    for (const d of gunler) {
+      const gunAdi = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'][d.dow] || '';
+      const baslik = `Aidan · ${gunAdi} · ${d.name}`.slice(0, 60);
+      const notlar = []
+        .concat((d.warmup || []).length ? ['ISINMA:'].concat(d.warmup.map(w => '• ' + w)) : [])
+        .concat(['', 'Bu program Aidan tarafından üretildi. Sıra önemli — listedeki sırayla yap.',
+          'Ağrı hissedersen dur. 1RM denemesi yapma.'])
+        .join('\n').slice(0, 800);
+
+      const govde = {
+        routine: {
+          title: baslik,
+          folder_id: folderId,
+          notes: notlar,
+          exercises: hevyBuildExercises(d, tplIds, G),
+        },
+      };
+      if (!govde.routine.exercises.length) continue;
+
+      const mevcutId = eski[String(d.dow)];
+      if (mevcutId) {
+        try {
+          await hevyCall(key, '/routines/' + encodeURIComponent(mevcutId), {
+            method: 'PUT', body: JSON.stringify(govde),
+          });
+          routines[String(d.dow)] = mevcutId;
+          guncellenen.push(baslik);
+          continue;
+        } catch (err) {
+          // Rutin silinmis olabilir -> yeniden olustur
+        }
+      }
+      const yeni = await hevyCall(key, '/routines', { method: 'POST', body: JSON.stringify(govde) });
+      const rt = yeni.routine || yeni;
+      const rid = Array.isArray(rt) ? (rt[0] && rt[0].id) : (rt && rt.id);
+      if (rid) { routines[String(d.dow)] = rid; olusan.push(baslik); }
+    }
+
+    return jsonCors({
+      folderId, routines, tplMap: tplIds,
+      created: olusan, updated: guncellenen,
+      customCreated: yeniOzel, unmatched: eslesmeyen,
+    }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 502, cors);
+  }
+}
+
 async function handleHevySyncApi(request, env) {
   const cors = {
     'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
@@ -7044,6 +7306,10 @@ export default {
     // 💪 Hevy antrenman senkronu
     if (url.pathname === '/hevy-sync') {
       return handleHevySyncApi(request, env);
+    }
+    // Programi Hevy'ye rutin olarak yaz (tek yonlu disa aktarim)
+    if (url.pathname === '/hevy-routines') {
+      return handleHevyRoutinesApi(request, env);
     }
     // ⚖️ Tartı verisi — iOS Kısayol her sabah buraya POST eder
     if (url.pathname === '/body') {

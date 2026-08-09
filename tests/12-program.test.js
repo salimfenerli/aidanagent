@@ -391,7 +391,10 @@ describe('kaynak sozlesmesi', () => {
   const html = fs.readFileSync(path.join(ROOT, 'asistan.html'), 'utf8');
 
   test('AI cagrisi YOK — motor tamamen kural tabanli ve $0', () => {
-    assert.ok(!/fetch\s*\(|WORKER|\/chat|\/plan|aiRun/.test(src),
+    // ⚠️ 9 Agu: program.js'te artik TEK bir fetch var — Hevy'ye rutin yazma
+    // (disa aktarim, AI degil). Motorun kendisi hala kural tabanli ve $0.
+    // Sozlesme daraltildi: AI ucuna baglanmak YASAK, izinli tek uc Hevy.
+    assert.ok(!/\/chat|\/plan|\/health-coach|aiRun/.test(src),
       'program.js ag istegi yapiyor — bu motor deterministik ve ucretsiz kalmali');
   });
 

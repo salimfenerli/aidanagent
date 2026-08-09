@@ -1059,6 +1059,72 @@ async function programMeasure(id) {
   else showToast('Kayıt alındı.', 'success');
 }
 
+// ============ HEVY'YE YAZ (9 Agu 2026) ============
+// Tek yonlu disa aktarim: karar Aidan'da, uygulama kagidi Hevy'de.
+// Hevy'de temsil EDILEMEYENLER (seans ici sira zorlamasi, temas butcesi)
+// hareket notlarina yazilir — kullanici salonda okusun diye.
+const HEVY_ROUTINES_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/hevy-routines';
+
+async function pushProgramToHevy() {
+  const p = ensureProgram();
+  if (!p) { showToast('Önce program kur.', 'warning'); return; }
+  const key = (data.settings && data.settings.hevyKey || '').trim();
+  if (!key) {
+    showToast('Hevy anahtarı yok — Ayarlar → Hevy bölümünden ekle (Hevy Pro gerekiyor).', 'warning', 5000);
+    return;
+  }
+  const btn = document.getElementById('progHevyBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Yazılıyor…'; }
+  try {
+    const token = await getSupaToken();
+    if (!token) { showToast('Giriş gerekli — Ayarlar\'dan bulut girişi yap.', 'warning'); return; }
+    p.hevy = p.hevy || {};
+    const r = await fetch(HEVY_ROUTINES_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({
+        key, program: p,
+        routines: p.hevy.routines || {},
+        tplMap: p.hevy.tplMap || {},
+      }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) { showToast(j.error || ('Hevy hatası ' + r.status), 'error', 6000); return; }
+
+    p.hevy = {
+      folderId: j.folderId,
+      routines: j.routines || {},
+      tplMap: j.tplMap || {},
+      syncedAt: Date.now(),
+      week: p.week,
+    };
+    save();
+    renderProgram();
+    const n = (j.created || []).length, g = (j.updated || []).length;
+    let msg = 'Hevy\'ye yazıldı — "Aidan" klasörü: ' +
+      (n ? n + ' yeni rutin' : '') + (n && g ? ', ' : '') + (g ? g + ' güncellendi' : '');
+    if ((j.customCreated || []).length) msg += ' · ' + j.customCreated.length + ' özel hareket oluşturuldu';
+    showToast(msg, 'success', 6000);
+    if ((j.unmatched || []).length) {
+      showToast('Şu hareketler Hevy\'ye yazılamadı: ' + j.unmatched.slice(0, 3).join(', '), 'warning', 7000);
+    }
+  } catch (e) {
+    showToast('Bağlantı hatası: ' + (e && e.message ? e.message : e), 'error', 5000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Hevy\'ye yaz'; }
+  }
+}
+
+function programHevyLabel(p) {
+  if (!p.hevy || !p.hevy.syncedAt) return '';
+  const eskimis = p.hevy.week != null && p.hevy.week !== p.week;
+  return '<div class="prog-hevy' + (eskimis ? ' stale' : '') + '">' +
+    (eskimis
+      ? 'Hevy\'deki rutinler ' + p.hevy.week + '. haftaya ait — program ilerledi, tekrar yaz.'
+      : 'Hevy\'ye yazıldı (' + new Date(p.hevy.syncedAt).toLocaleDateString('tr-TR') + ') · "Aidan" klasörü') +
+    '</div>';
+}
+
 function renderProgram() {
   const el = document.getElementById('programSection');
   if (!el) return;
@@ -1145,7 +1211,9 @@ function renderProgram() {
     '<div class="prog-actions">' +
     '<button class="small" onclick="runProgramAdvance()">Haftayı ilerlet</button>' +
     '<button class="small secondary" onclick="openProgramSetup()">Yeniden kur</button>' +
-    '<button class="small secondary" onclick="deleteProgram()">Sil</button></div>' +
+    '<button class="small secondary" onclick="deleteProgram()">Sil</button>' +
+    '<button class="small secondary" id="progHevyBtn" onclick="pushProgramToHevy()">Hevy\'ye yaz</button></div>' +
+    programHevyLabel(p) +
     ((p.history || []).length ? '<details class="prog-hist"><summary>Geçmiş değişiklikler</summary>' +
       p.history.map(h => '<div class="ph-row"><b>' + h.week + '. hafta</b> ' +
         escapeHtml((h.changes || []).join(' · ') || '—') + '</div>').join('') + '</details>' : '') +

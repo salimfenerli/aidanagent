@@ -31,9 +31,9 @@ const css = readText('styles.css');
 
 // ---------------------------------------------------------------------------
 describe('tembel yukleme sozlesmesi', () => {
-  test('stocks.js ve program.js <script> etiketiyle GELMIYOR', () => {
+  test('stocks.js, program.js ve supabase.js <script> etiketiyle GELMIYOR', () => {
     const src = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1]);
-    for (const m of ['stocks.js', 'program.js']) {
+    for (const m of ['stocks.js', 'program.js', 'supabase.js']) {
       assert.ok(!src.some((s) => s.replace(/^\//, '') === m),
         m + ' hala statik script etiketiyle yukleniyor — tembel yukleme kazanci yok');
     }
@@ -72,11 +72,11 @@ describe('tembel yukleme sozlesmesi', () => {
       'renderStocks modul yuklenmeden cagriliyor — "not defined" ile patlar');
   });
 
-  test('LAZY_MODULES tam olarak stocks + program', () => {
+  test('LAZY_MODULES tam olarak stocks + program + supabase', () => {
     const blok = /const LAZY_MODULES = \{([^}]*)\}/.exec(core);
     assert.ok(blok, 'LAZY_MODULES okunamadi');
     const anahtarlar = [...blok[1].matchAll(/(\w+)\s*:/g)].map((m) => m[1]).sort();
-    assert.deepStrictEqual(anahtarlar, ['program', 'stocks'],
+    assert.deepStrictEqual(anahtarlar, ['program', 'stocks', 'supabase'],
       'modul listesi degisti — sw.js/deploy.py/Actions paths da guncellendi mi?');
   });
 });
@@ -274,15 +274,65 @@ describe('ilk yukleme butcesi', () => {
       .filter((f) => fs.existsSync(path.join(ROOT, f)))
       .reduce((a, f) => a + gz(f), 0);
     const kb = Math.round(toplam / 1024);
-    assert.ok(kb <= 260,
-      `ilk yukleme ${kb} KB gzip — butce 260 KB. Yeni agir bagimlilik statik eklendi mi?`);
+    assert.ok(kb <= 215,
+      `ilk yukleme ${kb} KB gzip — butce 215 KB. Yeni agir bagimlilik statik eklendi mi?`);
   });
 
   test('tembel moduller butceye DAHIL DEGIL (gercekten ayrildilar)', () => {
     const statik = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1].replace(/^\//, ''));
-    assert.ok(!statik.includes('stocks.js') && !statik.includes('program.js'));
-    assert.ok(gz('stocks.js') + gz('program.js') > 30 * 1024,
+    for (const m of ['stocks.js', 'program.js', 'supabase.js']) {
+      assert.ok(!statik.includes(m), m + ' hala statik');
+    }
+    assert.ok(gz('stocks.js') + gz('program.js') + gz('supabase.js') > 80 * 1024,
       'tembel moduller beklenenden kucuk — dogru dosyalar mi olculuyor?');
+  });
+
+  test('kritik istek sayisi 5 ya da alti', () => {
+    const n = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].length +
+      [...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g)]
+        .filter((m) => !/^https?:/.test(m[1])).length;
+    assert.ok(n <= 5, n + ' kritik istek — tembel yukleme kazanci geri aliniyor');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// supabase.js auth/senkron/catisma mantiginin tabani — en hassas alt sistem.
+// Tembel yuklendigi icin "kutuphane inmeden tetiklenen yol" senaryosu kritik.
+describe('supabase tembel yukleme', () => {
+  test('supaReady ve _supaReady sozlesmesi var', () => {
+    const ui = readText('ui.js');
+    assert.ok(/async function supaReady\(/.test(ui), 'supaReady yok');
+    assert.ok(/window\._supaReady = _initSupabaseAsync\(\)/.test(ui),
+      'initSupabase baslatma sozunu saklamiyor — bekleyen yol neyi bekleyecek?');
+  });
+
+  test('getSupaToken kutuphane inmeden "oturum yok" DEMEZ', () => {
+    const ui = readText('ui.js');
+    const i = ui.indexOf('async function getSupaToken(');
+    const blok = ui.slice(i, i + 300);
+    assert.ok(/await supaReady\(\)/.test(blok),
+      'getSupaToken beklemiyor — ilk saniyelerde her AI cagrisi oturum hatasi verir');
+  });
+
+  test('giris yollari da bekliyor', () => {
+    const ui = readText('ui.js');
+    const n = (ui.match(/!\(await supaReady\(\)\)/g) || []).length;
+    assert.ok(n >= 4, 'sadece ' + n + ' giris/senkron yolu bekliyor');
+  });
+
+  test('save() hala kirli isaretliyor (push kacsa bile veri kaybolmaz)', () => {
+    const core = readText('core.js');
+    const i = core.indexOf('function save()');
+    const blok = core.slice(i, i + 220);
+    assert.ok(/markLocalDirty/.test(blok),
+      'save kirli isaretlemiyor — kutuphane inmeden yapilan degisiklik hic push edilmez');
+  });
+
+  test('initSupabase asenkron ve loadModule kullaniyor', () => {
+    const ui = readText('ui.js');
+    assert.ok(/await loadModule\('supabase'\)/.test(ui), 'supabase tembel indirilmiyor');
+    assert.ok(!/window\.supabase\.createClient/.test(ui.slice(0, ui.indexOf('_initSupabaseAsync'))),
+      'createClient tembel yuklemeden ONCE cagriliyor');
   });
 });
 
