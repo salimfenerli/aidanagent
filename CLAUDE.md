@@ -19,6 +19,44 @@ Statik sıra: `supabase.js` → `core.js` (diyet + uyku + `escapeHtml` + depolam
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 9 Ağustos 2026 — 🎯 PROGRAM KALİTESİ (v7-138)
+
+Salim: "hevy uygulamasına programı yazabilir mi **program kalitesi de önemli**" → öncelik kaliteye verildi. Motor denetlendi, **5 gerçek zayıflık** çıktı, beşi de kapatıldı. Hevy'ye yazma ayrı pakete bırakıldı (aşağıda not).
+
+**1. Kademe sistemi (`tier`) — paketin çıkış noktası.** Eskiden tek `repMin/repMax` vardı ve `compound:true` olan HER hareket aynı aralığı alıyordu. Sonuç: atletik hedefte **Bulgar split squat 3-6 tekrar** yazıyordu — ana kaldırışla yardımcı hareket aynı muamele görüyordu.
+- Artık 3 kademe: **1** ana kaldırış (ağır, düşük tekrar) · **2** yardımcı bileşke (orta) · **3** izolasyon (yüksek).
+- Her hedefe kademe başına aralık: atletik `{1:[3,5], 2:[6,10], 3:[10,15]}`, kas `{1:[6,10], 2:[8,12], 3:[12,15]}` vb.
+- Kütüphane `PROGRAM_TIER1`/`TIER2` kümeleriyle işaretleniyor (dizi yeniden yazılmadı, sonradan normalize ediliyor). `repMin/repMax` kademe 1'in eşi olarak **geriye uyumlu korundu** — `advanceProgram` ve eski testler kullanıyor.
+- Yeni alan: `PROGRAM_UNI` — tek taraflı hareketler (`bulgarian`/`lunge`/`dbrow`/`bound`). Dövüş sporcusunda ayrı değer taşır.
+
+**2. `setsLow`/`setsHigh` artık KULLANILIYOR.** Alanlar aylardır tanımlıydı ama hiçbir yerde okunmuyordu; herkese sabit 4/3 set veriliyordu. Yeni `programBalanceVolume(p, G)` haftalık hacmi hedefin bandına oturtuyor: bandın **altında** kalan kasa set ekler, **üstünde** kalandan alır. **Hareket UYDURMAZ** — sadece programda zaten olan hareketin setini oynatır (teste bağlandı). Değişiklik olursa sebebiyle birlikte kullanıcıya yazılır.
+- Doğrulandı: atletikte hacim 8-14 bandına oturuyor (önce 4-19 arası savruluyordu).
+- 20 set tavanı üstte güvenlik ağı olarak duruyor.
+
+**3. Isınma reçetesi (yeni).** Seans kapasitesi hesabında 8 dk ısınmaya ayrılıyordu ama kullanıcıya **ne yapacağı hiç söylenmiyordu**. `programWarmup(d, G)` gün içeriğinden türetiyor: kardiyo → (atletikte) dinamik hareketlilik → alt/üst güne göre hazırlık → **o günün ana kaldırışına özel 2 ısınma seti** (adıyla). Günde `d.warmup[]`, kartta katlanır.
+- ⚠️ **Isınmaya sıçrama KONMAZ** — temas bütçesini sessizce şişirir. Teste bağlandı.
+
+**4. Kondisyon / aerobik taban (yeni).** Dövüş sporunda 3 raundu çıkarmak patlayıcılık kadar önemli, motor bunu hiç görmüyordu. `programConditioning(p)` dövüş gün sayısına bakar:
+- **≥3 gün dövüş → 0 seans.** "Aerobik tabanı zaten o sağlıyor, üstüne koşu eklemek toparlanmayı yer."
+- ≤2 gün → 1-2 düşük şiddetli seans.
+- **Girişim etkisi kuralı yazılı:** patlayıcı/ağır seanstan ÖNCE yapılmaz.
+- Motor kondisyon/teknik seansının **İÇERİĞİNE karışmaz** — o antrenörün işi (teste bağlandı).
+
+**5. Akıllı hareket seçimi.** Eskiden `havuz.find()` = "havuzdaki ilk uyan" → hep Bench Press çıkıyordu. Yeni `programPickScore(e, slot, ctx)`: ilk slot **ana kaldırış** ister (+45), sonraki slotlar yardımcı/izolasyona kayar, hafta içinde kullanılmamış hareket +20, **dövüş sporcusunda tek taraflı iş +12**, aynı kası o gün tekrar yüklemek −8. **Beraberlikte kütüphane sırası kazanır → seçim hâlâ DETERMİNİSTİK** (teste bağlandı).
+
+**Doğrulama:** yeni `tests/15-quality.test.js` **32 test** (5 başlığın hepsi + regresyonlar: yardımcı hareket ana kaldırış aralığını almaz, denge hareket uydurmaz, ısınmaya plyo girmez, çeşitlilik ≥12 hareket / aynı hareket ≤2 kez, determinizm, ekipman filtresi, Impeccable). **16 dosya toplam 353 test geçiyor**, tek kırmızı kasıtlı.
+**🔧 Bulunan yan bug:** `programBalanceVolume` hacmi kırpıyor ama **kullanıcıya söylemiyordu** — `12-program`'ın "hacim düşürüldü ama söylenmemiş" testi yakaladı. Not eklendi.
+**Cache:** v7-137 → **v7-138**
+
+### 📋 Hevy'ye program yazma — araştırıldı, YAPILABİLİR (sonraki paket)
+Hevy Public API (`api.hevyapp.com/docs`) gerekli her şeyi veriyor:
+- `POST /v1/routines` — rutin oluştur · `PUT /v1/routines/{id}` — hafta ilerleyince güncelle
+- `POST /v1/routine_folders` — "Aidan" klasörü
+- **`POST /v1/exercise_templates` — özel hareket oluştur.** Kritik: sağlık topu rotasyonel atışı, pogo gibi hareketler Hevy kütüphanesinde yok.
+- Alan eşleşmesi temiz: `rep_range:{start,end}` ↔ `repMin/repMax` · `rest_seconds` ↔ `G.restSec` · hareket başına `notes` (patlayıcı iş kuralı buraya) · `distance_meters` (sağlık topu) · `duration_seconds` (boyun izometriği)
+- ⚠️ `403` = rutin limiti dolu. Tüm API **Hevy Pro** ister (zaten bilinen engel).
+- **Mimari karar:** Hevy bir kayıt defteri, antrenör değil. Seans içi sıra Hevy'de sadece liste sırası olur, temas bütçesi hiç temsil edilemez. Doğru iş bölümü: **karar Aidan'da, uygulama kâğıdı Hevy'de.**
+
 ### 🔴 9 Ağustos 2026 — 🥊 ATLETİK KATMAN / PATLAYICILIK (v7-137)
 
 Salim: "kickboks ve ağırlık yapıcam, atletizm önemli patlayıcılık — iyi bilimsel program yapabilecek mi, araştırma seviyesi ne." **Dürüst cevap hayırdı.** Motor iyi bir salon şablonu üreticisiydi ama dövüş sporcusu için yanlış araçtı. Denetimde 4 gerçek eksik çıktı, dördü de kapatıldı.
