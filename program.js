@@ -26,7 +26,9 @@ const PROGRAM_LIMITS = {
   maxStrengthDays: 5,
   maxExercisesPerSession: 7,
   minRestDays: 1,
-  deloadAfterStallWeeks: 2,   // 2 hafta ilerleme yoksa hafifletme haftasi
+  deloadAfterStallWeeks: 2,   // 2 hafta ilerleme yoksa hafifletme haftasi (REAKTIF)
+  deloadEveryWeeks: 5,        // her 5. hafta PLANLI hafifletme — yorgunluk
+                              // performansi dusurene kadar BEKLEMEZ
   deloadVolumeFactor: 0.6,
 };
 
@@ -124,6 +126,7 @@ const PROGRAM_EXERCISES = [
   { id: 'bulgarian', tr: 'Bulgar Split Squat',       en: 'Bulgarian Split Squat',      muscle: 'quads', pattern: 'lunge', compound: true,  places: ['gym', 'home', 'bw'] },
   { id: 'lunge',     tr: 'Lunge',                    en: 'Lunge (Dumbbell)',           muscle: 'quads', pattern: 'lunge', compound: true,  places: ['gym', 'home', 'bw'] },
   { id: 'bwsquat',   tr: 'Vücut Ağırlığı Squat',     en: 'Squat (Bodyweight)',         muscle: 'quads', pattern: 'squat', compound: true,  places: ['home', 'bw'] },
+  { id: 'stepup',    tr: 'Step-Up (Kutuya Çıkış)',   en: 'Step Up',                    muscle: 'quads', pattern: 'lunge', compound: true,  places: ['gym', 'home', 'bw'] },
   { id: 'legext',    tr: 'Leg Extension',            en: 'Leg Extension (Machine)',    muscle: 'quads', pattern: 'iso',   compound: false, places: ['gym'] },
 
   // --- Arka bacak / kalca ---
@@ -193,9 +196,24 @@ const PROGRAM_TIER1 = new Set(['bench', 'dbbench', 'squat', 'legpress', 'rdl', '
   'ohp', 'dbohp', 'bbrow', 'seatedrow', 'pullup', 'chinup', 'latpull', 'hipthrust']);
 // Yardimci bileske: tek tarafli ya da vucut agirligi; orta tekrar.
 const PROGRAM_TIER2 = new Set(['incline', 'dip', 'pushup', 'invrow', 'pikepush', 'gobsquat',
-  'bulgarian', 'lunge', 'bwsquat', 'glutebr', 'closepush', 'dbrow']);
+  'bulgarian', 'lunge', 'bwsquat', 'glutebr', 'closepush', 'dbrow', 'stepup']);
 // Tek tarafli is: dovus sporcusunda ayri deger tasir (tekme, denge, asimetri).
-const PROGRAM_UNI = new Set(['bulgarian', 'lunge', 'dbrow', 'bound']);
+const PROGRAM_UNI = new Set(['bulgarian', 'lunge', 'dbrow', 'bound', 'stepup']);
+// ⚠️ HAREKET AILESI (10 Agu 2026) — ayni hareketin farkli aletle yapilan
+// versiyonlari. 'Romen Deadlift' ile 'Dambil Romen Deadlift' ayri id'ler ama
+// AYNI harekettir; motor bunu cesitlilik saniyordu. Aile ayni ise ceza agir.
+// Aileye yazilmayan hareket kendi basina bir ailedir (id = aile).
+// ⚠️ Aile SADECE "ayni hareket, farkli alet" demektir. Leg press bir squat
+// DEGILDIR (makine, farkli yuklenme, farkli stabilite) — ayri aile. Fazla genis
+// gruplamak havuzu tuketir ve motor cesitlilik uretemez hale gelir.
+const PROGRAM_FAMILY = {
+  rdl: 'rdl', dbrdl: 'rdl',                             // ayni hinge, bar vs dambil
+  squat: 'squat', gobsquat: 'squat', bwsquat: 'squat',  // ayni squat, yuk farkli
+  bench: 'bench', dbbench: 'bench',                     // ayni press, bar vs dambil
+  ohp: 'ohp', dbohp: 'ohp',                             // ayni omuz press
+  pullup: 'pullup', chinup: 'pullup',                   // ayni cekis, tutus farkli
+};
+function programFamily(e) { return PROGRAM_FAMILY[e.id] || e.id; }
 for (const e of PROGRAM_EXERCISES) {
   if (e.tier == null) e.tier = PROGRAM_TIER1.has(e.id) ? 1 : (PROGRAM_TIER2.has(e.id) ? 2 : 3);
   if (PROGRAM_UNI.has(e.id)) e.uni = true;
@@ -347,6 +365,8 @@ function buildProgram(cfg, workouts) {
   const gunler = programAssignDays(sd, fightDays);
   const havuz = programExercisePool(places, avoid);
   const kullanilan = new Set();
+  const kalipSayaci = {};   // 'hinge|1' -> kac kez kullanildi (hafta geneli)
+  const aileSayaci = {};    // 'rdl' -> kac kez (alet farki cesitlilik degil)
   const days = [];
   const uyarilar = [];
 
@@ -391,12 +411,16 @@ function buildProgram(cfg, workouts) {
       if (!adaylar.length) continue;
       let aday = null, enIyi = -Infinity;
       for (const e of adaylar) {
-        const sk = programPickScore(e, slot, { kullanilan, gunKas, athletic: !!G.athletic });
+        const sk = programPickScore(e, slot, { kullanilan, gunKas, kalipSayaci, aileSayaci, athletic: !!G.athletic });
         if (sk > enIyi) { enIyi = sk; aday = e; }
       }
       if (!aday) continue;
       kullanilan.add(aday.id);
       gunKas[aday.muscle] = (gunKas[aday.muscle] || 0) + 1;
+      const kAnahtar = aday.pattern + '|' + (aday.tier || 3);
+      kalipSayaci[kAnahtar] = (kalipSayaci[kAnahtar] || 0) + 1;
+      const kAile = programFamily(aday);
+      aileSayaci[kAile] = (aileSayaci[kAile] || 0) + 1;
       const tier = aday.tier || 3;
       const [tMin, tMax] = (G.tiers && G.tiers[tier]) || [G.repMin, G.repMax];
       secilenler.push({
@@ -485,6 +509,18 @@ function programPickScore(e, slot, ctx) {
   else s += tier === 3 ? 16 : (tier === 2 ? 14 : 8);
   // Cesitlilik: hafta icinde tekrarlanan hareketi geri plana at
   if (!ctx.kullanilan.has(e.id)) s += 20;
+  // ⚠️ ASIL CESITLILIK KALIP DUZEYINDE. Eskiden sadece id'ye bakiliyordu, o
+  // yuzden 'Romen Deadlift' ve 'Dambil Romen Deadlift' ayni haftaya birlikte
+  // giriyordu — ikisi de ayni hareket, sadece alet farkli. Ayni KALIP + ayni
+  // KADEME tekrari cezalandirilir; farkli kademe (agir squat + tek bacak
+  // squat) serbest, cunku onlar gercekten farkli uyaran.
+  // Ayni AILE (ayni hareketin baska aleti) — agir ceza, gercek tekrar.
+  const aile = programFamily(e);
+  s -= ((ctx.aileSayaci && ctx.aileSayaci[aile]) || 0) * 40;
+  // Ayni KALIP + KADEME — hafif ceza. Farkli kademe serbest: agir bilateral
+  // squat ile tek bacak is gercekten farkli uyarandir.
+  const anahtar = e.pattern + '|' + tier;
+  s -= ((ctx.kalipSayaci && ctx.kalipSayaci[anahtar]) || 0) * 14;
   // Dovus sporcusu: tek bacak kuvveti ve asimetri kontrolu ayri deger tasir
   if (ctx.athletic && e.uni) s += 12;
   // Ayni kasi o gun ust uste yuklemeyi cezalandir
@@ -545,9 +581,23 @@ function programConditioning(p) {
  * Bu fonksiyon bandin ALTINDA kalan kasa set ekler, USTUNDE kalandan alir.
  * Hareket UYDURMAZ — sadece programda zaten olan hareketin setini oynatir.
  */
+// Alt govde kaslari — dovus antrenmani bunlari zaten yukluyor.
+const PROGRAM_ALT_KAS = new Set(['quads', 'hams', 'glutes', 'calves']);
+// ⚠️ Dovus gunu basina alt vucut set indirimi. Temas butcesinde kickboksu
+// sayip kuvvet hacminde saymamak TUTARSIZDI: tekme atmak bacak isidir.
+// 1.5 set/gun LITERATUR DEGERI DEGIL, muhafazakar tahmin.
+const FIGHT_LEG_SETS = 1.5;
+
 function programBalanceVolume(p, G) {
   const low = Number(G.setsLow) || 0, high = Number(G.setsHigh) || 99;
-  const ATLA = new Set(['neck', 'core', 'calves']);   // sabit/kucuk hacimli bolgeler
+  const dovus = (Array.isArray(p.fightDays) ? p.fightDays : []).length;
+  const altIndirim = Math.round(dovus * FIGHT_LEG_SETS);
+  // Alt vucut bandi dovusle daralir; alt sinirin altina DUSMEZ.
+  const altHigh = Math.max(low, high - altIndirim);
+  const bandHigh = (m) => (PROGRAM_ALT_KAS.has(m) ? altHigh : high);
+  // Ayri hacim hedefi DEGIL: boyun sabit, core/baldir kucuk, kalca ise squat ve
+  // hinge tarafindan zaten dolayli calisiyor; biseps/triseps cekis-itisten payini alir.
+  const ATLA = new Set(['neck', 'core', 'calves', 'glutes', 'biceps', 'triceps']);
   const hareketler = (m) => {
     const out = [];
     for (const d of p.days || []) {
@@ -561,7 +611,7 @@ function programBalanceVolume(p, G) {
     const kaslar = Object.keys(sets).filter(m => !ATLA.has(m));
     const dusuk = kaslar.filter(m => sets[m] < low)
       .sort((a, b) => sets[a] - sets[b])[0];
-    const yuksek = kaslar.filter(m => sets[m] > high)
+    const yuksek = kaslar.filter(m => sets[m] > bandHigh(m))
       .sort((a, b) => sets[b] - sets[a])[0];
     if (!dusuk && !yuksek) break;
     if (dusuk) {
@@ -587,8 +637,11 @@ function programBalanceVolume(p, G) {
   // ⚠️ Sessiz kalma: hacim degistiyse SEBEBIYLE birlikte soyle.
   const ad = (m) => PROGRAM_MUSCLES[m] || m;
   if (kirpildi.length) {
+    const altVar = kirpildi.some(m => PROGRAM_ALT_KAS.has(m));
     p.notes.push('Haftalık set tavanı aşılmasın diye hacim düşürüldü: ' +
-      kirpildi.map(ad).join(', ') + '. Hedefin bandı ' + low + '-' + high + ' set.');
+      kirpildi.map(ad).join(', ') + '. Hedefin bandı ' + low + '-' + high + ' set.' +
+      ((altVar && altIndirim) ? ' Alt vücutta tavan ' + altHigh + ' sete çekildi — ' +
+        'haftada ' + dovus + ' gün dövüş antrenmanın bacağı zaten yüklüyor (tekme bacak işidir).' : ''));
   }
   if (eklendi.length) {
     p.notes.push('Şu kaslarda haftalık hacim hedefin alt bandının (' + low + ' set) ' +
@@ -928,6 +981,19 @@ function advanceProgram(p, workouts, todayStr) {
     return yeni;
   }
 
+  // 1b) ⚠️ GECEN HAFTA HAFIFLETME IDIYSE HACMI GERI YUKLE.
+  // Deload GECICIDIR. Bu blok olmadan set sayisi her deload'da x0.6 olup
+  // bir daha yukselmiyordu — program haftalar icinde sessizce eriyordu
+  // (10 haftada 74 -> 50 set ve orada kaliyordu).
+  if (p.deload) {
+    for (const d of yeni.days) {
+      for (const e of d.exercises || []) {
+        if (e.setsBase != null) { e.sets = e.setsBase; e.setsBase = null; }
+      }
+    }
+    degisiklikler.push('hafifletme bitti — hacim normale döndü');
+  }
+
   // 2) Egzersiz bazinda ilerleme
   let ilerleyen = 0;
   const G = PROGRAM_GOALS[p.goal] || PROGRAM_GOALS.kas;
@@ -976,19 +1042,36 @@ function advanceProgram(p, workouts, todayStr) {
   }
   if (patNot.length) degisiklikler.push.apply(degisiklikler, patNot.slice(0, 3));
 
-  // 3) Durgunluk / deload
+  // 3) Deload — İKİ tetikleyici var, ikisi de aynı hafifletmeyi uygular.
+  //    a) PLANLI: her N. hafta. Yorgunluk birikimi performans düşene KADAR
+  //       beklenmez; okul + dövüş + ağırlık yükünde bu şart.
+  //    b) REAKTİF: 2 hafta üst üste ilerleme yoksa.
+  const gelecekHafta = (Number(p.week) || 1) + 1;
+  const planliDeload = PROGRAM_LIMITS.deloadEveryWeeks > 0 &&
+    gelecekHafta % PROGRAM_LIMITS.deloadEveryWeeks === 0;
   yeni.stall = ilerleyen > 0 ? 0 : (Number(p.stall) || 0) + 1;
-  if (yeni.stall >= PROGRAM_LIMITS.deloadAfterStallWeeks) {
+  const reaktifDeload = yeni.stall >= PROGRAM_LIMITS.deloadAfterStallWeeks;
+  // ⚠️ ARKA ARKAYA IKI HAFIFLETME OLMAZ. Planli ve reaktif tetikleyiciler
+  // ust uste denk gelebiliyordu (9. hafta durgunluk + 10. hafta planli);
+  // sonuc iki hafta boyunca dusuk hacim = gereksiz gerileme.
+  if ((planliDeload || reaktifDeload) && !p.deload) {
     for (const d of yeni.days) {
       for (const e of d.exercises || []) {
+        if (e.setsBase == null) e.setsBase = e.sets;   // normal hacmi sakla
         e.sets = Math.max(2, Math.round(e.sets * PROGRAM_LIMITS.deloadVolumeFactor));
       }
     }
     yeni.stall = 0;
     yeni.deload = true;
-    degisiklikler.push('hafifletme haftası — set sayısı düşürüldü');
+    yeni.deloadReason = planliDeload ? 'planli' : 'durgunluk';
+    degisiklikler.push(planliDeload
+      ? 'PLANLI hafifletme haftası (her ' + PROGRAM_LIMITS.deloadEveryWeeks +
+        '. hafta) — set sayısı düşürüldü. Ağırlığı düşürme, seti azalt; ' +
+        'amaç toparlanmak, gerilemek değil.'
+      : 'hafifletme haftası — 2 haftadır ilerleme yok, set sayısı düşürüldü');
   } else {
     yeni.deload = false;
+    yeni.deloadReason = null;
   }
 
   yeni.week = (Number(p.week) || 1) + 1;

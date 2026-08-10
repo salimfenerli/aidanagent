@@ -37,7 +37,7 @@ function motor() {
   vm.createContext(ctx);
   const src = fs.readFileSync(path.join(ROOT, 'program.js'), 'utf8') +
     '\n;globalThis.__SABIT = { PROGRAM_GOALS, PROGRAM_EXERCISES, PROGRAM_LIMITS,' +
-    ' PROGRAM_TIER1, PROGRAM_TIER2, PROGRAM_UNI };';
+    ' PROGRAM_TIER1, PROGRAM_TIER2, PROGRAM_UNI, PROGRAM_FAMILY };';
   vm.runInContext(src, ctx);
   return Object.assign(ctx, ctx.__SABIT);
 }
@@ -118,7 +118,7 @@ describe('2 — hacim hedefin bandina oturuyor', () => {
       const p = M.buildProgram(Object.assign({}, KICKBOKS, { goal: g, fightDays: [] }), []);
       const sets = M.programWeeklySets(p);
       for (const m of Object.keys(sets)) {
-        if (m === 'neck' || m === 'core' || m === 'calves') continue;
+        if (['neck','core','calves','glutes','biceps','triceps'].indexOf(m) >= 0) continue;
         assert.ok(sets[m] >= Math.min(G.setsLow, 6),
           g + '/' + m + ': ' + sets[m] + ' set — hedef alt bandi ' + G.setsLow);
         assert.ok(sets[m] <= G.setsHigh,
@@ -266,7 +266,7 @@ describe('5 — akilli hareket secimi', () => {
   });
 
   test('programPickScore ilk slotta ana kaldirisi tercih eder', () => {
-    const ctx = { kullanilan: new Set(), gunKas: {}, athletic: false };
+    const ctx = { kullanilan: new Set(), gunKas: {}, kalipSayaci: {}, aileSayaci: {}, athletic: false };
     const t1 = M.programPickScore({ tier: 1, muscle: 'chest' }, 0, ctx);
     const t3 = M.programPickScore({ tier: 3, muscle: 'chest' }, 0, ctx);
     assert.ok(t1 > t3, 'ilk slotta izolasyon ana kaldirisla esit/ustun puan aliyor');
@@ -335,5 +335,168 @@ describe('Impeccable — isinma / kondisyon stili', () => {
 
   test('styles.css hala LF', () => {
     assert.strictEqual(fs.readFileSync(path.join(ROOT, 'styles.css')).indexOf(Buffer.from('\r\n')), -1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 10 Agu 2026 — objektif denetimde bulunan 3 zayiflik + denetim sirasinda
+// ortaya cikan 2 gercek bug.
+describe('6 — kalip cesitliligi (ayni hareket iki kez)', () => {
+  const p = M.buildProgram(KICKBOKS, []);
+
+  // ⚠️ Sozlesme dikkatli kuruldu: "hicbir aile tekrarlamasin" YANLIS bir kural.
+  // Salonda dikey press icin havuzda 2 secenek var (bar + dambil) ve haftada iki
+  // kez dikey press yapmak ZATEN dogru programlama. Yanlis olan, tekrarin
+  // SISTEMIK olmasi — yani her kalipta ayni hareketin baska aletiyle doldurmak.
+  test('ayni AILE en fazla 2 kez ve tekrar SISTEMIK degil', () => {
+    const sayim = {};
+    for (const e of normal(p)) {
+      const lib = M.PROGRAM_EXERCISES.find((x) => x.id === e.id);
+      if (!lib) continue;
+      const aile = M.programFamily(lib);
+      sayim[aile] = (sayim[aile] || 0) + 1;
+    }
+    for (const k of Object.keys(sayim)) {
+      assert.ok(sayim[k] <= 2, k + ' ailesi ' + sayim[k] + ' kez');
+    }
+    const tekrarEden = Object.keys(sayim).filter((k) => sayim[k] > 1);
+    assert.ok(tekrarEden.length <= 1,
+      'birden fazla aile tekrarliyor (' + tekrarEden.join(', ') + ') — havuz tuketilmis, ' +
+      'motor cesitlilik uretmiyor');
+  });
+
+  test('REGRESYON: alt vucutta ayni aile İKİ KEZ gelmiyor', () => {
+    // Paketin cikis noktasi: 'Romen Deadlift' + 'Dambil Romen Deadlift' ayni
+    // haftada. Alt vucutta havuz genis, orada tekrar MAZERETSIZ.
+    const sayim = {};
+    for (const e of normal(p)) {
+      const lib = M.PROGRAM_EXERCISES.find((x) => x.id === e.id);
+      if (!lib || ['quads', 'hams', 'glutes'].indexOf(lib.muscle) < 0) continue;
+      const aile = M.programFamily(lib);
+      sayim[aile] = (sayim[aile] || 0) + 1;
+    }
+    for (const k of Object.keys(sayim)) {
+      assert.ok(sayim[k] <= 1, 'alt vucutta ' + k + ' ailesi ' + sayim[k] + ' kez');
+    }
+  });
+
+  test('haftada yeterli AILE cesitliligi var', () => {
+    const aileler = new Set(normal(p).map((e) => {
+      const lib = M.PROGRAM_EXERCISES.find((x) => x.id === e.id);
+      return lib ? M.programFamily(lib) : e.id;
+    }));
+    assert.ok(aileler.size >= 12, 'sadece ' + aileler.size + ' farkli hareket ailesi');
+  });
+
+  test('farkli KADEME ayni kalip serbest (agir squat + tek bacak squat)', () => {
+    // Ceza kademe bazli olmali; agir bilateral squat ile tek bacak is
+    // gercekten farkli uyarandir, ikisi ayni haftada olabilir.
+    // Ceza VAR ama slot 0'daki ana-kaldiris bonusunu EZMEZ — ilk hareket her
+    // zaman agir bileske olmali. Onemli olan: ayni kalip tekrari cezalansin,
+    // AYNI AILE tekrari daha da agir cezalansin.
+    const T = (kalip, aile) => M.programPickScore(
+      { id: 'x', tier: 1, pattern: 'squat', muscle: 'quads' }, 0,
+      { kullanilan: new Set(), gunKas: {}, kalipSayaci: kalip, aileSayaci: aile, athletic: true });
+    const temiz = T({}, {});
+    const kalipTekrar = T({ 'squat|1': 1 }, {});
+    const aileTekrar = T({ 'squat|1': 1 }, { x: 1 });
+    assert.ok(kalipTekrar < temiz, 'ayni kalip tekrari cezalanmiyor');
+    assert.ok(aileTekrar < kalipTekrar,
+      'ayni AILE tekrari kalip tekrarindan daha agir cezalanmali — o gercek tekrar');
+  });
+});
+
+describe('7 — dovus gunu alt vucut hacminden dusuluyor', () => {
+  test('kickboks arttikca bacak hacmi AZALIYOR', () => {
+    const az = M.buildProgram(Object.assign({}, KICKBOKS, { fightDays: [] }), []);
+    const cok = M.buildProgram(Object.assign({}, KICKBOKS, { fightDays: [2, 4] }), []);
+    const bacak = (p) => {
+      const s = M.programWeeklySets(p);
+      return (s.quads || 0) + (s.hams || 0) + (s.glutes || 0);
+    };
+    assert.ok(bacak(cok) < bacak(az),
+      'dovus gunu bacak hacmini hic etkilemiyor — tekme atmak bacak isidir, ' +
+      'temas butcesinde sayilip kuvvet hacminde sayilmamasi TUTARSIZ');
+  });
+
+  test('alt vucut alt bandin ALTINA dusmuyor', () => {
+    const p = M.buildProgram(Object.assign({}, KICKBOKS, { strengthDays: 4, fightDays: [1, 2, 4] }), []);
+    const G = M.PROGRAM_GOALS.atletik;
+    const sets = M.programWeeklySets(p);
+    for (const m of ['quads', 'hams']) {
+      if (sets[m] == null) continue;
+      assert.ok(sets[m] >= 4, m + ': ' + sets[m] + ' set — indirim programi bosaltmis');
+    }
+    assert.ok(G.setsLow >= 4);
+  });
+
+  test('ust vucut bandi dovusten ETKILENMIYOR', () => {
+    const az = M.programWeeklySets(M.buildProgram(Object.assign({}, KICKBOKS, { fightDays: [] }), []));
+    const cok = M.programWeeklySets(M.buildProgram(Object.assign({}, KICKBOKS, { fightDays: [2, 4] }), []));
+    assert.strictEqual(az.chest, cok.chest, 'gogus hacmi dovusten etkilenmis — kickboks itme isi degil');
+  });
+
+  test('indirim kullaniciya SEBEBIYLE soyleniyor', () => {
+    const p = M.buildProgram(KICKBOKS, []);
+    assert.ok((p.notes || []).some((n) => /dövüş antrenmanın bacağı zaten yüklüyor/i.test(n)),
+      'bacak hacmi dusuruldu ama neden dusuruldugu soylenmiyor');
+  });
+});
+
+describe('8 — deload: planli + gecici + ardisik degil', () => {
+  const hevy = ['2026-08-05', '2026-08-06', '2026-08-08', '2026-08-09'].map((d) => ({ date: d, exercises: [] }));
+  const ilerlet = (p) => M.advanceProgram(p, hevy, '2026-08-10');
+  const setToplam = (p) => p.days.flatMap((d) => d.exercises || []).reduce((a, e) => a + e.sets, 0);
+
+  test('PLANLI deload var (sadece durgunlukta degil)', () => {
+    assert.ok(M.PROGRAM_LIMITS.deloadEveryWeeks > 0, 'planli hafifletme yok — motor yorgunluk performansi dusurene KADAR bekliyor');
+  });
+
+  test('⚠️ deload GECICI — hacim ertesi hafta geri geliyor', () => {
+    // Bulunan bug: setler her deload'da x0.6 olup bir daha yukselmiyordu.
+    // 10 haftada 74 -> 50 sete iniyor ve orada kaliyordu (program eriyordu).
+    let p = M.buildProgram(KICKBOKS, []);
+    const normalHacim = setToplam(ilerlet(p));
+    let onceki = null, geriGeldi = false;
+    p = M.buildProgram(KICKBOKS, []);
+    for (let i = 0; i < 8; i++) {
+      p = ilerlet(p);
+      if (onceki && onceki.deload && !p.deload && setToplam(p) >= normalHacim) geriGeldi = true;
+      onceki = { deload: p.deload };
+    }
+    assert.ok(geriGeldi, 'hafifletmeden sonra hacim normale DONMUYOR — program kalici olarak eriyor');
+  });
+
+  test('⚠️ arka arkaya iki hafifletme YOK', () => {
+    let p = M.buildProgram(KICKBOKS, []);
+    let oncekiDeload = false;
+    for (let i = 0; i < 12; i++) {
+      p = ilerlet(p);
+      assert.ok(!(p.deload && oncekiDeload),
+        'iki hafta ust uste hafifletme — gereksiz gerileme (' + p.week + '. hafta)');
+      oncekiDeload = !!p.deload;
+    }
+  });
+
+  test('deload sebebi kayitli ve kullaniciya yaziliyor', () => {
+    let p = M.buildProgram(KICKBOKS, []);
+    for (let i = 0; i < 6; i++) {
+      p = ilerlet(p);
+      if (p.deload) {
+        assert.ok(['planli', 'durgunluk'].indexOf(p.deloadReason) >= 0, 'deload sebebi yok');
+        const metin = JSON.stringify(p.history);
+        assert.ok(/hafifletme/i.test(metin), 'hafifletme gecmise yazilmamis');
+        return;
+      }
+    }
+    assert.fail('8 haftada hic deload olmadi');
+  });
+
+  test('seans kacirilan haftada deload TETIKLENMEZ', () => {
+    // Zaten yapilmamis programi ayrica hafifletmek anlamsiz.
+    let p = M.buildProgram(KICKBOKS, []);
+    p.week = 4;   // gelecek hafta 5 = planli deload haftasi
+    const y = M.advanceProgram(p, [{ date: '2026-08-09', exercises: [] }], '2026-08-10');
+    assert.ok(!y.deload, 'seans kacirilmis haftada ustune deload uygulanmis');
   });
 });

@@ -19,6 +19,31 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 10 Ağustos 2026 — 🔬 OBJEKTİF DENETİM + BİLİMSEL ŞARTNAME (v7-143)
+
+Salim: "sen objektif incele şimdi bu program iyi mi" → üretilen gerçek program bir antrenör gözüyle denetlendi. **Not verildi: 6.5/10.** 3 zayıflık bulundu, düzeltilirken **2 gerçek bug** daha ortaya çıktı. Ardından "bilime uygun bir how-to manuel" istendi → **`ANTRENMAN-BILIMI.md`** yazıldı.
+
+**📄 `ANTRENMAN-BILIMI.md` — motorun şartnamesi.** Kod artık bu dokümanın uygulaması; bir kural değişecekse önce orası tartışılır. Her kural **kanıt seviyesiyle** işaretli: 🟢 yerleşik bilim · 🟡 makul ama tartışmalı · 🔴 **tahmin** (literatür değeri değil). `fightEquiv: 40` ve `FIGHT_LEG_SETS: 1.5` açıkça 🔴 işaretli. Dokümanda ayrıca **"motor bunları YAPAMAZ"** bölümü var (kişiselleştirme yok, RIR/RPE yok, periyodizasyon yok, teknik denetlenmiyor).
+
+**1. Hareket AİLESİ (`PROGRAM_FAMILY`).** Denetimin çıkış noktası: `Romen Deadlift` ve `Dambıl Romen Deadlift` aynı haftaya birlikte giriyordu. Ayrı `id`'ler olduğu için motor bunu "çeşitlilik" sanıyordu — oysa aynı hareket, farklı alet. Puanlamaya **aile tekrarı −40** eklendi (kalıp+kademe tekrarı −14).
+- ⚠️ **Fazla geniş gruplamak da hata:** ilk denemede `legpress` squat ailesine konmuştu — leg press bir squat DEĞİLDİR (makine, farklı yüklenme/stabilite). Aile listesi bilinçli olarak dar: yalnız gerçek "aynı hareket, farklı alet" çiftleri.
+- **Aile tekrarı her zaman kötü değil:** salonda dikey press için havuzda 2 seçenek var ve haftada iki kez dikey press ZATEN doğru programlama. Test sözleşmesi buna göre kuruldu: aynı aile ≤2 kez · tekrar eden aile ≤1 · **alt vücutta hiç tekrar yok** (orada havuz geniş, tekrar mazeretsiz).
+- Havuza **step-up** eklendi (tek taraflı üçüncü seçenek), `lunge`/`bulgarian` ayrı aileye çıkarıldı — statik split ile dinamik adım farklı hareketler.
+
+**2. Dövüş günü artık KUVVET hacminden de düşülüyor (`FIGHT_LEG_SETS: 1.5`).** Temas bütçesinde kickboksu sayıp kuvvet hacminde saymamak **tutarsızdı** — tekme atmak bacak işidir. 2 gün dövüşte alt vücut tavanı **14 → 11 sete** iniyor. Üst vücut etkilenmiyor (kickboks itiş/çekiş işi değil). Alt bandın altına inmez. Sebep kullanıcıya yazılıyor.
+
+**3. PLANLI deload (`deloadEveryWeeks: 5`).** Motor sadece reaktifti — 2 hafta durgunluk olana kadar bekliyordu, yani **yorgunluk performansı düşürene kadar.** Okul + dövüş + ağırlık yükünde bu geç. Artık her 5. hafta planlı hafifletme var.
+
+**🔧 Düzeltme sırasında bulunan 2 GERÇEK BUG:**
+- **Deload kalıcı hacim kaybı yapıyordu.** `set × 0.6` uygulanıyor ama bir daha yükselmiyordu → 10 haftalık simülasyonda **74 → 50 set ve orada kalıyordu**; program sessizce eriyordu. Artık normal hacim `setsBase`'de saklanıp ertesi hafta geri geliyor.
+- **Arka arkaya iki deload olabiliyordu** (9. hafta durgunluk + 10. hafta planlı) → iki hafta düşük hacim = gereksiz gerileme. `!p.deload` koruması eklendi.
+- Ayrıca: seans kaçırılan haftada deload tetiklenmiyor (zaten yapılmamış programı hafifletmek anlamsız).
+
+**🔧 EOL kazası yakalandı:** `PROGRAM_FAMILY` bloğu ilk yazımda **LF** olarak girmişti (dosya CRLF) — 15 satır karışık EOL. Tüm dosya normalize edildi. **Ders: Python ile blok eklerken `.replace('\n','\r\n')` unutulursa sessizce karışır; yazımdan sonra `b.count(b'\n')==b.count(b'\r\n')` ile doğrula.**
+
+**Doğrulama:** `tests/15-quality.test.js` 32 → **45 test** (aile çeşitliliği 4 · dövüş→bacak mahsubu 4 · deload 5 — planlı var, geçici, ardışık değil, sebep kayıtlı, kaçırılan haftada yok). **18 dosya toplam 440 test geçiyor**, tek kırmızı kasıtlı.
+**Cache:** v7-142 → **v7-143**
+
 ### 🔴 9 Ağustos 2026 — 🏋️ HEVY'YE PROGRAM YAZMA (v7-141)
 
 Salim: "hevy pro var zaten, uygulama hevy içine program yazabilir mi." Evet — `POST /hevy-routines` uç noktası eklendi.
