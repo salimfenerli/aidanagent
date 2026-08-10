@@ -33,6 +33,7 @@ INCLUDE = [
     ("stocks.js", "/stocks.js"),
     ("ui.js", "/ui.js"),
     ("program.js", "/program.js"),
+    ("nutrition.js", "/nutrition.js"),
     ("styles.css", "/styles.css"),
     ("404.html", "/404.html"),
     ("sw.js", "/sw.js"),

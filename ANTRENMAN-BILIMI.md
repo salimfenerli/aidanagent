@@ -252,6 +252,63 @@ Hepsi motorda zorlanıyor, her biri ayrı teste bağlı:
 
 ---
 
+## 12. Beslenme 🟡
+
+`nutrition.js` ayrı bir motordur, aynı ilkelerle çalışır: kural tabanlı, deterministik, AI yok.
+
+### 🔴 KAPSAM SINIRI — en önemli karar
+
+**Bu bir kilo verme aracı değildir ve olamaz.** Kullanıcı 16 yaşında, büyüme döneminde, haftada 6 gün antrenman yapıyor. Bu profilde asıl risk **az yemektir**.
+
+Motor yalnızca iki hedef tanır: **koru** ve **kas** (yağsız kazanım). Kalori açığı, sıklet düşürme, vücut yağ oranı hedefi yok — arayüzde seçenek olarak bile bulunmuyor. `nutTargets` hiçbir koşulda BMR'nin altına inmez. Sıklet düşürmek gerekiyorsa bu antrenör + diyetisyen işidir.
+
+### BMR — yaşa göre denklem 🟢
+
+Mifflin-St Jeor **19-78 yaş** aralığında doğrulanmıştır; ergende sapar. 18 yaş altı için **Schofield** (yaş gruplu) kullanılıyor. 16 yaş / 70 kg örneğinde fark ~160 kcal — küçük değil.
+
+### Enerji: tek "aktivite seviyesi" yok 🟢
+
+Klasik hesaplayıcılar tek bir aktivite katsayısı sorar. Ama antrenman günü ile dinlenme günü **aynı kalori değildir**. Katsayı programdan türetilir:
+
+| Gün | PAL | 70 kg örneği |
+|---|---|---|
+| Dinlenme | 1.4 | 2654 kcal |
+| Ağırlık | 1.6 | 3034 kcal |
+| Dövüş | 1.75 | 3318 kcal |
+| Ağırlık + dövüş | 1.9 | 3602 kcal |
+
+### Makrolar
+
+| Makro | Kural | Kanıt |
+|---|---|---|
+| Protein | 1.8 g/kg (koru) · 2.0 (kas). Tavan 2.5 | 🟢 |
+| Yağ | %27 kcal, **taban 0.8 g/kg** (hormonal sağlık) — hangisi büyükse | 🟢 |
+| Karbonhidrat | Kalan. Antrenman gününde doğal olarak yüksek | 🟢 |
+| Su | 35 ml/kg + seans başına 600 ml | 🟡 |
+| Fazla (kas hedefi) | +350 kcal — büyük fazla yağ olarak birikir | 🟡 |
+
+### Protein dağılımı 🟢
+
+Toplam kadar **dağılım** da önemli. Öğün başına 0.25-0.40 g/kg bandı kas protein sentezini maksimuma çıkarır; günün tamamını tek öğüne yığmak aynı sonucu vermez.
+
+⚠️ Bu bant bir **rehberdir, kırpma kuralı değil**. Öğün hedefi bantla kırpılırsa 4 × tavan < günlük hedef olur ve plan sessizce eksik protein verir. Motor proteini eşit böler, bandı bilgi olarak gösterir.
+
+### Karbonhidrat zamanlaması 🟡
+
+- Antrenmandan 1-3 saat önce: karbonhidrat + protein, yağ düşük
+- Sonrasında 1-2 saat içinde: protein + karbonhidrat
+- ⚠️ **"30 dakikalık anabolik pencere" abartıdır** — protein için saatlerce süre var. Karbonhidratta zamanlama gerçekten önemli, çünkü glikojen bir sonraki seansın yakıtı.
+- Dövüş gününde karbonhidrat kısılmaz — yorgunluğun en sık sebebi az karbonhidrattır, az protein değil.
+
+### Örnek gün
+
+Türk yemeklerinden (410 besinlik veritabanı) kurulur: her öğünde bir **protein çapası** + bir **karbonhidrat çapası** + sabit ekler. Çapalar hedefi tutturacak şekilde ölçeklenir.
+
+Üç kural motorda zorlanıyor:
+1. **Çapa, şablonun en protein yoğun kalemi olmalı.** Kefir (6 g/bardak) çapa yapılınca motor "4 bardak kefir" yazıyordu — teknik olarak doğru, pratikte saçma.
+2. **`adet` birimli besinler tam sayı.** 1.5 yumurta olmaz.
+3. **Gün toplamı hedefe çekilir.** Türk mutfağında karbonhidrat kaynakları da protein taşır (bulgur 5 g, pilav 4 g); öğün öğün hesap tutarken gün toplamı hedefi %30 aşıyordu.
+
 ## 12. Bilinen sınırlar — motor bunları YAPAMAZ
 
 Dürüstlük bölümü. Bunlar eksiklik olarak biliniyor:

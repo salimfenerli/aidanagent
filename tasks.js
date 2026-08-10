@@ -29,11 +29,13 @@ async function showTab(name, btn) {
   toggleAppMenu(false);
   // --- Tembel modul: sekme ilk acilista indirilir (ilk yukleme 55 KB gzip hafifledi) ---
   if (name === 'stocks' || name === 'diet') {
-    const mod = name === 'stocks' ? 'stocks' : 'program';
-    if (!moduleLoaded(mod)) {
+    // Diyet sekmesi İKİ modül ister: antrenman programı + beslenme planı.
+    const modlar = name === 'stocks' ? ['stocks'] : ['program', 'nutrition'];
+    const eksik = modlar.filter(m => !moduleLoaded(m));
+    if (eksik.length) {
       setModuleLoading(name, true);
-      try { await loadModule(mod); }
-      catch (e) { setModuleLoading(name, false, mod); return; }
+      try { await Promise.all(eksik.map(m => loadModule(m))); }
+      catch (e) { setModuleLoading(name, false, eksik[0]); return; }
       setModuleLoading(name, false);
     }
     // Kullanici beklerken baska sekmeye gectiyse render etme
@@ -60,7 +62,7 @@ async function showTab(name, btn) {
   if (name === 'tasks') { renderCountdowns(); renderSchool(); if (typeof renderDailyScore === 'function') renderDailyScore(); }
   if (name === 'chat') { renderChatMessages(); setTimeout(() => { const ci = document.getElementById('chatInput'); if (ci) ci.focus(); }, 60); }
   if (name === 'plan') renderDayPlan();
-  if (name === 'diet') { _dietDate = null; renderDiet(); renderHealthCoach(); renderProgram(); }  // koç şeridi: uyku+spor+beslenme desenleri
+  if (name === 'diet') { _dietDate = null; renderDiet(); renderHealthCoach(); renderProgram(); renderNutrition(); }  // koç şeridi: uyku+spor+beslenme desenleri
   // Borsa sekmesinden çıkınca canlı güncellemeyi durdur (batarya/kota)
   if (name !== 'stocks') stopStockAutoRefresh();
   if (name === 'stocks') {

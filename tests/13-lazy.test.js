@@ -66,17 +66,19 @@ describe('tembel yukleme sozlesmesi', () => {
     const govde = tasks.slice(tasks.indexOf('async function showTab'));
     const son = govde.indexOf('\n}');
     const blok = govde.slice(0, son);
-    assert.ok(/await loadModule\(/.test(blok), 'showTab modulu beklemiyor');
+    assert.ok(/loadModule\(/.test(blok) && /await /.test(blok), 'showTab modulu beklemiyor');
     // Borsa render'i modul yuklendikten SONRA cagrilmali
-    assert.ok(blok.indexOf('await loadModule(') < blok.indexOf('renderStocks()'),
+    assert.ok(blok.indexOf('loadModule(') < blok.indexOf('renderStocks()'),
       'renderStocks modul yuklenmeden cagriliyor — "not defined" ile patlar');
+    // Diyet sekmesi IKI modul ister (program + nutrition)
+    assert.ok(/'program', 'nutrition'/.test(blok), 'diyet sekmesi beslenme modulunu yuklemiyor');
   });
 
-  test('LAZY_MODULES tam olarak stocks + program + supabase', () => {
-    const blok = /const LAZY_MODULES = \{([^}]*)\}/.exec(core);
+  test('LAZY_MODULES tam olarak stocks + program + nutrition + supabase', () => {
+    const blok = /const LAZY_MODULES = \{([\s\S]*?)\};/.exec(core);
     assert.ok(blok, 'LAZY_MODULES okunamadi');
     const anahtarlar = [...blok[1].matchAll(/(\w+)\s*:/g)].map((m) => m[1]).sort();
-    assert.deepStrictEqual(anahtarlar, ['program', 'stocks', 'supabase'],
+    assert.deepStrictEqual(anahtarlar, ['nutrition', 'program', 'stocks', 'supabase'],
       'modul listesi degisti — sw.js/deploy.py/Actions paths da guncellendi mi?');
   });
 });
@@ -280,7 +282,7 @@ describe('ilk yukleme butcesi', () => {
 
   test('tembel moduller butceye DAHIL DEGIL (gercekten ayrildilar)', () => {
     const statik = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1].replace(/^\//, ''));
-    for (const m of ['stocks.js', 'program.js', 'supabase.js']) {
+    for (const m of ['stocks.js', 'program.js', 'supabase.js', 'nutrition.js']) {
       assert.ok(!statik.includes(m), m + ' hala statik');
     }
     assert.ok(gz('stocks.js') + gz('program.js') + gz('supabase.js') > 80 * 1024,

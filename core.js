@@ -7,7 +7,8 @@
 // stocks/program: SEKME acilinca iner (showTab).
 // supabase: init'te iner ama <script> etiketi DEGIL — 50 KB gzip'i kritik
 // yoldan cikarir. Ilk cizim beklemez; auth birkac yuz ms sonra oturur.
-const LAZY_MODULES = { stocks: '/stocks.js', program: '/program.js', supabase: '/supabase.js' };
+const LAZY_MODULES = { stocks: '/stocks.js', program: '/program.js',
+  nutrition: '/nutrition.js', supabase: '/supabase.js' };
 const _moduleLoads = {};
 function moduleLoaded(name) { return !!(_moduleLoads[name] && _moduleLoads[name]._done); }
 function loadModule(name) {

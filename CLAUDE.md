@@ -19,6 +19,37 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 10 Ağustos 2026 — 🥗 BESLENME PLANLAYICI (v7-144)
+
+Salim: "bana diyet de yazabilsin." Yeni **7. modül `nutrition.js`** (tembel yüklenir, Diyet sekmesinde `program.js` ile birlikte iner).
+
+**🔴 KAPSAM SINIRI — bu paketin en önemli kararı.** Diyet yazmak, antrenman programı yazmaktan **farklı bir risk sınıfı.** Kullanıcı 16 yaşında, büyüme döneminde, haftada 6 gün antrenman yapıyor — bu profilde asıl risk **az yemek**. Motor yalnızca **`koru`** ve **`kas`** hedefi tanır. Kalori açığı / sıklet düşürme / yağ oranı hedefi **YOK**, arayüzde seçenek olarak bile bulunmuyor. `nutTargets` hiçbir koşulda **BMR'nin altına inmez** (5 farklı kilo × 4 gün tipi × 5 hedef girdisiyle teste bağlandı, uydurma hedef sessizce `koru`'ya düşer).
+
+**BMR yaşa göre denklem değiştiriyor.** Mifflin-St Jeor **19-78 yaş**ta doğrulanmıştır, ergende sapar → 18 altı için **Schofield**. 16 yaş/70 kg örneğinde fark **~160 kcal**.
+
+**Tek "aktivite seviyesi" sorulmuyor — katsayı PROGRAMDAN türetiliyor.** Antrenman günü ile dinlenme günü aynı kalori değildir: dinlenme 1.4 · ağırlık 1.6 · dövüş 1.75 · ikisi birden 1.9. 70 kg için 2654 → 3602 kcal aralığı.
+
+**Makrolar:** protein 1.8 g/kg (kas hedefinde 2.0, tavan 2.5) · yağ %27 kcal ama **taban 0.8 g/kg** (hormonal sağlık, hangisi büyükse) · karbonhidrat kalan · su 35 ml/kg + seans başına 600 ml.
+
+**⚠️ Öğün başı protein tavanı KIRPMA kuralı DEĞİL.** İlk yazımda 0.40 g/kg tavanıyla kırpılıyordu → 4 × tavan < günlük hedef oluyor ve plan sessizce eksik protein veriyordu. Artık eşit bölünüyor, bant bilgi olarak gösteriliyor.
+
+**Örnek gün — 410 besinlik Türk veritabanından.** Her öğün: protein çapası + karbonhidrat çapası + sabit ekler; çapalar hedefe göre ölçekleniyor.
+
+**🔧 Motoru gerçek çıktıyla denetlerken bulunan 4 hata:**
+- **Protein %50 aşıyordu** (126 g hedefe 168 g): "en az 1 porsiyon" kuralı — tavuk göğsü tek başına 47 g. Alt sınır 0.5 porsiyona indi + gün sonu denge geçişi eklendi.
+- **"4 bardak kefir":** çapa protein yoğun değildi (6 g/bardak), motor hedefi tutturmak için absürt miktar yazıyordu. Sözleşme: **çapa, şablonun en protein yoğun kalemi olmalı** (teste bağlı).
+- **"1.5 adet yumurta":** `adet`/`dilim`/`kase` birimli besinler artık tam sayıya yuvarlanıyor — azaltma geçişinde de.
+- **"1 5 adet Zeytin":** birim zaten sayı içeriyorsa bir daha sayı yazılmıyor (`nutPortion`).
+- Ayrıca protein dengelemesi kaloriyi düşürüyordu (3034 → 2692) → karbonhidrat çapasıyla geri dolduran ikinci geçiş eklendi. Şimdi 2935/3034.
+
+**AI çağrısı YOK** — motor kural tabanlı ve deterministik, `fetch` yasağı teste bağlı.
+**Yeni veri alanı:** `data.diet.nut = { hedef, sablon, kurulduAt }`. Yeni sekme/endpoint YOK.
+**Deploy zinciri 5 yere bağlandı:** `LAZY_MODULES` · `sw.js` · `aidan-pages-deploy.py` · Actions `paths` · `13-lazy` testleri.
+**📄 `ANTRENMAN-BILIMI.md`'ye Beslenme bölümü eklendi** — aynı kanıt seviyesi işaretlemesiyle.
+
+**Doğrulama:** yeni `tests/18-nutrition.test.js` **42 test** (kapsam sınırı 7 — BMR tabanı 60 kombinasyon, kaynak taraması, yağ tabanı, protein tavanı · BMR 3 · gün tipi 5 · makro 4 · zamanlama 4 · örnek gün 10 · mimari 5 · Impeccable 3). `13-lazy` LAZY_MODULES sözleşmesi 4 modüle çıktı. **19 dosya toplam 482 test geçiyor**, tek kırmızı kasıtlı.
+**Cache:** v7-143 → **v7-144**
+
 ### 🔴 10 Ağustos 2026 — 🔬 OBJEKTİF DENETİM + BİLİMSEL ŞARTNAME (v7-143)
 
 Salim: "sen objektif incele şimdi bu program iyi mi" → üretilen gerçek program bir antrenör gözüyle denetlendi. **Not verildi: 6.5/10.** 3 zayıflık bulundu, düzeltilirken **2 gerçek bug** daha ortaya çıktı. Ardından "bilime uygun bir how-to manuel" istendi → **`ANTRENMAN-BILIMI.md`** yazıldı.
