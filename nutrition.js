@@ -37,18 +37,14 @@ const NUT_DAY_LABEL = {
 };
 
 /**
- * Bazal metabolizma. ⚠️ Yasa gore DENKLEM DEGISIR:
- * Mifflin-St Jeor 19-78 yas araliginda dogrulanmistir; ergende sapar.
- * 18 yas alti icin Schofield kullaniliyor (yas gruplu, gencler icin gelistirilmis).
+ * Bazal metabolizma — ⚠️ KENDI FORMULU YOK, paylasilan cekirdegi cagirir.
+ * `hcBMR` ui.js ve worker.js'te byte-byte ozdes durur; saglik raporu ile
+ * beslenme plani AYNI sayiyi kullansin diye tek kaynak orasi.
+ * (Once burada Schofield, hcEnergyCheck'te Mifflin vardi — celisiyorlardi.)
  */
 function nutBMR(sex, age, kg, cm) {
-  const erkek = sex !== 'female';
-  if (!(kg > 0)) return 0;
-  if (age < 18) {
-    if (age >= 15) return Math.round(erkek ? 17.686 * kg + 658.2 : 13.384 * kg + 692.6);
-    return Math.round(erkek ? 22.706 * kg + 504.3 : 17.686 * kg + 349.0);
-  }
-  return Math.round(10 * kg + 6.25 * cm - 5 * age + (erkek ? 5 : -161));
+  if (typeof hcBMR !== 'function') return 0;   // cekirdek yuklenmeden cagrilmaz
+  return hcBMR(sex, age, kg, cm);
 }
 
 /** Antrenman programindan o gunun tipini cikar. */

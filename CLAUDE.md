@@ -19,6 +19,20 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 10 Ağustos 2026 — 🔢 TEK BMR KAYNAĞI (v7-145)
+
+Salim: "bazal metabolizma nerden anlarım" sorusu bir **tutarsızlığı ortaya çıkardı**: `hcEnergyCheck` (sağlık raporu) **Mifflin-St Jeor**, yeni `nutrition.js` ise **Schofield** kullanıyordu. Aynı kişi için iki farklı BMR — 16 yaş/70 kg'da **~160 kcal fark**. Sağlık raporu "TDEE 2900" derken beslenme planı 3034 diyordu.
+
+**Çözüm: `hcBMR` paylaşılan çekirdeğe eklendi.** Yaşa göre denklem seçiyor (18 altı Schofield, 18+ Mifflin), `hcEnergyCheck` onu çağırıyor, `nutrition.js` de kendi formülünü **bıraktı** ve aynı fonksiyona bağlandı.
+- ⚠️ Çekirdek kuralı gereği `ui.js` ve `aidan-worker/worker.js`'e **byte-byte aynı** yazıldı (02-twins 25/25 geçiyor).
+- `nutBMR` artık ince sarmalayıcı; çekirdek yüklenmemişse 0 döner, uydurmaz.
+- Teste bağlandı: `nutrition.js` içinde BMR katsayısı (17.686 / 13.384 / 6.25) **bulunmamalı**, `hcBMR(` çağrısı bulunmalı, her iki dosyada `var bmr = hcBMR(` olmalı.
+
+**⚠️ Kalıcı kural:** BMR'yi hesaplayan tek yer `hcBMR`. Yeni bir yerde ihtiyaç olursa formül kopyalanmaz, o fonksiyon çağrılır.
+
+**Doğrulama:** `18-nutrition` 42 → **43 test** (yeni: tek kaynak sözleşmesi). 02-twins 25/25 — paylaşılan çekirdek hâlâ özdeş. **19 dosya toplam 483 test geçiyor**, tek kırmızı kasıtlı.
+**Cache:** v7-144 → **v7-145**
+
 ### 🔴 10 Ağustos 2026 — 🥗 BESLENME PLANLAYICI (v7-144)
 
 Salim: "bana diyet de yazabilsin." Yeni **7. modül `nutrition.js`** (tembel yüklenir, Diyet sekmesinde `program.js` ile birlikte iner).

@@ -5515,12 +5515,28 @@ function hcWeightTrend(weights, fromDate, toDate) {
    değişimi uyuşuyor mu? Uyuşmuyorsa beslenme ortalamaları güvenilmezdir ve
    AI bunu bilmek zorunda — yoksa eksik loga tam veri muamelesi yapar.
    1 kg yağ doku ≈ 7700 kcal.                                              */
+// ⚠️ TEK BMR KAYNAGI (10 Agu 2026). Once burada Mifflin, nutrition.js'te
+// Schofield vardi — ayni kisi icin iki farkli sayi (16 yas/70 kg'da ~160 kcal
+// fark), saglik raporu ile beslenme plani celisiyordu.
+// Mifflin-St Jeor 19-78 yas araliginda dogrulanmistir; ergende sapar.
+// 18 alti icin Schofield (yas gruplu) kullanilir. nutrition.js bunu cagirir.
+function hcBMR(sex, age, kg, cm) {
+  var erkek = sex !== 'female';
+  var y = Number(age) || 0, k = Number(kg) || 0, c = Number(cm) || 0;
+  if (!(k > 0)) return 0;
+  if (y > 0 && y < 18) {
+    if (y >= 15) return Math.round(erkek ? 17.686 * k + 658.2 : 13.384 * k + 692.6);
+    return Math.round(erkek ? 22.706 * k + 504.3 : 17.686 * k + 349.0);
+  }
+  return Math.round(10 * k + 6.25 * c - 5 * y + (erkek ? 5 : -161));
+}
+
 function hcEnergyCheck(avgKcal, slopeKgPerWeek, calc) {
   if (avgKcal == null || slopeKgPerWeek == null || !calc) return null;
   var kg = Number(calc.weight), cm = Number(calc.height), age = Number(calc.age);
   var act = Number(calc.activity) || 1.55;
   if (!(kg > 0 && cm > 0 && age > 0)) return null;
-  var bmr = Math.round(10 * kg + 6.25 * cm - 5 * age + (calc.sex === 'male' ? 5 : -161));
+  var bmr = hcBMR(calc.sex, age, kg, cm);
   var tdee = Math.round(bmr * act);
   // Enerji dengesi: günlük fazla/eksik = eğim(kg/hafta) * 7700 / 7
   var dailyBalance = slopeKgPerWeek * 7700 / 7;
