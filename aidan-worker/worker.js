@@ -4303,8 +4303,16 @@ async function screenCommentReply(env, user, body, cors) {
     const bfTxt = !bf ? 'Buffett skoru: çalıştırılmadı'
       : (bf.score == null ? `Buffett skoru: HESAPLANAMADI (${String(bf.reason || 'mali tablo gelmedi').slice(0, 90)})`
         : `Buffett skoru ${bf.score}/100 (${bf.label})${Array.isArray(bf.weak) && bf.weak.length ? ' · en zayıf: ' + bf.weak.map(w => String(w).slice(0, 60)).join(' | ') : ''}`);
+    const cy = r.cycle || null;
+    const cyTxt = !cy
+      ? 'Çok yıllı: HESAPLANAMADI (yeterli yıllık tablo gelmedi)'
+      : `Çok yıllı (${cy.years} yıl, ${cy.basis === 'marj' ? 'kâr marjı' : 'ROE'} tabanı): normalize F/K ${num(cy.normPE, 1)}`
+        + ` · ortalama ${pc(cy.avgRate)} · son yıl ${pc(cy.lastRate)}`
+        + ` · zirve oranı ${num(cy.peakRatio, 2)}× · dalgalanma ${cy.cyclical || '—'}`
+        + (r.normScore != null ? ` · çok yıllı skor ${r.normScore}/100 (son yıl skorundan ${r.normScore - r.preScore >= 0 ? '+' : ''}${r.normScore - r.preScore})` : ' · çok yıllı skor yok');
     return `${i + 1}. ${String(r.symbol || '').slice(0, 10)} — ${String(r.name || '').slice(0, 50)}
-   Ön skor ${r.preScore ?? '—'}/100 · F/K ${num(r.trailingPE, 1)} · PD/DD ${num(r.priceToBook, 2)} · türetilmiş ROE ${pc(r.roe)} · temettü ${pc(r.dividendYield)}
+   Son yıl skoru ${r.preScore ?? '—'}/100 · F/K ${num(r.trailingPE, 1)} · PD/DD ${num(r.priceToBook, 2)} · türetilmiş ROE ${pc(r.roe)} · temettü ${pc(r.dividendYield)}
+   ${cyTxt}
    ${bfTxt}`;
   }).join('\n');
 
@@ -4316,6 +4324,12 @@ async function screenCommentReply(env, user, body, cors) {
 - Tablodaki oranların NE ÖLÇTÜĞÜNÜ öğret: F/K = fiyatın yıllık kâra oranı, kaç yıllık kâra denk fiyat verildiği · PD/DD = fiyatın defter değerine oranı · türetilmiş ROE = PD/DD ÷ F/K, yani şirketin özsermayesiyle ürettiği kâr oranı · temettü verimi = fiyata göre yıllık dağıtılan nakit.
 - Listede ORTAK ÖRÜNTÜ varsa söyle ("çoğu bankacılık", "yarısının PD/DD'si 1'in altında" gibi).
 - Filtrenin SINIRLARINI anlat — bu en değerli kısım: türetilmiş ROE tek yıllıktır (Buffett çok yıllı istikrar ister), F/K tek başına ucuzluk kanıtı değildir (kâr tek seferlik olabilir), TRY'de 2023 sonrası enflasyon muhasebesi net kârı çarpıtır, Yahoo verisi gecikmeli/eksik olabilir.
+- 🔁 DÖNGÜ KATMANI (bu paketin en önemli öğretisi — mutlaka değin): tabloda hem SON YIL skoru hem ÇOK YILLI skor var. Çok yıllı skor, şirketin çok yıllı ORTALAMA kâr marjını son yılın cirosuna uygulayarak "normalize kâr" üretir; normalize F/K bundan çıkar. İkisi arasındaki FARK asıl sinyaldir:
+  · Çok yıllı skor son yıl skorundan BELİRGİN DÜŞÜKSE (zirve oranı 1'in üstünde): son yılın kârı olağandışı yüksek demektir. Demir-çelik, rafineri, petrokimya, madencilik gibi döngüsel işlerde bu tipiktir — kâr zirvesinde F/K yapay olarak düşük görünür, kâr normale dönünce fiyat hiç düşmeden F/K yükselir. Buna değer tuzağı denir, ${name}'e bunu ÖĞRET.
+  · Çok yıllı skor DAHA YÜKSEKSE: son yıl ortalamanın altında kalmış olabilir (döngü dibi ya da geçici sorun) — bu da kendi başına bir sonuç değil, incelenecek bir sorudur.
+  · "Dalgalanma yüksek" yazan şirkette tek yıllık orana güvenilmez, bunu açıkça söyle.
+  · Normalizasyon ORAN tabanlıdır (nominal TL kârları toplanmaz), bu yüzden enflasyondan büyük ölçüde etkilenmez — ama yıl sayısı azdır (genelde 3-4), tam bir çevrimi kapsamayabilir. Bu sınırı da söyle.
+  · "Çok yıllı: HESAPLANAMADI" yazan satırda döngü yorumu YAPMA, sadece veri olmadığını söyle.
 - Buffett skoru HESAPLANAMADI yazan satırlar için "mali tablo gelmedi, bu hisse hakkında kalite yorumu yapılamaz" de — skoru olanla olmayanı aynı kefeye KOYMA.
 - Engel oranının (%${hurdle}) ne olduğunu hatırlat: paranın alternatif getirisi, TR'de mevduat/tahvil faizi. Bunun altında kalan ROE "iyi" değildir.
 
@@ -4329,7 +4343,7 @@ async function screenCommentReply(env, user, body, cors) {
 7. Sektör/şirket hakkında bilmediğin haber ya da beklenti uydurma
 
 ✅ TON: sabırlı öğretmen — tabloyu okur, terimi öğretir, filtrenin nerede yanılabileceğini söyler, KARAR VERMEZ. Kararı ${name} verir.
-6-10 cümle. Kapanışta dolgu uyarı cümlesi yazma, arayüzde zaten var.`;
+8-12 cümle. Kapanışta dolgu uyarı cümlesi yazma, arayüzde zaten var.`;
 
   const userMsg = `🔎 BIST temel tarama sonucu
 Taranan hisse: ${scanned}${dropped != null ? ` · elenen: ${dropped}` : ''} · listelenen: ${results.length}
@@ -4337,7 +4351,7 @@ Engel oranı: %${hurdle}
 
 ${lines}
 
-Bu tabloyu ${name}'e anlat: ① filtrenin ne yaptığı ve bu listenin ne OLMADIĞI ② tablodaki ortak örüntü ③ geçen oranların ne ölçtüğü ④ bu filtrenin nerede yanılabileceği. Tavsiye YOK, sıralama YOK, tahmin YOK.`;
+Bu tabloyu ${name}'e anlat: ① filtrenin ne yaptığı ve bu listenin ne OLMADIĞI ② tablodaki ortak örüntü ③ geçen oranların ne ölçtüğü ④ SON YIL ile ÇOK YILLI skorun ayrıştığı satırlar — hangileri ve bu ne anlama geliyor ⑤ bu filtrenin nerede yanılabileceği. Tavsiye YOK, sıralama YOK, tahmin YOK.`;
 
   try {
     const r = await aiRun(env, {

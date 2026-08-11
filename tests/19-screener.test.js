@@ -454,3 +454,190 @@ test('yeni dosya yok — tarama stocks.js icinde, deploy zinciri degismedi', () 
     'ayri dosya olusturulmus — sw.js/deploy.py/Actions paths guncellenmeli');
   assert.ok(readText('sw.js').includes('stocks.js'), 'stocks.js SW cache listesinde olmali');
 });
+
+// ============================================================
+// 🔁 ÇOK YILLI NORMALİZASYON — döngü tuzağı (11 Agu 2026)
+// ============================================================
+// margins: yeniden eskiye net kar marji · revenues verilmezse enflasyonlu
+// (eskiye gidince kuculen) nominal ciro uretilir.
+function fund(margins, opts = {}) {
+  const rev = opts.revenues || margins.map((_, i) => 1000 / Math.pow(1.5, i));
+  const years = margins.map((m, i) => ({
+    year: 2025 - i,
+    revenue: opts.noRevenue ? null : rev[i],
+    netIncome: m * rev[i],
+    equity: ('equity' in opts) ? opts.equity : 500,
+  }));
+  return { currency: 'TRY', marketCap: opts.marketCap != null ? opts.marketCap : 1200, years };
+}
+
+test('dongusel sirket: son yil zirvede -> normalize F/K cok daha yuksek + bayrak', () => {
+  // marj %20 (son) vs cok yilli ortalama %9,75 -> zirve orani ~2,05
+  const c = W.screenNormalize(fund([0.20, 0.08, 0.06, 0.05]), 1200);
+  assert.strictEqual(c.ok, true);
+  assert.strictEqual(c.basis, 'marj');
+  assert.strictEqual(c.years, 4);
+  assert.ok(Math.abs(c.peakRatio - 2.05) < 0.02, 'zirve orani ' + c.peakRatio);
+  // son yil kari 200 -> gercek F/K 6; normalize kar 97,5 -> normalize F/K ~12,3
+  assert.ok(Math.abs(c.normPE - 12.31) < 0.05, 'normalize F/K ' + c.normPE);
+  assert.ok(c.flags.some(f => /ucuz görünüyor/.test(f)), 'zirve bayragi yok: ' + JSON.stringify(c.flags));
+  assert.strictEqual(c.cyclical, 'yüksek');
+});
+
+test('istikrarli sirket: normalize F/K gercek F/K ile ayni, bayrak yok', () => {
+  const c = W.screenNormalize(fund([0.10, 0.10, 0.10, 0.10]), 1200);
+  assert.ok(Math.abs(c.peakRatio - 1) < 0.001, 'zirve orani ' + c.peakRatio);
+  assert.ok(Math.abs(c.normPE - 12) < 0.01, 'normalize F/K ' + c.normPE); // 1200 / (0,10*1000)
+  assert.strictEqual(c.cyclical, 'düşük');
+  assert.strictEqual(c.flags.length, 0);
+});
+
+test('🔴 ENFLASYON NOTRLUGU: nominal kar 5 kat buyuse de zirve orani 1 kalir', () => {
+  // Marj sabit %10; ciro enflasyonla 200 -> 1000'e cikmis. Nominal karlar:
+  // 100 / 60 / 35 / 20. NAIF ortalama (53,75) yanlis sonuc verirdi.
+  const c = W.screenNormalize(fund([0.10, 0.10, 0.10, 0.10]), 1200);
+  assert.ok(Math.abs(c.peakRatio - 1) < 1e-9,
+    'enflasyon zirve oranini bozmus: ' + c.peakRatio);
+  // Dogru normalize kar = 100 (bugunun parasi). Naif ortalama 53,75 olurdu.
+  const naifPE = 1200 / ((100 + 100 / 1.5 + 100 / 2.25 + 100 / 3.375) / 4);
+  assert.ok(Math.abs(c.normPE - 12) < 0.01, 'normalize F/K ' + c.normPE);
+  // Naif "nominal karlarin ortalamasi" yontemi ayni sirketi %66 daha pahali
+  // gosterirdi — sirf enflasyon yuzunden. Oran tabani bunu ortadan kaldiriyor.
+  assert.ok(naifPE / c.normPE > 1.6,
+    `naif yontem sapmasi beklenenden kucuk: naif ${naifPE.toFixed(1)} vs oran ${c.normPE}`);
+});
+
+test('cok yilli ortalamada zarar -> normalize F/K UYDURULMAZ, bayrak kalkar', () => {
+  const c = W.screenNormalize(fund([0.15, -0.10, -0.12, -0.08]), 1200);
+  assert.strictEqual(c.ok, true);
+  assert.strictEqual(c.normPE, null, 'ortalama zararda F/K hesaplanmamali');
+  assert.ok(c.flags.some(f => /ortalamada şirket kâr etmiyor/.test(f)));
+  assert.strictEqual(W.screenNormScore(row(), c, 35), null);
+});
+
+test('3 yildan az tablo -> hesap YOK, gerekce yazilir', () => {
+  const c = W.screenNormalize(fund([0.1, 0.1]), 1200);
+  assert.strictEqual(c.ok, false);
+  assert.strictEqual(c.years, 2);
+  assert.ok(c.reason && c.reason.length > 10);
+  assert.strictEqual(W.screenNormScore(row(), c, 35), null);
+});
+
+test('ciro gelmezse ROE tabanina duser, o da yoksa null', () => {
+  const c = W.screenNormalize(fund([0.10, 0.10, 0.10, 0.10], { noRevenue: true }), 1200);
+  assert.strictEqual(c.ok, true);
+  assert.strictEqual(c.basis, 'roe');
+  const f2 = fund([0.1, 0.1, 0.1], { noRevenue: true, equity: null });
+  assert.strictEqual(W.screenNormalize(f2, 1200).ok, false);
+  assert.strictEqual(W.screenNormalize(null, 1200), null);
+  assert.strictEqual(W.screenNormalize({ years: [] }, 1200).ok, false);
+});
+
+test('normalize skor AYNI formulu kullanir — ayri motor yazilmamis', () => {
+  assert.match(String(W.screenNormScore), /screenPreScore\(/);
+  // dongusel sirkette cok yilli skor son yil skorundan DUSUK olmali
+  // piyasa degeri 800, son yil kari 200 -> gercek F/K 4 · normalize kar 97,5 -> F/K ~8,2
+  const r = row({ trailingPE: 4, priceToBook: 1.5 });
+  const c = W.screenNormalize(fund([0.20, 0.08, 0.06, 0.05], { marketCap: 800 }), 800);
+  const pre = W.screenPreScore(r, 35).score;
+  const norm = W.screenNormScore(r, c, 35);
+  assert.ok(norm != null && norm < pre - 10,
+    `dongusel hissede cok yilli skor belirgin dusuk olmali: son yil ${pre}, cok yilli ${norm}`);
+});
+
+test('istikrarli sirkette iki skor birbirine yakin kalir', () => {
+  const r = row({ trailingPE: 12, priceToBook: 1.2 });
+  const c = W.screenNormalize(fund([0.10, 0.10, 0.10, 0.10]), 1200);
+  const pre = W.screenPreScore(r, 35).score;
+  const norm = W.screenNormScore(r, c, 35);
+  assert.ok(Math.abs(norm - pre) <= 2, `beklenen yakin: ${pre} vs ${norm}`);
+});
+
+test('screenSort norm modu: skorsuzler dibe, esitte alfabetik', () => {
+  const list = [
+    { symbol: 'A', preScore: 90, normScore: 40 },
+    { symbol: 'B', preScore: 50, normScore: 85 },
+    { symbol: 'C', preScore: 95, normScore: null },
+    { symbol: 'D', preScore: 60 },
+  ];
+  assert.strictEqual(W.screenSort(list, 'norm').map(x => x.symbol).join(','), 'B,A,C,D');
+});
+
+test('engel orani degisince cok yilli skor da yeniden hesaplanir', () => {
+  const fn = String(W.setScreenHurdle);
+  assert.match(fn, /screenNormScore\(row, row\.cycle, n\)/);
+  // ama Buffett skoru DOKUNULMAZ (mali tablo istegi gerektirir)
+  assert.ok(!/buffettScore\(/.test(fn));
+});
+
+test('DOM: cok yilli skor ve fark cizilir, dongu bayragi gorunur', () => {
+  const el = mount();
+  D().screen = {
+    at: Date.now(), hurdlePct: 35, scanned: 100, dropped: 88, dropCounts: {},
+    rows: [Object.assign(row({ symbol: 'DONGU' }), {
+      preScore: 85, normScore: 55, roe: 0.5, turnover: 4e8, buffett: null,
+      cycle: { ok: true, basis: 'marj', years: 4, normPE: 12.3, avgRate: 0.0975,
+        lastRate: 0.2, peakRatio: 2.05, cv: 0.6, cyclical: 'yüksek',
+        flags: ['Son yıl kâr marjı çok yıllı ortalamanın 105% üstünde — F/K olduğundan ucuz görünüyor.'] },
+    })],
+  };
+  W.renderScreener();
+  const h = el.innerHTML;
+  assert.ok(/Çok yıllı skor/.test(h));
+  assert.ok(h.includes('55') && h.includes('-30'), 'fark gosterilmemis');
+  assert.ok(/Normalize F\/K/.test(h) && h.includes('12,3'), 'normalize F/K hucresi yok');
+  assert.ok(/ucuz görünüyor/.test(h), 'dongu bayragi cizilmemis');
+  assert.ok(/scr-norm bad/.test(h), 'buyuk negatif fark uyari rengine gecmeli');
+});
+
+test('DOM: cok yilli veri yoksa sessiz kalmaz, sebebi yazar', () => {
+  const el = mount();
+  D().screen = {
+    at: Date.now(), hurdlePct: 35, scanned: 10, dropped: 5, dropCounts: {},
+    rows: [Object.assign(row({ symbol: 'YOK' }), {
+      preScore: 70, normScore: null, roe: 0.4, turnover: 1e8, buffett: null,
+      cycle: { ok: false, years: 1, reason: 'Çok yıllı hesap için en az 3 yıl gerekli, 1 yıl geldi.' },
+    })],
+  };
+  W.renderScreener();
+  assert.match(el.innerHTML, /Çok yıllı skor yok/);
+  assert.match(el.innerHTML, /en az 3 yıl gerekli/);
+});
+
+test('deep asamada cok yilli katman ayni istekten hesaplaniyor (ek istek yok)', () => {
+  const fn = String(W.screenDeepStage);
+  assert.match(fn, /screenNormalize\(d, row\.marketCap\)/);
+  assert.match(fn, /screenNormScore\(row, cyc/);
+  // tek fetch: sadece /stock-fundamentals
+  assert.strictEqual((fn.match(/fetch\(/g) || []).length, 1, 'ek ag istegi eklenmis');
+});
+
+test('worker prompt dongu tuzagini OGRETIYOR', () => {
+  const fnStart = WK.indexOf('async function screenCommentReply');
+  const pStart = WK.indexOf('const sysPrompt =', fnStart);
+  const p = WK.slice(pStart, WK.indexOf('const userMsg =', pStart));
+  assert.match(p, /DÖNGÜ KATMANI/);
+  assert.match(p, /değer tuzağı/);
+  assert.match(p, /zirve oranı|olağandışı yüksek/);
+  assert.match(p, /HESAPLANAMADI[\s\S]{0,120}döngü yorumu YAPMA/);
+  // enflasyon dayanikliligi ve yil sayisi siniri kullaniciya soylenmeli
+  assert.match(p, /ORAN tabanlıdır/);
+  assert.match(p, /tam bir çevrimi kapsamayabilir/);
+});
+
+test('worker cok yilli sayilari AI\'a veriyor, kendi hesaplamiyor', () => {
+  const fn = WK.slice(WK.indexOf('async function screenCommentReply'));
+  assert.match(fn, /r\.cycle/);
+  assert.match(fn, /normalize F\/K/);
+  const code = fn.split('\n').filter(l => !/^\s*(\/\/|\*)/.test(l)).join('\n');
+  assert.ok(!/screenNormalize|screenNormScore/.test(code), 'worker normalizasyonu kendi yapiyor');
+});
+
+test('Impeccable: cok yilli katman CSS kurallari da uyumlu', () => {
+  const css = readText('styles.css');
+  const blk = css.slice(css.indexOf('cok yilli (dongu) katmani'));
+  assert.ok(blk.length > 300, 'CSS blogu bulunamadi');
+  assert.ok(!/border-left:\s*[2-9]|border-right:\s*[2-9]/.test(blk), 'yan-serit yasak');
+  assert.ok(!/linear-gradient|backdrop-filter/.test(blk), 'gradient/glass yasak');
+  assert.ok(!/#fff\b|#000\b/i.test(blk), 'saf siyah/beyaz yasak');
+});

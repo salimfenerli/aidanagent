@@ -3084,17 +3084,18 @@ function screenRank(rows, opts) {
 // aynı sıralamaya karıştırmak yanıltıcı olurdu.
 function screenSort(list, mode) {
   const arr = (Array.isArray(list) ? list : []).slice();
-  if (mode !== 'buffett') {
-    arr.sort((a, b) => (b.preScore - a.preScore) || String(a.symbol).localeCompare(String(b.symbol), 'tr'));
-    return arr;
-  }
-  const bs = x => (x.buffett && x.buffett.score != null) ? x.buffett.score : null;
+  const alpha = (a, b) => String(a.symbol).localeCompare(String(b.symbol), 'tr');
+  const byPre = (a, b) => (b.preScore - a.preScore) || alpha(a, b);
+  if (mode !== 'buffett' && mode !== 'norm') { arr.sort(byPre); return arr; }
+  const key = mode === 'buffett'
+    ? (x => (x.buffett && x.buffett.score != null) ? x.buffett.score : null)
+    : (x => (x.normScore != null && isFinite(x.normScore)) ? x.normScore : null);
   arr.sort((a, b) => {
-    const x = bs(a), y = bs(b);
-    if (x == null && y == null) return (b.preScore - a.preScore) || String(a.symbol).localeCompare(String(b.symbol), 'tr');
+    const x = key(a), y = key(b);
+    if (x == null && y == null) return byPre(a, b);
     if (x == null) return 1;
     if (y == null) return -1;
-    return (y - x) || String(a.symbol).localeCompare(String(b.symbol), 'tr');
+    return (y - x) || alpha(a, b);
   });
   return arr;
 }
@@ -3106,6 +3107,129 @@ function screenWeakest(bf, n) {
     .sort((a, b) => a.score - b.score)
     .slice(0, n || 2)
     .map(p => `${p.label} (${Math.round(p.score * p.weight * 10) / 10}/${p.weight})`);
+}
+
+// ============================================================
+// 🔁 ÇOK YILLI NORMALİZASYON — döngü tuzağı kapatıcı (11 Agu 2026)
+// ============================================================
+// SORUN: F/K ve türetilmiş ROE SON 12 AYA bakar. Döngüsel şirket (demir-çelik,
+// rafineri, petrokimya) kâr ZİRVESİNDEYKEN F/K 3 gösterir ve taramadan birinci
+// çıkar. Ertesi yıl kâr yarıya iner, F/K fiyat hiç düşmeden 6 olur. Değer
+// yatırımcısının en klasik tuzağı budur ve tek yıllık bir filtre onu GÖREMEZ.
+//
+// 🔴 NEDEN "ORTALAMA KÂR" ALMIYORUZ: TL'de 4 yılın nominal kârını toplayıp
+// bölmek anlamsızdır — 2022'nin 100 TL'si ile 2025'in 100 TL'si aynı para
+// değildir, enflasyon ortalamayı sistematik olarak AŞAĞI çeker ve her şirket
+// yapay olarak "döngü zirvesinde" görünür.
+//
+// ✅ ÇÖZÜM — ORAN tabanlı normalizasyon (enflasyondan bagimsiz):
+//     normalize kâr = (çok yıllı ORTALAMA net kâr marjı) × (SON yılın cirosu)
+// Marj bir orandır, enflasyon payda ve pay'da birlikte büyüdüğü için sadeleşir.
+// Sonuç bugünün parasıyla ifade edilir; piyasa değeriyle doğrudan bölünebilir.
+// Ciro gelmezse ROE tabanına düşer: ortalama ROE × son özsermaye. O da yoksa
+// null döner — UYDURMA YOK.
+const SCREEN_CYCLE = {
+  minYears: 3,        // 2 yil "cevrim" degildir; altinda hesap yapilmaz
+  peakHigh: 1.5,      // son yil ortalamanin %50 ustunde -> zirve uyarisi
+  peakLow: 0.6,       // son yil ortalamanin %40 altinda -> dip uyarisi
+  cvMid: 0.25,        // degisim katsayisi bantlari
+  cvHigh: 0.50,
+};
+
+function scrMean(a) { return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; }
+function scrStdev(a) {
+  if (a.length < 2) return null;
+  const m = scrMean(a);
+  return Math.sqrt(a.reduce((s, v) => s + (v - m) * (v - m), 0) / a.length);
+}
+
+// f = /stock-fundamentals cevabi · marketCap = tarama satirindan (daha taze)
+function screenNormalize(f, marketCap) {
+  if (!f || typeof f !== 'object') return null;
+  const ys = (Array.isArray(f.years) ? f.years : [])
+    .filter(y => y && isFinite(y.year))
+    .sort((a, b) => b.year - a.year);   // yeniden eskiye
+  if (ys.length < SCREEN_CYCLE.minYears) {
+    return { ok: false, years: ys.length, reason: `Çok yıllı hesap için en az ${SCREEN_CYCLE.minYears} yıl gerekli, ${ys.length} yıl geldi.` };
+  }
+
+  const mc = (marketCap != null && isFinite(marketCap) && marketCap > 0)
+    ? marketCap
+    : ((f.marketCap != null && isFinite(f.marketCap) && f.marketCap > 0) ? f.marketCap : null);
+
+  // ——— Taban 1: net kâr marjı (tercih edilen) ———
+  const marg = ys.filter(y => y.revenue != null && isFinite(y.revenue) && y.revenue > 0
+    && y.netIncome != null && isFinite(y.netIncome))
+    .map(y => ({ year: y.year, v: y.netIncome / y.revenue, base: y.revenue }));
+
+  // ——— Taban 2: ROE (ciro gelmezse) ———
+  const roes = ys.filter(y => y.equity != null && isFinite(y.equity) && y.equity > 0
+    && y.netIncome != null && isFinite(y.netIncome))
+    .map(y => ({ year: y.year, v: y.netIncome / y.equity, base: y.equity }));
+
+  let src = null, basis = null;
+  if (marg.length >= SCREEN_CYCLE.minYears) { src = marg; basis = 'marj'; }
+  else if (roes.length >= SCREEN_CYCLE.minYears) { src = roes; basis = 'roe'; }
+  else {
+    return { ok: false, years: ys.length,
+      reason: 'Yıllık ciro/özsermaye verisi çok yıllı hesaba yetmedi.' };
+  }
+
+  const vals = src.map(x => x.v);
+  const avg = scrMean(vals);
+  const last = src[0].v;                 // en yeni yil
+  const lastBase = src[0].base;          // son yilin cirosu / ozsermayesi
+  const sd = scrStdev(vals);
+
+  // Degisim katsayisi — donguselligin siddeti. Ortalama 0'a yakinsa anlamsiz
+  // buyur, o yuzden mutlak degerle korunur ve tabani var.
+  const cv = (sd != null && Math.abs(avg) > 1e-9) ? sd / Math.abs(avg) : null;
+  const cyclical = cv == null ? null
+    : (cv < SCREEN_CYCLE.cvMid ? 'düşük' : (cv < SCREEN_CYCLE.cvHigh ? 'orta' : 'yüksek'));
+
+  // Zirve orani — son yil ortalamanin kac kati. >1 kar sisik, <1 kar bastirilmis.
+  const peakRatio = (avg != null && Math.abs(avg) > 1e-9) ? last / avg : null;
+
+  // Normalize kâr: ORTALAMA oran × SON yilin tabani (bugunun parasiyla)
+  const normEarnings = (avg != null && lastBase != null) ? avg * lastBase : null;
+
+  // Ortalama zarar eden sirket "ucuz" degildir — normPE hesaplanmaz, bayrak kalkar.
+  let normPE = null, note = null;
+  if (normEarnings != null && normEarnings > 0 && mc != null) {
+    normPE = mc / normEarnings;
+  } else if (normEarnings != null && normEarnings <= 0) {
+    note = 'Çok yıllı ortalamada şirket kâr etmiyor — son yılın kârı istisna.';
+  }
+
+  const flags = [];
+  if (peakRatio != null && peakRatio >= SCREEN_CYCLE.peakHigh) {
+    flags.push(`Son yıl ${basis === 'marj' ? 'kâr marjı' : 'özsermaye kârlılığı'} çok yıllı ortalamanın ${Math.round(peakRatio * 100 - 100)}% üstünde — F/K olduğundan ucuz görünüyor.`);
+  }
+  if (peakRatio != null && peakRatio <= SCREEN_CYCLE.peakLow) {
+    flags.push(`Son yıl ${basis === 'marj' ? 'kâr marjı' : 'özsermaye kârlılığı'} ortalamanın ${Math.round(100 - peakRatio * 100)}% altında — F/K olduğundan pahalı görünüyor.`);
+  }
+  if (cyclical === 'yüksek') flags.push('Kâr geçmişi çok dalgalı — tek yıla bakmak yanıltır.');
+  if (note) flags.push(note);
+
+  return {
+    ok: true, basis, years: src.length,
+    avgRate: bfR(avg, 4), lastRate: bfR(last, 4),
+    peakRatio: bfR(peakRatio, 2),
+    cv: bfR(cv, 2), cyclical,
+    normEarnings, normPE: bfR(normPE, 2),
+    flags,
+  };
+}
+
+// Aynı skor fonksiyonu, ÇOK YILLI girdi.
+// screenPreScore ROE'yi PD/DD ÷ F/K ile turetiyor; F/K yerine normalize F/K
+// verince turetilen ROE de otomatik olarak cok yilli ortalamaya donuyor
+// (PD/DD ÷ normF/K = defter basina normalize kar = ortalama ROE). Yani tek
+// satirlik degisiklikle butun skor cok yilli hale geliyor — ayri formul YOK.
+function screenNormScore(row, cyc, hurdlePct) {
+  if (!row || !cyc || !cyc.ok || cyc.normPE == null || !(cyc.normPE > 0)) return null;
+  const s = screenPreScore(Object.assign({}, row, { trailingPE: cyc.normPE }), hurdlePct);
+  return (s && s.score != null) ? s.score : null;
 }
 
 // ============================================================
@@ -3209,6 +3333,10 @@ async function screenDeepStage(list, token) {
         });
         if (!r.ok) throw new Error(`http ${r.status}`);
         const d = await r.json();
+        // Cok yilli normalizasyon — dongu tuzagi kontrolu (ayni istekten bedava)
+        const cyc = screenNormalize(d, row.marketCap);
+        row.cycle = cyc;
+        row.normScore = screenNormScore(row, cyc, buffettHurdle('TRY'));
         const bf = buffettScore(d, buffettHurdle(d.currency || 'TRY'));
         row.buffett = bf ? {
           score: bf.score, label: bf.label, coverage: bf.coverage,
@@ -3225,7 +3353,7 @@ async function screenDeepStage(list, token) {
 }
 
 function setScreenSort(mode) {
-  _screenSort = (mode === 'buffett') ? 'buffett' : 'pre';
+  _screenSort = (mode === 'buffett' || mode === 'norm') ? mode : 'pre';
   renderScreener();
 }
 
@@ -3253,6 +3381,9 @@ async function setScreenHurdle() {
     for (const row of sc.rows) {
       const ps = screenPreScore(row, n);
       if (ps && ps.score != null) { row.preScore = ps.score; row.preParts = ps.parts; }
+      // normalize skor da ayni esige bagli — bayat kalmasin (mali tablo istegi GEREKMEZ,
+      // cycle zaten kayitli; sadece Buffett skoru yeniden tarama ister)
+      if (row.cycle) row.normScore = screenNormScore(row, row.cycle, n);
     }
     sc.hurdlePct = n;
   }
@@ -3293,6 +3424,12 @@ async function aiScreenComment() {
       symbol: r.symbol, name: r.name, preScore: r.preScore,
       trailingPE: r.trailingPE, priceToBook: r.priceToBook,
       roe: r.roe, dividendYield: r.dividendYield,
+      normScore: r.normScore != null ? r.normScore : null,
+      cycle: (r.cycle && r.cycle.ok) ? {
+        basis: r.cycle.basis, years: r.cycle.years, normPE: r.cycle.normPE,
+        avgRate: r.cycle.avgRate, lastRate: r.cycle.lastRate,
+        peakRatio: r.cycle.peakRatio, cyclical: r.cycle.cyclical,
+      } : null,
       buffett: r.buffett || null,
     }));
     const r = await fetch(STOCK_SCREEN_ENDPOINT, {
@@ -3352,10 +3489,35 @@ function screenRowHtml(r, i) {
   }
   const weak = (bf && Array.isArray(bf.weak) && bf.weak.length)
     ? `<div class="scr-weak">En zayıf: ${bf.weak.map(w => escapeHtml(String(w))).join(' · ')}</div>` : '';
+
+  // ——— Cok yilli katman ———
+  const cy = r.cycle;
+  const cyOk = !!(cy && cy.ok);
+  // ⚠️ On skor ile normalize skor ARASINDAKI FARK asil sinyaldir: buyuk negatif
+  // fark = son yilin kari sisik, tek yila bakan skor hisseyi olduğundan iyi
+  // gosteriyor demektir. Bu yuzden ikisi YAN YANA gosterilir, biri digerinin
+  // yerini almaz.
+  let normHtml = '';
+  if (r.normScore != null && isFinite(r.normScore)) {
+    const d = r.normScore - r.preScore;
+    const dCls = d <= -15 ? 'bad' : (d >= 15 ? 'good' : '');
+    normHtml = `<div class="scr-norm ${dCls}">Çok yıllı skor <b>${tr(r.normScore)}</b>
+      <span class="scr-delta">${d > 0 ? '+' : ''}${tr(d)}</span>
+      <span class="scr-cyc">${cyOk ? escapeHtml(cy.years + ' yıl · dalgalanma ' + (cy.cyclical || '—')) : ''}</span></div>`;
+  } else if (cy && !cy.ok) {
+    normHtml = `<div class="scr-norm na">Çok yıllı skor yok — ${escapeHtml(String(cy.reason || 'veri yetersiz'))}</div>`;
+  } else if (cyOk) {
+    normHtml = `<div class="scr-norm na">Çok yıllı skor yok — ortalamada kâr üretilmiyor</div>`;
+  }
+  const cyFlags = (cyOk && Array.isArray(cy.flags) && cy.flags.length)
+    ? `<div class="scr-cflags">${cy.flags.map(f => `<div>${escapeHtml(String(f))}</div>`).join('')}</div>` : '';
+
   const cells = [
     ['F/K', num(r.trailingPE, 1)],
+    ['Normalize F/K', cyOk && cy.normPE != null ? num(cy.normPE, 1) : '—'],
     ['PD/DD', num(r.priceToBook, 2)],
-    ['ROE*', pct(r.roe)],
+    ['ROE* (son yıl)', pct(r.roe)],
+    ['Ort. ROE / marj', cyOk ? pct(cy.avgRate) + (cy.basis === 'marj' ? ' marj' : '') : '—'],
     ['Temettü', pct(r.dividendYield)],
     ['Piyasa değeri', big(r.marketCap)],
     ['Günlük hacim', big(r.turnover)],
@@ -3371,11 +3533,12 @@ function screenRowHtml(r, i) {
       <div class="scr-score ${cls}">${tr(r.preScore)}<span>/100</span></div>
     </div>
     <div class="scr-bar"><i class="${cls}" style="width:${Math.max(2, Math.min(100, r.preScore))}%"></i></div>
+    ${normHtml}
     <div class="scr-cells">${cells}</div>
     <div class="scr-row-foot">${bfHtml}
       <button type="button" class="scr-add" onclick="screenAddToWatchlist('${escapeHtml(String(r.symbol || ''))}')">Listeme ekle</button>
     </div>
-    ${weak}
+    ${weak}${cyFlags}
   </div>`;
 }
 
@@ -3418,8 +3581,9 @@ function renderScreener() {
     ${has ? `
     <div class="scr-tools">
       <div class="scr-sortby">
-        <button type="button" class="${_screenSort === 'pre' ? 'active' : ''}" onclick="setScreenSort('pre')">Ön skor</button>
-        <button type="button" class="${_screenSort === 'buffett' ? 'active' : ''}" onclick="setScreenSort('buffett')">Buffett skoru</button>
+        <button type="button" class="${_screenSort === 'pre' ? 'active' : ''}" onclick="setScreenSort('pre')">Son yıl</button>
+        <button type="button" class="${_screenSort === 'norm' ? 'active' : ''}" onclick="setScreenSort('norm')">Çok yıllı</button>
+        <button type="button" class="${_screenSort === 'buffett' ? 'active' : ''}" onclick="setScreenSort('buffett')">Buffett</button>
       </div>
       <button type="button" class="scr-hurdle" onclick="setScreenHurdle()">engel oranı %${tr(hur)} · değiştir</button>
     </div>
@@ -3427,8 +3591,8 @@ function renderScreener() {
     ${dropList ? `<details class="scr-drop"><summary>Elenen ${tr(sc.dropped || 0)} hisse — hangi kapıdan döndü</summary><ul>${dropList}</ul></details>` : ''}
     <button type="button" class="scr-ai" id="scrAiBtn" onclick="aiScreenComment()">Aidan bu tabloyu anlatsın</button>
     <div class="scr-comment" id="scrComment" style="display:none;"></div>
-    ` : `<p class="scr-intro">BIST'in likit ana gövdesini temel oranlara göre eler: kâr eden, defter değerine göre makul fiyatlanan, özsermayesini engel oranının üzerinde çalıştıran şirketler kalır. İlk ${SCREEN_LIMITS.deepCount} hisseye ayrıca Buffett skoru çalışır.</p>`}
-    <p class="scr-note"><b>Bu bir alım listesi değildir.</b> Mekanik bir filtrenin çıktısıdır; sıralama tercih sırası değil, formülün sonucudur. ROE* = PD/DD ÷ F/K ile türetilmiştir ve <b>tek yıllıktır</b>. TRY'de 2023 sonrası enflasyon muhasebesi net kârı çarpıtır — oranları buna göre oku. Veriler Yahoo Finance'tan, gecikmeli ve eksik olabilir.</p>`;
+    ` : `<p class="scr-intro">BIST'in likit ana gövdesini temel oranlara göre eler: kâr eden, defter değerine göre makul fiyatlanan, özsermayesini engel oranının üzerinde çalıştıran şirketler kalır. İlk ${SCREEN_LIMITS.deepCount} hissenin çok yıllı mali tablosu da okunur: Buffett skoru + <b>döngü kontrolü</b> (son yılın kârı olağandışı yüksek mi).</p>`}
+    <p class="scr-note"><b>Bu bir alım listesi değildir.</b> Mekanik bir filtrenin çıktısıdır; sıralama tercih sırası değil, formülün sonucudur. ROE* = PD/DD ÷ F/K ile türetilmiştir ve <b>son 12 aya</b> aittir; <b>Çok yıllı skor</b> aynı formülü çok yıllı ortalama kârlılıkla çalıştırır. İkisi arasındaki fark döngü sinyalidir — büyük düşüş, son yılın kârının olağandışı yüksek olduğunu gösterir. TRY'de 2023 sonrası enflasyon muhasebesi net kârı çarpıtır — oranları buna göre oku. Veriler Yahoo Finance'tan, gecikmeli ve eksik olabilir.</p>`;
 
   if (has) { renderScreenRows(); renderScreenComment(); }
 }

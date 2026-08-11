@@ -4729,3 +4729,29 @@
   .screener .scr-ai,
   .screener .scr-sortby button { transition: none; }
 }
+
+/* ——— cok yilli (dongu) katmani ——— */
+.screener .scr-norm {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 7px;
+  margin: 0 0 9px; padding: 6px 9px;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+  background: var(--surface); font-size: 11.5px; color: var(--text-muted);
+}
+.screener .scr-norm b { color: var(--text); font-size: 12.5px; }
+.screener .scr-norm .scr-delta {
+  font-weight: 700; font-size: 11px; padding: 2px 6px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--text-muted);
+}
+.screener .scr-norm.bad { border-color: var(--warning); background: var(--warning-soft); }
+.screener .scr-norm.bad .scr-delta { color: var(--warning); border-color: var(--warning); }
+.screener .scr-norm.good .scr-delta { color: var(--success); border-color: var(--success); }
+.screener .scr-norm.na { opacity: 0.8; }
+.screener .scr-norm .scr-cyc { margin-left: auto; font-size: 10.5px; }
+.screener .scr-cflags {
+  margin-top: 7px; display: flex; flex-direction: column; gap: 4px;
+}
+.screener .scr-cflags div {
+  font-size: 10.5px; line-height: 1.5; color: var(--warning);
+  border: 1px solid var(--warning); border-radius: var(--radius-sm);
+  background: var(--warning-soft); padding: 5px 8px;
+}

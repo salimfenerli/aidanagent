@@ -19,6 +19,37 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 11 Ağustos 2026 — 🔁 ÇOK YILLI NORMALİZASYON / DÖNGÜ TUZAĞI (v7-147)
+
+Salim taramayı denetledi: "filtre neye göre, mantıklı mı." Dürüst cevapta **en büyük açık döngüsellikti** — F/K ve türetilmiş ROE son 12 aya bakıyor; demir-çelik/rafineri/petrokimya gibi döngüsel şirketler **kâr zirvesindeyken F/K 3 gösterip listenin başına çıkar**, ertesi yıl kâr normale dönünce fiyat hiç düşmeden F/K ikiye katlanır. Değer yatırımcısının klasik tuzağı ve tek yıllık filtre onu göremez. Salim: "çok yıllı da bakabilsin o zaman."
+
+**🔴 NEDEN "ORTALAMA KÂR" ALINMADI — bu paketin en önemli kararı.** TL'de 4 yılın **nominal** kârını toplayıp bölmek anlamsızdır: 2022'nin 100 TL'si ile 2025'in 100 TL'si aynı para değildir. Naif ortalama enflasyonu döngü sanır, **her şirket yapay olarak "zirvede" görünür.** Ölçüldü: marjı 4 yıl boyunca sabit %10 olan (yani hiç döngüsel olmayan) bir şirkette naif yöntem normalize F/K'yı 12 yerine **19,9** verir — %66 sapma, sırf enflasyondan.
+
+**✅ ÇÖZÜM — ORAN tabanlı normalizasyon (`screenNormalize`):**
+```
+normalize kâr = (çok yıllı ORTALAMA net kâr marjı) × (SON yılın cirosu)
+```
+Marj bir orandır; enflasyon payda ve payda birlikte büyüdüğü için **sadeleşir**. Sonuç bugünün parasıyla çıkar, piyasa değerine doğrudan bölünür. Ciro gelmezse **ROE tabanına** düşer (ortalama ROE × son özsermaye) — o da yoksa `null`, uydurma yok. Enflasyon nötrlüğü ayrı bir teste bağlandı.
+
+**🧩 AYRI SKOR MOTORU YAZILMADI — tek satırlık zarafet.** `screenPreScore` ROE'yi `PD/DD ÷ F/K` ile türetiyor. Ona F/K yerine **normalize F/K** verince türetilen ROE de otomatik çok yıllı ortalamaya dönüyor (`PD/DD ÷ normF/K = defter başına normalize kâr = ortalama ROE`). Yani **aynı formül, çok yıllı girdi** — ikinci bir ağırlık seti bakımı yok. Teste bağlı.
+
+**📊 ASIL SİNYAL İKİ SKORUN FARKI.** Son yıl skoru ile çok yıllı skor **yan yana** gösterilir, biri diğerinin yerini almaz. Fark −15'in altına inerse kart uyarı rengine geçer:
+- **Çok yıllı belirgin DÜŞÜK** (zirve oranı > 1) → son yılın kârı olağandışı yüksek, F/K olduğundan ucuz görünüyor. Değer tuzağı adayı.
+- **Çok yıllı YÜKSEK** (zirve oranı < 1) → son yıl ortalamanın altında; döngü dibi ya da geçici sorun olabilir. Cevap değil, incelenecek soru.
+- **Dalgalanma "yüksek"** (değişim katsayısı > 0,50) → tek yıllık orana zaten güvenilmez.
+
+**Yeni kart alanları:** Normalize F/K · Ort. ROE/marj · "Çok yıllı skor NN (±Δ) · N yıl · dalgalanma X" şeridi · sarı döngü bayrakları.
+**Sıralama 3 mod oldu:** Son yıl · **Çok yıllı** · Buffett. Her modda skoru olmayan satır **en altta ayrı grupta** (iki farklı ölçek karışmaz — v7-146 kuralının aynısı).
+
+**Sınırlar (kartta ve AI prompt'unda yazılı):** Yahoo genelde **3-4 yıl** verir, bu tam bir çevrimi kapsamayabilir · çok yıllı ortalamada zarar eden şirkette normalize F/K **hesaplanmaz**, bayrak kalkar (ortalamada zarar eden şirket "ucuz" değildir) · 3 yıldan az tabloda hesap hiç yapılmaz, sebebi kullanıcıya yazılır.
+
+**⚡ Maliyet SIFIR — ek ağ isteği yok.** `years[]` zaten kademe 2'de `/stock-fundamentals`'tan geliyordu, sadece kullanılmıyordu. Teste bağlandı (`screenDeepStage` içinde tek `fetch`).
+**Engel oranı değişince** çok yıllı skor da yeniden hesaplanır (cycle kayıtlı, mali tablo isteği GEREKMEZ) — Buffett skoru için yeniden tarama şart.
+**AI prompt'una DÖNGÜ KATMANI eklendi:** iki skorun ayrıştığı satırları göstermek, değer tuzağını öğretmek, oran tabanının enflasyona dayanıklılığını ve yıl sayısı sınırını söylemek zorunda. "HESAPLANAMADI" satırında döngü yorumu **yasak**. Tavsiye/sıralama/değer yargısı yasakları aynen duruyor.
+
+**Doğrulama:** `tests/19-screener.test.js` 44 → **60 test** (döngüsel vs istikrarlı şirket · **enflasyon nötrlüğü** — naif yöntemin saptığı ayrıca kanıtlanır · ortalamada zarar · 3 yıl tabanı · ROE tabanına düşme · aynı formül sözleşmesi · sıralama · hurdle yeniden hesabı · ek istek yasağı · DOM + "veri yok" hali · worker prompt · Impeccable). **20 dosya toplam 544 test geçiyor — suite tamamen yeşil.** (`SILINECEK-DOSYALAR/` klasörü bu seansta silindi; 8 Ağu'dan beri kasıtlı kırmızı duran hatırlatıcı test artık geçiyor.)
+**Cache:** v7-146 → **v7-147**
+
 ### 🔴 11 Ağustos 2026 — 🔎 BIST HİSSE TARAMA FİLTRESİ (v7-146)
 
 Salim: "uygulamaya alınacak hisse senedi bulma filtresi ekle bist için." Seçimler: **sadece temel analiz** (teknik/momentum kriteri YOK) · evren **BIST 100** · **elle tetiklenen** tarama + isteğe bağlı AI yorumu.
@@ -42,11 +73,11 @@ Salim: "uygulamaya alınacak hisse senedi bulma filtresi ekle bist için." Seçi
 
 **AI çağrısı motorda YOK** — eleme ve skor tamamen kural tabanlı ve deterministik (eşit skorda alfabetik, girdi sırası sonucu değiştirmez). AI yalnız düğmeye basılırsa ve yalnız **çıkan tabloyu anlatmak** için çağrılır; `/stock-screen` ikinci modu (`{comment:true}`), `heavy` + `aiTierForUser` kilidi. Worker hiçbir hisseyi sıralamaz/puanlamaz — teste bağlı.
 
-**Yeni veri alanı:** `data.screen = { at, hurdlePct, scanned, dropped, dropCounts, rows[≤12], comment, deepAt }`.
+**Yeni veri alanı:** `data.screen = { at, hurdlePct, scanned, dropped, dropCounts, rows[≤12], comment, deepAt }` (satırlarda ayrıca `cycle` + `normScore` — v7-147).
 **Yeni DOSYA YOK** — kod `stocks.js` sonuna eklendi (zaten tembel yüklenen borsa modülü), yani `LAZY_MODULES`/`sw.js`/`deploy.py`/Actions `paths` **hiç değişmedi**. İlk yükleme bütçesi etkilenmedi (13-lazy 49/49 geçiyor).
 **UI:** Borsa sekmesinde `#screenerSection` (BIST100 karşılaştırmasının altında). Yeni sekme/modal YOK; tarama yapılmadan tek satır + düğme, Impeccable uyumlu.
 
-**Doğrulama:** yeni `tests/19-screener.test.js` **44 test** (ROE özdeşliği 2 · hijyen kapıları 6 · ön skor 8 — hurdle etkisi, atlanan kriter, kapsama tabanı, NaN sızıntısı, ağırlık sözleşmesi · sıralama/determinizm 5 · evren 2 · DOM + XSS 6 · mimari sözleşme 5 · worker sözleşmesi 6 — auth, worker skor hesaplamıyor, temettü oran/yüzde, prompt yasakları, talimat sırası · Impeccable + EOL 4). **20 dosya toplam 527 test geçiyor**, tek kırmızı kasıtlı (SILINECEK-DOSYALAR hatırlatıcısı).
+**Doğrulama:** yeni `tests/19-screener.test.js` **44 test** (ROE özdeşliği 2 · hijyen kapıları 6 · ön skor 8 — hurdle etkisi, atlanan kriter, kapsama tabanı, NaN sızıntısı, ağırlık sözleşmesi · sıralama/determinizm 5 · evren 2 · DOM + XSS 6 · mimari sözleşme 5 · worker sözleşmesi 6 — auth, worker skor hesaplamıyor, temettü oran/yüzde, prompt yasakları, talimat sırası · Impeccable + EOL 4). **20 dosya toplam 527 test geçiyor** (v7-147 ile 543'e çıktı).
 **⚠️ Test notu:** `data` core.js'te top-level `let` — **window'a yazılmaz**, testte `A.evalIn('data')` ile canlı referans alınır. Ayrıca vm bağlamından dönen dizide `deepStrictEqual` KULLANMA (farklı realm) — `join(',')` ile karşılaştır.
 **Cache:** v7-145 → **v7-146**
 
@@ -1189,7 +1220,7 @@ py aidan-pages-deploy.py
                alarmAbove, alarmBelow, lastAlertedAbove, lastAlertedBelow, qty, cost, fetchedAt, error}],  // (Haz 6-8) borsa
   portfolioHistory: [{date:'YYYY-MM-DD', byCur:{TRY:{value,cost}}}],  // (Haz 8) portföy değer geçmişi, son 180 gün
   reminders: [{id, label, time:'HH:MM', days:'daily'|'weekdays', enabled, lastFired:'YYYY-MM-DD'}],  // (Haz 10) sabit hatırlatıcılar — Worker 15dk cron push'lar
-  screen: { at, hurdlePct, scanned, dropped, dropCounts, rows:[...], comment, deepAt },  // (11 Agu 2026) BIST temel tarama — son tarama sonucu, max 12 satır
+  screen: { at, hurdlePct, scanned, dropped, dropCounts, rows:[{...,preScore,normScore,cycle}], comment, deepAt },  // (11 Agu 2026) BIST temel tarama — son tarama sonucu, max 12 satır
   diet: {  // (Haz 14) diyet sekmesi + diyet programı
     kcalGoal, waterGoal,
     days: { 'YYYY-MM-DD': { meals:[{id, slot, name, kcal, planId?}], water } },  // günlük öğün log + su; planId = plandan gelen kayıt
