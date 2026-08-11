@@ -258,6 +258,7 @@ function renderStocks() {
   renderPortfolioHistory();
   renderPortfolioRisk();
   renderBist100Compare();
+  renderScreener();
   renderTradeJournal();
   const _hasHoldings = (data.watchlist || []).some(w => w.qty != null && w.qty > 0 && w.cost != null);
   const _hasTaHoldings = (data.watchlist || []).some(w =>
@@ -2895,4 +2896,539 @@ function confirmPortfolioImport() {
     ? `Portfoy yenilendi · ${added} eklendi, ${updated} güncellendi${removed ? `, ${removed} satildi (kaldirildi)` : ''}`
     : `${added} eklendi${updated ? `, ${updated} güncellendi` : ''}`;
   showToast(msg, 'success', 3800);
+}
+
+// ============================================================
+// 🔎 BIST TEMEL TARAMA — "alınacak hisse bulma" filtresi (Ağu 2026)
+// ============================================================
+// ⚠️ NE OLDUĞU / NE OLMADIĞI: bu bir MEKANİK ELEME. Çıkan liste bir alım
+// listesi DEĞİLDİR, sıralama bir tercih sırası DEĞİLDİR. Kod hiçbir yerde
+// "al/sat" demez; UI'da ve AI prompt'unda bu sınır ayrıca yazılıdır.
+//
+// 🔴 İKİ KADEME (mimarinin özü):
+//   Kademe 1 — TÜM evren tek Yahoo isteğinde taranır (/stock-screen). Sadece
+//     toplu quote'ta gelen oranlar: F/K, PD/DD, temettü, piyasa değeri, hacim.
+//   Kademe 2 — hayatta kalan ilk N hisseye MEVCUT buffettScore() çalıştırılır
+//     (/stock-fundamentals, sembol başına 1 istek). Yeni skor motoru YAZILMADI.
+//
+// NEDEN böyle: mali tablo isteği sembol başınadır; 100 hisse için 100 istek eder
+// ve Cloudflare ücretsiz planın 50 subrequest sınırını aşar. Ucuz kademe geniş
+// eler, pahalı kademe dar doğrular.
+//
+// 🚫 AI ÇAĞRISI YOK — eleme ve skor tamamen kural tabanlı ve deterministik.
+// AI yalnız kullanıcı düğmeye basarsa ve yalnız ÇIKAN TABLOYU ANLATMAK için
+// çağrılır; sıralamaya karışmaz. (program.js'teki kalıbın aynısı.)
+const STOCK_SCREEN_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/stock-screen';
+
+// Tarama evreni — BIST'in likit ana gövdesi (BIST 100 ağırlıklı).
+// ⚠️ ELLE BAKILAN LİSTE: endeks 3 ayda bir değişir. Endeksten çıkmış bir sembol
+// zarar vermez (Yahoo veri döndürmezse taramadan sessizce düşer), ama yeni giren
+// bir hisse buraya eklenmedikçe taranmaz. Kullanıcının kendi BIST izleme
+// listesindeki semboller her taramada bu listeye OTOMATİK eklenir.
+const BIST_UNIVERSE = [
+  'AEFES', 'AGHOL', 'AGROT', 'AKBNK', 'AKCNS', 'AKFGY', 'AKSA', 'AKSEN', 'ALARK', 'ALBRK',
+  'ALFAS', 'ANSGR', 'ARCLK', 'ARDYZ', 'ASELS', 'ASTOR', 'BERA', 'BFREN', 'BIMAS', 'BINHO',
+  'BRSAN', 'BRYAT', 'BTCIM', 'CANTE', 'CCOLA', 'CIMSA', 'CWENE', 'DAPGM', 'DOAS', 'DOHOL',
+  'EBEBK', 'ECILC', 'EGEEN', 'EKGYO', 'ENERY', 'ENJSA', 'ENKAI', 'EREGL', 'EUPWR', 'FROTO',
+  'GARAN', 'GENIL', 'GESAN', 'GUBRF', 'GWIND', 'HALKB', 'HEKTS', 'IPEKE', 'ISCTR', 'ISMEN',
+  'IZMDC', 'KARSN', 'KAYSE', 'KCAER', 'KCHOL', 'KLSER', 'KMPUR', 'KONTR', 'KONYA', 'KOZAA',
+  'KOZAL', 'KRDMD', 'MAVI', 'MGROS', 'MIATK', 'MPARK', 'ODAS', 'OTKAR', 'OYAKC', 'PENTA',
+  'PETKM', 'PGSUS', 'QUAGR', 'REEDR', 'SAHOL', 'SASA', 'SDTTR', 'SISE', 'SKBNK', 'SMRTG',
+  'SOKM', 'TABGD', 'TAVHL', 'TCELL', 'THYAO', 'TKFEN', 'TMSN', 'TOASO', 'TSKB', 'TTKOM',
+  'TTRAK', 'TUKAS', 'TUPRS', 'TURSG', 'ULKER', 'VAKBN', 'VESBE', 'VESTL', 'YEOTK', 'YKBNK',
+  'YYLGD', 'ZOREN', 'ZRGYO',
+];
+
+// Hijyen eşikleri — bunlar SKOR değil, KAPIDIR. Altında kalan hisse hiç puanlanmaz.
+const SCREEN_LIMITS = {
+  minMarketCap: 2e9,    // 2 milyar TL — mikro şirkette tek haber fiyatı savurur
+  minTurnover: 20e6,    // günlük ort. 20 mn TL işlem — likit olmayanda çıkış yoktur
+  maxPE: 40,            // bunun üstünde kazanç getirisi engel oranı yanında anlamsız
+  maxPB: 6,             // defter değerinin 6 katı: "iyi iş" değil, beklenti fiyatı
+  deepCount: 10,        // 2. kademede kaç hisseye Buffett skoru çalışsın
+  listCount: 12,        // ekranda kaç satır gösterilsin
+  maxSymbols: 120,      // worker tavanıyla aynı
+};
+
+const SCREEN_DROP_LABELS = {
+  nodata: 'veri gelmedi',
+  loss: 'zarar ediyor / kâr verisi yok',
+  nobook: 'defter değeri yok',
+  small: 'piyasa değeri eşiğin altında',
+  illiquid: 'işlem hacmi düşük',
+  expensive: 'F/K tavanın üstünde',
+  rich: 'PD/DD tavanın üstünde',
+};
+
+// ——— Türetilmiş ROE ———
+// PD/DD ÷ F/K = (Fiyat/Defter) × (Kazanç/Fiyat) = Kazanç/Defter = ROE.
+// Cebirsel bir ÖZDEŞLİK, tahmin değil. Ama TEK YILLIKTIR — Buffett çok yıllı
+// istikrar ister; o yüzden bu sadece ön eleme kriteri, kademe 2'nin yerini tutmaz.
+function screenRoe(r) {
+  if (!r) return null;
+  const pe = r.trailingPE, pb = r.priceToBook;
+  if (pe == null || pb == null || !isFinite(pe) || !isFinite(pb) || pe <= 0 || pb <= 0) return null;
+  return pb / pe;
+}
+
+// Günlük ortalama işlem hacmi (TL) — likidite kapısı
+function screenTurnover(r) {
+  if (!r || r.price == null || r.avgVolume == null) return null;
+  if (!isFinite(r.price) || !isFinite(r.avgVolume) || r.price <= 0 || r.avgVolume <= 0) return null;
+  return r.price * r.avgVolume;
+}
+
+// Kapı kontrolü — {ok:true} ya da {ok:false, why:'kod'}
+function screenHygiene(r, lim) {
+  const L = Object.assign({}, SCREEN_LIMITS, lim || {});
+  if (!r || r.price == null || !isFinite(r.price) || r.price <= 0) return { ok: false, why: 'nodata' };
+  if (r.trailingPE == null || !isFinite(r.trailingPE) || r.trailingPE <= 0) return { ok: false, why: 'loss' };
+  if (r.priceToBook == null || !isFinite(r.priceToBook) || r.priceToBook <= 0) return { ok: false, why: 'nobook' };
+  if (r.marketCap == null || !isFinite(r.marketCap) || r.marketCap < L.minMarketCap) return { ok: false, why: 'small' };
+  const to = screenTurnover(r);
+  if (to == null || to < L.minTurnover) return { ok: false, why: 'illiquid' };
+  if (r.trailingPE > L.maxPE) return { ok: false, why: 'expensive' };
+  if (r.priceToBook > L.maxPB) return { ok: false, why: 'rich' };
+  return { ok: true };
+}
+
+// ——— ÖN SKOR (0-100) — kademe 1 ———
+// Ağırlık toplamı 10. Veri gelmeyen kriter ATLANIR ve paydadan da düşer
+// (buffettScore ile aynı kalıp) — eksik veri sessizce 0 puan sayılmaz.
+// Kapsama %60'ın altına düşerse skor null döner: UYDURMA YOK.
+function screenPreScore(r, hurdlePct) {
+  if (!r) return null;
+  const hur = (isFinite(hurdlePct) && hurdlePct > 0) ? hurdlePct / 100 : 0.35;
+  const parts = [];
+  const add = (key, label, weight, score, note) => parts.push({ key, label, weight, score, note });
+  const pct = v => (v == null || !isFinite(v)) ? '—' : ('%' + (Math.round(v * 1000) / 10));
+
+  // 1) Türetilmiş ROE — engel oranına karşı (ana filtre)
+  const roe = screenRoe(r);
+  if (roe != null) {
+    add('roe', 'Özsermaye kârlılığı (türetilmiş)', 4.0, bfLin(roe / hur, 0.6, 1.6),
+      `${pct(roe)} · engel oranı ${pct(hur)} · PD/DD ÷ F/K ile türetildi, TEK yıllıktır`);
+  } else {
+    add('roe', 'Özsermaye kârlılığı (türetilmiş)', 4.0, null, 'F/K veya PD/DD gelmedi.');
+  }
+
+  // 2) Kazanç getirisi (1/FK) — engel oranına karşı
+  if (r.trailingPE != null && isFinite(r.trailingPE) && r.trailingPE > 0) {
+    const ey = 1 / r.trailingPE;
+    add('ey', 'Kazanç getirisi (1 ÷ F/K)', 3.0, bfLin(ey / hur, 0.5, 1.3),
+      `${pct(ey)} · F/K ${Math.round(r.trailingPE * 10) / 10} · engel oranı ${pct(hur)}`);
+  } else {
+    add('ey', 'Kazanç getirisi (1 ÷ F/K)', 3.0, null, 'F/K gelmedi.');
+  }
+
+  // 3) PD/DD — defter değerine göre fiyat
+  if (r.priceToBook != null && isFinite(r.priceToBook) && r.priceToBook > 0) {
+    add('pb', 'Fiyat / Defter değeri', 2.0, 1 - bfLin(r.priceToBook, 0.8, 3.5),
+      `${Math.round(r.priceToBook * 100) / 100}× · 1'in altı defter değerinin altında fiyat demek`);
+  } else {
+    add('pb', 'Fiyat / Defter değeri', 2.0, null, 'PD/DD gelmedi.');
+  }
+
+  // 4) Temettü verimi — nakit dağıtımı (destekleyici, belirleyici değil)
+  if (r.dividendYield != null && isFinite(r.dividendYield) && r.dividendYield > 0) {
+    add('div', 'Temettü verimi', 1.0, bfLin(r.dividendYield / hur, 0, 0.5),
+      `${pct(r.dividendYield)} · fiyata göre yıllık dağıtılan nakit`);
+  } else {
+    add('div', 'Temettü verimi', 1.0, null, 'Temettü verisi yok ya da dağıtmıyor.');
+  }
+
+  const used = parts.filter(p => p.score != null);
+  const wTot = parts.reduce((a, p) => a + p.weight, 0);
+  const wUse = used.reduce((a, p) => a + p.weight, 0);
+  const coverage = wTot > 0 ? wUse / wTot : 0;
+  if (coverage < 0.6) {
+    return { score: null, parts, coverage: Math.round(coverage * 100) / 100, roe,
+      reason: 'Yahoo bu sembol için yeterli oran döndürmedi.' };
+  }
+  const raw = used.reduce((a, p) => a + p.score * p.weight, 0) / wUse;
+  return {
+    score: Math.round(bfClamp01(raw) * 100),
+    parts, roe,
+    coverage: Math.round(coverage * 100) / 100,
+  };
+}
+
+// ——— Tüm evreni ele + sırala ———
+// Deterministik: eşit skorda sembol adı alfabetik kazanır (rastgelelik YOK).
+function screenRank(rows, opts) {
+  const o = opts || {};
+  const hur = (isFinite(o.hurdlePct) && o.hurdlePct > 0) ? o.hurdlePct : 35;
+  const lim = Object.assign({}, SCREEN_LIMITS, o.limits || {});
+  const passed = [], dropCounts = {};
+  for (const r of (Array.isArray(rows) ? rows : [])) {
+    const h = screenHygiene(r, lim);
+    if (!h.ok) { dropCounts[h.why] = (dropCounts[h.why] || 0) + 1; continue; }
+    const ps = screenPreScore(r, hur);
+    if (!ps || ps.score == null) { dropCounts.nodata = (dropCounts.nodata || 0) + 1; continue; }
+    passed.push(Object.assign({}, r, {
+      preScore: ps.score, preParts: ps.parts, roe: ps.roe,
+      turnover: screenTurnover(r), buffett: null,
+    }));
+  }
+  passed.sort((a, b) => (b.preScore - a.preScore) || String(a.symbol).localeCompare(String(b.symbol), 'tr'));
+  const scanned = Array.isArray(rows) ? rows.length : 0;
+  return {
+    passed, dropCounts, scanned,
+    dropped: scanned - passed.length,
+    hurdlePct: hur,
+  };
+}
+
+// ——— Buffett skoruna göre sıralama ———
+// Skoru OLMAYAN hisse listenin altına ayrı grupta düşer — iki farklı ölçeği
+// aynı sıralamaya karıştırmak yanıltıcı olurdu.
+function screenSort(list, mode) {
+  const arr = (Array.isArray(list) ? list : []).slice();
+  if (mode !== 'buffett') {
+    arr.sort((a, b) => (b.preScore - a.preScore) || String(a.symbol).localeCompare(String(b.symbol), 'tr'));
+    return arr;
+  }
+  const bs = x => (x.buffett && x.buffett.score != null) ? x.buffett.score : null;
+  arr.sort((a, b) => {
+    const x = bs(a), y = bs(b);
+    if (x == null && y == null) return (b.preScore - a.preScore) || String(a.symbol).localeCompare(String(b.symbol), 'tr');
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return (y - x) || String(a.symbol).localeCompare(String(b.symbol), 'tr');
+  });
+  return arr;
+}
+
+// Buffett kriter dökümünden en zayıf 2 madde (AI'a ve karta gider)
+function screenWeakest(bf, n) {
+  if (!bf || !Array.isArray(bf.parts)) return [];
+  return bf.parts.filter(p => p && p.score != null)
+    .sort((a, b) => a.score - b.score)
+    .slice(0, n || 2)
+    .map(p => `${p.label} (${Math.round(p.score * p.weight * 10) / 10}/${p.weight})`);
+}
+
+// ============================================================
+// Tarama akışı
+// ============================================================
+let _screenBusy = false;
+let _screenSort = 'pre';
+
+function ensureScreen() {
+  if (!data.screen || typeof data.screen !== 'object') data.screen = {};
+  if (!Array.isArray(data.screen.rows)) data.screen.rows = [];
+  return data.screen;
+}
+
+// Evren = sabit liste + kullanıcının kendi BIST izleme listesi (tekrarsız)
+function screenUniverse() {
+  const set = new Set(BIST_UNIVERSE);
+  for (const w of (data.watchlist || [])) {
+    if (!w || w.market !== 'bist' || !w.symbol) continue;
+    const s = String(w.symbol).toUpperCase().replace(/\.IS$/, '');
+    if (/^[A-Z0-9]{2,10}$/.test(s)) set.add(s);
+  }
+  return Array.from(set).slice(0, SCREEN_LIMITS.maxSymbols);
+}
+
+function setScreenStatus(msg, isError) {
+  const el = document.getElementById('scrStatus');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.classList.toggle('error', !!isError);
+  el.style.display = msg ? 'block' : 'none';
+}
+
+async function runScreener() {
+  if (_screenBusy) return;
+  _screenBusy = true;
+  const btn = document.getElementById('scrRunBtn');
+  if (btn) { btn.disabled = true; btn.classList.add('busy'); }
+  const hur = buffettHurdle('TRY');
+  try {
+    const token = await getSupaToken();
+    if (!token) throw new Error('giriş yapılmamış');
+
+    const symbols = screenUniverse();
+    setScreenStatus(`${symbols.length} hisse taranıyor…`);
+    const r = await fetch(STOCK_SCREEN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ symbols: symbols.map(s => s + '.IS') }),
+    });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `http ${r.status}`); }
+    const j = await r.json();
+    const rows = Array.isArray(j.rows) ? j.rows : [];
+    if (!rows.length) throw new Error('Yahoo veri döndürmedi, birazdan tekrar dene');
+
+    const res = screenRank(rows, { hurdlePct: hur });
+    const top = res.passed.slice(0, SCREEN_LIMITS.listCount);
+
+    const sc = ensureScreen();
+    sc.at = Date.now();
+    sc.hurdlePct = hur;
+    sc.scanned = res.scanned;
+    sc.dropped = res.dropped;
+    sc.dropCounts = res.dropCounts;
+    sc.asked = symbols.length;
+    sc.rows = top;
+    sc.comment = null;
+    save();
+    _screenSort = 'pre';
+    renderScreener();
+
+    // ——— Kademe 2: ilk N hisseye mevcut Buffett skoru ———
+    setScreenStatus(`Mali tablolar okunuyor (${Math.min(SCREEN_LIMITS.deepCount, top.length)} hisse)…`);
+    await screenDeepStage(top.slice(0, SCREEN_LIMITS.deepCount), token);
+    sc.rows = top;
+    sc.deepAt = Date.now();
+    save();
+    setScreenStatus('');
+    renderScreener();
+  } catch (e) {
+    setScreenStatus('Tarama yapılamadı: ' + e.message, true);
+  } finally {
+    _screenBusy = false;
+    if (btn) { btn.disabled = false; btn.classList.remove('busy'); }
+  }
+}
+
+// Sembol başına /stock-fundamentals + buffettScore. 3'lü kuyruk — Yahoo'yu
+// aynı anda 10 istekle dövmek 429/403 getirir.
+async function screenDeepStage(list, token) {
+  const queue = list.slice();
+  const worker = async () => {
+    while (queue.length) {
+      const row = queue.shift();
+      if (!row) continue;
+      try {
+        const r = await fetch(STOCK_FUND_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ ySymbol: row.ySymbol, symbol: row.symbol }),
+        });
+        if (!r.ok) throw new Error(`http ${r.status}`);
+        const d = await r.json();
+        const bf = buffettScore(d, buffettHurdle(d.currency || 'TRY'));
+        row.buffett = bf ? {
+          score: bf.score, label: bf.label, coverage: bf.coverage,
+          years: bf.years, reason: bf.reason || null, weak: screenWeakest(bf, 2),
+        } : { score: null, label: 'yetersiz veri', reason: 'skor üretilemedi', weak: [] };
+      } catch (e) {
+        // ⚠️ Sessiz geçme — kullanıcı "skor yok" ile "skor kötü" arasını GÖRMELİ
+        row.buffett = { score: null, label: 'veri alınamadı', reason: e.message, weak: [] };
+      }
+      renderScreenRows();
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+}
+
+function setScreenSort(mode) {
+  _screenSort = (mode === 'buffett') ? 'buffett' : 'pre';
+  renderScreener();
+}
+
+// ⚠️ setBuffettHurdle() KULLANILMAZ: o, o an acik olan hisse grafiginin para
+// birimine gore duzenler (US hissesine bakildiysa USD esigini degistirir).
+// Tarama her zaman BIST = TRY'dir, esik dogrudan TRY'ye yazilir.
+async function setScreenHurdle() {
+  const now = buffettHurdle('TRY');
+  const v = await aidanPrompt(
+    'Engel oranı (TRY)',
+    'Bir şirketin aşması gereken yıllık getiri, % olarak. Mevduat/tahvil faizini yaz — %15 ROE, mevduat %37 iken iyi değildir.',
+    String(now)
+  );
+  if (v == null) return;
+  const n = Number(String(v).replace(',', '.').replace('%', '').trim());
+  if (!isFinite(n) || n <= 0 || n >= 200) { showToast('Geçerli bir yüzde gir (1-199)', 'error'); return; }
+  data.settings = data.settings || {};
+  if (!data.settings.buffettHurdle || typeof data.settings.buffettHurdle !== 'object') data.settings.buffettHurdle = {};
+  data.settings.buffettHurdle.TRY = n;
+
+  // Ekrandaki liste bayat kalmasin — on skorlar yeni esikle yeniden hesaplanir.
+  // (Buffett skoru yeniden hesaplanmaz: mali tablo istegi gerektirir, yeniden tara.)
+  const sc = data.screen;
+  if (sc && Array.isArray(sc.rows) && sc.rows.length) {
+    for (const row of sc.rows) {
+      const ps = screenPreScore(row, n);
+      if (ps && ps.score != null) { row.preScore = ps.score; row.preParts = ps.parts; }
+    }
+    sc.hurdlePct = n;
+  }
+  save();
+  renderScreener();
+  showToast(`Engel oranı %${n} yapıldı`, 'success');
+}
+
+function screenAddToWatchlist(sym) {
+  const s = String(sym || '').toUpperCase().replace(/\.IS$/, '');
+  if (!/^[A-Z0-9]{2,10}$/.test(s)) return;
+  data.watchlist = data.watchlist || [];
+  if (data.watchlist.some(w => w && String(w.symbol).toUpperCase() === s && w.market === 'bist')) {
+    showToast(`${s} zaten listende`, 'info');
+    return;
+  }
+  data.watchlist.push({ symbol: s, ySymbol: s + '.IS', market: 'bist', name: s });
+  save();
+  renderStocks();   // renderScreener() zaten bunun icinden cagriliyor
+  showToast(`${s} izleme listesine eklendi`, 'success');
+  refreshStocks();
+}
+
+// ============================================================
+// AI yorumu — tabloyu ANLATIR, sıralamaya karışmaz
+// ============================================================
+async function aiScreenComment() {
+  const sc = data.screen;
+  if (!sc || !Array.isArray(sc.rows) || !sc.rows.length) return;
+  const btn = document.getElementById('scrAiBtn');
+  const box = document.getElementById('scrComment');
+  if (btn) btn.disabled = true;
+  if (box) { box.style.display = 'block'; box.innerHTML = '<div class="scr-loading">Aidan tabloyu okuyor…</div>'; }
+  try {
+    const token = await getSupaToken();
+    if (!token) throw new Error('giriş yapılmamış');
+    const results = sc.rows.slice(0, 12).map(r => ({
+      symbol: r.symbol, name: r.name, preScore: r.preScore,
+      trailingPE: r.trailingPE, priceToBook: r.priceToBook,
+      roe: r.roe, dividendYield: r.dividendYield,
+      buffett: r.buffett || null,
+    }));
+    const r = await fetch(STOCK_SCREEN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        comment: true, results,
+        hurdlePct: sc.hurdlePct || buffettHurdle('TRY'),
+        scanned: sc.scanned, dropped: sc.dropped,
+        instructions: (typeof aiInstructions === 'function') ? aiInstructions() : '',
+      }),
+    });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `http ${r.status}`); }
+    const j = await r.json();
+    sc.comment = j.comment || '';
+    save();
+    renderScreenComment();
+  } catch (e) {
+    if (box) box.innerHTML = `<div class="scr-loading">Yorum alınamadı: ${escapeHtml(e.message)}</div>`;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function renderScreenComment() {
+  const box = document.getElementById('scrComment');
+  const sc = data.screen;
+  if (!box) return;
+  if (!sc || !sc.comment) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = 'block';
+  box.innerHTML = `<div class="scr-comment-head">Aidan'ın okuması</div>
+    <div class="scr-comment-body">${escapeHtml(sc.comment).replace(/\n/g, '<br>')}</div>`;
+}
+
+// ============================================================
+// Render
+// ============================================================
+function scrCls(v) { return v >= 70 ? 'good' : (v >= 45 ? 'mid' : 'bad'); }
+
+function screenRowHtml(r, i) {
+  const tr = n => n.toLocaleString('tr-TR');
+  const num = (v, d) => (v == null || !isFinite(v)) ? '—' : tr(Math.round(v * Math.pow(10, d)) / Math.pow(10, d));
+  const pct = v => (v == null || !isFinite(v)) ? '—' : '%' + tr(Math.round(v * 1000) / 10);
+  const big = v => {
+    if (v == null || !isFinite(v)) return '—';
+    if (Math.abs(v) >= 1e9) return tr(Math.round(v / 1e8) / 10) + ' Mr';
+    if (Math.abs(v) >= 1e6) return tr(Math.round(v / 1e5) / 10) + ' Mn';
+    return tr(Math.round(v));
+  };
+  const cls = scrCls(r.preScore);
+  const bf = r.buffett;
+  let bfHtml = '<span class="scr-bf pending">Buffett skoru bekliyor</span>';
+  if (bf) {
+    bfHtml = bf.score == null
+      ? `<span class="scr-bf na" title="${escapeHtml(String(bf.reason || ''))}">Buffett skoru yok — ${escapeHtml(String(bf.label || 'veri gelmedi'))}</span>`
+      : `<span class="scr-bf ${scrCls(bf.score)}">Buffett ${tr(bf.score)}/100 · ${escapeHtml(String(bf.label || ''))}</span>`;
+  }
+  const weak = (bf && Array.isArray(bf.weak) && bf.weak.length)
+    ? `<div class="scr-weak">En zayıf: ${bf.weak.map(w => escapeHtml(String(w))).join(' · ')}</div>` : '';
+  const cells = [
+    ['F/K', num(r.trailingPE, 1)],
+    ['PD/DD', num(r.priceToBook, 2)],
+    ['ROE*', pct(r.roe)],
+    ['Temettü', pct(r.dividendYield)],
+    ['Piyasa değeri', big(r.marketCap)],
+    ['Günlük hacim', big(r.turnover)],
+  ].map(([l, v]) => `<div class="scr-cell"><span class="lbl">${l}</span><span class="val">${escapeHtml(String(v))}</span></div>`).join('');
+
+  return `<div class="scr-row">
+    <div class="scr-row-top">
+      <div class="scr-rank">${i + 1}</div>
+      <div class="scr-id">
+        <div class="scr-sym">${escapeHtml(String(r.symbol || ''))}</div>
+        <div class="scr-name">${escapeHtml(String(r.name || ''))}</div>
+      </div>
+      <div class="scr-score ${cls}">${tr(r.preScore)}<span>/100</span></div>
+    </div>
+    <div class="scr-bar"><i class="${cls}" style="width:${Math.max(2, Math.min(100, r.preScore))}%"></i></div>
+    <div class="scr-cells">${cells}</div>
+    <div class="scr-row-foot">${bfHtml}
+      <button type="button" class="scr-add" onclick="screenAddToWatchlist('${escapeHtml(String(r.symbol || ''))}')">Listeme ekle</button>
+    </div>
+    ${weak}
+  </div>`;
+}
+
+function renderScreenRows() {
+  const el = document.getElementById('scrRows');
+  if (!el) return;
+  const sc = data.screen;
+  const rows = (sc && Array.isArray(sc.rows)) ? screenSort(sc.rows, _screenSort) : [];
+  el.innerHTML = rows.length
+    ? rows.map((r, i) => screenRowHtml(r, i)).join('')
+    : '<div class="scr-empty">Filtreden geçen hisse yok. Engel oranını düşürmeyi deneyebilirsin.</div>';
+}
+
+function renderScreener() {
+  const el = document.getElementById('screenerSection');
+  if (!el) return;
+  const sc = data.screen;
+  const tr = n => n.toLocaleString('tr-TR');
+  const hur = (sc && sc.hurdlePct) || buffettHurdle('TRY');
+  const has = !!(sc && Array.isArray(sc.rows) && sc.rows.length);
+
+  const when = (sc && sc.at)
+    ? new Date(sc.at).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : null;
+
+  const dropList = (sc && sc.dropCounts)
+    ? Object.keys(sc.dropCounts).sort((a, b) => sc.dropCounts[b] - sc.dropCounts[a])
+        .map(k => `<li>${escapeHtml(SCREEN_DROP_LABELS[k] || k)}: <b>${tr(sc.dropCounts[k])}</b></li>`).join('')
+    : '';
+
+  el.innerHTML = `
+    <div class="scr-head">
+      <div class="scr-head-txt">
+        <div class="scr-title">BIST temel tarama</div>
+        <div class="scr-sub">${when ? escapeHtml(when) + ' · ' : ''}${sc && sc.scanned ? tr(sc.scanned) + ' hisse tarandı · ' : ''}engel oranı %${tr(hur)}</div>
+      </div>
+      <button type="button" class="scr-run" id="scrRunBtn" onclick="runScreener()">${has ? 'Yeniden tara' : 'Tara'}</button>
+    </div>
+    <div class="scr-status" id="scrStatus" style="display:none;"></div>
+    ${has ? `
+    <div class="scr-tools">
+      <div class="scr-sortby">
+        <button type="button" class="${_screenSort === 'pre' ? 'active' : ''}" onclick="setScreenSort('pre')">Ön skor</button>
+        <button type="button" class="${_screenSort === 'buffett' ? 'active' : ''}" onclick="setScreenSort('buffett')">Buffett skoru</button>
+      </div>
+      <button type="button" class="scr-hurdle" onclick="setScreenHurdle()">engel oranı %${tr(hur)} · değiştir</button>
+    </div>
+    <div class="scr-rows" id="scrRows"></div>
+    ${dropList ? `<details class="scr-drop"><summary>Elenen ${tr(sc.dropped || 0)} hisse — hangi kapıdan döndü</summary><ul>${dropList}</ul></details>` : ''}
+    <button type="button" class="scr-ai" id="scrAiBtn" onclick="aiScreenComment()">Aidan bu tabloyu anlatsın</button>
+    <div class="scr-comment" id="scrComment" style="display:none;"></div>
+    ` : `<p class="scr-intro">BIST'in likit ana gövdesini temel oranlara göre eler: kâr eden, defter değerine göre makul fiyatlanan, özsermayesini engel oranının üzerinde çalıştıran şirketler kalır. İlk ${SCREEN_LIMITS.deepCount} hisseye ayrıca Buffett skoru çalışır.</p>`}
+    <p class="scr-note"><b>Bu bir alım listesi değildir.</b> Mekanik bir filtrenin çıktısıdır; sıralama tercih sırası değil, formülün sonucudur. ROE* = PD/DD ÷ F/K ile türetilmiştir ve <b>tek yıllıktır</b>. TRY'de 2023 sonrası enflasyon muhasebesi net kârı çarpıtır — oranları buna göre oku. Veriler Yahoo Finance'tan, gecikmeli ve eksik olabilir.</p>`;
+
+  if (has) { renderScreenRows(); renderScreenComment(); }
 }

@@ -19,6 +19,37 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 11 Ağustos 2026 — 🔎 BIST HİSSE TARAMA FİLTRESİ (v7-146)
+
+Salim: "uygulamaya alınacak hisse senedi bulma filtresi ekle bist için." Seçimler: **sadece temel analiz** (teknik/momentum kriteri YOK) · evren **BIST 100** · **elle tetiklenen** tarama + isteğe bağlı AI yorumu.
+
+**🔴 KAPSAM SINIRI — bu paketin en önemli cümlesi.** Çıkan liste bir **alım listesi DEĞİLDİR**, sıralama bir tercih sırası değildir. Kod hiçbir yerde al/sat demez; bu sınır ① kart altındaki sabit notta ② AI prompt'unun ilk maddesinde ③ teste bağlı olarak üç yerde birden yazılı. AI'ın listeyi yeniden sıralaması, "en iyisi bu" demesi ve "ucuz/pahalı" değer yargısı ayrı ayrı yasak.
+
+**⚙️ İKİ KADEME — mimarinin özü (Cloudflare sınırı zorladı).** Mali tablo isteği (`/stock-fundamentals`) **sembol başınadır**; 100 hisse için 100 istek eder ve ücretsiz planın **istek başına 50 subrequest** sınırını tarama daha başlamadan patlatır.
+- **Kademe 1 — geniş ve ucuz:** yeni `POST /stock-screen` → Yahoo **`v7/finance/quote`** ile **50 sembol tek istekte**. 103 hisse = 2 chunk + crumb = **4 subrequest**. Gelen alanlar: F/K, PD/DD, temettü, piyasa değeri, HBK, hacim.
+- **Kademe 2 — dar ve pahalı:** ayakta kalan **ilk 10** hisseye **mevcut `buffettScore()`** çalışır (3'lü kuyruk — Yahoo'yu 10 eşzamanlı istekle dövmek 429/403 getirir). **Yeni skor motoru YAZILMADI.**
+
+**🧮 Türetilmiş ROE — tahmin değil ÖZDEŞLİK.** `PD/DD ÷ F/K = (Fiyat/Defter) × (Kazanç/Fiyat) = Kazanç/Defter = ROE`. Toplu quote ROE vermiyor, ama bu cebirle bedavaya çıkıyor. ⚠️ **TEK YILLIKTIR** — Buffett çok yıllı istikrar ister; o yüzden yalnız ön eleme kriteridir, kademe 2'nin yerini tutmaz. Kartta `ROE*` yıldızıyla ve altındaki notta açıkça yazılı.
+
+**Hijyen kapıları SKOR DEĞİL, KAPIDIR** (altında kalan hisse hiç puanlanmaz): zarar eden ya da F/K'sı gelmeyen · defter değeri yok · piyasa değeri < 2 mlr TL · **günlük ort. işlem hacmi < 20 mn TL** (BIST'te likidite şart — likit olmayanda çıkış yoktur) · F/K > 40 · PD/DD > 6. Elenen her hisse **sebebiyle sayılır** ve kartta katlanır dökümde gösterilir — sessiz eleme yok.
+
+**Ön skor (0-100), ağırlık toplamı 10:** türetilmiş ROE vs engel oranı **4.0** · kazanç getirisi (1÷F/K) vs engel **3.0** · PD/DD **2.0** · temettü verimi **1.0**. **Veri gelmeyen kriter ATLANIR ve paydadan da düşer** (buffettScore kalıbı) — eksik veri sessizce 0 puan sayılmaz. **Kapsama %60 altına düşerse skor `null`**, uydurma yok.
+- **Engel oranı mevcut `buffettHurdle` ile ortak** (TRY varsayılan %35). ⚠️ Tarama eşiği `setBuffettHurdle()` ÇAĞIRMAZ — o fonksiyon **o an açık olan grafiğin** para birimini düzenler; US hissesine bakıldıktan sonra tarama eşiği değiştirilseydi USD eşiği değişirdi (sessiz hata, teste bağlandı).
+
+**"Buffett skoru YOK" ile "Buffett skoru DÜŞÜK" aynı şey değildir.** Yahoo BIST'te mali tabloyu sık sık vermiyor (bilinen sınır). Skoru gelmeyen satır ayrı rozetle işaretlenir, Buffett'a göre sıralamada **en alta ayrı grupta** düşer — iki farklı ölçeği aynı sıralamaya karıştırmak yanıltıcı olurdu. Deep aşamada hata olursa da sessiz geçilmez, "veri alınamadı" yazılır.
+
+**Evren `BIST_UNIVERSE` (103 sembol, stocks.js).** ⚠️ **Elle bakılan liste** — endeks 3 ayda bir değişir. Endeksten çıkmış sembol zarar vermez (Yahoo veri döndürmezse sessizce düşer), ama **yeni giren hisse eklenmedikçe taranmaz**. Kullanıcının kendi BIST izleme listesindeki semboller her taramada otomatik eklenir.
+
+**AI çağrısı motorda YOK** — eleme ve skor tamamen kural tabanlı ve deterministik (eşit skorda alfabetik, girdi sırası sonucu değiştirmez). AI yalnız düğmeye basılırsa ve yalnız **çıkan tabloyu anlatmak** için çağrılır; `/stock-screen` ikinci modu (`{comment:true}`), `heavy` + `aiTierForUser` kilidi. Worker hiçbir hisseyi sıralamaz/puanlamaz — teste bağlı.
+
+**Yeni veri alanı:** `data.screen = { at, hurdlePct, scanned, dropped, dropCounts, rows[≤12], comment, deepAt }`.
+**Yeni DOSYA YOK** — kod `stocks.js` sonuna eklendi (zaten tembel yüklenen borsa modülü), yani `LAZY_MODULES`/`sw.js`/`deploy.py`/Actions `paths` **hiç değişmedi**. İlk yükleme bütçesi etkilenmedi (13-lazy 49/49 geçiyor).
+**UI:** Borsa sekmesinde `#screenerSection` (BIST100 karşılaştırmasının altında). Yeni sekme/modal YOK; tarama yapılmadan tek satır + düğme, Impeccable uyumlu.
+
+**Doğrulama:** yeni `tests/19-screener.test.js` **44 test** (ROE özdeşliği 2 · hijyen kapıları 6 · ön skor 8 — hurdle etkisi, atlanan kriter, kapsama tabanı, NaN sızıntısı, ağırlık sözleşmesi · sıralama/determinizm 5 · evren 2 · DOM + XSS 6 · mimari sözleşme 5 · worker sözleşmesi 6 — auth, worker skor hesaplamıyor, temettü oran/yüzde, prompt yasakları, talimat sırası · Impeccable + EOL 4). **20 dosya toplam 527 test geçiyor**, tek kırmızı kasıtlı (SILINECEK-DOSYALAR hatırlatıcısı).
+**⚠️ Test notu:** `data` core.js'te top-level `let` — **window'a yazılmaz**, testte `A.evalIn('data')` ile canlı referans alınır. Ayrıca vm bağlamından dönen dizide `deepStrictEqual` KULLANMA (farklı realm) — `join(',')` ile karşılaştır.
+**Cache:** v7-145 → **v7-146**
+
 ### 🔴 10 Ağustos 2026 — 🔢 TEK BMR KAYNAĞI (v7-145)
 
 Salim: "bazal metabolizma nerden anlarım" sorusu bir **tutarsızlığı ortaya çıkardı**: `hcEnergyCheck` (sağlık raporu) **Mifflin-St Jeor**, yeni `nutrition.js` ise **Schofield** kullanıyordu. Aynı kişi için iki farklı BMR — 16 yaş/70 kg'da **~160 kcal fark**. Sağlık raporu "TDEE 2900" derken beslenme planı 3034 diyordu.
@@ -977,6 +1008,7 @@ Günde 288 istek (limit 100K). `Promise.allSettled` — bir iş patlarsa diğerl
 - `POST /portfolio-technical` — tüm pozisyonların TA snapshot özeti.
 - `POST /stock-fundamentals` — Yahoo temel veri + 4 yıllık mali tablo + 5y aylık kapanış (Buffett skorunun girdisi).
 - `POST /stock-news` — Yahoo haber proxy + opsiyonel AI ön eleme.
+- `POST /stock-screen` — BIST toplu temel veri (Yahoo v7 quote, 50 sembol/istek) + `{comment:true}` ile tarama tablosunu anlatan AI yorumu. **Eleme ve skor PWA'da**, worker sıralamaz.
 - `POST /food-macros` — besin makro arama (USDA + AI).
 - `POST /diet-plan-image` · `POST /classroom-image` — görsel OCR (diyet programı / Classroom ödevi).
 - `POST /hevy-sync` — Hevy antrenman proxy (⚠️ Hevy Pro şart).
@@ -1157,6 +1189,7 @@ py aidan-pages-deploy.py
                alarmAbove, alarmBelow, lastAlertedAbove, lastAlertedBelow, qty, cost, fetchedAt, error}],  // (Haz 6-8) borsa
   portfolioHistory: [{date:'YYYY-MM-DD', byCur:{TRY:{value,cost}}}],  // (Haz 8) portföy değer geçmişi, son 180 gün
   reminders: [{id, label, time:'HH:MM', days:'daily'|'weekdays', enabled, lastFired:'YYYY-MM-DD'}],  // (Haz 10) sabit hatırlatıcılar — Worker 15dk cron push'lar
+  screen: { at, hurdlePct, scanned, dropped, dropCounts, rows:[...], comment, deepAt },  // (11 Agu 2026) BIST temel tarama — son tarama sonucu, max 12 satır
   diet: {  // (Haz 14) diyet sekmesi + diyet programı
     kcalGoal, waterGoal,
     days: { 'YYYY-MM-DD': { meals:[{id, slot, name, kcal, planId?}], water } },  // günlük öğün log + su; planId = plandan gelen kayıt

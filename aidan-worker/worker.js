@@ -4135,6 +4135,231 @@ async function handleStockFundamentalsApi(request, env) {
 }
 
 // ============================================================
+// 🔎 HİSSE TARAMA (BIST) — toplu temel veri proxy'si + AI yorumu
+// ============================================================
+// NEDEN AYRI UÇ: /stock-fundamentals sembol BAŞINA quoteSummary çağırır (mali
+// tablo + 5y fiyat serisi). 100 hisse için 100 istek eder — Cloudflare ücretsiz
+// planda istek başına 50 subrequest sınırı var, tarama daha başlamadan patlardı.
+// v7/finance/quote ise TEK istekte 50 sembolün temel oranlarını döner.
+//
+// ⚠️ İŞ BÖLÜMÜ: burası SADECE veri taşır. Eleme ve skor PWA'da (stocks.js
+// screenPreScore) — "sayıyı PWA hesaplar, AI uydurmaz" ilkesi. Worker hiçbir
+// hisseyi sıralamaz, filtrelemez, puanlamaz.
+//
+// İki mod (stock-news kalıbı): (1) {symbols:[...]} → ham satırlar
+//                              (2) {comment:true, results:[...]} → AI yorumu
+const SCREEN_MAX_SYMBOLS = 120;
+const SCREEN_CHUNK = 50;   // Yahoo v7 quote tek istekte rahat taşır; 2 chunk = 2 subrequest
+const SCREEN_FIELDS = [
+  'symbol', 'longName', 'shortName', 'currency',
+  'regularMarketPrice', 'regularMarketChangePercent', 'regularMarketVolume',
+  'marketCap', 'trailingPE', 'forwardPE', 'priceToBook', 'bookValue',
+  'epsTrailingTwelveMonths', 'epsForward',
+  'dividendYield', 'trailingAnnualDividendYield',
+  'averageDailyVolume3Month', 'averageDailyVolume10Day',
+].join(',');
+
+// Yahoo temettü verimini bazen oran (0,032) bazen yüzde (3,2) döner — ikisini de
+// ORANA çevir. 1'in üstü kesin yüzdedir; %100 üstü temettü verimi gerçek değildir.
+function screenDivYield(q) {
+  const cand = [q.trailingAnnualDividendYield, q.dividendYield];
+  for (const v of cand) {
+    if (v == null || !isFinite(v) || v <= 0) continue;
+    const f = v > 1 ? v / 100 : v;
+    if (f > 0 && f < 1) return Math.round(f * 100000) / 100000;
+  }
+  return null;
+}
+
+function screenNum(v) {
+  return (v == null || !isFinite(v)) ? null : v;
+}
+
+// Yahoo quote satırı → PWA'nın beklediği sade satır. Hesap YOK, sadece normalize.
+function normScreenRow(q) {
+  if (!q || !q.symbol) return null;
+  const ySymbol = String(q.symbol).toUpperCase();
+  const symbol = ySymbol.replace(/\.IS$/, '');
+  const price = screenNum(q.regularMarketPrice);
+  const avgVol = screenNum(q.averageDailyVolume3Month) != null
+    ? q.averageDailyVolume3Month : screenNum(q.averageDailyVolume10Day);
+  return {
+    symbol,
+    ySymbol,
+    name: q.longName || q.shortName || symbol,
+    currency: q.currency || 'TRY',
+    price,
+    changePct: screenNum(q.regularMarketChangePercent) != null
+      ? Math.round(q.regularMarketChangePercent * 100) / 100 : null,
+    marketCap: screenNum(q.marketCap),
+    trailingPE: screenNum(q.trailingPE),
+    forwardPE: screenNum(q.forwardPE),
+    priceToBook: screenNum(q.priceToBook),
+    bookValue: screenNum(q.bookValue),
+    eps: screenNum(q.epsTrailingTwelveMonths),
+    epsForward: screenNum(q.epsForward),
+    dividendYield: screenDivYield(q),
+    volume: screenNum(q.regularMarketVolume),
+    avgVolume: screenNum(avgVol),
+  };
+}
+
+async function fetchScreenQuotes(symbols) {
+  const { crumb, cookie } = await getYahooCrumb();
+  const hdr = { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json', 'Cookie': cookie };
+  const chunks = [];
+  for (let i = 0; i < symbols.length; i += SCREEN_CHUNK) chunks.push(symbols.slice(i, i + SCREEN_CHUNK));
+
+  let authFail = false;
+  const jobs = chunks.map(async (ch) => {
+    const url = `https://query1.finance.yahoo.com/v7/finance/quote`
+      + `?symbols=${encodeURIComponent(ch.join(','))}`
+      + `&fields=${encodeURIComponent(SCREEN_FIELDS)}`
+      + `&crumb=${encodeURIComponent(crumb)}`;
+    try {
+      const r = await fetch(url, { headers: hdr, cf: { cacheTtl: 600, cacheEverything: true } });
+      if (r.status === 401 || r.status === 403) { authFail = true; return []; }
+      if (!r.ok) return [];
+      const j = await r.json();
+      return (j && j.quoteResponse && Array.isArray(j.quoteResponse.result)) ? j.quoteResponse.result : [];
+    } catch { return []; }
+  });
+  const packs = await Promise.all(jobs);
+  const rows = [];
+  const seen = new Set();
+  for (const pack of packs) {
+    for (const q of pack) {
+      const row = normScreenRow(q);
+      // Fiyatı bile gelmeyen sembol taramaya girmez (borsadan çıkmış/ad değişmiş olabilir)
+      if (!row || row.price == null || seen.has(row.ySymbol)) continue;
+      seen.add(row.ySymbol);
+      rows.push(row);
+    }
+  }
+  // Crumb bayatladıysa bir sonraki istek yenisini alsın
+  if (authFail && !rows.length) { _yahooCrumb = null; throw new Error('yahoo yetki — birazdan tekrar dene'); }
+  return rows;
+}
+
+async function handleStockScreenApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+
+  // ——— Mod 2: tarama sonucuna AI yorumu ———
+  if (body.comment) {
+    if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
+    return screenCommentReply(env, user, body, cors);
+  }
+
+  // ——— Mod 1: toplu temel veri ———
+  const symbols = (Array.isArray(body.symbols) ? body.symbols : [])
+    .map(s => String(s || '').trim().toUpperCase())
+    .filter(s => /^[A-Z0-9.]{2,20}$/.test(s))
+    .slice(0, SCREEN_MAX_SYMBOLS);
+  if (!symbols.length) return jsonCors({ rows: [], at: Date.now() }, 200, cors);
+
+  try {
+    const rows = await fetchScreenQuotes(symbols);
+    return jsonCors({ rows, asked: symbols.length, at: Date.now() }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 502, cors);
+  }
+}
+
+// AI yorumu — liste zaten PWA'da elendi ve sıralandı. AI'ın işi SIRALAMAK DEĞİL,
+// çıkan tablonun ne anlama geldiğini anlatmak. Tavsiye yasağı /stock-analysis ile aynı.
+async function screenCommentReply(env, user, body, cors) {
+  const results = (Array.isArray(body.results) ? body.results : []).slice(0, 12);
+  if (!results.length) return jsonCors({ error: 'missing' }, 400, cors);
+
+  let name = 'kanka';
+  try {
+    const session = await fetchUserDataForApi(env, user);
+    name = getUserDisplayName(session.data, user.email);
+  } catch {}
+
+  const hurdle = (isFinite(body.hurdlePct) && body.hurdlePct > 0 && body.hurdlePct < 200)
+    ? Math.round(body.hurdlePct) : 35;
+  const scanned = (isFinite(body.scanned) && body.scanned > 0) ? Math.round(body.scanned) : results.length;
+  const dropped = (isFinite(body.dropped) && body.dropped >= 0) ? Math.round(body.dropped) : null;
+
+  const num = (v, d) => (v == null || !isFinite(v)) ? '—' : String(Math.round(v * Math.pow(10, d)) / Math.pow(10, d));
+  const pc = v => (v == null || !isFinite(v)) ? '—' : '%' + (Math.round(v * 1000) / 10);
+  const lines = results.map((r, i) => {
+    const bf = r.buffett || null;
+    const bfTxt = !bf ? 'Buffett skoru: çalıştırılmadı'
+      : (bf.score == null ? `Buffett skoru: HESAPLANAMADI (${String(bf.reason || 'mali tablo gelmedi').slice(0, 90)})`
+        : `Buffett skoru ${bf.score}/100 (${bf.label})${Array.isArray(bf.weak) && bf.weak.length ? ' · en zayıf: ' + bf.weak.map(w => String(w).slice(0, 60)).join(' | ') : ''}`);
+    return `${i + 1}. ${String(r.symbol || '').slice(0, 10)} — ${String(r.name || '').slice(0, 50)}
+   Ön skor ${r.preScore ?? '—'}/100 · F/K ${num(r.trailingPE, 1)} · PD/DD ${num(r.priceToBook, 2)} · türetilmiş ROE ${pc(r.roe)} · temettü ${pc(r.dividendYield)}
+   ${bfTxt}`;
+  }).join('\n');
+
+  const sysPrompt = `Sen Aidan'sın — ${name}'in asistanı. ${name} 16 yaşında, temel analizi ÖĞRENİYOR. Sana bir BIST tarama filtresinin ÇIKTISI veriliyor. Sayıları PWA hesapladı; sen SADECE betimle ve ÖĞRET.
+
+📌 BU LİSTE NEDİR: mekanik bir filtrenin elemesinden geçen hisseler. "Alınacak hisse listesi" DEĞİLDİR, sıralama bir tercih sırası DEĞİLDİR. Cevabının bir yerinde bunu ${name}'e açıkça söyle.
+
+✅ İZİN VERİLEN:
+- Tablodaki oranların NE ÖLÇTÜĞÜNÜ öğret: F/K = fiyatın yıllık kâra oranı, kaç yıllık kâra denk fiyat verildiği · PD/DD = fiyatın defter değerine oranı · türetilmiş ROE = PD/DD ÷ F/K, yani şirketin özsermayesiyle ürettiği kâr oranı · temettü verimi = fiyata göre yıllık dağıtılan nakit.
+- Listede ORTAK ÖRÜNTÜ varsa söyle ("çoğu bankacılık", "yarısının PD/DD'si 1'in altında" gibi).
+- Filtrenin SINIRLARINI anlat — bu en değerli kısım: türetilmiş ROE tek yıllıktır (Buffett çok yıllı istikrar ister), F/K tek başına ucuzluk kanıtı değildir (kâr tek seferlik olabilir), TRY'de 2023 sonrası enflasyon muhasebesi net kârı çarpıtır, Yahoo verisi gecikmeli/eksik olabilir.
+- Buffett skoru HESAPLANAMADI yazan satırlar için "mali tablo gelmedi, bu hisse hakkında kalite yorumu yapılamaz" de — skoru olanla olmayanı aynı kefeye KOYMA.
+- Engel oranının (%${hurdle}) ne olduğunu hatırlat: paranın alternatif getirisi, TR'de mevduat/tahvil faizi. Bunun altında kalan ROE "iyi" değildir.
+
+🚫 MUTLAK YASAK:
+1. AL / SAT / TUT emri ("al", "topla", "gir", "portföye ekle", "bunu tercih et")
+2. Liste içinde "en iyisi / favorim / bence şu" seçmek — sıralama zaten mekanik, sen yeniden sıralama
+3. Fiyat tahmini ya da koşulsuz gelecek cümlesi ("yükselecek", "değerlenir")
+4. Değer yargısı ("ucuz", "pahalı", "kaçırılmaz", "iyi fırsat", "sağlam şirket")
+5. Sana verilmeyen sayı UYDURMA — tablo dışında rakam yazma
+6. İngilizce
+7. Sektör/şirket hakkında bilmediğin haber ya da beklenti uydurma
+
+✅ TON: sabırlı öğretmen — tabloyu okur, terimi öğretir, filtrenin nerede yanılabileceğini söyler, KARAR VERMEZ. Kararı ${name} verir.
+6-10 cümle. Kapanışta dolgu uyarı cümlesi yazma, arayüzde zaten var.`;
+
+  const userMsg = `🔎 BIST temel tarama sonucu
+Taranan hisse: ${scanned}${dropped != null ? ` · elenen: ${dropped}` : ''} · listelenen: ${results.length}
+Engel oranı: %${hurdle}
+
+${lines}
+
+Bu tabloyu ${name}'e anlat: ① filtrenin ne yaptığı ve bu listenin ne OLMADIĞI ② tablodaki ortak örüntü ③ geçen oranların ne ölçtüğü ④ bu filtrenin nerede yanılabileceği. Tavsiye YOK, sıralama YOK, tahmin YOK.`;
+
+  try {
+    const r = await aiRun(env, {
+      tier: aiTierForUser(env, user, 'heavy'),
+      messages: [
+        { role: 'system', content: sysPrompt + instructionsBlock(body.instructions) },
+        { role: 'user', content: userMsg },
+      ],
+      max_tokens: 1100,
+      temperature: 0.4,
+    });
+    let comment = (r.response || '').trim();
+    if (!comment || /^i'?m sorry|^as an ai/i.test(comment)) {
+      comment = `${name}, şu an yorum üretemedim. Tablo yukarıda — sayıları kendin okuyabilirsin.`;
+    }
+    return jsonCors({ comment, count: results.length }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
+// ============================================================
 // 📰 Hisse haberleri — Yahoo Finance search news proxy + opsiyonel AI özet
 // İki mod: (1) default → haber listesi döner, (2) {summarize:true, headlines:[...]} → Türkçe AI özet.
 // PWA önce listeyi çeker (hızlı), kullanıcı "AI özetle" derse aynı endpoint'e başlıkları yollar.
@@ -7352,6 +7577,10 @@ export default {
     }
     if (url.pathname === '/stock-news') {
       return handleStockNewsApi(request, env);
+    }
+    // 🔎 BIST temel tarama — toplu oran verisi (eleme/skor PWA'da)
+    if (url.pathname === '/stock-screen') {
+      return handleStockScreenApi(request, env);
     }
 
     // 👥 Multi-user (davet kodlu)
