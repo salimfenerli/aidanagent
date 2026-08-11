@@ -4052,7 +4052,9 @@ async function handleStockFundamentalsApi(request, env) {
   try {
     const { crumb, cookie } = await getYahooCrumb();
     // Buffett skoru icin gecmis mali tablolar da lazim (yillik, Yahoo genelde 4 donem verir)
-    const modules = 'summaryDetail,defaultKeyStatistics,financialData,price,incomeStatementHistory,balanceSheetHistory,cashflowStatementHistory';
+    // assetProfile = sektor/sanayi kolu. Ayni istege bir modul adi eklemek BEDAVA
+    // (ek subrequest yok) — tarama sektor duzeltmesi icin kullanir.
+    const modules = 'summaryDetail,defaultKeyStatistics,financialData,price,assetProfile,incomeStatementHistory,balanceSheetHistory,cashflowStatementHistory';
     const hdr = { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json', 'Cookie': cookie };
     // 5 yillik aylik kapanis serisi — "1 Dolar Testi" fiyat degisimi icin (bolunme/bedelsiz duzeltilmis)
     const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahoo)}?range=5y&interval=1mo`;
@@ -4069,6 +4071,7 @@ async function handleStockFundamentalsApi(request, env) {
     const res = j && j.quoteSummary && j.quoteSummary.result && j.quoteSummary.result[0];
     if (!res) return jsonCors({ error: 'veri yok' }, 404, cors);
     const sd = res.summaryDetail || {}, ks = res.defaultKeyStatistics || {}, fd = res.financialData || {}, pr = res.price || {};
+    const ap = res.assetProfile || {};
     const raw = o => (o && typeof o === 'object' && 'raw' in o) ? o.raw : (typeof o === 'number' ? o : null);
     const pick = (a, b) => { const x = raw(a); return x != null ? x : raw(b); };
 
@@ -4105,6 +4108,8 @@ async function handleStockFundamentalsApi(request, env) {
       ySymbol: yahoo,
       name: pr.longName || pr.shortName || yahoo,
       currency: pr.currency || sd.currency || 'TRY',
+      sector: ap.sector || null,
+      industry: ap.industry || null,
       marketCap: pick(pr.marketCap, sd.marketCap),
       trailingPE: pick(sd.trailingPE, ks.trailingPE),
       forwardPE: raw(sd.forwardPE),
@@ -4311,7 +4316,7 @@ async function screenCommentReply(env, user, body, cors) {
         + ` · zirve oranı ${num(cy.peakRatio, 2)}× · dalgalanma ${cy.cyclical || '—'}`
         + (r.normScore != null ? ` · çok yıllı skor ${r.normScore}/100 (son yıl skorundan ${r.normScore - r.preScore >= 0 ? '+' : ''}${r.normScore - r.preScore})` : ' · çok yıllı skor yok');
     return `${i + 1}. ${String(r.symbol || '').slice(0, 10)} — ${String(r.name || '').slice(0, 50)}
-   Son yıl skoru ${r.preScore ?? '—'}/100 · F/K ${num(r.trailingPE, 1)} · PD/DD ${num(r.priceToBook, 2)} · türetilmiş ROE ${pc(r.roe)} · temettü ${pc(r.dividendYield)}
+   Kalite skoru (son 12 ay) ${r.preScore ?? '—'}/100 · türetilmiş ROE ${pc(r.roe)} · F/K ${num(r.trailingPE, 1)} · PD/DD ${num(r.priceToBook, 2)} · temettü ${pc(r.dividendYield)} (skora GİRMEZ)
    ${cyTxt}
    ${bfTxt}`;
   }).join('\n');
@@ -4320,8 +4325,12 @@ async function screenCommentReply(env, user, body, cors) {
 
 📌 BU LİSTE NEDİR: mekanik bir filtrenin elemesinden geçen hisseler. "Alınacak hisse listesi" DEĞİLDİR, sıralama bir tercih sırası DEĞİLDİR. Cevabının bir yerinde bunu ${name}'e açıkça söyle.
 
+🧱 FİLTRENİN MANTIĞI (bunu bir kez açıkla): Buffett sırası — ÖNCE İŞ KALİTESİ, SONRA FİYAT. Özsermaye kârlılığı engel oranının altında kalan şirket ne kadar ucuz olursa olsun baştan elenir. Sıralama ucuzluğa göre DEĞİLDİR; ucuzluk sadece "fiyat makul mü" kontrolüdür ve ağırlığı düşüktür. Bunun sebebi Buffett'in kendi dönüşümüdür: gençken Graham'ın "izmarit" yöntemini (çok ucuz, vasat şirket) kullanıyordu, sonra bıraktı — "harika bir şirketi makul fiyata almak, vasat bir şirketi harika fiyata almaktan çok daha iyidir". ${name}'e bu farkı öğret.
+- PD/DD ve temettü verimi skora GİRMEZ, tabloda sadece bilgi olarak var. Sebebini söyle: PD/DD = F/K × ROE olduğu için üçünü birlikte puanlamak aynı bilgiyi iki kez saymaktır; temettüyü de Buffett kalite işareti saymaz (yüksek getiriyle yeniden yatırım yapabilen şirket kâr dağıtmamalıdır — Berkshire hiç dağıtmadı). Bu satırlar hakkında "temettüsü yüksek, iyi" gibi bir cümle KURMA.
+
 ✅ İZİN VERİLEN:
-- Tablodaki oranların NE ÖLÇTÜĞÜNÜ öğret: F/K = fiyatın yıllık kâra oranı, kaç yıllık kâra denk fiyat verildiği · PD/DD = fiyatın defter değerine oranı · türetilmiş ROE = PD/DD ÷ F/K, yani şirketin özsermayesiyle ürettiği kâr oranı · temettü verimi = fiyata göre yıllık dağıtılan nakit.
+- Tablodaki oranların NE ÖLÇTÜĞÜNÜ öğret: türetilmiş ROE = PD/DD ÷ F/K, yani şirketin özsermayesiyle ürettiği kâr oranı — bu filtrenin ANA ölçüsüdür · F/K = fiyatın yıllık kâra oranı · PD/DD = fiyatın defter değerine oranı · temettü verimi = fiyata göre yıllık dağıtılan nakit.
+- Tabloda üç ayrı skor olabilir, karıştırma: KALİTE SKORU (son 12 ay, toplu veriden) · ÇOK YILLI KALİTE (aynı formül, çok yıllı ortalama kârlılıkla) · BUFFETT SKORU (mali tablodan; borç, marj istikrarı, sahip kârı, 1 Dolar Testi). Asıl ağırlık Buffett skorundadır; ilk ikisi ona giden elemedir.
 - Listede ORTAK ÖRÜNTÜ varsa söyle ("çoğu bankacılık", "yarısının PD/DD'si 1'in altında" gibi).
 - Filtrenin SINIRLARINI anlat — bu en değerli kısım: türetilmiş ROE tek yıllıktır (Buffett çok yıllı istikrar ister), F/K tek başına ucuzluk kanıtı değildir (kâr tek seferlik olabilir), TRY'de 2023 sonrası enflasyon muhasebesi net kârı çarpıtır, Yahoo verisi gecikmeli/eksik olabilir.
 - 🔁 DÖNGÜ KATMANI (bu paketin en önemli öğretisi — mutlaka değin): tabloda hem SON YIL skoru hem ÇOK YILLI skor var. Çok yıllı skor, şirketin çok yıllı ORTALAMA kâr marjını son yılın cirosuna uygulayarak "normalize kâr" üretir; normalize F/K bundan çıkar. İkisi arasındaki FARK asıl sinyaldir:

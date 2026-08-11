@@ -2944,9 +2944,14 @@ const SCREEN_LIMITS = {
   minMarketCap: 2e9,    // 2 milyar TL — mikro şirkette tek haber fiyatı savurur
   minTurnover: 20e6,    // günlük ort. 20 mn TL işlem — likit olmayanda çıkış yoktur
   maxPE: 40,            // bunun üstünde kazanç getirisi engel oranı yanında anlamsız
-  maxPB: 6,             // defter değerinin 6 katı: "iyi iş" değil, beklenti fiyatı
-  deepCount: 10,        // 2. kademede kaç hisseye Buffett skoru çalışsın
-  listCount: 12,        // ekranda kaç satır gösterilsin
+  // ⚠️ PD/DD artik UCUZLUK olcusu degil, ANOMALI kapisi. PD/DD = F/K × ROE
+  // oldugu icin yuksek PD/DD tek basina kotu degildir (kaliteli is yuksek
+  // PD/DD'de islem gorur). Ama ozsermaye anormal kuculdugunde (agresif geri
+  // alim, birikmis zarar) ROE yapay olarak sisar ve hisse kalite kapisindan
+  // haksiz yere gecer — bu tavan onu keser.
+  maxPB: 12,
+  deepCount: 25,        // 2. kademede kaç hisseye gerçek Buffett skoru çalışsın
+  listCount: 15,        // ekranda kaç satır gösterilsin
   maxSymbols: 120,      // worker tavanıyla aynı
 };
 
@@ -2954,10 +2959,11 @@ const SCREEN_DROP_LABELS = {
   nodata: 'veri gelmedi',
   loss: 'zarar ediyor / kâr verisi yok',
   nobook: 'defter değeri yok',
+  lowroe: 'özsermaye kârlılığı engel oranının altında',
   small: 'piyasa değeri eşiğin altında',
   illiquid: 'işlem hacmi düşük',
   expensive: 'F/K tavanın üstünde',
-  rich: 'PD/DD tavanın üstünde',
+  rich: 'PD/DD anormal — özsermaye çok küçük, ROE şişmiş olabilir',
 };
 
 // ——— Türetilmiş ROE ———
@@ -2979,11 +2985,17 @@ function screenTurnover(r) {
 }
 
 // Kapı kontrolü — {ok:true} ya da {ok:false, why:'kod'}
-function screenHygiene(r, lim) {
+// 🔴 KALITE KAPISI (hurdlePct) Buffett donusumunun kalbi: sermayesini engel
+// oraninin uzerinde calistiramayan sirket ne kadar ucuz olursa olsun ELENIR.
+// Eskiden bu bir skor kriteriydi ve ucuz-ama-vasat sirketler listeyi dolduruyordu.
+function screenHygiene(r, lim, hurdlePct) {
   const L = Object.assign({}, SCREEN_LIMITS, lim || {});
+  const hur = (isFinite(hurdlePct) && hurdlePct > 0) ? hurdlePct / 100 : 0.35;
   if (!r || r.price == null || !isFinite(r.price) || r.price <= 0) return { ok: false, why: 'nodata' };
   if (r.trailingPE == null || !isFinite(r.trailingPE) || r.trailingPE <= 0) return { ok: false, why: 'loss' };
   if (r.priceToBook == null || !isFinite(r.priceToBook) || r.priceToBook <= 0) return { ok: false, why: 'nobook' };
+  const roe = screenRoe(r);
+  if (roe == null || roe < hur) return { ok: false, why: 'lowroe' };
   if (r.marketCap == null || !isFinite(r.marketCap) || r.marketCap < L.minMarketCap) return { ok: false, why: 'small' };
   const to = screenTurnover(r);
   if (to == null || to < L.minTurnover) return { ok: false, why: 'illiquid' };
@@ -2992,10 +3004,25 @@ function screenHygiene(r, lim) {
   return { ok: true };
 }
 
-// ——— ÖN SKOR (0-100) — kademe 1 ———
-// Ağırlık toplamı 10. Veri gelmeyen kriter ATLANIR ve paydadan da düşer
-// (buffettScore ile aynı kalıp) — eksik veri sessizce 0 puan sayılmaz.
-// Kapsama %60'ın altına düşerse skor null döner: UYDURMA YOK.
+// ——— KALİTE SKORU (0-100) — kademe 1 ———
+// 🔴 BUFFETT SIRASI: önce iş kalitesi, SONRA fiyat. Eski sürüm ucuzluğu
+// ödüllendiriyordu (F/K + PD/DD + temettü = ağırlığın %60'ı) ve derin
+// aşamaya en UCUZ 10 hisse gidiyordu — yani izmarit. Buffett bunu bıraktı:
+// "Harika bir şirketi makul fiyata almak, vasat bir şirketi harika fiyata
+// almaktan çok daha iyidir."
+//
+// 🧮 PD/DD VE TEMETTÜ SKORDAN ÇIKARILDI — sebep matematiksel, keyfi değil:
+//   PD/DD = F/K × ROE
+// Üçünü birlikte puanlamak AYNI bilgiyi iki kez saymaktır; yüksek ROE'ye puan
+// verip yüksek PD/DD'yi cezalandırmak birbirini götürür ve kaliteli şirketi
+// sistematik olarak aşağı iter. Bağımsız iki boyut vardır: KALİTE (ROE) ve
+// FİYAT (F/K). Skor sadece bu ikisini kullanır.
+// Temettü de çıktı: Buffett'e göre yüksek getiriyle yeniden yatırım yapabilen
+// şirket kâr DAĞITMAMALIDIR (Berkshire hiç temettü ödemedi). Temettü verimi
+// kartta bilgi olarak durur, puana girmez.
+//
+// Veri gelmeyen kriter ATLANIR ve paydadan da düşer (buffettScore kalıbı).
+// Kapsama %60 altına düşerse skor null — UYDURMA YOK.
 function screenPreScore(r, hurdlePct) {
   if (!r) return null;
   const hur = (isFinite(hurdlePct) && hurdlePct > 0) ? hurdlePct / 100 : 0.35;
@@ -3003,38 +3030,24 @@ function screenPreScore(r, hurdlePct) {
   const add = (key, label, weight, score, note) => parts.push({ key, label, weight, score, note });
   const pct = v => (v == null || !isFinite(v)) ? '—' : ('%' + (Math.round(v * 1000) / 10));
 
-  // 1) Türetilmiş ROE — engel oranına karşı (ana filtre)
+  // 1) İŞ KALİTESİ — özsermaye kârlılığı (Buffett'in ana filtresi)
+  // Engel oranı zaten KAPI olduğu için puanlama 1,0 katından başlar ve
+  // 2,5 katında dolar: "engeli geçmek" yetmez, ne kadar aştığı önemlidir.
   const roe = screenRoe(r);
   if (roe != null) {
-    add('roe', 'Özsermaye kârlılığı (türetilmiş)', 4.0, bfLin(roe / hur, 0.6, 1.6),
-      `${pct(roe)} · engel oranı ${pct(hur)} · PD/DD ÷ F/K ile türetildi, TEK yıllıktır`);
+    add('roe', 'İş kalitesi — özsermaye kârlılığı', 7.0, bfLin(roe / hur, 1.0, 2.5),
+      `${pct(roe)} · engel oranı ${pct(hur)} · engelin ${bfR(roe / hur, 2)} katı · PD/DD ÷ F/K ile türetildi, TEK yıllıktır`);
   } else {
-    add('roe', 'Özsermaye kârlılığı (türetilmiş)', 4.0, null, 'F/K veya PD/DD gelmedi.');
+    add('roe', 'İş kalitesi — özsermaye kârlılığı', 7.0, null, 'F/K veya PD/DD gelmedi.');
   }
 
-  // 2) Kazanç getirisi (1/FK) — engel oranına karşı
+  // 2) FİYAT MAKUL MU — kazanç getirisi (ucuzluk YARIŞI değil, makullük kontrolü)
   if (r.trailingPE != null && isFinite(r.trailingPE) && r.trailingPE > 0) {
     const ey = 1 / r.trailingPE;
-    add('ey', 'Kazanç getirisi (1 ÷ F/K)', 3.0, bfLin(ey / hur, 0.5, 1.3),
-      `${pct(ey)} · F/K ${Math.round(r.trailingPE * 10) / 10} · engel oranı ${pct(hur)}`);
+    add('ey', 'Fiyat makul mü — kazanç getirisi', 3.0, bfLin(ey / hur, 0.15, 0.5),
+      `${pct(ey)} · F/K ${bfR(r.trailingPE, 1)} · engel oranının ${bfR(ey / hur, 2)} katı`);
   } else {
-    add('ey', 'Kazanç getirisi (1 ÷ F/K)', 3.0, null, 'F/K gelmedi.');
-  }
-
-  // 3) PD/DD — defter değerine göre fiyat
-  if (r.priceToBook != null && isFinite(r.priceToBook) && r.priceToBook > 0) {
-    add('pb', 'Fiyat / Defter değeri', 2.0, 1 - bfLin(r.priceToBook, 0.8, 3.5),
-      `${Math.round(r.priceToBook * 100) / 100}× · 1'in altı defter değerinin altında fiyat demek`);
-  } else {
-    add('pb', 'Fiyat / Defter değeri', 2.0, null, 'PD/DD gelmedi.');
-  }
-
-  // 4) Temettü verimi — nakit dağıtımı (destekleyici, belirleyici değil)
-  if (r.dividendYield != null && isFinite(r.dividendYield) && r.dividendYield > 0) {
-    add('div', 'Temettü verimi', 1.0, bfLin(r.dividendYield / hur, 0, 0.5),
-      `${pct(r.dividendYield)} · fiyata göre yıllık dağıtılan nakit`);
-  } else {
-    add('div', 'Temettü verimi', 1.0, null, 'Temettü verisi yok ya da dağıtmıyor.');
+    add('ey', 'Fiyat makul mü — kazanç getirisi', 3.0, null, 'F/K gelmedi.');
   }
 
   const used = parts.filter(p => p.score != null);
@@ -3061,7 +3074,7 @@ function screenRank(rows, opts) {
   const lim = Object.assign({}, SCREEN_LIMITS, o.limits || {});
   const passed = [], dropCounts = {};
   for (const r of (Array.isArray(rows) ? rows : [])) {
-    const h = screenHygiene(r, lim);
+    const h = screenHygiene(r, lim, hur);
     if (!h.ok) { dropCounts[h.why] = (dropCounts[h.why] || 0) + 1; continue; }
     const ps = screenPreScore(r, hur);
     if (!ps || ps.score == null) { dropCounts.nodata = (dropCounts.nodata || 0) + 1; continue; }
@@ -3236,7 +3249,9 @@ function screenNormScore(row, cyc, hurdlePct) {
 // Tarama akışı
 // ============================================================
 let _screenBusy = false;
-let _screenSort = 'pre';
+// Varsayilan GERCEK Buffett skoru — kademe 1 sadece "kime mali tablo okunacak"
+// sorusunu cevaplar, nihai sirayi mali tablo belirler.
+let _screenSort = 'buffett';
 
 function ensureScreen() {
   if (!data.screen || typeof data.screen !== 'object') data.screen = {};
@@ -3298,11 +3313,11 @@ async function runScreener() {
     sc.rows = top;
     sc.comment = null;
     save();
-    _screenSort = 'pre';
+    _screenSort = 'buffett';
     renderScreener();
 
     // ——— Kademe 2: ilk N hisseye mevcut Buffett skoru ———
-    setScreenStatus(`Mali tablolar okunuyor (${Math.min(SCREEN_LIMITS.deepCount, top.length)} hisse)…`);
+    setScreenStatus(`Mali tablolar okunuyor — ${Math.min(SCREEN_LIMITS.deepCount, top.length)} hisse, bu biraz sürer…`);
     await screenDeepStage(top.slice(0, SCREEN_LIMITS.deepCount), token);
     sc.rows = top;
     sc.deepAt = Date.now();
@@ -3581,9 +3596,9 @@ function renderScreener() {
     ${has ? `
     <div class="scr-tools">
       <div class="scr-sortby">
-        <button type="button" class="${_screenSort === 'pre' ? 'active' : ''}" onclick="setScreenSort('pre')">Son yıl</button>
-        <button type="button" class="${_screenSort === 'norm' ? 'active' : ''}" onclick="setScreenSort('norm')">Çok yıllı</button>
-        <button type="button" class="${_screenSort === 'buffett' ? 'active' : ''}" onclick="setScreenSort('buffett')">Buffett</button>
+        <button type="button" class="${_screenSort === 'buffett' ? 'active' : ''}" onclick="setScreenSort('buffett')">Buffett skoru</button>
+        <button type="button" class="${_screenSort === 'norm' ? 'active' : ''}" onclick="setScreenSort('norm')">Çok yıllı kalite</button>
+        <button type="button" class="${_screenSort === 'pre' ? 'active' : ''}" onclick="setScreenSort('pre')">Son yıl kalite</button>
       </div>
       <button type="button" class="scr-hurdle" onclick="setScreenHurdle()">engel oranı %${tr(hur)} · değiştir</button>
     </div>
@@ -3591,8 +3606,8 @@ function renderScreener() {
     ${dropList ? `<details class="scr-drop"><summary>Elenen ${tr(sc.dropped || 0)} hisse — hangi kapıdan döndü</summary><ul>${dropList}</ul></details>` : ''}
     <button type="button" class="scr-ai" id="scrAiBtn" onclick="aiScreenComment()">Aidan bu tabloyu anlatsın</button>
     <div class="scr-comment" id="scrComment" style="display:none;"></div>
-    ` : `<p class="scr-intro">BIST'in likit ana gövdesini temel oranlara göre eler: kâr eden, defter değerine göre makul fiyatlanan, özsermayesini engel oranının üzerinde çalıştıran şirketler kalır. İlk ${SCREEN_LIMITS.deepCount} hissenin çok yıllı mali tablosu da okunur: Buffett skoru + <b>döngü kontrolü</b> (son yılın kârı olağandışı yüksek mi).</p>`}
-    <p class="scr-note"><b>Bu bir alım listesi değildir.</b> Mekanik bir filtrenin çıktısıdır; sıralama tercih sırası değil, formülün sonucudur. ROE* = PD/DD ÷ F/K ile türetilmiştir ve <b>son 12 aya</b> aittir; <b>Çok yıllı skor</b> aynı formülü çok yıllı ortalama kârlılıkla çalıştırır. İkisi arasındaki fark döngü sinyalidir — büyük düşüş, son yılın kârının olağandışı yüksek olduğunu gösterir. TRY'de 2023 sonrası enflasyon muhasebesi net kârı çarpıtır — oranları buna göre oku. Veriler Yahoo Finance'tan, gecikmeli ve eksik olabilir.</p>`;
+    ` : `<p class="scr-intro">BIST'in likit ana gövdesini <b>Buffett sırasıyla</b> eler: <b>önce iş kalitesi, sonra fiyat</b>. Özsermayesini engel oranının üzerinde çalıştıramayan şirket ne kadar ucuz olursa olsun elenir. Kalan en kaliteli ${SCREEN_LIMITS.deepCount} hissenin çok yıllı mali tablosu okunur: gerçek Buffett skoru (borç, marj istikrarı, sahip kârı, 1 Dolar Testi) + <b>döngü kontrolü</b>.</p>`}
+    <p class="scr-note"><b>Bu bir alım listesi değildir.</b> Mekanik bir filtrenin çıktısıdır; sıralama tercih sırası değil, formülün sonucudur. Sıralama <b>kalite önce, fiyat sonra</b> mantığındadır: ucuzluk tek başına puan kazandırmaz. PD/DD ve temettü verimi <b>skora girmez</b> — PD/DD = F/K × ROE olduğu için üçünü birlikte puanlamak aynı bilgiyi iki kez saymak olurdu, temettüyü de Buffett bir kalite işareti saymaz. ROE* = PD/DD ÷ F/K ile türetilmiştir ve <b>son 12 aya</b> aittir; <b>Çok yıllı skor</b> aynı formülü çok yıllı ortalama kârlılıkla çalıştırır — aradaki fark döngü sinyalidir. TRY'de 2023 sonrası enflasyon muhasebesi net kârı çarpıtır — oranları buna göre oku. Veriler Yahoo Finance'tan, gecikmeli ve eksik olabilir.</p>`;
 
   if (has) { renderScreenRows(); renderScreenComment(); }
 }

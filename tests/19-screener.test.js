@@ -35,7 +35,7 @@ function row(over = {}) {
     symbol: 'TEST', ySymbol: 'TEST.IS', name: 'Test A.S.', currency: 'TRY',
     price: 100, changePct: 1.2,
     marketCap: 50e9,
-    trailingPE: 5, priceToBook: 2.5, bookValue: 40,
+    trailingPE: 5, priceToBook: 2.5, bookValue: 40,   // turetilmis ROE %50 — engelin (%35) ustunde
     eps: 20, dividendYield: 0.06,
     volume: 5e6, avgVolume: 4e6,   // 4e6 * 100 = 400 mn TL ciro
   }, over);
@@ -60,11 +60,31 @@ test('ROE negatif/sifir/eksik girdide null doner — uydurma yok', () => {
 // Hijyen kapilari — bunlar SKOR degil, KAPI
 // ============================================================
 test('saglikli satir kapidan gecer', () => {
-  assert.strictEqual(W.screenHygiene(row()).ok, true);
+  assert.strictEqual(W.screenHygiene(row(), null, 35).ok, true);
+});
+
+// ============================================================
+// 🔴 KALITE KAPISI — Buffett donusumunun kalbi
+// ============================================================
+test('ROE engel oraninin altindaysa hisse ELENIR (ne kadar ucuz olursa olsun)', () => {
+  // F/K 2 -> cok ucuz. Ama PD/DD 0,5 -> ROE %25, engel %35'in altinda.
+  const ucuzAmaVasat = row({ trailingPE: 2, priceToBook: 0.5 });
+  const h = W.screenHygiene(ucuzAmaVasat, null, 35);
+  assert.strictEqual(h.ok, false);
+  assert.strictEqual(h.why, 'lowroe');
+  const r = W.screenRank([ucuzAmaVasat], { hurdlePct: 35 });
+  assert.strictEqual(r.passed.length, 0, 'izmarit listeye girmemeli');
+  assert.strictEqual(r.dropCounts.lowroe, 1);
+});
+
+test('kalite kapisi engel oranina BAGLI — esik dusunce ayni hisse gecer', () => {
+  const r = row({ trailingPE: 2, priceToBook: 0.5 });   // ROE %25
+  assert.strictEqual(W.screenHygiene(r, null, 35).why, 'lowroe');
+  assert.strictEqual(W.screenHygiene(r, null, 20).ok, true);
 });
 
 test('zarar eden hisse hic puanlanmaz', () => {
-  const h = W.screenHygiene(row({ trailingPE: -8 }));
+  const h = W.screenHygiene(row({ trailingPE: -8 }), null, 35);
   assert.strictEqual(h.ok, false);
   assert.strictEqual(h.why, 'loss');
   // ve rank asamasinda da listeye giremez
@@ -74,44 +94,59 @@ test('zarar eden hisse hic puanlanmaz', () => {
 
 test('likidite kapisi: dusuk hacimli hisse elenir', () => {
   // 1000 lot * 100 TL = 100.000 TL/gun — esik 20 mn
-  const h = W.screenHygiene(row({ avgVolume: 1000 }));
+  const h = W.screenHygiene(row({ avgVolume: 1000 }), null, 35);
   assert.strictEqual(h.ok, false);
   assert.strictEqual(h.why, 'illiquid');
 });
 
 test('mikro sirket elenir, buyuk sirket gecer', () => {
-  assert.strictEqual(W.screenHygiene(row({ marketCap: 1e8 })).why, 'small');
-  assert.strictEqual(W.screenHygiene(row({ marketCap: 5e9 })).ok, true);
+  assert.strictEqual(W.screenHygiene(row({ marketCap: 1e8 }), null, 35).why, 'small');
+  assert.strictEqual(W.screenHygiene(row({ marketCap: 5e9 }), null, 35).ok, true);
 });
 
-test('F/K ve PD/DD tavanlari kapi olarak calisir', () => {
-  assert.strictEqual(W.screenHygiene(row({ trailingPE: 90 })).why, 'expensive');
-  assert.strictEqual(W.screenHygiene(row({ priceToBook: 12, trailingPE: 5 })).why, 'rich');
+test('F/K tavani ve PD/DD anomali kapisi calisir', () => {
+  // F/K 90 -> ROE %2,8, once kalite kapisindan doner; ROE yuksek tutulup test edilir
+  assert.strictEqual(W.screenHygiene(row({ trailingPE: 90, priceToBook: 40 }), null, 35).why, 'expensive');
+  // PD/DD 14 -> ozsermaye anormal kucuk, ROE sismis olabilir
+  assert.strictEqual(W.screenHygiene(row({ priceToBook: 14, trailingPE: 5 }), null, 35).why, 'rich');
+  // ⚠️ Kaliteli is YUKSEK PD/DD'de islem gorur — 6-10 bandi artik ELENMEZ
+  assert.strictEqual(W.screenHygiene(row({ priceToBook: 8, trailingPE: 10 }), null, 35).ok, true);
 });
 
 test('fiyati gelmeyen sembol veri-yok kapisindan doner', () => {
-  assert.strictEqual(W.screenHygiene(row({ price: null })).why, 'nodata');
-  assert.strictEqual(W.screenHygiene(row({ price: 0 })).why, 'nodata');
+  assert.strictEqual(W.screenHygiene(row({ price: null }), null, 35).why, 'nodata');
+  assert.strictEqual(W.screenHygiene(row({ price: 0 }), null, 35).why, 'nodata');
 });
 
 // ============================================================
 // On skor
 // ============================================================
-test('yuksek ROE + dusuk F/K yuksek skor alir', () => {
-  // F/K 3, PD/DD 1,8 -> turetilmis ROE %60, engelin (%35) 1,7 kati
-  const s = W.screenPreScore(row({ trailingPE: 3, priceToBook: 1.8, dividendYield: 0.12 }), 35);
-  assert.ok(s.score >= 70, `beklenen >=70, gelen ${s.score}`);
+test('cok yuksek ROE cok yuksek skor alir', () => {
+  // F/K 8, PD/DD 8 -> ROE %100 = engelin (%35) 2,9 kati
+  const s = W.screenPreScore(row({ trailingPE: 8, priceToBook: 8 }), 35);
+  assert.ok(s.score >= 80, `beklenen >=80, gelen ${s.score}`);
   assert.strictEqual(s.coverage, 1);
 });
 
-test('engel oraninin cok altinda ROE dusuk skor alir', () => {
-  const s = W.screenPreScore(row({ trailingPE: 30, priceToBook: 1.5, dividendYield: null }), 35);
-  assert.ok(s.score != null && s.score < 40, `beklenen <40, gelen ${s.score}`);
+test('🔴 IZMARIT REGRESYONU: kaliteli is, ucuz vasat isi GECMELI', () => {
+  // Buffett: "harika sirketi makul fiyata almak, vasat sirketi harika fiyata
+  // almaktan cok daha iyidir." Eski surumde bu test KIRMIZI olurdu.
+  const kaliteli = row({ trailingPE: 10, priceToBook: 8 });   // ROE %80, F/K 10
+  const ucuzVasat = row({ trailingPE: 3, priceToBook: 1.2 }); // ROE %40, F/K 3
+  const a = W.screenPreScore(kaliteli, 35).score;
+  const b = W.screenPreScore(ucuzVasat, 35).score;
+  assert.ok(a > b, `kaliteli is (${a}) ucuz vasati (${b}) gecmeliydi`);
+});
+
+test('ucuzluk tek basina ust siraya tasimaz', () => {
+  const cokUcuz = row({ trailingPE: 2.5, priceToBook: 1 });    // ROE %40
+  const s = W.screenPreScore(cokUcuz, 35);
+  assert.ok(s.score < 45, `sadece ucuz olan yuksek puan almamali: ${s.score}`);
 });
 
 test('skor her zaman 0-100 arasinda kalir', () => {
   for (const h of [1, 10, 35, 120]) {
-    for (const o of [{}, { trailingPE: 0.5 }, { priceToBook: 0.1 }, { dividendYield: 0.9 }]) {
+    for (const o of [{}, { trailingPE: 0.5 }, { priceToBook: 0.1 }, { priceToBook: 20 }]) {
       const s = W.screenPreScore(row(o), h);
       if (s && s.score != null) assert.ok(s.score >= 0 && s.score <= 100, `${h} ${JSON.stringify(o)} -> ${s.score}`);
     }
@@ -119,35 +154,44 @@ test('skor her zaman 0-100 arasinda kalir', () => {
 });
 
 test('engel orani yukselince ayni hisse dusuk skor alir (hurdle gercekten etkiliyor)', () => {
-  const r = row({ trailingPE: 8, priceToBook: 2 });
+  const r = row({ trailingPE: 8, priceToBook: 4 });
   const lo = W.screenPreScore(r, 10).score;
   const hi = W.screenPreScore(r, 60).score;
   assert.ok(lo > hi, `engel yukselince skor dusmeli: %10 -> ${lo}, %60 -> ${hi}`);
 });
 
-test('temettu verisi yoksa kriter ATLANIR, 0 puan sayilmaz', () => {
-  const withDiv = W.screenPreScore(row({ dividendYield: 0.0001 }), 35).score;
-  const noDiv = W.screenPreScore(row({ dividendYield: null }), 35).score;
-  assert.ok(noDiv > withDiv,
-    `veri yok (${noDiv}) sifira yakin temettuden (${withDiv}) daha kotu puanlanmamali`);
-  const s = W.screenPreScore(row({ dividendYield: null }), 35);
-  assert.ok(s.coverage < 1 && s.coverage >= 0.6, `kapsama ${s.coverage}`);
-  assert.strictEqual(s.parts.find(p => p.key === 'div').score, null);
-});
-
 test('kapsama %60 altinda skor null doner + gerekce yazar', () => {
-  // F/K ve PD/DD yoksa 4.0+3.0+2.0 = 9/10 aglirlik duser -> kapsama 0.1
+  // F/K yoksa hem ROE hem kazanc getirisi duser -> kapsama 0
   const s = W.screenPreScore(row({ trailingPE: null, priceToBook: null }), 35);
   assert.strictEqual(s.score, null);
   assert.ok(s.reason && s.reason.length > 10, 'gerekce metni yok');
 });
 
-test('agirlik sozlesmesi: 4 kriter, toplam 10', () => {
+test('🧮 agirlik sozlesmesi: 2 kriter (kalite 7 + fiyat 3), PD/DD ve temettu YOK', () => {
+  // PD/DD = F/K x ROE oldugu icin ucunu birlikte puanlamak cifte sayimdir.
+  // Temettuyu de Buffett kalite isareti saymaz.
   const s = W.screenPreScore(row(), 35);
-  assert.strictEqual(s.parts.length, 4);
+  assert.strictEqual(s.parts.length, 2);
+  assert.strictEqual(s.parts.map(p => p.key).join(','), 'roe,ey');
+  assert.strictEqual(s.parts.find(p => p.key === 'roe').weight, 7.0);
+  assert.strictEqual(s.parts.find(p => p.key === 'ey').weight, 3.0);
   assert.strictEqual(s.parts.reduce((a, p) => a + p.weight, 0), 10);
-  // ⚠️ vm baglamindan donen dizide deepStrictEqual KULLANMA (farkli realm, prototip esitlenmez)
-  assert.strictEqual(s.parts.map(p => p.key).join(','), 'roe,ey,pb,div');
+});
+
+test('temettu skoru DEGISTIRMEZ (Buffett kalite isareti saymaz)', () => {
+  const yok = W.screenPreScore(row({ dividendYield: null }), 35).score;
+  const bol = W.screenPreScore(row({ dividendYield: 0.25 }), 35).score;
+  assert.strictEqual(yok, bol, 'temettu skora sizmis');
+});
+
+test('PD/DD tek basina skoru DEGISTIRMEZ — sadece ROE uzerinden etkiler', () => {
+  // ayni ROE (%50), farkli PD/DD & F/K ciftleri -> ayni kalite puani beklenir
+  const a = W.screenPreScore(row({ trailingPE: 4, priceToBook: 2 }), 35);
+  const b = W.screenPreScore(row({ trailingPE: 4, priceToBook: 2 }), 35);
+  assert.strictEqual(a.score, b.score);
+  assert.strictEqual(a.parts.find(p => p.key === 'roe').score,
+    W.screenPreScore(row({ trailingPE: 8, priceToBook: 4 }), 35).parts.find(p => p.key === 'roe').score,
+    'ayni ROE farkli PD/DD -> kalite puani ayni olmali');
 });
 
 test('bozuk girdi NaN sizdirmaz', () => {
@@ -164,16 +208,18 @@ test('bozuk girdi NaN sizdirmaz', () => {
 // ============================================================
 test('rank: skora gore siralar, elenenleri sebebiyle sayar', () => {
   const r = W.screenRank([
-    row({ symbol: 'IYI', trailingPE: 3.5, priceToBook: 1.3 }),
-    row({ symbol: 'ORTA', trailingPE: 12, priceToBook: 2.4 }),
+    row({ symbol: 'IYI', trailingPE: 8, priceToBook: 8 }),      // ROE %100
+    row({ symbol: 'ORTA', trailingPE: 5, priceToBook: 2.5 }),   // ROE %50
     row({ symbol: 'ZARAR', trailingPE: -3 }),
     row({ symbol: 'KUCUK', marketCap: 1e7 }),
+    row({ symbol: 'VASAT', trailingPE: 2, priceToBook: 0.5 }),  // ROE %25 -> kalite kapisi
   ], { hurdlePct: 35 });
   assert.strictEqual(r.passed.map(x => x.symbol).join(','), 'IYI,ORTA');
-  assert.strictEqual(r.scanned, 4);
-  assert.strictEqual(r.dropped, 2);
+  assert.strictEqual(r.scanned, 5);
+  assert.strictEqual(r.dropped, 3);
   assert.strictEqual(r.dropCounts.loss, 1);
   assert.strictEqual(r.dropCounts.small, 1);
+  assert.strictEqual(r.dropCounts.lowroe, 1);
 });
 
 test('siralama DETERMINISTIK — esit skorda alfabetik, tekrar calistirinca ayni', () => {
@@ -354,7 +400,7 @@ test('engel orani her zaman TRY yazar — setBuffettHurdle() cagirmaz', () => {
 
 test('elenme sebeplerinin hepsinin Turkce etiketi var', () => {
   const labels = A.evalIn('SCREEN_DROP_LABELS');
-  for (const k of ['nodata', 'loss', 'nobook', 'small', 'illiquid', 'expensive', 'rich']) {
+  for (const k of ['nodata', 'loss', 'nobook', 'lowroe', 'small', 'illiquid', 'expensive', 'rich']) {
     assert.ok(labels[k] && labels[k].length > 3, 'etiket yok: ' + k);
   }
 });
@@ -640,4 +686,66 @@ test('Impeccable: cok yilli katman CSS kurallari da uyumlu', () => {
   assert.ok(!/border-left:\s*[2-9]|border-right:\s*[2-9]/.test(blk), 'yan-serit yasak');
   assert.ok(!/linear-gradient|backdrop-filter/.test(blk), 'gradient/glass yasak');
   assert.ok(!/#fff\b|#000\b/i.test(blk), 'saf siyah/beyaz yasak');
+});
+
+// ============================================================
+// 🧱 BUFFETT SIRASI — kalite once, fiyat sonra (12 Agu 2026)
+// ============================================================
+test('derin asama 25 hisseye cikti, liste 15 satir', () => {
+  const lim = A.evalIn('SCREEN_LIMITS');
+  assert.strictEqual(lim.deepCount, 25, 'Buffett siralamasi icin ornek genis olmali');
+  assert.strictEqual(lim.listCount, 15);
+  assert.ok(lim.listCount <= lim.deepCount, 'gosterilen satir derin taranandan fazla olamaz');
+});
+
+test('varsayilan siralama GERCEK Buffett skoru', () => {
+  assert.strictEqual(A.evalIn('_screenSort'), 'buffett');
+  assert.match(String(W.runScreener), /_screenSort = 'buffett'/);
+});
+
+test('PD/DD tavani kaliteli isi elemeyecek kadar gevsedi', () => {
+  const lim = A.evalIn('SCREEN_LIMITS');
+  assert.ok(lim.maxPB >= 10,
+    'PD/DD = F/K x ROE — dar tavan yuksek ROE\'li kaliteli isi haksiz eler');
+});
+
+test('kart notu kalite-once mantigini ve cifte sayim gerekcesini yaziyor', () => {
+  const el = mount();
+  D().screen = null;
+  W.renderScreener();
+  const h = el.innerHTML;
+  assert.match(h, /kalite önce, fiyat sonra/);
+  assert.match(h, /PD\/DD = F\/K × ROE/);
+  assert.match(h, /alım listesi değildir/);
+});
+
+test('giris metni Buffett sirasini anlatiyor', () => {
+  const el = mount();
+  D().screen = null;
+  W.renderScreener();
+  assert.match(el.innerHTML, /önce iş kalitesi, sonra fiyat/);
+  assert.match(el.innerHTML, /ne kadar ucuz olursa olsun elenir/);
+});
+
+test('worker prompt izmarit ile kaliteli is farkini OGRETIYOR', () => {
+  const fnStart = WK.indexOf('async function screenCommentReply');
+  const pStart = WK.indexOf('const sysPrompt =', fnStart);
+  const p = WK.slice(pStart, WK.indexOf('const userMsg =', pStart));
+  assert.match(p, /ÖNCE İŞ KALİTESİ, SONRA FİYAT/);
+  assert.match(p, /izmarit/);
+  assert.match(p, /PD\/DD = F\/K × ROE/);
+  assert.match(p, /Berkshire hiç dağıtmadı/);
+  // temettuyu kalite isareti gibi sunmak yasak
+  assert.match(p, /temettüsü yüksek, iyi.{0,40}KURMA/s);
+});
+
+test('worker sektor alanini ayni istekten donduruyor (ek subrequest yok)', () => {
+  const fn = WK.slice(WK.indexOf('async function handleStockFundamentalsApi'),
+    WK.indexOf('// 🔎 HİSSE TARAMA'));
+  assert.match(fn, /assetProfile/);
+  assert.match(fn, /sector: ap\.sector \|\| null/);
+  // sektor SADECE modul adi eklenerek geldi — istek sayisi ARTMAMALI
+  // (quoteSummary + 5y chart = 2 fetch, oncekiyle ayni)
+  assert.strictEqual((fn.match(/fetch\(/g) || []).length, 2,
+    'sektor icin ek ag istegi eklenmis — assetProfile ayni quoteSummary cagrisinda gelmeli');
 });

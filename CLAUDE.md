@@ -19,6 +19,36 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 12 Ağustos 2026 — 🧱 TARAMA BUFFETT SIRASINA GEÇTİ (v7-148)
+
+Salim: "buffett prensiplerine uygun bi filtre yapalım." Denetimde **huninin yanlış şeyi seçtiği** ortaya çıktı — bu paketin tamamı o tek kusurun sonucu.
+
+**🔴 KUSUR: kademe 1 UCUZLUĞA göre sıralıyordu.** Ağırlığın %60'ı fiyat kriterlerindeydi (kazanç getirisi 3.0 + PD/DD 2.0 + temettü 1.0 = 6/10), kalite yalnızca 4.0'dı. Sonuç: derin aşamaya (Buffett skoruna) **en ucuz 10 hisse** gidiyordu. İyi iş + makul fiyat (F/K 15, ROE %60) kademe 1'de düşük skor alıp **kademe 2'ye hiç ulaşamıyordu**; liste ucuz-ama-vasat şirketlerle doluyordu. Bu **Graham'ın izmarit yöntemi** — genç Buffett'in yaptığı ve sonra açıkça bıraktığı şey. Filtre "Buffett skorlu" ama **Buffett sıralı değildi**.
+
+**✅ 1) KALİTE KAPISI (`screenHygiene` artık `hurdlePct` alıyor).** Türetilmiş ROE engel oranının altındaysa hisse **ne kadar ucuz olursa olsun elenir** (`lowroe`). Eskiden bu bir skor kriteriydi; şimdi kapı. Buffett'in ana filtresinin karşılığı: sermayesini alternatif getirinin üzerinde çalıştıramayan şirket zaten aday değildir. Kapı engel oranına bağlı — eşik düşünce aynı hisse geçer (teste bağlı).
+
+**🧮 2) PD/DD VE TEMETTÜ SKORDAN ÇIKARILDI — sebep matematiksel, keyfi değil.**
+```
+PD/DD = F/K × ROE
+```
+Üçünü birlikte puanlamak **aynı bilgiyi iki kez saymaktır**. Yüksek ROE'ye puan verip yüksek PD/DD'yi cezalandırmak birbirini götürür ve **kaliteli şirketi sistematik olarak aşağı iter** — ölçüldü: ROE %60 / F/K 10 olan şirket 33 puan alırken ROE %40 / F/K 4 olan 43 alıyordu. Bağımsız iki boyut vardır: **kalite (ROE)** ve **fiyat (F/K)**. Skor sadece bu ikisini kullanır.
+Temettü de çıktı: Buffett'e göre yüksek getiriyle yeniden yatırım yapabilen şirket kâr **dağıtmamalıdır** (Berkshire hiç ödemedi). Kartta bilgi olarak durur, puana girmez. Teste bağlı — temettü skoru değiştiremez.
+
+**Yeni skor (toplam 10):** iş kalitesi (ROE vs engel) **7.0** · fiyat makullüğü (kazanç getirisi) **3.0**.
+- ROE puanlaması **1,0 katından başlar** (engel zaten kapı) ve 2,5 katında dolar — "engeli geçmek" yetmez, ne kadar aştığı önemlidir.
+- Kazanç getirisi eğrisi ucuzluk YARIŞI değil makullük kontrolü: 0,15–0,50 bandı.
+
+**PD/DD tavanı 6 → 12, artık ANOMALİ kapısı.** Kaliteli iş yüksek PD/DD'de işlem görür (ROE %80 × F/K 10 = PD/DD 8) — eski dar tavan tam da aranan şirketleri eliyordu. Yeni tavanın işi farklı: özsermaye anormal küçüldüğünde (agresif geri alım, birikmiş zarar) ROE yapay şişer ve hisse kalite kapısından haksız geçer; 12 tavanı onu keser.
+
+**⚙️ 3) DERİN AŞAMA 10 → 25 HİSSE, varsayılan sıralama GERÇEK Buffett skoru.** Kademe 1 artık yalnızca "kime mali tablo okunacak" sorusunu cevaplıyor; nihai sırayı `buffettScore` belirliyor. Salim'in sorusu ("o 25'i nerden nasıl seçecek") tam bu noktaydı: **kalite sırasına göre** — türetilmiş ROE (`PD/DD ÷ F/K`) toplu quote'tan bedava geldiği için 103 hissenin hepsi için hesaplanabiliyor. Liste 12 → 15 satır. Sıralama modları: **Buffett skoru** (varsayılan) · Çok yıllı kalite · Son yıl kalite.
+
+**🏷️ Sektör alanı eklendi (bedava).** `/stock-fundamentals` modül listesine `assetProfile` yazıldı — **ek subrequest YOK**, aynı quoteSummary çağrısı. `sector`/`industry` dönüyor. Sektör düzeltmesi henüz skora girmedi (Salim mod değişikliğine öncelik verdi), ama veri hazır.
+
+**⚠️ Kalan sınır (kartta yazılı):** kademe 1'in ROE'si **tek yıllıktır** — tek şanslı yılı olan şirket kapıdan geçebilir; onu kademe 2'nin çok yıllı katmanı yakalar. Tersi de mümkün: son 12 ayı bastırılmış gerçekten iyi bir şirket kapıda elenebilir. 103 hissenin hepsi için çok yıllı veri çekmek subrequest sınırı yüzünden mümkün değil.
+
+**Doğrulama:** `tests/19-screener.test.js` 60 → **71 test**. En değerlisi **izmarit regresyonu**: "kaliteli iş, ucuz vasat işi GEÇMELİ" — eski sürümde bu test kırmızı olurdu. Ayrıca: kalite kapısı 2 · temettü/PD-DD skora sızmıyor 2 · ağırlık sözleşmesi (2 kriter, 7+3) · PD/DD tavanı kaliteli işi elemiyor · 25/15 sayıları · varsayılan sıralama · kart + giriş metni · worker prompt izmarit farkını öğretiyor · sektör ek istek getirmemiş. **19 dosya toplam 554 test geçiyor, suite tamamen yeşil.**
+**Cache:** v7-147 → **v7-148**
+
 ### 🔴 11 Ağustos 2026 — 🔁 ÇOK YILLI NORMALİZASYON / DÖNGÜ TUZAĞI (v7-147)
 
 Salim taramayı denetledi: "filtre neye göre, mantıklı mı." Dürüst cevapta **en büyük açık döngüsellikti** — F/K ve türetilmiş ROE son 12 aya bakıyor; demir-çelik/rafineri/petrokimya gibi döngüsel şirketler **kâr zirvesindeyken F/K 3 gösterip listenin başına çıkar**, ertesi yıl kâr normale dönünce fiyat hiç düşmeden F/K ikiye katlanır. Değer yatırımcısının klasik tuzağı ve tek yıllık filtre onu göremez. Salim: "çok yıllı da bakabilsin o zaman."
@@ -64,7 +94,7 @@ Salim: "uygulamaya alınacak hisse senedi bulma filtresi ekle bist için." Seçi
 
 **Hijyen kapıları SKOR DEĞİL, KAPIDIR** (altında kalan hisse hiç puanlanmaz): zarar eden ya da F/K'sı gelmeyen · defter değeri yok · piyasa değeri < 2 mlr TL · **günlük ort. işlem hacmi < 20 mn TL** (BIST'te likidite şart — likit olmayanda çıkış yoktur) · F/K > 40 · PD/DD > 6. Elenen her hisse **sebebiyle sayılır** ve kartta katlanır dökümde gösterilir — sessiz eleme yok.
 
-**Ön skor (0-100), ağırlık toplamı 10:** türetilmiş ROE vs engel oranı **4.0** · kazanç getirisi (1÷F/K) vs engel **3.0** · PD/DD **2.0** · temettü verimi **1.0**. **Veri gelmeyen kriter ATLANIR ve paydadan da düşer** (buffettScore kalıbı) — eksik veri sessizce 0 puan sayılmaz. **Kapsama %60 altına düşerse skor `null`**, uydurma yok.
+**Ön skor (0-100), ağırlık toplamı 10:** türetilmiş ROE vs engel oranı **4.0** · kazanç getirisi (1÷F/K) vs engel **3.0** · PD/DD **2.0** · temettü verimi **1.0**. ⚠️ **Bu ağırlıklar 12 Ağu'da (v7-148) değişti — güncel: ROE 7.0 + kazanç getirisi 3.0, PD/DD ve temettü skordan çıktı.** **Veri gelmeyen kriter ATLANIR ve paydadan da düşer** (buffettScore kalıbı) — eksik veri sessizce 0 puan sayılmaz. **Kapsama %60 altına düşerse skor `null`**, uydurma yok.
 - **Engel oranı mevcut `buffettHurdle` ile ortak** (TRY varsayılan %35). ⚠️ Tarama eşiği `setBuffettHurdle()` ÇAĞIRMAZ — o fonksiyon **o an açık olan grafiğin** para birimini düzenler; US hissesine bakıldıktan sonra tarama eşiği değiştirilseydi USD eşiği değişirdi (sessiz hata, teste bağlandı).
 
 **"Buffett skoru YOK" ile "Buffett skoru DÜŞÜK" aynı şey değildir.** Yahoo BIST'te mali tabloyu sık sık vermiyor (bilinen sınır). Skoru gelmeyen satır ayrı rozetle işaretlenir, Buffett'a göre sıralamada **en alta ayrı grupta** düşer — iki farklı ölçeği aynı sıralamaya karıştırmak yanıltıcı olurdu. Deep aşamada hata olursa da sessiz geçilmez, "veri alınamadı" yazılır.
@@ -1037,7 +1067,7 @@ Günde 288 istek (limit 100K). `Promise.allSettled` — bir iş patlarsa diğerl
 - `POST /suggest` — "şu an ne yapayım?" AI önerisi.
 - `POST /stock-analysis` — teknik analiz yorumu; `mode:'fund'` ile Buffett katmanı.
 - `POST /portfolio-technical` — tüm pozisyonların TA snapshot özeti.
-- `POST /stock-fundamentals` — Yahoo temel veri + 4 yıllık mali tablo + 5y aylık kapanış (Buffett skorunun girdisi).
+- `POST /stock-fundamentals` — Yahoo temel veri + 4 yıllık mali tablo + 5y aylık kapanış + `assetProfile` sektör/sanayi kolu (Buffett skorunun girdisi).
 - `POST /stock-news` — Yahoo haber proxy + opsiyonel AI ön eleme.
 - `POST /stock-screen` — BIST toplu temel veri (Yahoo v7 quote, 50 sembol/istek) + `{comment:true}` ile tarama tablosunu anlatan AI yorumu. **Eleme ve skor PWA'da**, worker sıralamaz.
 - `POST /food-macros` — besin makro arama (USDA + AI).
