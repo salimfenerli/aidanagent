@@ -749,3 +749,44 @@ test('worker sektor alanini ayni istekten donduruyor (ek subrequest yok)', () =>
   assert.strictEqual((fn.match(/fetch\(/g) || []).length, 2,
     'sektor icin ek ag istegi eklenmis — assetProfile ayni quoteSummary cagrisinda gelmeli');
 });
+
+// ============================================================
+// Derin asama sayisi + kurum tipi (12 Agu 2026 — tam Buffett uyumu)
+// ============================================================
+test('REGRESYON: derin asamaya deepCount hisse gider, listCount kadari GOSTERILIR', () => {
+  // Eskiden res.passed once listCount'a (15) kirpiliyordu; derin asama 25 degil
+  // 15 hisse goruyordu ve dokumanda yazan "25 hisseye Buffett skoru" hic
+  // gerceklesmiyordu. Kirpma artik EN SONDA, siralamadan sonra.
+  const src = readText('stocks.js');
+  const i = src.indexOf('async function runScreener');
+  assert.ok(i > 0);
+  const block = src.slice(i, i + 2600);
+  assert.ok(/res\.passed\.slice\(0, SCREEN_LIMITS\.deepCount\)/.test(block),
+    'kademe 1 ciktisi deepCount ile kirpilmali');
+  assert.ok(!/res\.passed\.slice\(0, SCREEN_LIMITS\.listCount\)/.test(block),
+    'listCount ile erken kirpma geri gelmemeli');
+  assert.ok(/await screenDeepStage\(top, token\)/.test(block),
+    'derin asama tum listeyi almali');
+  const ri = src.indexOf('function renderScreenRows');
+  const rb = src.slice(ri, ri + 800);
+  assert.ok(/screenSort\([^)]*\)\s*\.slice\(0, SCREEN_LIMITS\.listCount\)/.test(rb.replace(/\s+/g, ' ')),
+    'kirpma siralamadan SONRA, render icinde olmali');
+});
+
+test('tarama satiri kurum tipini ve guvenlik payini tasir', () => {
+  const src = readText('stocks.js');
+  const i = src.indexOf('async function screenDeepStage');
+  const block = src.slice(i, i + 1800);
+  assert.ok(/kind: bf\.kind/.test(block) && /mos: bf\.mos/.test(block),
+    'derin asama kurum tipi ve guvenlik payini satira yazmali');
+  assert.ok(/scr-kind/.test(src) && /scr-mos/.test(src), 'satirda rozetler cizilmeli');
+});
+
+test('worker tarama prompt u kurum tipi ve guvenlik payini ogretiyor', () => {
+  const w = readText('aidan-worker/worker.js');
+  assert.ok(/KURUM TİPİ KATMANI/.test(w), 'kurum tipi katmani ogretisi yok');
+  assert.ok(/GÜVENLİK PAYI/.test(w), 'guvenlik payi ogretisi yok');
+  assert.ok(/BİREBİR AYNI ÖLÇEK DEĞİLDİR/.test(w), 'banka-sanayi skoru karsilastirma yasagi yok');
+  // Tavsiye yasaklari gevsemedi
+  assert.ok(/güvenlik payı pozitif olsa BİLE/i.test(w), 'pozitif guvenlik payi deger yargisina izin vermemeli');
+});

@@ -4307,7 +4307,10 @@ async function screenCommentReply(env, user, body, cors) {
     const bf = r.buffett || null;
     const bfTxt = !bf ? 'Buffett skoru: çalıştırılmadı'
       : (bf.score == null ? `Buffett skoru: HESAPLANAMADI (${String(bf.reason || 'mali tablo gelmedi').slice(0, 90)})`
-        : `Buffett skoru ${bf.score}/100 (${bf.label})${Array.isArray(bf.weak) && bf.weak.length ? ' · en zayıf: ' + bf.weak.map(w => String(w).slice(0, 60)).join(' | ') : ''}`);
+        : `Buffett skoru ${bf.score}/100 (${bf.label})`
+          + (bf.kind && bf.kind !== 'operating' ? ` · KURUM TİPİ: ${bf.kindLabel || bf.kind}${bf.kind === 'financial' ? ' (AYRI kriter seti — borç/Owner Earnings/1 Dolar Testi bu sette YOK)' : ''}` : '')
+          + (bf.mos != null ? ` · güvenlik payı ${Math.round(bf.mos * 1000) / 10}% (sıfır büyüme varsayımı)` : '')
+          + (Array.isArray(bf.weak) && bf.weak.length ? ' · en zayıf: ' + bf.weak.map(w => String(w).slice(0, 60)).join(' | ') : ''));
     const cy = r.cycle || null;
     const cyTxt = !cy
       ? 'Çok yıllı: HESAPLANAMADI (yeterli yıllık tablo gelmedi)'
@@ -4339,6 +4342,8 @@ async function screenCommentReply(env, user, body, cors) {
   · "Dalgalanma yüksek" yazan şirkette tek yıllık orana güvenilmez, bunu açıkça söyle.
   · Normalizasyon ORAN tabanlıdır (nominal TL kârları toplanmaz), bu yüzden enflasyondan büyük ölçüde etkilenmez — ama yıl sayısı azdır (genelde 3-4), tam bir çevrimi kapsamayabilir. Bu sınırı da söyle.
   · "Çok yıllı: HESAPLANAMADI" yazan satırda döngü yorumu YAPMA, sadece veri olmadığını söyle.
+- 🏦 KURUM TİPİ KATMANI: bazı satırlarda "KURUM TİPİ: banka / finans" yazar. Bu satırlar AYRI bir kriter setiyle puanlandı — borç/özsermaye, Owner Earnings, capex ve 1 Dolar Testi bankada anlamsız olduğu için o sette KASITLI YOKTUR; yerine varlık kârlılığı (ROA), varlık/özsermaye kaldıracı ve defter değeri büyümesi ölçülür. Bunu ${name}'e açıkla ve ŞUNU MUTLAKA SÖYLE: bir bankanın Buffett skoru ile bir sanayi şirketinin skoru BİREBİR AYNI ÖLÇEK DEĞİLDİR, ikisini doğrudan karşılaştırma. Bankada Yahoo'nun vermediği takipteki kredi oranı ve sermaye yeterliliğinin kör nokta olduğunu da söyle. "holding" ya da "gayrimenkul yatırım ortaklığı" yazan satırlarda da konsolide tablonun/yeniden değerlemenin oranları çarpıttığını belirt.
+- 🛡️ GÜVENLİK PAYI: satırda varsa ne olduğunu öğret — Buffett'in "margin of safety" ilkesi. Operasyonel şirkette içsel değer = normalize sahip kârı ÷ engel oranı; bankada hak edilen PD/DD = ROE ÷ engel oranı. ⚠️ BÜYÜME SIFIR VARSAYILDI, bunu her seferinde söyle: %${hurdle} iskonto oranında küçük bir büyüme varsayımı sonucu savurur, o yüzden bilinçli olarak eklenmedi. Bu sayı bir TABAN tahminidir, hedef fiyat DEĞİLDİR. Pozitif güvenlik payını "ucuz" ya da "fırsat" diye SUNMA — sadece iskonto oranını betimle.
 - Buffett skoru HESAPLANAMADI yazan satırlar için "mali tablo gelmedi, bu hisse hakkında kalite yorumu yapılamaz" de — skoru olanla olmayanı aynı kefeye KOYMA.
 - Engel oranının (%${hurdle}) ne olduğunu hatırlat: paranın alternatif getirisi, TR'de mevduat/tahvil faizi. Bunun altında kalan ROE "iyi" değildir.
 
@@ -4346,7 +4351,8 @@ async function screenCommentReply(env, user, body, cors) {
 1. AL / SAT / TUT emri ("al", "topla", "gir", "portföye ekle", "bunu tercih et")
 2. Liste içinde "en iyisi / favorim / bence şu" seçmek — sıralama zaten mekanik, sen yeniden sıralama
 3. Fiyat tahmini ya da koşulsuz gelecek cümlesi ("yükselecek", "değerlenir")
-4. Değer yargısı ("ucuz", "pahalı", "kaçırılmaz", "iyi fırsat", "sağlam şirket")
+4. Değer yargısı ("ucuz", "pahalı", "kaçırılmaz", "iyi fırsat", "sağlam şirket") — güvenlik payı pozitif olsa BİLE
+8. Banka skorunu sanayi şirketi skoruyla doğrudan karşılaştırıp "şu daha kaliteli" demek — iki farklı kriter seti, iki farklı ölçek
 5. Sana verilmeyen sayı UYDURMA — tablo dışında rakam yazma
 6. İngilizce
 7. Sektör/şirket hakkında bilmediğin haber ya da beklenti uydurma
@@ -4360,7 +4366,7 @@ Engel oranı: %${hurdle}
 
 ${lines}
 
-Bu tabloyu ${name}'e anlat: ① filtrenin ne yaptığı ve bu listenin ne OLMADIĞI ② tablodaki ortak örüntü ③ geçen oranların ne ölçtüğü ④ SON YIL ile ÇOK YILLI skorun ayrıştığı satırlar — hangileri ve bu ne anlama geliyor ⑤ bu filtrenin nerede yanılabileceği. Tavsiye YOK, sıralama YOK, tahmin YOK.`;
+Bu tabloyu ${name}'e anlat: ① filtrenin ne yaptığı ve bu listenin ne OLMADIĞI ② tablodaki ortak örüntü ③ geçen oranların ne ölçtüğü ④ SON YIL ile ÇOK YILLI skorun ayrıştığı satırlar — hangileri ve bu ne anlama geliyor ⑤ varsa KURUM TİPİ farkı (banka/GYO/holding satırları ayrı kriter setiyle puanlandı, aynı ölçek değil) ve GÜVENLİK PAYI'nın ne olduğu + sıfır büyüme varsayımı ⑥ bu filtrenin nerede yanılabileceği. Tavsiye YOK, sıralama YOK, tahmin YOK.`;
 
   try {
     const r = await aiRun(env, {
@@ -4553,12 +4559,28 @@ async function handleStockAnalysisApi(request, env) {
 
 🧱 BUFFETT KATMANI (temel analiz — PWA hesapladı, ASLA YENİDEN HESAPLAMA):
 - Buffett skoru 0-100'dür; teknik uyum skorunun temel analiz karşılığıdır. Kriter dökümü sana veriliyor — hangi maddeden kaç puan KIRILDIĞINI açıkla, en zayıf 2 maddeyi öne çıkar.
-- Her kriterin NE ÖLÇTÜĞÜNÜ kısaca öğret (${name} öğreniyor): ROE = şirketin kendi sermayesiyle ürettiği kâr · Owner Earnings = Buffett'in 1986 mektubunda tanıttığı "sahip kârı", işletme nakit akışından bakım yatırımı düşülmüş hali; muhasebe kârından daha dürüsttür çünkü makineyi yenilemenin maliyetini saymaya devam eder · 1 Dolar Testi = şirketin dağıtmayıp tuttuğu her 1 birim kârın piyasa değerine en az 1 birim eklemesi beklenir, eklemiyorsa o para temettü olarak dağıtılsaydı daha iyiydi · engel oranı = paranın alternatif getirisi (TR'de mevduat/tahvil faizi).
+- 🔴 İKİ AYRI KRİTER SETİ VAR, hangisinin uygulandığı sana "KURUM TİPİ" satırında yazılı. BUNU MUTLAKA SÖYLE:
+  · "operasyonel şirket" → 11 kriter (ROE, ROIC, brüt marj, net marj, borç, enflasyon dayanıklılığı, Owner Earnings, 1 Dolar Testi, kâr istikrarı, seyreltme, güvenlik payı).
+  · "banka / finans" → 8 KRİTER, FARKLI SET. Borç/özsermaye, Owner Earnings, capex ve 1 Dolar Testi bu sette KASITLI YOKTUR — bankada anlamsızdırlar. Bunların eksikliğini "veri gelmemiş" diye SUNMA; ayrı bir çerçeve uygulandığını açıkla. Sebebini öğret: banka mevduatla çalışır, mevduat "borç" değil hammaddedir; bankada risk borç oranı değil VARLIK/ÖZSERMAYE kaldıracıdır. Buffett 1990 Wells Fargo mektubu: 20 kat kaldıraçta varlıkların yalnızca %5'i bozulursa özsermaye tamamen silinir.
+  · İki setin skorları BİREBİR AYNI ÖLÇEK DEĞİLDİR — bir bankanın 70'i ile bir sanayi şirketinin 70'ini aynı kefeye koyma.
+- Her kriterin NE ÖLÇTÜĞÜNÜ kısaca öğret (${name} öğreniyor):
+  · ROE = şirketin kendi sermayesiyle ürettiği kâr — ama BORÇ ALARAK ŞİŞİRİLEBİLİR.
+  · ROIC = yatırılan sermayenin (özsermaye + borç − nakit) getirisi; kaldıraçtan arındırılmıştır, işin GERÇEK getirisidir. ROE, ROIC'in çok üstündeyse kârlılığın önemli kısmı borçtan geliyordur — bunu gördüğünde söyle.
+  · Brüt marj = fiyatlama gücünün en temiz izi; net marj vergiyle ve tek seferliklerle kirlenir. Marj hem düşük hem dalgalıysa iş emtia tipidir: fiyatı şirket değil piyasa belirler. Buffett: "emtia satan bir işte en aptal rakibinden çok daha zeki olamazsın."
+  · Enflasyon dayanıklılığı = Buffett'in 1977 "How Inflation Swindles the Equity Investor" makalesinin ölçüsü. Yüksek enflasyonda ayakta kalan şirket, büyümek için AĞIR sermaye harcaması yapmayan şirkettir; sermaye yoğun iş kazandığı kârı hissedara değil makinelerinin yenilenmesine öder. Üç bileşen de ORANDIR (capex/ciro, ciro/varlık, kâr büyümesi − varlık büyümesi), bu yüzden enflasyondan bağımsızdır — nominal TL ile hesaplanıp yine de reel sonuç verir. TR'de bu kriterin neden belirleyici olduğunu ${name}'e açıkla.
+  · Owner Earnings = Buffett'in 1986 mektubunda tanıttığı "sahip kârı", işletme nakit akışından bakım yatırımı düşülmüş hali; muhasebe kârından daha dürüsttür çünkü makineyi yenilemenin maliyetini saymaya devam eder.
+  · 1 Dolar Testi = şirketin dağıtmayıp tuttuğu her 1 birim kârın piyasa değerine en az 1 birim eklemesi beklenir, eklemiyorsa o para temettü olarak dağıtılsaydı daha iyiydi.
+  · Seyreltme = özsermaye yalnızca ① tutulan kâr ② dış sermaye ile büyür; ikisinin farkı sermaye artırımını gösterir. Buffett sermaye artırımını sevmez, geri alımı sever.
+  · Güvenlik payı = Buffett'in "margin of safety" ilkesi. Operasyonel şirkette içsel değer = normalize sahip kârı ÷ engel oranı; bankada hak edilen PD/DD = ROE ÷ engel oranı. ⚠️ HER İKİSİNDE DE BÜYÜME SIFIR VARSAYILDI — bunu MUTLAKA söyle. Sebebini de açıkla: %35 iskonto oranında küçük bir büyüme varsayımı sonucu savurur, büyüme eklemek hassasiyet tiyatrosu olurdu. Yani bu içsel değer bir TABAN tahminidir, hedef fiyat DEĞİLDİR.
+  · engel oranı = paranın alternatif getirisi (TR'de mevduat/tahvil faizi).
 - "veri yok" yazan kriter hakkında YORUM YAPMA — sadece eksik olduğunu söyle. Veri kapsamı %70'in altındaysa skoru temkinli sun.
+- KURUM TİPİ "holding" ya da "gayrimenkul yatırım ortaklığı" ise bunu ayrıca söyle: holdingde konsolide tablo bağlı ortaklıkları ve azınlık paylarını karıştırır, GYO'da kâr amortisman ve yeniden değerlemeden ağır etkilenir — her iki yapıda da oranlar olduğundan farklı görünebilir.
+- BANKA setinde şu kör noktayı MUTLAKA söyle: takipteki kredi oranı, karşılık yeterliliği ve sermaye yeterlilik rasyosu Yahoo verisinde YOKTUR; bir banka bu üçü bozulurken kâğıt üstünde hâlâ kârlı görünebilir.
 - BUFFETT'İN REDDETTİKLERİNİ sen de kullanma: FAVÖK/EBITDA'ya dayanma (amortismanı geri eklemek makinelerin bedava yenilendiğini varsaymaktır), beta/oynaklığı "risk" diye sunma (risk = kalıcı sermaye kaybı ihtimalidir, fiyatın oynaması değil), analist hedefini kanıt sayma, faiz/makro tahmini yapma. ${name} sorarsa NEDEN reddedildiğini açıklayabilirsin.
 - Para birimi TRY ise: 2023 sonrası enflasyon muhasebesinin net kârı çarpıttığını, bu yüzden Owner Earnings ve nakde dönüşüm satırının daha güvenilir olduğunu belirt. Nominal 1 Dolar Testi'nin enflasyon ortamında iyimser olabileceğini de söyle.
-- "Ucuz/pahalı", "iyi şirket/kötü yatırım", "al/sat" YİNE YASAK. Bunun yerine sayıyı engel oranıyla karşılaştırarak betimle: "OE getirisi %X, engel oranı %Y — altında kalıyor" gibi.
-- Sayıları verilenden aynen kullan; kriter puanı, skor ya da oran UYDURMA.` : '';
+- "Ucuz/pahalı", "iyi şirket/kötü yatırım", "al/sat" YİNE YASAK — güvenlik payı POZİTİF olsa bile. "Güvenlik payı %30" demek serbest, "ucuz" ya da "alım fırsatı" demek YASAK. Sayıyı engel oranıyla karşılaştırarak betimle: "içsel değer tahmini X, piyasa değeri Y — aradaki fark %Z" gibi.
+- İçsel değeri HEDEF FİYAT gibi sunma, "şu seviyeye gider" DEME. Sıfır büyüme varsayımıyla hesaplanmış bir taban tahminidir.
+- Sayıları verilenden aynen kullan; kriter puanı, skor, içsel değer ya da oran UYDURMA. Kendi DCF'ini kurma.` : '';
 
   const sysPrompt = `Sen Aidan'sın — ${name}'in asistanı. Sana bir hissenin teknik göstergeleri (PWA hesapladı) veriliyor. Görevin: SADECE BETİMLEYİCİ Türkçe teknik/taktik gözlem yaz. 5-8 cümle.
 
@@ -4643,12 +4665,29 @@ Oynaklık aralığı (5 seans, ATR×√5): ${sc.vol5.low} – ${sc.vol5.high} �
     const fl = (Array.isArray(bf.flags) && bf.flags.length)
       ? `\nUYARI BAYRAKLARI:\n${bf.flags.map(f => `- ${String(f).slice(0, 200)}`).join('\n')}`
       : '';
+    // Kurum tipi PROMPT'A GIRER: banka setinde borc/OE/1-dolar satirlari
+    // kasitli yoktur; AI bunu "veri gelmemis" sanmamali (teste bagli).
+    const kindLine = `\nKURUM TİPİ: ${bf.kindLabel || bf.kind || 'bilinmiyor'}${bf.kind === 'financial' ? ' — BANKA/FİNANS KRİTER SETİ uygulandı (borç, Owner Earnings, capex ve 1 Dolar Testi bu sette KASITLI YOK)' : ' — operasyonel şirket kriter seti'}${bf.kindSrc ? ` (tespit: ${bf.kindSrc})` : ''}${bf.sector ? ` · sektör: ${bf.sector}${bf.industry ? ' / ' + bf.industry : ''}` : ''}`;
+    const ex = [];
+    if (bf.roic != null) ex.push(`ROIC ${Math.round(bf.roic * 1000) / 10}%`);
+    if (bf.roe != null) ex.push(`ROE ${Math.round(bf.roe * 1000) / 10}%`);
+    if (bf.roa != null) ex.push(`ROA ${Math.round(bf.roa * 10000) / 100}%`);
+    if (bf.grossMargin != null) ex.push(`brüt marj ${Math.round(bf.grossMargin * 1000) / 10}%`);
+    if (bf.capexIntensity != null) ex.push(`capex/ciro ${Math.round(bf.capexIntensity * 1000) / 10}%`);
+    if (bf.leverage != null) ex.push(`kaldıraç ${bf.leverage}×`);
+    if (bf.bvCagr != null) ex.push(`defter değeri büyümesi ${Math.round(bf.bvCagr * 1000) / 10}%/yıl`);
+    if (bf.oeQuality != null) ex.push(`sahip kârı/muhasebe kârı ${bf.oeQuality}×`);
+    if (bf.debtToEquity != null) ex.push(`net borç/özsermaye ${bf.debtToEquity}×`);
+    if (bf.justifiedPB != null) ex.push(`hak edilen PD/DD ${bf.justifiedPB}×`);
+    if (bf.mos != null) ex.push(`GÜVENLİK PAYI ${Math.round(bf.mos * 1000) / 10}% (sıfır büyüme varsayımı)`);
+    if (bf.intrinsic != null) ex.push(`içsel değer tahmini ${bf.intrinsic}`);
+    const extras = ex.length ? `\n${ex.join(' | ')}` : '';
     bfBlock = bf.score == null
-      ? `\n\n🧱 BUFFETT SKORU: hesaplanamadı — ${String(bf.reason || 'veri yetersiz').slice(0, 200)}\n${rows}`
-      : `\n\n🧱 BUFFETT SKORU: ${bf.score}/100 — ${bf.label} (engel oranı %${bf.hurdlePct}, ${bf.years} yıllık tablo, veri kapsamı %${Math.round((bf.coverage || 0) * 100)})
+      ? `\n\n🧱 BUFFETT SKORU: hesaplanamadı — ${String(bf.reason || 'veri yetersiz').slice(0, 200)}${kindLine}\n${rows}`
+      : `\n\n🧱 BUFFETT SKORU: ${bf.score}/100 — ${bf.label} (engel oranı %${bf.hurdlePct}, ${bf.years} yıllık tablo, veri kapsamı %${Math.round((bf.coverage || 0) * 100)})${kindLine}
 KRİTER DÖKÜMÜ:
 ${rows}${dl}
-Owner earnings getirisi: ${bf.oeYield != null ? `%${Math.round(bf.oeYield * 1000) / 10}` : '—'} | Sahip kârı/muhasebe kârı: ${bf.oeQuality != null ? `${bf.oeQuality}×` : '—'} | Net borç/özsermaye: ${bf.debtToEquity != null ? `${bf.debtToEquity}×` : '—'}${fl}`;
+${extras}${fl}`;
   }
 
   const userMsg = `📊 ${symbol} (${rangeLabel}) — teknik göstergeler:

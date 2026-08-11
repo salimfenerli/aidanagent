@@ -19,6 +19,43 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 12 Ağustos 2026 — 🏦 TAM BUFFETT UYUMU: İKİ KRİTER SETİ + 5 YENİ KATMAN (v7-149)
+
+Salim: "warren buffett'a tam olarak uygun olsun hisse seçimi konusunda." Denetimde **6 boşluk** çıktı; hepsi kapatıldı. Kararlar: bankalara **ayrı kriter seti** · **bütün katmanlar** eklensin.
+
+**🔴 1) BANKALAR YANLIŞ PUANLANIYORDU — bu paketin en önemli düzeltmesi.** Evrende ~12 finansal var. Banka **tasarımı gereği 8-10 kat kaldıraçlıdır**; operasyonel şirkette doğru olan "borç/özsermaye düşük olsun" kriteri (ağırlık 2.0) bankaya **yapısal olarak 0** verir. Owner Earnings, capex ve 1 Dolar Testi bankada zaten anlamsızdır. Yani banka ya haksız eleniyor ya da kalan kriterlerden geçip haksız giriyordu. Buffett banka **alır** (Wells Fargo 1990, AmEx, BofA) ama **başka ölçülerle okur**.
+
+**`bfKind()` — 3 katmanlı kurum tipi tespiti** (sırayla): ① elle bakılan BIST sembol listesi (Yahoo BIST'te `sector`'ü sık sık boş döndürür, o yüzden liste ÖNCE) ② Yahoo `sector`/`industry` ③ **bilanço şekli** — kaldıraç >6 **VE** varlık devir hızı <0,25 **VE** capex/ciro <0,03 (üçü birden tutmalı, yanlış pozitif korumalı). Tipler: `operating` · `financial` · `reit` (GYO) · `holding`.
+
+**Banka seti — 8 kriter, toplam ağırlık 12.5:** ROA **2.0** (Buffett 1990: %1,25 ROA "mükemmel"; TR eşiği nominal enflasyona göre yukarı çekildi) · ROE **2.0** (**kaldıraç iskontosu YOK** — bankada kaldıraç yapısaldır) · **varlık/özsermaye kaldıracı 2.0** (Buffett 1990: "20:1 oranında varlıkların %5'i bozulursa özsermaye tamamen silinir") · defter değeri büyümesi **1.5** · faaliyet verimliliği **1.0** · kâr istikrarı **1.5** · seyreltme **0.5** · güvenlik payı **2.0**.
+- **Banka güvenlik payı = hak edilen PD/DD.** Bankada iskontolu nakit akışı anlamsızdır (serbest nakit akışı kavramı yok). Doğru ölçü: `hak edilen PD/DD = ROE ÷ engel oranı` (sıfır büyüme, sonsuz vade) → `güvenlik payı = 1 − gerçek PD/DD ÷ hak edilen`.
+- **Kör nokta AÇIKÇA yazılı** (kartta + AI prompt'unda + teste bağlı): takipteki kredi oranı, karşılık yeterliliği ve SYR Yahoo'da **YOK**; banka bu üçü bozulurken kâğıt üstünde kârlı görünür.
+- **İki setin skoru BİREBİR AYNI ÖLÇEK DEĞİLDİR** — kartta rozet, listede rozet, AI prompt'unda karşılaştırma yasağı (teste bağlı).
+
+**⚙️ 2) OPERASYONEL SET 7 → 11 KRİTER (ağırlık 11,5 → 16.0).** Dağılım Buffett sırasında: **kalite 10.5 (%66)** · sermaye dağıtımı 2.0 · güvenlik 1.5 · **fiyat 2.0**.
+- **ROIC (2.0) — yeni.** ROE borç alarak şişirilir, ROIC şişirilemez (paydada borç da var): `NOPAT ÷ (özsermaye + borç − nakit)`. Moat'ın sayısal izi. **ROE, ROIC'in 1,6 katını aşarsa bayrak kalkar** — kârlılık işten değil kaldıraçtan geliyor demektir.
+- **Fiyatlama gücü / brüt marj (1.5) — yeni.** Net marj vergiyle ve tek seferliklerle kirlenir; brüt marj moat'ın en temiz izidir. Düşük + dalgalı marj = emtia tipi iş → bayrak + tavan.
+- **Enflasyon dayanıklılığı (2.0) — yeni, TR için EN belirleyici.** Buffett 1977 "How Inflation Swindles the Equity Investor": yüksek enflasyonda ayakta kalan şirket, büyümek için ağır sermaye harcamayan şirkettir. 3 bileşen: capex/ciro · ciro/varlık · kâr büyümesinin varlık büyümesine oranı.
+- **Sermaye artırımı / seyreltme (0.5) — yeni.** Yahoo geçmiş hisse adedi vermiyor → muhasebe özdeşliğinden türetildi: özsermaye yalnızca ① tutulan kâr ② dış sermaye ile büyür; `Δözsermaye − tutulan kâr` = dış kaynak. Negatifse geri alım. **TRY eşiği bilinçli geniş** — enflasyon muhasebesi özsermayeyi sermaye artırımı olmadan da yukarı yazar.
+- **Güvenlik payı (2.0) — yeni, Buffett'in value tenet'i.** `içsel değer = normalize sahip kârı ÷ engel oranı`, normalize OE = çok yıllı **medyan OE marjı × son yılın cirosu** (v7-147 oran kalıbı). **BÜYÜME TERİMİ YOK ve bu bilinçli:** %35 iskonto oranında g=0 → g=0,10 içsel değeri %40 büyütür; büyüme varsaymak **hassasiyet tiyatrosudur**. Buffett'in kendi çerçevesi zaten muhafazakârdır: işi, kuponu sahip kârı olan bir tahvil gibi fiyatla. Kartta, AI prompt'unda ve testte "sıfır büyüme" yazılı; **hedef fiyat değildir**.
+- Eski "Fiyat cazibesi (OE getirisi)" kriteri **kaldırıldı** — güvenlik payı onu kapsıyor, ikisi birlikte çift sayma olurdu.
+- **GYO'da enflasyon kriteri BİLİNÇLİ atlanır** (GYO'da capex gayrimenkul alımının kendisidir, yapısal olarak anlamsız) · GYO ve holding yapısal bayrak alır.
+
+**🐛 3) DENETİMDE BULUNAN 3 GERÇEK HATA (ikisi mevcut koddaydı):**
+- **İstikrar TOPLANIYORDU, çarpan olmalıydı.** Marjı yıllardır sabit **%10** olan bir emtia şirketi "istikrarlı" diye **0,42 puan** alıyordu — oysa sürekli düşük marj moat'ın **yokluğunun kanıtıdır**. Hem brüt hem net marjda düzeltildi: `seviye × (0,7 + 0,3×istikrar)`. Regresyon testine bağlandı.
+- **🔴 ENFLASYON NÖTRLÜĞÜ İLK YAZIMDA HATALIYDI — test yakaladı.** İki CAGR'ın **FARKI** enflasyonda sadeleşmez, `(1+π)` ile ölçeklenir: `(g1n − g2n) = (g1r − g2r)(1+π)`. %45 enflasyonda skor 0,68 yerine 0,71 çıkıyordu. Çözüm: büyüme **çarpanlarının ORANI** — `(1+g1)/(1+g2)` tam olarak sadeleşir. Ölçülen şey aynı, ama nominal TL serisiyle çalışıp reel sonuç veriyor. **Naif formun saptığı ayrıca kanıtlanıyor** (v7-147'deki aynı ders, aynı test kalıbı).
+- **Zarar eden şirket "enflasyona dayanıklı" sayılabiliyordu.** Sermaye hafif olmak, para kazanmayan bir iş için avantaj değildir → ortalama net marj ≤0 ise tavan 0,4.
+
+**🔧 4) TARAMADA DOKÜMANLA UYUŞMAYAN HATA.** `res.passed` **önce** `listCount`'a (15) kırpılıyordu, derin aşama 25 değil **15 hisse** görüyordu — CLAUDE.md'de yazan "25 hisseye Buffett skoru" hiç gerçekleşmiyordu. Kırpma artık **en sonda, sıralamadan sonra**: 25 hisse derin puanlanıp saklanıyor, ekranda 15 satır gösteriliyor. Teste bağlandı.
+
+**Çemberin dışı (circle of competence):** sektör/sanayi kolu bayrak üretir (emtia tipi iş, Buffett'in açıkça uzak durduğu kollar). **Etiket tek başına tavan uygulamaz** — tavan yalnızca rakamlar da onaylarsa (düşük + dalgalı brüt marj) gelir. Kanıt, etiketin önünde.
+
+**Maliyet SIFIR — ek ağ isteği yok.** `grossProfit`, `operatingIncome`, `totalAssets`, `retainedEarnings`, `capex`, `sector` zaten `/stock-fundamentals`'tan geliyordu, kullanılmıyordu.
+**Yeni dosya YOK · yeni endpoint YOK · yeni veri alanı YOK** (skor her açılışta yeniden hesaplanır, saklanmaz).
+
+**Doğrulama:** `09-buffett` 30 → **69 test** · `19-screener` 71 → **74 test**. En değerlileri: **enflasyon nötrlüğü + naif formun sapma kanıtı** · **istikrar regresyonu** ("sürekli düşük ama istikrarlı marj yüksek puan ALMAZ" — eski sürümde kırmızı olurdu) · banka setinde borç/OE/capex/1-dolar kriterlerinin bulunmaması · kurum tipi 3 katmanının hepsi · güvenlik payı matematiği (içsel değer ve hak edilen PD/DD ayrı ayrı) · bozuk veride NaN sızıntısı (2 fixture × 2 engel oranı) · determinizm · XSS · Impeccable CSS. **20 dosya toplam 596 test geçiyor, suite tamamen yeşil.**
+**Cache:** v7-148 → **v7-149**
+
 ### 🔴 12 Ağustos 2026 — 🧱 TARAMA BUFFETT SIRASINA GEÇTİ (v7-148)
 
 Salim: "buffett prensiplerine uygun bi filtre yapalım." Denetimde **huninin yanlış şeyi seçtiği** ortaya çıktı — bu paketin tamamı o tek kusurun sonucu.
