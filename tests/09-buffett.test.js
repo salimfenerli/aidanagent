@@ -1252,3 +1252,25 @@ test('Yahoo 0 yil verse bile birlestirme 10 yili getirir', () => {
   assert.strictEqual(m.added, 10);
   assert.strictEqual(m.years[0].revenue, 1000000);
 });
+
+test('REGRESYON: skor hesaplanamadiginda da tesis seridi cizilir', () => {
+  // Bu, Is Yatirim katmaninin EN GEREKLI oldugu durum — kullanici 10 yillik
+  // verinin denenip denenmedigini gormeli. Ilk yazimda yalnizca basarili dalda vardi.
+  const src = readText('stocks.js');
+  const i = src.indexOf('function renderBuffettCard');
+  const block = src.slice(i, src.indexOf('function bfDeepFinHtml'));
+  const nullBranch = block.slice(block.indexOf('if (bf.score == null)'), block.indexOf('const cls ='));
+  assert.ok(/bfDeepFinHtml\(\)/.test(nullBranch),
+    'skor null dalinda da derin-veri seridi cizilmeli');
+});
+
+test('tesis seridi 4 halin hepsini ayirt eder', () => {
+  const src = readText('stocks.js');
+  const i = src.indexOf('function bfDeepFinHtml');
+  const block = src.slice(i, i + 1800);
+  assert.ok(/s\.pending/.test(block), 'araniyor hali');
+  assert.ok(/!s\.ok/.test(block), 'basarisiz hali + sebep');
+  assert.ok(/s\.reason/.test(block), 'sebep yazilmali');
+  assert.ok(/s\.method/.test(block), 'olcek yontemi yazilmali');
+  assert.ok(/unmatchedSample/.test(block), 'eslesmeyen kalemler teshisi');
+});

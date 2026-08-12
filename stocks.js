@@ -980,8 +980,13 @@ function renderBuffettCard(el, bf, d) {
     : '';
 
   if (bf.score == null) {
+    // 🔴 Teşhis şeridi BURADA DA çizilir. Skorun hesaplanamadığı durum, İş
+    // Yatırım katmanının EN GEREKLİ olduğu durumdur — kullanıcı 10 yıllık
+    // verinin denenip denenmediğini ve neden başarısız olduğunu görmeli.
+    // (İlk yazımda yalnızca başarılı dalda vardı; Salim canlıda yakaladı.)
     el.innerHTML = `<div class="bf-head"><div class="bf-title">Buffett skoru ${kindBadge}</div><div class="bf-na">hesaplanamadı</div></div>
       <div class="bf-meta">${escapeHtml(bf.reason || 'Veri yetersiz.')} ${hurBtn}</div>
+      ${bfDeepFinHtml()}
       ${bf.parts && bf.parts.length ? bfRows(bf) : ''}
       <p class="bf-note">Yahoo, BIST hisselerinde mali tabloları her zaman vermiyor. ABD hisselerinde bu skor genelde dolu gelir.</p>`;
     return;
