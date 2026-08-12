@@ -359,9 +359,17 @@ describe('örnek gün — gerçek Türk yemekleri', () => {
 
 // ---------------------------------------------------------------------------
 describe('mimari sözleşmeler', () => {
-  test('AI çağrısı YOK — motor deterministik', () => {
-    assert.ok(!/\bfetch\s*\(|\/chat|\/health-coach|aiRun/.test(nutSrc),
-      'nutrition.js ag istegi yapiyor');
+  test('AI çağrısı YOK — hedefi hesaplayan motor deterministik', () => {
+    // ⚠️ 12 Agu 2026'da dosyaya AI BESLENME YAZICI eklendi. Sozlesme DARALDI,
+    // kalkmadi: kcal/makro hedefini ureten kural tabanli motor hala tamamen
+    // deterministik ve agsiz olmali — AI yalnizca o hedefi DOLDURUR.
+    const kesim = nutSrc.indexOf('// AI BESLENME YAZICI');
+    const motorSrc = kesim > 0 ? nutSrc.slice(0, kesim) : nutSrc;
+    assert.ok(!/\bfetch\s*\(|\/chat|\/health-coach|aiRun/.test(motorSrc),
+      'hedef hesaplayan motor ag istegi yapiyor');
+    // Izinli tek istek: /diet-plan (tests/20-ai-diet.test.js kilitliyor)
+    assert.ok(!/\/chat|\/health-coach|aiRun/.test(nutSrc),
+      'nutrition.js baska bir AI ucuna baglanmis');
   });
 
   test('tembel yükleniyor ve deploy zincirinde var', () => {

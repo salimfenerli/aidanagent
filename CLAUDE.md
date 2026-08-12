@@ -19,6 +19,29 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 12 Ağustos 2026 — 🥗 AI BESLENME PROGRAMI YAZMA (v7-154)
+
+Salim: "diyet kısmına beslenme yazma ekleyelim" → seçim: **AI'a diyet yazdır** (serbest metin: "balık sevmiyorum, bütçem kısıtlı, okul öğlen 12:30" → haftalık program).
+
+**🔴 MİMARİ KARAR — AI HEDEFİ BELİRLEMEZ, HEDEFİ DOLDURUR.** Kalori/makro sayılarını v7-144'teki kural tabanlı motor (`nutTargets`) hesaplar; AI yalnızca *"bu hedefi Türk mutfağından, senin sevdiklerinle nasıl doldururum"* sorusunu cevaplar. Portföy yorumu ve teknik analiz kalıbının aynısı — **sayıyı PWA hesaplar, AI uydurmaz.** Worker'da BMR/PAL formülü **YOKTUR** (teste bağlı: 17.686 / 13.384 / 6.25 / 9.99 / 1.75 katsayıları handler'da bulunmamalı). İkinci bir formül kaynağı olsaydı sağlık raporu ile beslenme planı farklı sayılar üretirdi — 10 Ağu'da `hcBMR` tam bu yüzden tek kaynağa indirilmişti.
+
+**🔒 ASIL KORUMA PROMPT DEĞİL KOD — `nutAiValidate`.** Serbest metin kutusuna "zayıflamak istiyorum" yazılabilir; prompt bunu yasaklıyor ama **prompt bir ricadır, garanti değil.** Dönen planın HER günü hedefle karşılaştırılır:
+- **BMR kapısı (mutlak):** günün toplamı bazal metabolizmanın altındaysa RED.
+- **%15 kapısı (gizli açık):** BMR'nin üstünde ama hedefin %85'inin altındaysa RED — hedef 3000'ken 2400 yazmak "az" değil, **kalori açığıdır**. İki kapı ayrı ayrı teste bağlı (ikinci senaryonun BMR ile değil açık kapısıyla yakalandığı ispatlanıyor).
+- **Tek gün düşerse PLANIN TAMAMI reddedilir** — kısmi kayıt YOK. "6 günü doğru, 1 günü aç" bir plan tam da engellenmek istenen şeydir.
+- Reddedilen plan **kaydedilmez ve eskisini de silmez**; sebebi kullanıcıya kartta yazılır.
+- **Düşük protein REDDETMEZ, uyarır** — protein eksiği tehlikeli değil, kalori açığı tehlikelidir. Aynı sertlikte davranmak iyi bir planı boşuna elerdi.
+
+**Worker `POST /diet-plan` (yeni endpoint):** Supabase token auth + `allowUser` · `aiTierForUser(env, user, 'heavy')` (çıplak `heavy` YOK — kullanıcı düğmeye basıyor, serbest akış değil) · `json: true` · JSON sözleşmesi + markdown çit toleranslı ayrıştırıcı. **⚠️ Kullanıcı talimatları (`instructionsBlock`) ENJEKTE EDİLMEZ** — makine sözleşmeli uç, "madde madde yaz" gibi bir üslup talimatı JSON çıktısını bozar. İki yönlü teste bağlı (PWA göndermiyor, worker enjekte etmiyor).
+
+**Prompt yasakları (16 yaş, teste bağlı):** hedefin ALTINDA gün yazmak · kalori açığı / kilo verme / sıklet düşürme / "hafif gün" / detoks / aralıklı oruç · takviye-vitamin-ilaç önerisi (protein tozu besindir, serbest) · vücut/görünüm yorumu · teşhis. Kullanıcı isteğiyle çelişirse **"KURALLAR KAZANIR"** açıkça yazılı. Ayrıca her kalemde **MİKTAR zorunlu** ("biraz", "yeterince" yasak), gün tipine göre kalori dağılımı, 7 gün kopya olmaması.
+
+**Depolama tavanları:** öğün başına 12 kalem, günde 8 öğün, kalem metni 90 / öğün adı 60 karakter, istek 500 karakter. Tek JSON blob'u şişirmez.
+**Yeni veri alanı:** `data.diet.nut.ai = { istek, at, hedefTipi, gunler[], uyari[], notlar[] }` · `data.diet.nut.aiRed = { at, istek, sebep[] }`. **Yeni dosya YOK** (kod `nutrition.js` sonuna eklendi), yeni sekme YOK.
+
+**Doğrulama:** yeni `tests/20-ai-diet.test.js` **37 test** (güvenlik kapısı 11 — BMR tabanı, gizli açık, %5 toleransı, tek günün tümü düşürmesi, protein uyarısı, bozuk sayıda NaN sızıntısı, determinizm · depolama tavanları 3 · fakt paketi 2 · XSS + red şeridi 3 · PWA sözleşmesi 5 — motor bölümünde fetch yasağı, izinli tek uç, talimat muafiyeti, red yolunun planı ezmemesi · worker sözleşmesi 9 · Impeccable 4). `18-nutrition`'ın "AI çağrısı YOK" sözleşmesi **daraltıldı, kalkmadı** — hedefi üreten motor hâlâ ağsız. `npm run check` listesine `nutrition.js` eklendi. **21 dosya toplam 683 test geçiyor, suite tamamen yeşil.**
+**Cache:** v7-153 → **v7-154**
+
 ### 🔴 12 Ağustos 2026 — 🐛 TÜRETİLMİŞ ÇAPA + CI TIKANIKLIĞI (v7-152)
 
 **1. 🔴 TASARIM HATASI — İş Yatırım katmanı en çok gerektiği yerde çalışmıyordu.** Salim canlıda gördü: BIST'te bilinen birkaç hisse dışında kart *"Yahoo bu sembol için yıllık mali tablo döndürmedi"* diyor. Yahoo'nun tablo vermediği hisseler İş Yatırım'a **en çok ihtiyaç duyulan** hisselerdir — ama `isyDetectScale` birim ölçeğini bulmak için Yahoo'yla **çakışan yıl** istiyordu. Çakışma yoksa ölçek `null`, veri **çöpe**. Katman tam da işe yarayacağı yerde ölüydü.
@@ -1188,6 +1211,7 @@ Günde 288 istek (limit 100K). `Promise.allSettled` — bir iş patlarsa diğerl
 - `POST /stock-news` — Yahoo haber proxy + opsiyonel AI ön eleme.
 - `POST /stock-screen` — BIST toplu temel veri (Yahoo v7 quote, 50 sembol/istek) + `{comment:true}` ile tarama tablosunu anlatan AI yorumu. **Eleme ve skor PWA'da**, worker sıralamaz.
 - `POST /food-macros` — besin makro arama (USDA + AI).
+- `POST /diet-plan` — AI beslenme programı. **Hedefleri PWA hesaplar**, worker BMR hesaplamaz; dönen plan PWA'daki `nutAiValidate` kapısından geçmeden kaydedilmez.
 - `POST /diet-plan-image` · `POST /classroom-image` — görsel OCR (diyet programı / Classroom ödevi).
 - `POST /hevy-sync` — Hevy antrenman proxy (⚠️ Hevy Pro şart).
 - `POST /body` — iOS Kısayol tartı girişi. Kimlik **`X-Aidan-Secret` header'ı** (Supabase token DEĞİL — Kısayol token yenileyemez).

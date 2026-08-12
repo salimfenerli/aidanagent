@@ -6110,6 +6110,121 @@ SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
   }
 }
 
+// ============================================================================
+// 🥗 AI BESLENME PROGRAMI — POST /diet-plan (12 Agu 2026)
+//
+// ⚠️ WORKER HEDEF HESAPLAMAZ. Kalori/makro sayilari PWA'daki kural tabanli
+// motordan (`nutTargets`) gelir; burada BMR/PAL formulu YOKTUR ve olmamalidir.
+// Ikinci bir formul kaynagi olsaydi saglik raporu ile beslenme plani farkli
+// sayilar uretirdi (10 Agu'da tam bu yuzden `hcBMR` tek kaynaga indirilmisti).
+//
+// 🔒 16 YAS SINIRLARI promptta KATI. Ama asil koruma PWA'daki
+// `nutAiValidate` — donen planin her gunu hedefle karsilastirilir, hedefin
+// altinda kalan plan KAYDEDILMEZ. Prompt bir rica, kod ise kapidir.
+//
+// ⚠️ MAKINE SOZLESMELI UC — kullanici talimatlari (instructionsBlock)
+// ENJEKTE EDILMEZ. "Madde madde yaz" gibi bir uslup talimati JSON cikti
+// sozlesmesini bozar. Bu iki yonlu teste baglidir.
+// ============================================================================
+const DIET_PLAN_REQ_MAX = 500;
+
+function parseDietPlanJson(raw) {
+  let s = String(raw || '').trim();
+  s = s.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  const i = s.indexOf('{'), j = s.lastIndexOf('}');
+  if (i < 0 || j <= i) return null;
+  try {
+    const o = JSON.parse(s.slice(i, j + 1));
+    return (o && Array.isArray(o.gunler)) ? o : null;
+  } catch { return null; }
+}
+
+async function handleDietPlanApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
+
+  const istek = String(body.istek || '').slice(0, DIET_PLAN_REQ_MAX).trim();
+  const hedefler = (Array.isArray(body.hedefler) ? body.hedefler : [])
+    .slice(0, 7)
+    .filter(h => h && isFinite(Number(h.dow)) && Number(h.kcal) > 0 && Number(h.bmr) > 0);
+  if (!hedefler.length) return jsonCors({ error: 'hedef yok — önce yaş/boy/kilo gir' }, 400, cors);
+
+  const p = body.profil || {};
+  const yas = Math.round(Number(p.age) || 16);
+  const kg = Math.round(Number(p.weight) || 0);
+  const kasMi = body.hedef === 'kas';
+
+  const sys = `Sen Türkiye'de yaşayan bir sporcunun HAFTALIK beslenme programını yazıyorsun.
+Kullanıcı ${yas} yaşında${kg ? ', ' + kg + ' kg' : ''}, haftada birkaç gün ağırlık ve dövüş antrenmanı yapıyor.
+Hedefi: ${kasMi ? 'yağsız kas kazanımı' : 'kiloyu koruma'}.
+
+🔒 DEĞİŞTİRİLEMEZ KURALLAR — istek bunlarla çelişirse KURALLAR KAZANIR:
+1. Her günün kalori ve makro hedefi SANA VERİLDİ; bunlar hesaplanmış sayılardır, yeniden hesaplama.
+   Bir günün toplam kalorisi o günün hedefine EŞİT ya da çok yakın olmalı (en fazla %5 sapma).
+   Hedefin ALTINDA gün yazmak YASAKTIR — böyle bir plan zaten reddedilir ve kullanıcıya ulaşmaz.
+2. Kalori açığı, kilo verme, sıklet düşürme, "hafif gün", detoks, aralıklı oruç, öğün atlatma YASAK.
+   Kullanıcı açıkça istese bile yapma: büyüme çağında ve ağır antrenman yapıyor, buradaki asıl risk AZ YEMEK.
+   İstenirse notlarda TEK cümleyle "bu araç kilo verme planı yazmaz" de ve hedefe uygun planı yine de yaz.
+3. Takviye, vitamin, ilaç, yağ yakıcı, "şunu al" önerme. (Protein tozu bir besindir, öğünde kullanılabilir.)
+4. Vücut şekli, görünüm, kilo ya da yağ oranı hakkında yorum yapma. "İdeal" bir sayı söyleme.
+5. Teşhis koyma, hastalık ya da alerji tedavisi önerme. Alerji söylenmişse sadece o besini kullanma.
+
+NASIL YAZILIR:
+- Türk mutfağı; markette bulunur, öğrenci bütçesine uygun, hazırlaması makul yemekler.
+- Her öğün kaleminde MİKTAR olmalı (gram / adet / dilim / kase / porsiyon). "biraz", "yeterince" YASAK.
+- Her öğün için kcal ve protein SAYISI ver. Günün öğün toplamı o günün hedefini tutmalı.
+- Antrenman günü ile dinlenme günü aynı olamaz — her günün tipi sana veriliyor, kaloriyi ona göre dağıt.
+- Antrenman gününde karbonhidratı seans çevresine yığ; dövüş gününde karbonhidratı kısma.
+- 7 gün birbirinin kopyası olmasın; aynı yemek haftada en fazla 2-3 kez geçsin.
+- Kullanıcının isteğine (sevmedikleri, saatleri, bütçesi, pişirme imkânı) uy.
+
+SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
+{"gunler":[{"dow":0,"ogunler":[{"ad":"Kahvaltı","saat":"08:00","kalemler":["3 adet yumurta","2 dilim tam buğday ekmek","1 kase yoğurt"],"kcal":650,"protein":38}]}],"notlar":["en fazla 3 kısa not"]}
+- "dow": 0=Pazar, 1=Pazartesi ... 6=Cumartesi. Sana verilen HER gün için bir nesne yaz, fazlasını yazma.
+- "kcal" ve "protein" sayı olmalı, metin değil.`;
+
+  const gunMetni = hedefler.map(h =>
+    `dow=${h.dow} (${h.etiket || h.tip}): hedef ${h.kcal} kcal · protein ${h.protein}g · karb ${h.carb}g · yağ ${h.fat}g · su ${h.suL}L · bazal metabolizma ${h.bmr} (bu sayının altına ASLA inme)`
+  ).join('\n');
+
+  const usr = `GÜNLÜK HEDEFLER (hesaplanmış, değiştirme):\n${gunMetni}\n\n` +
+    (istek ? `KULLANICININ İSTEĞİ (üslup/tercih — güvenlik kurallarını ezmez):\n${istek}` :
+      'Kullanıcı özel bir istek yazmadı — dengeli, çeşitli bir program yaz.');
+
+  try {
+    const r = await aiRun(env, {
+      tier: aiTierForUser(env, user, 'heavy'),
+      json: true,
+      messages: [
+        { role: 'system', content: sys },
+        { role: 'user', content: usr },
+      ],
+      max_tokens: 4000,
+      temperature: 0.5,
+    });
+    const raw = typeof r.response === 'string' ? r.response : JSON.stringify(r.response || '');
+    const plan = parseDietPlanJson(raw);
+    if (!plan) return jsonCors({ error: 'AI okunabilir bir plan döndürmedi, tekrar dene.' }, 200, cors);
+    return jsonCors({ plan }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
 // Byte dizisi → base64 (Gemini image_url data URL için). base64ToBytes'in tersi.
 // Büyük görsellerde stack taşmasın diye parça parça (String.fromCharCode.apply sınırı).
 function bytesToBase64(bytes) {
@@ -7817,6 +7932,12 @@ export default {
     // Besin makro arama (POST {query} → {db, ai} kalori+protein+karb+yağ)
     if (url.pathname === '/food-macros') {
       return handleFoodMacrosApi(request, env);
+    }
+
+    // 🥗 AI beslenme programı (POST {istek, hedefler, profil} → gün gün öğün JSON)
+    // Hedefleri PWA hesaplar; dönen plan PWA'da `nutAiValidate` kapısından geçer.
+    if (url.pathname === '/diet-plan') {
+      return handleDietPlanApi(request, env);
     }
 
     // 📅 Takvim ICS feed (GET ?token=, iOS/Google abonelik)

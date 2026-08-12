@@ -390,6 +390,8 @@ function renderNutrition() {
 
     '<div class="nut-week">' + hafta + '</div>' +
 
+    nutAiHtml(n) +
+
     '<details class="nut-timing"><summary>Karbonhidrat zamanlaması</summary>' +
     nutCarbTiming(tip).map(x => '<div class="nt-row">' + escapeHtml(x) + '</div>').join('') +
     '</details>' +
@@ -404,4 +406,225 @@ function renderNutrition() {
     'üretmez — 16 yaşında, büyüme döneminde ve haftada 6 gün antrenman yaparken asıl risk ' +
     'az yemektir. Sıklet için hocan ve bir diyetisyenle konuş.</div>' +
     '</div>';
+}
+
+// ============================================================================
+// AI BESLENME YAZICI (12 Agu 2026)
+//
+// 🔴 MIMARI KARAR — AI HEDEFI BELIRLEMEZ, HEDEFI DOLDURUR.
+// Sayilari (kcal / protein / karb / yag / su) yukaridaki kural tabanli motor
+// hesaplar; AI yalnizca "bu hedefi Turk mutfagindan, senin sevdiklerinle nasil
+// doldururum" sorusunu cevaplar. Portfoy yorumu ve teknik analiz kalibinin
+// aynisi: SAYIYI PWA HESAPLAR, AI UYDURMAZ.
+//
+// 🔒 VE ASIL KORUMA — DONEN PLAN KORU KORUNE KAYDEDILMEZ.
+// Serbest metin kutusuna "zayiflamak istiyorum" yazilabilir; prompt bunu
+// yasakliyor ama prompt bir RICADIR, garanti degil. `nutAiValidate` donen
+// planin HER gununu hedefle karsilastirir. BMR'nin altinda ya da gunluk
+// hedefin %15 altinda kalan tek bir gun bile varsa PLANIN TAMAMI reddedilir
+// ve HIC kaydedilmez — sebebi kullaniciya yazilir. Bu kapi promptun degil
+// kodun icinde oldugu icin modelin ne dedigine bagli degildir.
+// ============================================================================
+
+const NUT_AI_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/diet-plan';
+const NUT_AI_REQ_MAX = 500;      // istek metni tavani (~150 token)
+const NUT_AI_FLOOR = 0.85;       // hedefin bu oraninin altinda kalan gun = gizli kalori acigi
+const NUT_AI_PROTEIN_MIN = 0.70; // altinda REDDETMEZ, uyarir — protein eksigi tehlikeli degil
+const NUT_AI_MAX_ITEMS = 12;     // ogun basina kalem tavani (depolama sismesin)
+
+function nutDowLabel(dow) {
+  if (typeof programDayLabel === 'function') return programDayLabel(dow);
+  return ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'][Number(dow) % 7] || '';
+}
+
+/** AI'a gonderilecek fakt paketi — hedefler PWA'da hesaplanmis halde gider. */
+function nutAiFacts() {
+  const prof = nutProfile();
+  if (!prof) return null;
+  const n = ensureNutrition();
+  const prog = (typeof data !== 'undefined' && data) ? data.program : null;
+  const hedefler = nutWeek(prof, n.hedef, prog).filter(g => g.hedef).map(g => ({
+    dow: g.dow, tip: g.tip, etiket: NUT_DAY_LABEL[g.tip] || '',
+    kcal: g.hedef.kcal, protein: g.hedef.protein, carb: g.hedef.carb,
+    fat: g.hedef.fat, bmr: g.hedef.bmr, suL: g.hedef.waterL,
+  }));
+  if (!hedefler.length) return null;
+  return {
+    hedef: n.hedef,
+    profil: { age: prof.age, weight: prof.weight, height: prof.height, sex: prof.sex },
+    hedefler,
+  };
+}
+
+/**
+ * 🔒 GUVENLIK KAPISI. Donen plani hedeflerle karsilastirir.
+ * Tek bir gun bile duserse `ok:false` — kismi kayit YOK, cunku "6 gunu dogru
+ * 1 gunu ac birakan" bir plan tam da engellemek istedigimiz seydir.
+ */
+function nutAiValidate(plan, hedefler) {
+  const out = { ok: false, gunler: [], red: [], uyari: [] };
+  const gunler = (plan && Array.isArray(plan.gunler)) ? plan.gunler : [];
+  if (!gunler.length) { out.red.push('AI okunabilir bir plan döndürmedi.'); return out; }
+
+  const hMap = {};
+  (hedefler || []).forEach(h => { if (h && isFinite(Number(h.dow))) hMap[Number(h.dow)] = h; });
+
+  gunler.forEach(g => {
+    const dow = Number(g && g.dow);
+    const h = hMap[dow];
+    if (!h) { out.red.push('Plan tanınmayan bir gün içeriyor.'); return; }
+    const ham = Array.isArray(g.ogunler) ? g.ogunler : [];
+    if (!ham.length) { out.red.push(nutDowLabel(dow) + ': hiç öğün yok.'); return; }
+
+    let kcal = 0, protein = 0, bozuk = false;
+    ham.forEach(o => {
+      const k = Number(o && o.kcal), p = Number(o && o.protein);
+      if (!isFinite(k) || !isFinite(p) || k < 0 || p < 0) { bozuk = true; return; }
+      kcal += k; protein += p;
+    });
+    if (bozuk || !(kcal > 0)) { out.red.push(nutDowLabel(dow) + ': sayılar okunamadı.'); return; }
+    kcal = Math.round(kcal); protein = Math.round(protein);
+
+    // ⚠️ Iki ayri kapi. BMR tabani mutlak (bazal metabolizmanin altinda gun
+    // olamaz); %15 tabani ise gizli acik yakalar — hedef 3000'ken 2400 yazmak
+    // teknik olarak "az" degil, kalori acigidir.
+    if (kcal < h.bmr) {
+      out.red.push(nutDowLabel(dow) + ': ' + kcal + ' kcal — bazal metabolizmanın (' + h.bmr + ') altında.');
+      return;
+    }
+    if (kcal < Math.round(h.kcal * NUT_AI_FLOOR)) {
+      out.red.push(nutDowLabel(dow) + ': ' + kcal + ' kcal — hedef ' + h.kcal + ', bu bir kalori açığı.');
+      return;
+    }
+    if (protein < Math.round(h.protein * NUT_AI_PROTEIN_MIN)) {
+      out.uyari.push(nutDowLabel(dow) + ': protein ' + protein + 'g, hedef ' + h.protein + 'g — düşük.');
+    }
+
+    out.gunler.push({
+      dow, tip: h.tip, kcal, protein,
+      hedefKcal: h.kcal, hedefProtein: h.protein,
+      ogunler: ham.slice(0, 8).map(o => ({
+        ad: String((o && o.ad) || '').slice(0, 60),
+        saat: String((o && o.saat) || '').slice(0, 6),
+        kcal: Math.round(Number(o && o.kcal) || 0),
+        protein: Math.round(Number(o && o.protein) || 0),
+        kalemler: (Array.isArray(o && o.kalemler) ? o.kalemler : [])
+          .slice(0, NUT_AI_MAX_ITEMS).map(x => String(x).slice(0, 90)),
+      })),
+    });
+  });
+
+  out.ok = out.gunler.length > 0 && out.red.length === 0;
+  return out;
+}
+
+async function nutAiWrite() {
+  const el = document.getElementById('nutAiReq');
+  const istek = String((el && el.value) || '').trim().slice(0, NUT_AI_REQ_MAX);
+  const facts = nutAiFacts();
+  if (!facts) {
+    showToast('Önce yaş, boy ve kilonu gir — plan senin verinden hesaplanır.', 'warning', 5000);
+    return;
+  }
+  const btn = document.getElementById('nutAiBtn');
+  const eski = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Yazılıyor…'; }
+  try {
+    const token = await getSupaToken();
+    if (!token) { showToast('Giriş gerekli — Ayarlar\'dan bulut girişi yap.', 'warning'); return; }
+    const r = await fetch(NUT_AI_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({
+        istek, hedef: facts.hedef, profil: facts.profil, hedefler: facts.hedefler,
+      }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) { showToast(j.error || ('Plan yazılamadı (' + r.status + ')'), 'error', 6000); return; }
+
+    const v = nutAiValidate(j.plan, facts.hedefler);
+    const n = ensureNutrition();
+    if (!v.ok) {
+      // 🔒 Reddedilen plan KAYDEDILMEZ — eskisi de silinmez, oldugu gibi kalir.
+      n.aiRed = { at: Date.now(), istek, sebep: v.red.slice(0, 5) };
+      save(); renderNutrition();
+      showToast('Plan reddedildi: hedefin altında kalıyor. Kaydedilmedi.', 'error', 7000);
+      return;
+    }
+    n.ai = {
+      istek, at: Date.now(), hedefTipi: facts.hedef,
+      gunler: v.gunler, uyari: v.uyari,
+      notlar: (j.plan && Array.isArray(j.plan.notlar) ? j.plan.notlar : [])
+        .slice(0, 5).map(s => String(s).slice(0, 240)),
+    };
+    n.aiRed = null;
+    save(); renderNutrition();
+    showToast('Beslenme programın yazıldı.', 'success');
+  } catch (e) {
+    showToast('Bağlantı hatası: ' + e.message, 'error', 6000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = eski || 'Aidan yazsın'; }
+  }
+}
+
+function nutAiClear() {
+  const n = ensureNutrition();
+  n.ai = null; n.aiRed = null;
+  save();
+  renderNutrition();
+}
+
+function nutAiHtml(n) {
+  const ai = n && n.ai;
+  const red = n && n.aiRed;
+  const bugun = new Date().getDay();
+
+  let h = '<div class="nut-ai">' +
+    '<div class="nut-sample-head">Sana özel program' +
+    (ai ? '<button class="nut-mini" onclick="nutAiClear()">Sil</button>' : '') +
+    '</div>' +
+    '<textarea id="nutAiReq" class="nut-ai-req" rows="2" maxlength="' + NUT_AI_REQ_MAX + '" ' +
+    'placeholder="Sevmediklerin, bütçen, okul saatlerin, yemek yapabilme durumun…">' +
+    escapeHtml((ai && ai.istek) || (red && red.istek) || '') + '</textarea>' +
+    '<div class="nut-ai-row">' +
+    '<button id="nutAiBtn" class="nut-chip on" onclick="nutAiWrite()">' +
+    (ai ? 'Yeniden yaz' : 'Aidan yazsın') + '</button>' +
+    '<span class="nut-ai-hint">Kalori ve makro hedefini yukarıdaki motor hesaplar; ' +
+    'AI sadece o hedefi doldurur.</span></div>';
+
+  if (red && Array.isArray(red.sebep) && red.sebep.length) {
+    h += '<div class="nut-ai-red"><b>Son plan reddedildi — kaydedilmedi.</b>' +
+      red.sebep.map(s => '<div>' + escapeHtml(s) + '</div>').join('') +
+      '<div class="nut-ai-sub">Hedefin altında kalan bir gün kaydedilmez. ' +
+      'Bu araç kilo verme / sıklet düşürme planı üretmez.</div></div>';
+  }
+
+  if (ai && Array.isArray(ai.gunler) && ai.gunler.length) {
+    h += '<div class="nut-ai-days">' + ai.gunler.map(g =>
+      '<details class="nut-ai-day"' + (Number(g.dow) === bugun ? ' open' : '') + '>' +
+      '<summary><span>' + escapeHtml(nutDowLabel(g.dow)) + '</span>' +
+      '<b>' + g.kcal + ' kcal · ' + g.protein + 'g P</b>' +
+      '<i>hedef ' + g.hedefKcal + ' · ' + g.hedefProtein + 'g</i></summary>' +
+      (g.ogunler || []).map(o =>
+        '<div class="nut-meal"><div class="nm-head"><span>' + escapeHtml(o.ad) +
+        (o.saat ? ' · ' + escapeHtml(o.saat) : '') + '</span>' +
+        '<b>' + o.kcal + ' kcal · ' + o.protein + 'g P</b></div>' +
+        '<div class="nm-list">' + (o.kalemler || []).map(x =>
+          '<div class="nm-item"><span>' + escapeHtml(x) + '</span></div>').join('') +
+        '</div></div>').join('') +
+      '</details>').join('') + '</div>';
+
+    if (Array.isArray(ai.uyari) && ai.uyari.length) {
+      h += '<div class="nut-ai-warn">' + ai.uyari.map(s =>
+        '<div>' + escapeHtml(s) + '</div>').join('') + '</div>';
+    }
+    if (Array.isArray(ai.notlar) && ai.notlar.length) {
+      h += '<div class="nut-ai-notes">' + ai.notlar.map(s =>
+        '<div class="nt-row">' + escapeHtml(s) + '</div>').join('') + '</div>';
+    }
+    h += '<div class="nut-ai-sub">Her günü hedefinle karşılaştırıp öyle kaydettim — ' +
+      'hedefin altında kalan bir plan buraya hiç düşmez.</div>';
+  }
+
+  return h + '</div>';
 }
