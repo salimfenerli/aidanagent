@@ -19,6 +19,71 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 12 Ağustos 2026 — 🇹🇷 10 YILLIK MALİ TABLO / İŞ YATIRIM KAYNAĞI (v7-151)
+
+Salim: "10 yıllık veri API bul Türkiye." Buffett'in **10 yıllık tutarlı geçmiş** şartı Yahoo'yla karşılanamıyordu (4 yıl; Yahoo'nun kendi Financials sekmesi de ücretsiz hesapta 4 yıl gösteriyor, 10 yıl Premium'da).
+
+**Bulunan kaynak — İş Yatırım MaliTablo ucu** (`.../IsYatirim.Website/Common/Data.aspx/MaliTablo`), ücretsiz, anahtarsız:
+- `companyCode` · `exchange` · `financialGroup` · `year1..4` + `period1..4` (12 = yıllık) → **istek başına 4 dönem**, 10 yıl = **3 istek** (Cloudflare 50 subrequest sınırı içinde rahat)
+- Yanıt `{ok, value:[{itemCode, itemDescTr, value1..4}]}` · itemCode **1-2xxx bilanço · 3xxx gelir tablosu · 4xxx nakit akışı**
+- **`financialGroup` bizim iki kriter setimizle BİREBİR örtüşüyor:** `XI_29` = sanayi (`bfScoreOperating`) · `UFRS` = banka (`bfScoreFinancial`). Yani hangi grup veri döndürdüyse şirket odur — kurum tipi tespitine **4. ve en güvenilir katman**.
+
+**⚠️ KAPSAM BİLİNÇLİ OLARAK DAR — YALNIZCA HİSSE KARTI, TARAMADA YOK.** Resmî API değil, İş Yatırım'ın iç ucu; kütüphane README'si aşırı istekte **IP engeli** uyarısı yapıyor. Tarama 25 sembol × 3 istek = tek taramada ~75 istek eder ve Cloudflare'ın veri-merkezi IP'si daha kolay engellenir. Bu sınır teste bağlandı.
+
+**🔬 EN KRİTİK PARÇA — BİRİM TAHMİN EDİLMEZ, ÖLÇÜLÜR.** İş Yatırım genelde **bin TL**, Yahoo tam TL döner. Yanlış çarpanın tehlikesi sinsi: oranları **bozmaz** (marj, ROE, ROA sadeleşir) ama **içsel değeri 1000 kat kaydırır** — güvenlik payı tamamen anlamsızlaşır ve bu hata sessizdir.
+- `isyDetectScale()`: Yahoo ile **çakışan yılın** aynı kalemleri (ciro, varlık, özsermaye, net kâr) karşılaştırılır → oran medyanı → **10'un kuvvetine yuvarlanır**.
+- Medyan yuvarlanan değerden **%25'ten fazla saparsa** iki kaynak aynı şeyi ölçmüyor demektir → ölçek `null`, **veri KULLANILMAZ**.
+- Çakışan yıl yoksa da `null` — uydurma çarpan yok.
+
+**Birleştirme (`isyMergeYears`):** Yahoo yılları **olduğu gibi korunur** (birimi bilinen, aylardır test edilen kaynak) · Yahoo'da **olmayan** yıllar İş Yatırım'dan ölçeklenip eklenir (asıl kazanç) · çakışan yılda Yahoo kazanır ama **eksik alanlar tamamlanır** (Yahoo BIST'te capex/amortisman/temettüyü sık atlar). `longDebt` → `longTermDebt` adına çevrilir.
+
+**Sessiz bozulma yok:** uç patlarsa, ölçek ölçülemezse ya da veri gelmezse `d.years`'a **dokunulmaz**, kart Yahoo'nun 4 yılıyla aynen çalışır ve şerit sebebini yazar. Kart çizimi **beklemez** — önce 4 yılla görünür, derin veri gelince skor yeniden hesaplanıp tazelenir (yarış koşulu koruması var: kullanıcı başka hisseye geçtiyse bayat sonuç basılmaz).
+
+**Kalem eşleştirme kırılganlığa karşı normalize:** `isyNorm()` baştaki roma rakamlarını ("XVI. ÖZKAYNAKLAR"), madde numaralarını ("16.4.2 Dönem Net Kar/Zararı"), parantez içini ve noktalamayı atar, Türkçe küçük harfe çevirir. **Eşleşmeyen kalemler teşhis olarak kartta gösterilir** — alan adı değişirse kaynağa bakmadan görülür.
+
+**Etkisi:** 10 yıla çıkan hissede yıl sayısı tavanı kalkar, "veri derinliği sınırı" notu düşer, kâr istikrarı/trend/CAGR/1 Dolar Testi hepsi derinleşir. **TMS 29 sınır katmanı (v7-150) burada daha da değerli** — 10 yılın çoğu 2023 öncesi olduğu için karşılaştırmaların sınırlanması artık asıl işi yapıyor.
+
+**Veri saklanmaz:** `_isyCache` yalnız bellekte (worker zaten 24 saat cache'liyor). localStorage/Supabase blob'u şişmez.
+**Yeni dosya YOK · yeni veri alanı YOK.** Yeni endpoint: `POST /bist-financials` (auth'lu).
+
+**⚠️ DOĞRULANMADI:** uç sandbox'tan fetch edilemedi (web_fetch bu JSON uçlarında boş dönüyor). Sözleşme kaynak koddan çıkarıldı; **ilk canlı deneme fiilen testtir**. Kartın teşhis şeridi birim, eşleşmeyen kalem ve yıl derinliğini tek bakışta gösterecek şekilde yazıldı. Sonuca göre `ISY_FIELDS_*` haritası güncellenir.
+
+**Doğrulama:** `09-buffett` 88 → **100 test** (ölçek tespiti 5 hâl — bin TL, tam TL, çakışma yok, tutarsız kaynak, bozuk girdi · birleştirme 2 · 10 yılda tavanın kalkması · **taramada kullanılmama sözleşmesi** · hata yolunda Yahoo verisinin bozulmaması · worker auth/cache/4-dönem · normalizasyon). **20 dosya toplam 636 test geçiyor, suite tamamen yeşil.**
+**Cache:** v7-150 → **v7-151**
+
+### 🔴 12 Ağustos 2026 — 🧮 KALAN 6 BOŞLUK KAPATILDI (v7-150)
+
+Salim: "bu eksikleri düzelt hepsini sırayla, Warren Buffett'ın algoritmasını tam yapalım." v7-149 sonrası denetimde kalan 6 madde ele alındı. **3'ü tam kapandı, 2'si kısmen (yapısal sınır), 1'i kapatılamaz — hangisinin hangisi olduğu koda ve karta yazıldı.**
+
+**🔴 1) KADEME 1'DE BANKA AYRIMI (tam kapandı).** v7-149 kademe 2'de "bankada kaldıraç yapısaldır, ROE'ye iskonto uygulama" diyordu ama **kademe 1'in kalite kapısı hâlâ ayrımsızdı**: bankanın 8-10 kat kaldıraçla şişmiş %40 ROE'si, sanayi şirketinin %40 ROE'siyle aynı sayılıyor, banka kapıyı yapısal olarak kolay geçiyordu.
+- **Çözüm keyfî çarpan DEĞİL:** kademe 1'de toplam varlık verisi yok, kaldıraç **matematiksel olarak arındırılamaz**. Uydurma bir katsayı koymak sayı üretmek olurdu. Banka **yalnızca ROE kapısını atlar** ve kararı ölçebilen yere — kademe 2'ye — gider.
+- **🐛 İlk yazımda banka erken `ok` dönüyordu ve büyüklük/likidite/F-K kapılarını da atlıyordu. Test yakaladı.** Erken dönüş kaldırıldı, yalnızca o kapı koşullu.
+- **Kademe 1 skorunda ağırlık kayar: 7/3 yerine 4/6.** Gerekçe ölçülebilirlik: bankanın ROE'si burada güvenilmez, kazanç getirisi ise **kaldıraçtan bağımsızdır**. Toplam ağırlık iki sette de 10 — ölçek kaymaz.
+- **Banka kotası (`finQuota: 6`):** bankalar ROE kapısını atladığı için kademe 1 skorları aynı ölçekte değil; kota olmasa yüksek ROE'li sanayi hisseleri onları derin aşamadan tamamen dışlardı.
+- Banka listesi `BF_FIN_SYMBOLS` ile **tek kaynak** (teste bağlı — iki liste tutulsa biri güncellenir diğeri unutulurdu). Engel oranı değişince `row.fin` geçirilmezse skor sessizce sanayi ağırlığına dönerdi; o da teste bağlandı.
+
+**🇹🇷 2) TMS 29 ENFLASYON MUHASEBESİ SINIR KATMANI (kısmen — tam düzeltme imkânsız).** Türkiye'de 2023 yıl sonundan itibaren enflasyon muhasebesi uygulanıyor; 2022 ve öncesi tablolar **farklı satın alma gücüyle** yazılı. Tam düzeltme yeniden ifade endeksi ister, Yahoo vermiyor.
+- **Asıl kavrayış — hangi hesap bozulur, hangisi bozulmaz:** **yıl içi oranlar GÜVENLİ** (marj, ROE, ROA, capex/ciro, varlık devir hızı — pay ve payda aynı yılın parası, sadeleşir) · **yıllar arası karşılaştırmalar BOZULUR** (trend, bileşik büyüme, 1 Dolar Testi'nin tuttuğu kâr toplamı).
+- `bfSafeSpan()`: sınır sonrası **≥2 yıl** varsa karşılaştırmalar **yalnızca onlarla** yapılır · tek yıl varsa hesap yapılır ama **"GÜVENİLMEZ" yazılır** · seviye/medyan hesapları **tüm yılları** kullanmaya devam eder.
+- Etkilenen kriterler: brüt/net marj trendi · enflasyon dayanıklılığının büyüme bileşeni · 1 Dolar Testi · bankada defter değeri büyümesi.
+
+**🎯 3) ÇEMBER (circle of competence) SKORA GİRDİ (tam kapandı).** Sektör artık ağırlıklı kriter (1.0): emtia tipi iş, Buffett'in açıkça uzak durduğu kollar, holding/GYO opaklığı. **⚠️ ETİKET TEK BAŞINA KARAR VERMEZ** — ceza yalnızca rakamlar da onayladığında (brüt marj hem düşük hem dalgalı) ağırlaşır. Çelik etiketli ama marjı yüksek ve istikrarlı bir şirket cezalanmaz (teste bağlı). Sektör verisi yoksa kriter **atlanır**, uydurulmaz.
+
+**💰 4) SERMAYE DAĞITIMI RASYONELLİĞİ (yönetim kalitesinin ölçülebilen tek yüzü).** Buffett 1984 mektubu: *"Tutulan her 1 dolar en az 1 dolar piyasa değeri yaratacaksa TUTULMALI, yaratmayacaksa DAĞITILMALI."* Kriter (1.0), sermaye getirisi ile temettü davranışının uyumunu ölçer: getiri engelin **üstündeyse** kâr tutmak doğru · **altındaysa** kârı elde tutmak değer yakar → bayrak. **Dürüstlük, şeffaflık ve "kurumsal zorlama"ya direnç ÖLÇÜLEMEZ** — bu kod ve AI prompt'unda açıkça yazılı.
+
+**🧾 5) EFEKTİF VERGİ ORANI.** ROIC artık yasal değil **gerçekten ödenen** oranı kullanıyor (`incomeBeforeTax`/`incomeTaxExpense` worker'a eklendi — ek istek yok). Teşvikli/serbest bölge şirketinde fark büyük. Saçma değerler (negatif vergi, %60 üstü) yasal orana düşer.
+
+**⏳ 6) YIL SAYISI TAVANI + KIYI PAYI (kısmen — yapısal sınırlar).**
+- **Etiket tavanı:** 2-3 yıllık tabloda "güçlü kalite" verilmez. ⚠️ **Tavan 4 yılda BAŞLAMAZ** — 4 yıl Yahoo'nun pratik üst sınırı; herkesi veri kaynağının sınırından cezalandırmak bilgi eklemez, sadece tüm ölçeği aşağı kaydırır ve en üst etiketi ölü koda çevirirdi. 4 yılda tavan yok ama **"Buffett 10 yıl ister" notu** her durumda düşülür.
+- **🛟 Kıyı payı şeridi (`edgeQuota: 8`, `edgeBand: 0.70`):** kademe 1'in ROE'si tek yıllık — geçici olarak bastırılmış bir yıl gerçekten iyi bir şirketi eleyebiliyordu. Kapıdan **kıl payı** dönenler (engelin %70'i ve üstü) artık mali tabloya sorulur, kararı çok yıllı veri verir. Elenen sayısına yazılırlar (sessiz kurtarma yok), listede **ayrı rozetle** görünürler, normal sıranın önüne geçemezler.
+- **Kapatılamayan:** Yahoo 4 yıl veriyor, Buffett 10 istiyor. 103 hissenin hepsi için çok yıllı veri çekmek subrequest sınırı yüzünden mümkün değil.
+
+**Yeni ağırlıklar:** operasyonel **13 kriter / 18.0** (kalite 11.5 = %64 · sermaye dağıtımı 3.0 · güvenlik 1.5 · fiyat 2.0) · banka **9 kriter / 13.5**.
+**Yeni dosya YOK · yeni endpoint YOK · yeni veri alanı YOK.**
+
+**Doğrulama:** `09-buffett` 69 → **88 test** · `19-screener` 74 → **83 test**. En değerlileri: **banka diğer kapılardan muaf değil** (gerçek hatayı yakalayan test) · TMS 29'un 5 hâli (sınır bayrağı, ≥2 yıl kısıtlama, tek yıl uyarısı, yıl içi oranların etkilenmemesi, sınırı geçmeyen seri) · çemberde **etiket tek başına tavan uygulamaz** · sermaye dağıtımının iki yönü · efektif vergi + saçma değer koruması · yıl tavanının 4'te başlamaması · banka kotası · kıyı payının kotayı aşmaması ve sıranın önüne geçmemesi · determinizm · NaN sızıntısı. **20 dosya toplam 624 test geçiyor, suite tamamen yeşil.**
+**Cache:** v7-149 → **v7-150**
+
 ### 🔴 12 Ağustos 2026 — 🏦 TAM BUFFETT UYUMU: İKİ KRİTER SETİ + 5 YENİ KATMAN (v7-149)
 
 Salim: "warren buffett'a tam olarak uygun olsun hisse seçimi konusunda." Denetimde **6 boşluk** çıktı; hepsi kapatıldı. Kararlar: bankalara **ayrı kriter seti** · **bütün katmanlar** eklensin.

@@ -17,6 +17,7 @@ let _stockNewsItems = [];       // [{title,publisher,link,time}] — AI özet i�
 let _stockFundLoaded = false;   // temel veri bu açılışta çekildi mi
 let _stockFundData = null;      // {trailingPE, priceToBook, ...}
 let _stockBuffett = null;       // son hesaplanan Buffett skoru (AI faktlarına da gider)
+let _stockDeepFin = null;       // İş Yatırım 10 yıllık veri durumu (BIST kartı)
 // Teknik analiz sadece hisselerde (BIST + ABD) anlamlı — döviz/kripto'da panel gizli
 const TA_MARKETS = new Set(['bist', 'abd']);
 
@@ -1013,6 +1014,7 @@ function renderBuffettCard(el, bf, d) {
     </div>
     <div class="bf-bar"><i class="${cls}" style="width:${Math.max(2, Math.min(100, bf.score))}%"></i></div>
     <div class="bf-meta">${tr(bf.years)} yıllık tablo · veri kapsamı %${tr(Math.round(bf.coverage * 100))}${cur ? ' · ' + cur : ''} ${hurBtn}</div>
+    ${bfDeepFinHtml()}
     ${mosHtml}
     ${bfRows(bf)}
     ${flags ? `<ul class="bf-flags">${flags}</ul>` : ''}
@@ -1020,6 +1022,29 @@ function renderBuffettCard(el, bf, d) {
       ? 'Bu bir <b>banka/finans</b> kuruluşu — ayrı kriter seti uygulandı. Borç/özsermaye, Owner Earnings, capex ve 1 Dolar Testi bankada anlamlı olmadığı için kasıtlı olarak girmedi; yerine varlık kârlılığı, kaldıraç ve defter değeri büyümesi ölçüldü (Buffett\'in 1990 Wells Fargo mektubundaki çerçeve).'
       : 'Kalite ağırlığın <b>üçte ikisidir</b>, fiyat üçte biri — Buffett sırası: "harika bir şirketi makul fiyata almak, vasat bir şirketi harika fiyata almaktan çok daha iyidir."'}
       FAVÖK (EBITDA), beta/oynaklık, analist hedefleri ve teknik göstergeler bu skora <b>kasıtlı olarak girmez</b> — Buffett dördünü de reddeder. Skor tarafsız bir kalite ölçüsüdür, al/sat sinyali değildir.</p>`;
+}
+
+// 🇹🇷 Veri derinliği şeridi — kullanıcı skorun KAÇ YILDAN çıktığını ve
+// verinin NEREDEN geldiğini görmeli. Sessiz kaynak değişimi kabul edilemez.
+function bfDeepFinHtml() {
+  const s = _stockDeepFin;
+  if (!s) return '';
+  if (s.pending) return `<div class="bf-deep pending">10 yıllık mali tablo aranıyor (İş Yatırım)…</div>`;
+  if (!s.ok) {
+    return `<div class="bf-deep na">10 yıllık veri alınamadı — skor Yahoo'nun 4 yılıyla hesaplandı.
+      <span class="bf-deep-why">${escapeHtml(String(s.reason || ''))}</span></div>`;
+  }
+  const tr = n => n.toLocaleString('tr-TR');
+  const grp = s.group === 'XI_29' ? 'sanayi tablosu (XI_29)' : `banka tablosu (${s.group})`;
+  // Teşhis: hangi kalemler eşleşmedi — canlıda alan adı değişirse burada görünür
+  const un = (s.diag && Array.isArray(s.diag.unmatchedSample)) ? s.diag.unmatchedSample : [];
+  const diag = un.length
+    ? `<details class="bf-deep-diag"><summary>Eşleşmeyen kalemler (${tr(un.length)})</summary>
+        <div>${un.map(x => escapeHtml(String(x))).join(' · ')}</div></details>` : '';
+  return `<div class="bf-deep good">
+    <b>${tr(s.total)} yıllık tablo</b> — İş Yatırım'dan ${tr(s.added)} yıl eklendi${s.filled ? `, ${tr(s.filled)} eksik alan tamamlandı` : ''} · ${escapeHtml(grp)}
+    <span class="bf-deep-why">birim ölçeği ölçüldü: ×${tr(s.scale)} (Yahoo ile çakışan yıldan)</span>${diag}
+  </div>`;
 }
 
 function bfRows(bf) {
@@ -1063,6 +1088,139 @@ async function setBuffettHurdle() {
   showToast(`${cur} engel oranı %${n} yapıldı`, 'success');
 }
 
+// ============================================================
+// 🇹🇷 İŞ YATIRIM 10 YILLIK MALİ TABLO — Yahoo'nun 4 yılını derinleştirir
+// ============================================================
+// Buffett 10 YILLIK tutarlı geçmiş ister; Yahoo BIST'te 4 yıl veriyor.
+// Bu katman yalnızca TEK HİSSE KARTINDA çalışır (taramada değil — resmî
+// olmayan uç, 25 sembollük tarama IP engeli riski taşır).
+//
+// 🔴 SESSİZ ARIZA YOK / SESSİZ BOZULMA YOK: uç patlarsa kart Yahoo'nun 4 yılıyla
+// aynen çalışmaya devam eder, rozet "Yahoo · 4 yıl" der. Hiçbir şey kaybolmaz.
+const STOCK_BIST_FIN_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/bist-financials';
+// Bellekte tutulur, localStorage'a YAZILMAZ — 10 yıl × ~16 alan × sembol
+// başına veri blob'u şişirirdi. Worker zaten 24 saat cache'liyor.
+const _isyCache = {};
+let _isyReq = 0;
+
+// Parasal alanlar — ölçek çarpanı YALNIZCA bunlara uygulanır
+const ISY_MONEY_FIELDS = ['revenue', 'grossProfit', 'operatingIncome', 'netIncome',
+  'incomeBeforeTax', 'incomeTaxExpense', 'totalAssets', 'totalLiab', 'equity',
+  'cash', 'retainedEarnings', 'opCashFlow', 'capex', 'dna', 'dividendsPaid',
+  'shortDebt', 'longDebt'];
+
+// 🔬 BİRİM OTOMATİK TESPİTİ — tahmin DEĞİL, ölçüm.
+// İş Yatırım genelde "bin TL" döner, Yahoo tam TL. Yanlış çarpan oranları
+// bozmaz (marj/ROE sadeleşir) ama piyasa değeri ↔ içsel değer karşılaştırmasını
+// tamamen bozar. Sabit bir çarpan varsaymak yerine ÇAKIŞAN yıldan ölçülür:
+// aynı yılın aynı kalemi iki kaynakta karşılaştırılır, oran 10'un kuvvetine
+// yuvarlanır. Oran tutarsızsa ölçek `null` döner ve veri KULLANILMAZ.
+function isyDetectScale(isyYears, yahooYears) {
+  const cand = ['revenue', 'totalAssets', 'equity', 'netIncome'];
+  const ratios = [];
+  for (const iy of (isyYears || [])) {
+    const yy = (yahooYears || []).find(y => y && y.year === iy.year);
+    if (!yy) continue;
+    for (const f of cand) {
+      const a = iy[f], v = yy[f];
+      if (a == null || v == null || !isFinite(a) || !isFinite(v)) continue;
+      if (Math.abs(a) < 1 || Math.abs(v) < 1) continue;
+      ratios.push(Math.abs(v / a));
+    }
+  }
+  if (!ratios.length) return { scale: null, reason: 'Yahoo ile çakışan yıl bulunamadı — ölçek ölçülemedi' };
+  const med = bfMedian(ratios);
+  if (!(med > 0)) return { scale: null, reason: 'ölçek oranı geçersiz' };
+  const scale = Math.pow(10, Math.round(Math.log10(med)));
+  // Güven kontrolü: medyan, yuvarlanan değerden %25'ten fazla sapıyorsa iki
+  // kaynak aynı şeyi ölçmüyor demektir (farklı konsolidasyon, düzeltme vb.)
+  if (Math.abs(med / scale - 1) > 0.25) {
+    return { scale: null, reason: `iki kaynak tutarsız (oran ${bfR(med, 3)}) — veri kullanılmadı` };
+  }
+  return { scale, samples: ratios.length, med: bfR(med, 4) };
+}
+
+// Yahoo yılları OLDUĞU GİBİ kalır (birimi bilinen, aylardır test edilen kaynak).
+// İş Yatırım yılları ölçekle çarpılır ve:
+//   · Yahoo'da OLMAYAN yıllar → doğrudan eklenir (asıl kazanç: 10 yıla çıkmak)
+//   · Yahoo'da OLAN yıllar → Yahoo kazanır, yalnızca EKSİK alanlar tamamlanır
+//     (Yahoo BIST'te capex/amortisman/temettüyü sık sık atlar)
+function isyMergeYears(yahooYears, isyYears, scale) {
+  const out = (Array.isArray(yahooYears) ? yahooYears : []).map(y => Object.assign({ src: 'yahoo' }, y));
+  const byYear = {};
+  for (const y of out) byYear[y.year] = y;
+  let added = 0, filled = 0;
+  for (const iy of (Array.isArray(isyYears) ? isyYears : [])) {
+    if (!iy || !isFinite(iy.year)) continue;
+    const scaled = { year: iy.year, src: 'isyatirim' };
+    for (const f of ISY_MONEY_FIELDS) {
+      if (iy[f] == null || !isFinite(iy[f])) continue;
+      scaled[f] = iy[f] * scale;
+    }
+    // İş Yatırım borcu kısa/uzun ayırıyor; motor longTermDebt bekliyor
+    if (scaled.longDebt != null) { scaled.longTermDebt = scaled.longDebt; delete scaled.longDebt; }
+    const ex = byYear[iy.year];
+    if (!ex) { out.push(scaled); byYear[iy.year] = scaled; added++; continue; }
+    for (const f of Object.keys(scaled)) {
+      if (f === 'year' || f === 'src') continue;
+      if (ex[f] == null && scaled[f] != null) { ex[f] = scaled[f]; filled++; }
+    }
+  }
+  out.sort((a, b) => b.year - a.year);
+  return { years: out, added, filled };
+}
+
+// Kartı 10 yıllık veriyle YENİDEN çizer. Yahoo çizimini BEKLETMEZ —
+// kart önce 4 yılla görünür, derin veri gelince kendini tazeler.
+async function loadBistDeepFinancials(d, w) {
+  if (!d || !w || w.market !== 'bist') return;
+  const sym = String(w.symbol || '').toUpperCase().replace(/\.IS$/, '');
+  if (!/^[A-Z0-9]{2,10}$/.test(sym)) return;
+  const req = ++_isyReq;
+  let res = _isyCache[sym];
+  if (!res) {
+    try {
+      const token = await getSupaToken();
+      if (!token) return;
+      const r = await fetch(STOCK_BIST_FIN_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ symbol: sym, years: 10 }),
+      });
+      if (!r.ok) throw new Error('http ' + r.status);
+      res = await r.json();
+      _isyCache[sym] = res;
+    } catch (e) {
+      _isyCache[sym] = { ok: false, error: e.message };
+      res = _isyCache[sym];
+    }
+  }
+  // Kullanıcı başka hisseye geçtiyse bayat sonucu ekrana basma
+  if (req !== _isyReq || !_stockFundData || _stockFundData !== d) return;
+  if (!res || !res.ok || !Array.isArray(res.years) || !res.years.length) {
+    _stockDeepFin = { ok: false, reason: (res && res.error) || 'veri gelmedi' };
+    renderBuffettCard(document.getElementById('buffettCard'), _stockBuffett, d);
+    return;
+  }
+  const det = isyDetectScale(res.years, d.years);
+  if (det.scale == null) {
+    // 🔴 ÖLÇEK BİLİNMİYORSA VERİ KULLANILMAZ. Yanlış çarpanla birleştirmek
+    // içsel değeri 1000 kat şişirir/küçültür — sessiz ve ölümcül bir hata.
+    _stockDeepFin = { ok: false, reason: det.reason, group: res.group };
+    renderBuffettCard(document.getElementById('buffettCard'), _stockBuffett, d);
+    return;
+  }
+  const m = isyMergeYears(d.years, res.years, det.scale);
+  d.years = m.years;
+  _stockDeepFin = {
+    ok: true, group: res.group, scale: det.scale, added: m.added, filled: m.filled,
+    total: m.years.length, kind: res.kind, diag: res.diag || null,
+  };
+  // Skoru YENİDEN hesapla — artık 10 yıllık pencereden bakıyor
+  _stockBuffett = buffettScore(d, buffettHurdle(d.currency || w.currency));
+  renderBuffettCard(document.getElementById('buffettCard'), _stockBuffett, d);
+}
+
 function renderStockFundamentals(d, w) {
   const grid = document.getElementById('stockFundGrid');
   const bfEl = document.getElementById('buffettCard');
@@ -1070,12 +1228,20 @@ function renderStockFundamentals(d, w) {
   if (!d) {
     grid.innerHTML = '<div class="stock-chart-loading">Veri yok.</div>';
     _stockBuffett = null;
+    _stockDeepFin = null;
     if (bfEl) { bfEl.innerHTML = ''; bfEl.style.display = 'none'; }
     return;
   }
   // Buffett skoru — sayıyı PWA hesaplar, AI uydurmaz (teknik uyum skoruyla aynı kalıp)
   _stockBuffett = buffettScore(d, buffettHurdle(d.currency || w.currency));
   renderBuffettCard(bfEl, _stockBuffett, d);
+  // 🇹🇷 BIST'te 10 yıllık derin veriyi ARKA PLANDA çek — çizimi BEKLETMEZ.
+  // Gelirse skor 10 yıllık pencereden yeniden hesaplanır; gelmezse kart
+  // Yahoo'nun 4 yılıyla aynen kalır (sessiz bozulma yok).
+  if (w && w.market === 'bist') {
+    _stockDeepFin = { pending: true };
+    loadBistDeepFinancials(d, w);
+  } else _stockDeepFin = null;
   const cur = d.currency || w.currency || '';
   const c = cur ? ' ' + cur : '';
   const tr = n => n.toLocaleString('tr-TR');
@@ -2180,11 +2346,23 @@ const BF_HOLDING_SYMBOLS = ['AGHOL', 'ALARK', 'BRYAT', 'DOHOL', 'ECILC', 'GLYHO'
 const BF_FIN_IND_RE = /bank|insurance|capital market|asset management|credit service|mortgage|financial (conglomerate|credit)|brokerage/i;
 const BF_REIT_IND_RE = /reit|real estate/i;
 // Emtia tipi is: fiyati sirket degil PIYASA belirler. Buffett: "emtia satan bir
-// iste en aptal rakibinden cok daha zeki olamazsin." Bu bir ETIKET onyargisidir —
-// tavan yalnizca RAKAMLAR da onaylarsa uygulanir (dusuk + dalgali brut marj).
+// iste en aptal rakibinden cok daha zeki olamazsin."
 const BF_COMMODITY_RE = /steel|iron|aluminum|copper|gold|silver|coal|marine shipping|oil & gas|refin|agricultural inputs|fertilizer|paper|lumber|commodity chemical|building materials|cement/i;
 // Buffett'in acikca uzak durdugu is kollari (yorum degil, mektuplarindan)
 const BF_AVOID_RE = /airline|airport service|gold|silver|biotech|shell compan/i;
+
+// 🔴 TMS 29 (IAS 29) ENFLASYON MUHASEBESI SINIRI.
+// Turkiye'de 2023 yil sonundan itibaren uygulaniyor: parasal olmayan kalemler
+// (ozsermaye, maddi duran varlik, stok) yeniden ifade ediliyor, parasal
+// pozisyon kar/zarari gelir tablosuna giriyor.
+// ⚠️ ASIL SONUC — hangi hesap bozulur, hangisi bozulmaz:
+//   · YIL ICI oranlar (marj, ROE, ROA, capex/ciro, varlik devir hizi) GUVENLI:
+//     pay ve payda ayni yilin satin alma gucundedir, oran sadelesir.
+//   · YILLAR ARASI karsilastirmalar (trend, bilesik buyume, 1 Dolar Testi'nin
+//     tuttugu kar toplami) GUVENILMEZ: 2022 ve oncesi baska bir para birimidir.
+// Bu yuzden seviye/medyan hesaplari TUM yillari kullanir, karsilastirma
+// hesaplari yalnizca SINIR SONRASI yillari kullanir (yeterliyse).
+const BF_TR_RESTATE_YEAR = 2023;
 
 function bfBaseSymbol(f) {
   const s = String((f && (f.ySymbol || f.symbol)) || '').toUpperCase();
@@ -2234,7 +2412,23 @@ function bfCagr(newest, oldest, years) {
   return Math.pow(newest / oldest, 1 / years) - 1;
 }
 
-// ——— Borc/ozsermaye (iki sette de lazim; ROE'nin kaldiracli olup olmadigini bilmek icin ONCE hesaplanir) ———
+// ——— TMS 29 sinir katmani ———
+// Yillar arasi KARSILASTIRMA yapacak her hesap bunu cagirir. Sinir sonrasinda
+// en az 2 yil varsa yalnizca onlari dondurur; yoksa tum seriyi dondurur ama
+// `warn` isaretiyle — o zaman hesap yapilir, hesabin guvenilmezligi yazilir.
+function bfSafeSpan(ys, isTRY) {
+  if (!isTRY) return { rows: ys, cross: false, warn: false };
+  const after = ys.filter(y => y.year >= BF_TR_RESTATE_YEAR);
+  const before = ys.filter(y => y.year < BF_TR_RESTATE_YEAR);
+  const cross = after.length > 0 && before.length > 0;
+  if (!cross) return { rows: ys, cross: false, warn: false };
+  if (after.length >= 2) return { rows: after, cross: true, warn: false };
+  return { rows: ys, cross: true, warn: true };
+}
+const BF_TMS29_NOTE = ' · ⚠️ TMS 29: karşılaştırma yalnızca 2023 ve sonrası yıllarla yapıldı (2022 ve öncesi farklı satın alma gücü)';
+const BF_TMS29_WARN = ' · ⚠️ TMS 29 sınırını geçiyor, 2023 sonrası tek yıl var — bu karşılaştırma GÜVENİLMEZ';
+
+// ——— Borc/ozsermaye ———
 function bfDebtInfo(f, ys) {
   const b0 = ys.find(y => y.equity != null && y.equity > 0) || null;
   let de = null, netDe = null, deSrc = null;
@@ -2251,7 +2445,25 @@ function bfDebtInfo(f, ys) {
   return { de, netDe, deSrc, use: netDe != null ? netDe : de };
 }
 
-// ——— Kar istikrari (iki sette de ayni) ———
+// ——— Efektif vergi orani ———
+// Yasal oran yerine sirketin GERCEKTEN odedigi oran. Tesvikli/serbest bolge
+// sirketinde fark buyuk olur ve ROIC'i dogrudan etkiler. Veri yoksa yasal orana
+// duser; sacma degerler (negatif vergi, %60 ustu) disarida birakilir.
+function bfTaxRate(ys, isTRY) {
+  const rates = [];
+  for (const y of ys) {
+    if (y.incomeBeforeTax == null || y.incomeTaxExpense == null) continue;
+    if (!(y.incomeBeforeTax > 0)) continue;
+    const t = Math.abs(y.incomeTaxExpense) / y.incomeBeforeTax;
+    if (isFinite(t) && t >= 0 && t <= 0.60) rates.push(t);
+  }
+  const statutory = isTRY ? 0.25 : 0.21;
+  if (!rates.length) return { rate: statutory, src: 'yasal oran (efektif veri yok)' };
+  const m = bfMedian(rates);
+  return { rate: m, src: `efektif oran, ${rates.length} yıl medyanı` };
+}
+
+// ——— Kar istikrari ———
 function bfStabilityPart(ys) {
   const nis = ys.filter(y => y.netIncome != null).map(y => y.netIncome);
   if (nis.length < 3) return { score: null, note: 'En az 3 yıllık kâr serisi gerekli.' };
@@ -2265,50 +2477,78 @@ function bfStabilityPart(ys) {
   return { score: sc, note: `${posN}/${nis.length} yıl kârlı · ${up}/${nis.length - 1} yıl bir önceki yılı geçmiş` };
 }
 
-// ——— Sermaye artirimi / seyreltme (iki sette de ayni) ———
+// ——— Sermaye artirimi / seyreltme ———
 // 🧮 MUHASEBE OZDESLIGI: ozsermaye yalnizca ① tutulan kar ② dis sermaye ile
-// buyur. Δozsermaye ile tutulan kari karsilastirmak, hisse adedi verisi
-// OLMADAN seyreltmeyi olcmenin tek durust yoludur (Yahoo gecmis hisse adedi
-// vermiyor — uydurmak yerine bilancodan tureiyoruz).
+// buyur. Yahoo gecmis hisse adedi vermiyor — uydurmak yerine bilancodan turet.
 function bfDilutionPart(ys, isTRY) {
   const eqY = ys.filter(y => y.equity != null && isFinite(y.equity));
   if (eqY.length < 2) return { score: null, note: 'Özsermaye serisi yetersiz — seyreltme ölçülemedi.' };
   const oldest = eqY[eqY.length - 1];
   const eqNew = eqY[0].equity, eqOld = oldest.equity;
   if (!(eqOld > 0)) return { score: null, note: 'En eski yıl özsermayesi pozitif değil — oran hesaplanamaz.' };
-  // ⚠️ En eski yilin kari o yilin ozsermayesine ZATEN dahildir; yalnizca SONRAKI
-  // yillarin tuttugu kar Δozsermaye'yi aciklamalidir.
   const span = ys.filter(y => y.year > oldest.year && y.netIncome != null);
   if (!span.length) return { score: null, note: 'Karşılaştırılacak yıl aralığı yok.' };
   const retained = span.reduce((s, y) => s + y.netIncome - Math.abs(y.dividendsPaid || 0), 0);
   const issuance = (eqNew - eqOld) - retained;
   const ratio = issuance / eqOld;
-  // TR esigi BILINCLI olarak genis: 2023 sonrasi enflasyon muhasebesi ozsermayeyi
-  // hicbir sermaye artirimi olmadan yukari yazar, dar esik yanlis alarm uretir.
+  // TR esigi BILINCLI genis: TMS 29 ozsermayeyi sermaye artirimi olmadan da yukari yazar.
   const lo = isTRY ? 0.15 : 0.0, hi = isTRY ? 0.80 : 0.40;
   const sc = 1 - bfLin(ratio, lo, hi);
   let note = `Özsermaye ${bfBig(eqOld)} → ${bfBig(eqNew)} · aynı dönemde tutulan kâr ${bfBig(retained)} → dış kaynak ${bfPct(ratio)}`;
   let flag = null;
   if (ratio < -0.05) note += ' · fark NEGATİF: geri alım / sermaye iadesi işareti (Buffett bunu sever)';
   else if (ratio > hi) flag = `Sermaye artırımıyla büyümüş görünüyor (özsermayenin ${bfPct(ratio)} kadarı tutulan kârla açıklanmıyor) — mevcut ortağın payı seyrelir.`;
-  if (isTRY) note += ' · ⚠️ TR eşiği geniş: enflasyon muhasebesi özsermayeyi sermaye artırımı olmadan da yukarı yazar';
+  if (isTRY) note += ' · ⚠️ TMS 29 özsermayeyi sermaye artırımı olmadan da yukarı yazar, TR eşiği geniş tutuldu';
+  return { score: sc, note, flag };
+}
+
+// ——— SERMAYE DAGITIMI RASYONELLIGI (Buffett 1984 mektubu) ———
+// 🔴 YONETIM KALITESININ OLCULEBILIR TEK PARCASI. Buffett'in kurali nettir:
+// "Tutulan her 1 dolar, en az 1 dolar piyasa degeri yaratacaksa TUTULMALI;
+// yaratmayacaksa DAGITILMALI." Yani karar, sirketin sermayeye kazandirdigi
+// getirinin engel oranini asip asmadigina baglidir:
+//   · getiri ENGELIN USTUNDE → kar tutulmali (dagitmak deger yakar)
+//   · getiri ENGELIN ALTINDA → kar dagitilmali (tutmak deger yakar)
+// Durustlugu, seffafligi ve "kurumsal zorlama"ya direnci OLCULEMEZ — bu kriter
+// yonetim kalitesinin tamami degil, sayiya donen tek yuzudur.
+function bfCapAllocPart(ys, ret, hur) {
+  const rows = ys.filter(y => y.netIncome != null && y.netIncome > 0 && y.dividendsPaid != null);
+  if (!rows.length || ret == null || !isFinite(ret)) {
+    return { score: null, note: 'Temettü verisi ya da sermaye getirisi gelmedi — dağıtım kararı değerlendirilemedi.' };
+  }
+  const payouts = rows.map(y => bfClamp01(Math.abs(y.dividendsPaid) / y.netIncome));
+  const payout = bfMedian(payouts);
+  const above = ret >= hur;
+  const sc = above ? bfClamp01(1 - payout * 0.6) : bfClamp01(0.3 + 0.7 * payout);
+  const note = above
+    ? `Sermaye getirisi ${bfPct(ret)} engelin (${bfPct(hur, 0)}) ÜSTÜNDE → kâr tutulmalı · dağıtım oranı ${bfPct(payout)} (${rows.length} yıl)`
+    : `Sermaye getirisi ${bfPct(ret)} engelin (${bfPct(hur, 0)}) ALTINDA → kâr dağıtılmalı · dağıtım oranı ${bfPct(payout)} (${rows.length} yıl)`;
+  const flag = (!above && payout < 0.3)
+    ? `Sermaye dağıtımı sorunlu: şirket engel oranının altında getiri üretirken kârı dağıtmıyor, elde tutuyor. Buffett 1984: bu durumda tutulan her lira değer yakar.`
+    : null;
   return { score: sc, note, flag };
 }
 
 // ============================================================
-// A) OPERASYONEL SIRKET SETI — 11 kriter, toplam agirlik 16.0
+// A) OPERASYONEL SIRKET SETI — 13 kriter, toplam agirlik 18.0
 // ============================================================
-// Agirlik dagilimi Buffett sirasindadir: KALITE 10.5 (%66) · sermaye dagitimi
-// 2.0 · guvenlik 1.5 · FIYAT 2.0. "Harika bir sirketi makul fiyata almak,
-// vasat bir sirketi harika fiyata almaktan cok daha iyidir."
+// Agirlik dagilimi Buffett sirasindadir: KALITE 11.5 (%64) · sermaye dagitimi
+// 3.0 · guvenlik 1.5 · FIYAT 2.0.
 function bfScoreOperating(ctx) {
   const f = ctx.f, ys = ctx.ys, hur = ctx.hur, isTRY = ctx.isTRY, kind = ctx.kind;
   const parts = [], flags = [], extra = {};
   const add = (key, label, weight, score, note) => parts.push({ key, label, weight, score, note });
   const dbg = bfDebtInfo(f, ys);
   const deUse = dbg.use;
+  // Yillar arasi karsilastirmalarin kullanacagi guvenli pencere (TMS 29)
+  const span = bfSafeSpan(ys, isTRY);
+  const cmpRows = span.rows;
+  const cmpNote = span.cross ? (span.warn ? BF_TMS29_WARN : BF_TMS29_NOTE) : '';
+  if (span.cross) {
+    flags.push('TMS 29 uyarısı: mali tablo serisi 2023 enflasyon muhasebesi sınırını geçiyor. 2022 ve öncesi farklı satın alma gücüyle yazıldı — yıl içi oranlar (marj, ROE) güvenli, ama TREND ve BİLEŞİK BÜYÜME hesapları bu yüzden' + (span.warn ? ' GÜVENİLMEZ (sınır sonrası tek yıl var).' : ' yalnızca 2023 sonrası yıllarla yapıldı.'));
+  }
 
-  // --- 1) ROE seviyesi + istikrari (agirlik 1.5 — ROIC ile birlikte okunur) ---
+  // --- 1) ROE seviyesi + istikrari (1.5) ---
   const roes = ys.filter(y => y.netIncome != null && y.equity != null && y.equity > 0)
     .map(y => y.netIncome / y.equity);
   let roeMean = null;
@@ -2327,73 +2567,96 @@ function bfScoreOperating(ctx) {
     extra.roe = bfR(roeMean, 4);
   } else add('roe', 'Özsermaye kârlılığı (ROE)', 1.5, null, 'Yıllık özsermaye/net kâr verisi yetersiz.');
 
-  // --- 2) ROIC — kaldiractan ARINDIRILMIS gercek is getirisi (agirlik 2.0) ---
-  // ROE borc alarak sisirilebilir, ROIC sisirilemez: paydada borc da vardir.
-  // Buffett'in "harika is" tanimi buradadir — moat'in sayisal izi.
-  const taxRate = isTRY ? 0.25 : 0.21;
+  // --- 2) ROIC — kaldiractan ARINDIRILMIS gercek is getirisi (2.0) ---
+  const tax = bfTaxRate(ys, isTRY);
   const roics = [];
   for (const y of ys) {
     if (y.operatingIncome == null || y.equity == null || y.equity <= 0) continue;
     const invested = y.equity + ((y.longTermDebt || 0) + (y.shortDebt || 0)) - (y.cash || 0);
     if (!(invested > 0)) continue;
-    roics.push(y.operatingIncome * (1 - taxRate) / invested);
+    roics.push(y.operatingIncome * (1 - tax.rate) / invested);
   }
+  let roicMean = null;
   if (roics.length >= 2) {
-    const mean = bfAvg(roics);
+    roicMean = bfAvg(roics);
     const above = roics.filter(v => v >= hur).length;
-    const sc = 0.65 * bfLin(mean / hur, 0.8, 1.8) + 0.35 * (above / roics.length);
+    const sc = 0.65 * bfLin(roicMean / hur, 0.8, 1.8) + 0.35 * (above / roics.length);
     add('roic', 'Yatırılan sermaye getirisi (ROIC)', 2.0, bfClamp01(sc),
-      `Ort. ${bfPct(mean)} · engel ${bfPct(hur, 0)} · ${above}/${roics.length} yıl engelin üstünde · vergi %${bfR(taxRate * 100, 0)} varsayıldı · borç kaldıracından arındırılmış`);
-    extra.roic = bfR(mean, 4);
-    if (roeMean != null && mean > 0 && roeMean > mean * 1.6) {
+      `Ort. ${bfPct(roicMean)} · engel ${bfPct(hur, 0)} · ${above}/${roics.length} yıl engelin üstünde · vergi ${bfPct(tax.rate, 0)} (${tax.src}) · borç kaldıracından arındırılmış`);
+    extra.roic = bfR(roicMean, 4);
+    extra.taxRate = bfR(tax.rate, 3);
+    if (roeMean != null && roicMean > 0 && roeMean > roicMean * 1.6) {
       flags.push('ROE, ROIC\'in belirgin üstünde — kârlılığın önemli kısmı borç kaldıracından geliyor, işin kendisinden değil.');
     }
   } else add('roic', 'Yatırılan sermaye getirisi (ROIC)', 2.0, null, 'Faaliyet kârı ya da yatırılan sermaye verisi yetersiz.');
 
-  // --- 3) Fiyatlama gucu / brut marj (agirlik 1.5) ---
-  // Net marj vergiyle ve tek seferliklerle kirlenir; BRUT marj fiyatlama gucunu
-  // daha temiz gosterir — moat'in en dogrudan gozlemlenebilir izi.
+  // --- 3) Fiyatlama gucu / brut marj (1.5) ---
   const gms = ys.filter(y => y.grossProfit != null && y.revenue != null && y.revenue > 0)
     .map(y => y.grossProfit / y.revenue);
+  const gmsCmp = cmpRows.filter(y => y.grossProfit != null && y.revenue != null && y.revenue > 0)
+    .map(y => y.grossProfit / y.revenue);
+  let gmMed = null, gmCommodity = false;
   if (gms.length >= 2) {
-    const med = bfMedian(gms);
+    const med = bfMedian(gms); gmMed = med;
     const spread = Math.max.apply(null, gms) - Math.min.apply(null, gms);
-    const trend = gms[0] - gms[gms.length - 1];
-    // 🔴 ISTIKRAR TOPLAMA DEGIL CARPANDIR. Toplansaydi, marji YILLARDIR sabit
-    // %10 olan bir emtia sirketi "istikrarli" diye puan alirdi — oysa surekli
-    // dusuk marj moat'in yoklugunun KANITIDIR. Once seviye, sonra istikrar o
-    // seviyeyi ne kadar hak ettigini belirler.
+    // Trend YILLAR ARASI bir karsilastirmadir → guvenli pencere kullanilir
+    const trend = gmsCmp.length >= 2 ? (gmsCmp[0] - gmsCmp[gmsCmp.length - 1]) : 0;
+    // 🔴 ISTIKRAR TOPLAMA DEGIL CARPANDIR — surekli dusuk marj moat'in
+    // YOKLUGUNUN kanitidir, "istikrarli" diye puan alamaz.
     const stab = 1 - bfClamp01(spread / 0.25);
     let sc = bfLin(med, 0.15, 0.45) * (0.7 + 0.3 * stab) + 0.12 * (bfLin(trend, -0.05, 0.05) - 0.5);
     let cmt = '';
     if (med < 0.20 && spread > 0.08) {
+      gmCommodity = true;
       sc = Math.min(sc, 0.35);
       cmt = ' · EMTİA BENZERİ: marj hem düşük hem dalgalı';
       flags.push('Fiyatlama gücü zayıf: brüt marj hem düşük hem dalgalı — emtia tipi iş. Buffett: "emtia satan bir işte en aptal rakibinden çok daha zeki olamazsın."');
     }
     add('moat', 'Fiyatlama gücü (brüt marj)', 1.5, bfClamp01(sc),
-      `Medyan ${bfPct(med)} · dalgalanma ${bfR(spread * 100, 1)} puan · trend ${trend >= 0 ? '+' : ''}${bfR(trend * 100, 1)} puan${cmt}`);
+      `Medyan ${bfPct(med)} · dalgalanma ${bfR(spread * 100, 1)} puan · trend ${trend >= 0 ? '+' : ''}${bfR(trend * 100, 1)} puan${cmt}${gmsCmp.length >= 2 ? cmpNote : ''}`);
     extra.grossMargin = bfR(med, 4);
-    extra.grossStable = bfR(stab, 2);
   } else add('moat', 'Fiyatlama gücü (brüt marj)', 1.5, null, 'Brüt kâr verisi gelmedi (Yahoo BIST\'te sık atlar).');
 
-  // --- 4) Net kar marji (agirlik 1.0) ---
+  // --- 4) Net kar marji (1.0) ---
   const mgs = ys.filter(y => y.netIncome != null && y.revenue != null && y.revenue > 0)
+    .map(y => y.netIncome / y.revenue);
+  const mgsCmp = cmpRows.filter(y => y.netIncome != null && y.revenue != null && y.revenue > 0)
     .map(y => y.netIncome / y.revenue);
   let mgMed = null;
   if (mgs.length >= 2) {
     const med = bfMedian(mgs); mgMed = med;
     const spread = Math.max.apply(null, mgs) - Math.min.apply(null, mgs);
-    const trend = mgs[0] - mgs[mgs.length - 1];
-    // Brut marjla ayni duzeltme: istikrar CARPANDIR. Sürekli zarar eden bir
-    // sirket "istikrarli zarar" diye puan alamaz.
+    const trend = mgsCmp.length >= 2 ? (mgsCmp[0] - mgsCmp[mgsCmp.length - 1]) : 0;
     const stab = 1 - bfClamp01(spread / 0.20);
     const sc = bfClamp01(bfLin(med, 0.02, 0.20) * (0.7 + 0.3 * stab) + 0.12 * (bfLin(trend, -0.05, 0.05) - 0.5));
     add('margin', 'Net kâr marjı', 1.0, sc,
       `Medyan ${bfPct(med)} · dalgalanma ${bfR(spread * 100, 1)} puan · trend ${trend >= 0 ? '+' : ''}${bfR(trend * 100, 1)} puan`);
   } else add('margin', 'Net kâr marjı', 1.0, null, 'Yıllık ciro/net kâr verisi yetersiz.');
 
-  // --- 5) Borcsuzluk (agirlik 1.5) ---
+  // --- 5) CEMBER / IS TIPI (1.0) — circle of competence ---
+  // ⚠️ ETIKET TEK BASINA KARAR VERMEZ. Sektor bir ONYARGI verir, ceza yalnizca
+  // RAKAMLAR da onayladiginda agirlasir (dusuk + dalgali brut marj). Kanit,
+  // etiketin onundedir — aksi halde tek bir Yahoo etiketi skoru belirlerdi.
+  const ind = String(f.industry || '');
+  const sec = String(f.sector || '');
+  if (!ind && !sec && kind === 'operating') {
+    add('circle', 'Çember / iş tipi', 1.0, null, 'Sektör bilgisi gelmedi — iş tipi değerlendirilemedi.');
+  } else {
+    let sc = 1, why = [];
+    if (BF_AVOID_RE.test(ind)) { sc -= 0.5; why.push('Buffett\'in açıkça uzak durduğu iş kolu'); }
+    if (BF_COMMODITY_RE.test(ind)) {
+      sc -= 0.25; why.push('emtia tipi sektör');
+      if (gmCommodity) { sc -= 0.25; why.push('rakamlar da onaylıyor: brüt marj düşük ve dalgalı'); }
+    } else if (gmCommodity) { sc -= 0.2; why.push('sektör etiketi emtia demese de marj yapısı emtia gibi'); }
+    if (kind === 'holding') { sc -= 0.25; why.push('holding: konsolide tablo azınlık paylarını karıştırır, iş tek bir şey değil'); }
+    if (kind === 'reit') { sc -= 0.15; why.push('GYO: kâr yeniden değerlemeden ağır etkilenir'); }
+    add('circle', 'Çember / iş tipi', 1.0, bfClamp01(sc),
+      (why.length ? why.join(' · ') : 'Anlaşılır, tek bir işi olan şirket görünümü') + (ind ? ` · ${ind}` : ''));
+    if (BF_AVOID_RE.test(ind)) flags.push(`Buffett bu iş kolundan (${ind}) açıkça uzak durdu — çemberin dışı sayılır.`);
+    if (BF_COMMODITY_RE.test(ind)) flags.push(`Sektör emtia tipi (${ind}) — satış fiyatını şirket değil piyasa belirler, fiyatlama gücü yapısal olarak sınırlıdır.`);
+  }
+
+  // --- 6) Borcsuzluk (1.5) ---
   if (deUse != null && isFinite(deUse)) {
     const dLo = isTRY ? 0.30 : 0.50, dHi = isTRY ? 1.00 : 2.00;
     add('debt', 'Borç / Özsermaye', 1.5, 1 - bfLin(deUse, dLo, dHi),
@@ -2402,21 +2665,13 @@ function bfScoreOperating(ctx) {
     extra.debtToEquity = bfR(deUse, 2);
   } else add('debt', 'Borç / Özsermaye', 1.5, null, 'Borç verisi gelmedi.');
 
-  // --- 6) ENFLASYON DAYANIKLILIGI (agirlik 2.0) — Buffett 1977 ---
+  // --- 7) ENFLASYON DAYANIKLILIGI (2.0) — Buffett 1977 ---
   // "How Inflation Swindles the Equity Investor": yuksek enflasyonda ayakta
-  // kalan sirket, buyumek icin AGIR sermaye harcamayan sirkettir. Sermaye yogun
-  // is, kazandigi kari hissedara degil makinelerine oder.
-  // 🧮 UCU DE ENFLASYONA NOTR: capex/ciro ve ciro/varlik birer ORANDIR (pay ve
-  // payda ayni yilin parasi, enflasyon sadelesir).
-  // ⚠️ UCUNCUSU ICIN FARK DEGIL ORAN KULLANILIR — bu ilk yazimda hataydi ve
-  // enflasyon notrlugu testi yakaladi. Nominal bilesik buyume
-  //   (1+g_nominal) = (1+g_reel)(1+π)
-  // oldugu icin IKI CAGR'IN FARKI enflasyonda sadelesmez, (1+π) ile OLCEKLENIR:
-  //   (g1n − g2n) = (g1r − g2r)(1+π)
-  // Buyume CARPANLARININ ORANI ise tam olarak sadelesir:
-  //   (1+g1n)/(1+g2n) = (1+g1r)(1+π) / [(1+g2r)(1+π)] = (1+g1r)/(1+g2r)
-  // Olculen sey ayni ("kar, varliklardan ne kadar hizli buyudu"), ama bu form
-  // nominal TL serisiyle calisip yine de reel sonuc verir. Teste bagli.
+  // kalan sirket, buyumek icin AGIR sermaye harcamayan sirkettir.
+  // 🧮 capex/ciro ve ciro/varlik birer ORANDIR → enflasyon sadelesir.
+  // ⚠️ Ucuncu bilesende FARK DEGIL ORAN kullanilir: nominal bilesik buyume
+  // (1+g_reel)(1+π) oldugu icin iki CAGR'in FARKI (1+π) ile olceklenir,
+  // sadelesmez. Buyume CARPANLARININ ORANI ise tam sadelesir. Teste bagli.
   if (kind === 'reit') {
     add('inflation', 'Enflasyon dayanıklılığı', 2.0, null,
       'GYO yapısında sermaye harcaması gayrimenkul alımının kendisidir — bu kriter yapısal olarak anlamsız, bilinçli atlandı.');
@@ -2427,26 +2682,24 @@ function bfScoreOperating(ctx) {
     let ciMed = null, atMed = null, gap = null;
     if (ciArr.length) { ciMed = bfMedian(ciArr); sub.push({ w: 0.4, v: 1 - bfLin(ciMed, 0.03, 0.15) }); }
     if (atArr.length) { atMed = bfMedian(atArr); sub.push({ w: 0.3, v: bfLin(atMed, 0.4, 1.5) }); }
-    const niY = ys.filter(y => y.netIncome != null), asY = ys.filter(y => y.totalAssets != null && y.totalAssets > 0);
+    // Buyume karsilastirmasi → TMS 29 guvenli penceresi
+    const niY = cmpRows.filter(y => y.netIncome != null), asY = cmpRows.filter(y => y.totalAssets != null && y.totalAssets > 0);
     if (niY.length >= 2 && asY.length >= 2) {
-      const span = Math.max(1, niY[0].year - niY[niY.length - 1].year);
-      const niC = bfCagr(niY[0].netIncome, niY[niY.length - 1].netIncome, span);
+      const nSpan = Math.max(1, niY[0].year - niY[niY.length - 1].year);
+      const niC = bfCagr(niY[0].netIncome, niY[niY.length - 1].netIncome, nSpan);
       const asC = bfCagr(asY[0].totalAssets, asY[asY.length - 1].totalAssets, Math.max(1, asY[0].year - asY[asY.length - 1].year));
-      // Buyume carpanlarinin ORANI — 1'in ustu: kar, varliklardan hizli buyuyor
       if (niC != null && asC != null) { gap = (1 + niC) / (1 + asC) - 1; sub.push({ w: 0.3, v: bfLin(gap, -0.06, 0.06) }); }
     }
     if (sub.length) {
       const wt = sub.reduce((a, s) => a + s.w, 0);
       let sc = sub.reduce((a, s) => a + s.v * s.w, 0) / wt;
       // 🔴 SERMAYE HAFIF OLMAK, PARA KAZANMAYAN BIR IS ICIN AVANTAJ DEGILDIR.
-      // Bu kriter sermaye yogunlugunu olcer, karliligi degil — ama ortalamada
-      // zarar eden sirkete "enflasyona dayanikli" demek yanlis okuma uretir.
       let capNote = '';
       if (mgMed != null && mgMed <= 0) { sc = Math.min(sc, 0.4); capNote = ' · ⚠️ ortalamada zarar edildiği için tavan uygulandı'; }
       const bits = [];
       if (ciMed != null) bits.push(`Sermaye harcaması cironun ${bfPct(ciMed)}'i`);
       if (atMed != null) bits.push(`varlık devir hızı ${bfR(atMed, 2)}×`);
-      if (gap != null) bits.push(`kâr, varlıklardan yılda ${bfR(gap * 100, 1)} puan ${gap >= 0 ? 'HIZLI' : 'YAVAŞ'} büyüyor (büyüme çarpanlarının oranı)`);
+      if (gap != null) bits.push(`kâr, varlıklardan yılda ${bfR(gap * 100, 1)} puan ${gap >= 0 ? 'HIZLI' : 'YAVAŞ'} büyüyor (büyüme çarpanlarının oranı)${cmpNote}`);
       add('inflation', 'Enflasyon dayanıklılığı', 2.0, bfClamp01(sc), bits.join(' · ') + ' · orana dayalı, enflasyondan bağımsız' + capNote);
       extra.capexIntensity = bfR(ciMed, 4);
       if (ciMed != null && ciMed > 0.15) {
@@ -2455,8 +2708,12 @@ function bfScoreOperating(ctx) {
     } else add('inflation', 'Enflasyon dayanıklılığı', 2.0, null, 'Capex / varlık / ciro serisi gelmedi.');
   }
 
-  // --- 7) Owner Earnings kalitesi (agirlik 1.5) ---
+  // --- 8) Owner Earnings kalitesi (1.5) ---
   // OE ≈ isletme nakit akisi − bakim capex'i (bakim ≈ min(capex, amortisman))
+  // ⚠️ Greenwald'in "buyume capex'ini ciro artisindan tahmin et" yontemi
+  // BILEREK KULLANILMADI: %35 enflasyonda ciro artisi nominaldir, buyume capex'i
+  // sistematik olarak yuksek cikar, bakim capex'i dusuk cikar ve sahip kari
+  // OLDUGUNDAN IYI gorunur. min(capex, amortisman) daha muhafazakardir.
   const oeY = ys.filter(y => y.opCashFlow != null && y.capex != null && y.dna != null && y.netIncome != null)
     .map(y => ({ year: y.year, oe: y.opCashFlow - Math.min(Math.abs(y.capex), Math.abs(y.dna)), ni: y.netIncome }));
   let oeQ = null;
@@ -2471,49 +2728,56 @@ function bfScoreOperating(ctx) {
     } else add('owner', 'Owner Earnings kalitesi', 1.5, null, 'Kârlı yıl yok — oran hesaplanamadı.');
   } else add('owner', 'Owner Earnings kalitesi', 1.5, null, 'Nakit akış tablosu (işletme akışı / capex / amortisman) gelmedi.');
 
-  // --- 8) 1 Dolar Testi (agirlik 1.5) ---
+  // --- 9) 1 Dolar Testi (1.5) ---
+  // ⚠️ Tutulan karlarin TOPLAMI yillar arasi bir birikimdir → TMS 29 sinirini
+  // gecerse farkli satin alma guclerini toplamis oluruz. Guvenli pencere.
   let dollar = null;
   const shares = (f.sharesOutstanding != null && f.sharesOutstanding > 0) ? f.sharesOutstanding : null;
   const ph = f.priceHistory;
-  const niY2 = ys.filter(y => y.netIncome != null);
-  if (shares && ph && Array.isArray(ph.t) && Array.isArray(ph.c) && ph.t.length >= 2 && niY2.length >= 2) {
-    const oldestYear = niY2[niY2.length - 1].year;
+  const niD = cmpRows.filter(y => y.netIncome != null);
+  if (shares && ph && Array.isArray(ph.t) && Array.isArray(ph.c) && ph.t.length >= 2 && niD.length >= 2) {
+    const oldestYear = niD[niD.length - 1].year;
     const t0 = Date.UTC(oldestYear, 0, 1) / 1000;
     let i0 = -1;
     for (let i = 0; i < ph.t.length; i++) { if (ph.t[i] >= t0) { i0 = i; break; } }
-    const divKnown = niY2.some(y => y.dividendsPaid != null);
-    const retained = niY2.reduce((s, y) => s + y.netIncome - Math.abs(y.dividendsPaid || 0), 0);
+    const divKnown = niD.some(y => y.dividendsPaid != null);
+    const retained = niD.reduce((s, y) => s + y.netIncome - Math.abs(y.dividendsPaid || 0), 0);
     const retPerShare = retained / shares;
     if (i0 >= 0 && i0 < ph.c.length - 1 && retPerShare > 0) {
       const p0 = ph.c[i0], p1 = ph.c[ph.c.length - 1];
       const gain = p1 - p0, ratio = gain / retPerShare;
-      dollar = { years: niY2.length, from: oldestYear, p0: bfR(p0, 2), p1: bfR(p1, 2),
+      dollar = { years: niD.length, from: oldestYear, p0: bfR(p0, 2), p1: bfR(p1, 2),
         retainedPerShare: bfR(retPerShare, 2), gainPerShare: bfR(gain, 2), ratio: bfR(ratio, 2), divKnown };
       add('dollar', '1 Dolar Testi', 1.5, bfLin(ratio, 0, 2.0),
-        `Tutulan her 1 birim kâr ${bfR(ratio, 2)} birim piyasa değeri yarattı (${oldestYear}'den beri) · tutulan ${bfR(retPerShare, 2)} vs fiyat artışı ${bfR(gain, 2)}${divKnown ? '' : ' · temettü verisi yok, tutulan kâr yüksek tahmin edilmiş olabilir'}`);
+        `Tutulan her 1 birim kâr ${bfR(ratio, 2)} birim piyasa değeri yarattı (${oldestYear}'den beri) · tutulan ${bfR(retPerShare, 2)} vs fiyat artışı ${bfR(gain, 2)}${divKnown ? '' : ' · temettü verisi yok, tutulan kâr yüksek tahmin edilmiş olabilir'}${span.cross ? cmpNote : ''}`);
       if (ratio < 1) flags.push('1 Dolar Testi başarısız: tutulan kâr piyasa değerine dönüşmemiş — sermaye dağıtımı zayıf.');
     } else if (retPerShare <= 0) {
       add('dollar', '1 Dolar Testi', 1.5, null, 'Dönemde net birikmiş kâr yok (zarar ya da tümü temettü) — test uygulanamaz.');
     } else add('dollar', '1 Dolar Testi', 1.5, null, 'Fiyat geçmişi mali tablo dönemini kapsamıyor.');
   } else add('dollar', '1 Dolar Testi', 1.5, null, 'Hisse adedi veya fiyat geçmişi gelmedi.');
 
-  // --- 9) Kar istikrari (agirlik 1.0) ---
+  // --- 10) Kar istikrari (1.0) ---
   const st = bfStabilityPart(ys);
   add('stability', 'Kâr istikrarı', 1.0, st.score, st.note);
 
-  // --- 10) Sermaye artirimi / seyreltme (agirlik 0.5) ---
+  // --- 11) Sermaye dagitimi rasyonelligi (1.0) — Buffett 1984 ---
+  const ca = bfCapAllocPart(ys, roicMean != null ? roicMean : roeMean, hur);
+  add('capalloc', 'Sermaye dağıtımı rasyonelliği', 1.0, ca.score, ca.note);
+  if (ca.flag) flags.push(ca.flag);
+
+  // --- 12) Sermaye artirimi / seyreltme (0.5) ---
   const dil = bfDilutionPart(ys, isTRY);
   add('dilution', 'Sermaye artırımı / seyreltme', 0.5, dil.score, dil.note);
   if (dil.flag) flags.push(dil.flag);
 
-  // --- 11) GUVENLIK PAYI (agirlik 2.0) — Buffett'in value tenet'i ---
+  // --- 13) GUVENLIK PAYI (2.0) — Buffett'in value tenet'i ---
   // Icsel deger = normalize owner earnings ÷ engel orani. SIFIR BUYUME.
   // ⚠️ NEDEN BUYUME TERIMI YOK: %35 iskonto oraninda kucuk bir g degisikligi
   // sonucu savurur (g=0 → g=0.10 icsel degeri %40 buyutur). Buyume varsaymak
   // hassasiyet TIYATROSUDUR. Buffett'in kendi cercevesi zaten muhafazakardir:
   // isi, kuponu sahip kari olan bir tahvil gibi fiyatla.
-  // 🧮 Normalize OE = (cok yilli ORTALAMA OE marji) × SON yilin cirosu — marj bir
-  // orandir, enflasyon sadelesir; sonuc bugunun parasiyla cikar (v7-147 kalibi).
+  // 🧮 Normalize OE = (cok yilli MEDYAN OE marji) × SON yilin cirosu — marj bir
+  // orandir, enflasyon sadelesir; sonuc bugunun parasiyla cikar.
   const oeM = ys.filter(y => y.opCashFlow != null && y.capex != null && y.dna != null && y.revenue != null && y.revenue > 0)
     .map(y => (y.opCashFlow - Math.min(Math.abs(y.capex), Math.abs(y.dna))) / y.revenue);
   const revNewRow = ys.find(y => y.revenue != null && y.revenue > 0);
@@ -2535,21 +2799,16 @@ function bfScoreOperating(ctx) {
     }
   } else add('mos', 'Güvenlik payı (içsel değer iskontosu)', 2.0, null, 'Nakit akış serisi ya da piyasa değeri yetersiz — içsel değer uydurulmadı.');
 
-  // --- Yapisal bayraklar ---
   if (kind === 'holding') flags.push('Holding yapısı: konsolide tablo bağlı ortaklıkları ve azınlık paylarını karıştırır — ROE, marj ve owner earnings olduğundan farklı görünebilir. Buffett holdinge parça parça bakar.');
   if (kind === 'reit') flags.push('GYO yapısı: kâr amortisman ve yeniden değerlemeden ağır etkilenir; net kâr yerine nakit akışına bakılmalıdır.');
-  const ind = String(f.industry || '');
-  if (ind && BF_COMMODITY_RE.test(ind)) flags.push(`Sektör emtia tipi (${ind}) — satış fiyatını şirket değil piyasa belirler, fiyatlama gücü yapısal olarak sınırlıdır.`);
-  if (ind && BF_AVOID_RE.test(ind)) flags.push(`Buffett bu iş kolundan (${ind}) açıkça uzak durdu — çemberin dışı sayılır.`);
-  if (isTRY) flags.push('BIST notu: 2023 sonrası enflasyon muhasebesi net kârı çarpıtır — Owner Earnings ve ROIC satırlarına daha çok güven.');
   return { parts, flags, extra, dollar };
 }
 
 // ============================================================
-// B) BANKA / FINANS SETI — 8 kriter, toplam agirlik 12.5
+// B) BANKA / FINANS SETI — 9 kriter, toplam agirlik 13.5
 // ============================================================
-// Kaynak: Buffett'in 1990 Wells Fargo mektubu + AmEx/BofA yatirimlarinin
-// gerekcesi. Bankada olculen sey FARKLIDIR:
+// Kaynak: Buffett'in 1990 Wells Fargo mektubu + AmEx/BofA gerekcesi.
+// Bankada olculen sey FARKLIDIR:
 //   · verimlilik ROE degil ROA'dir (ROE kaldiracla istenildigi kadar sisirilir)
 //   · risk borc/ozsermaye degil VARLIK/OZSERMAYE kaldiracidir (mevduat "borc"
 //     degil hammaddedir; tehlike varliklarin bozulmasidir)
@@ -2559,8 +2818,14 @@ function bfScoreFinancial(ctx) {
   const f = ctx.f, ys = ctx.ys, hur = ctx.hur, isTRY = ctx.isTRY;
   const parts = [], flags = [], extra = {};
   const add = (key, label, weight, score, note) => parts.push({ key, label, weight, score, note });
+  const span = bfSafeSpan(ys, isTRY);
+  const cmpRows = span.rows;
+  const cmpNote = span.cross ? (span.warn ? BF_TMS29_WARN : BF_TMS29_NOTE) : '';
+  if (span.cross) {
+    flags.push('TMS 29 uyarısı: seri 2023 enflasyon muhasebesi sınırını geçiyor. Bankada özsermaye ve kâr yeniden ifadeden ağır etkilenir — yıl içi oranlar (ROA, ROE) güvenli, defter değeri BÜYÜMESİ' + (span.warn ? ' GÜVENİLMEZ.' : ' yalnızca 2023 sonrasıyla hesaplandı.'));
+  }
 
-  // --- 1) ROA — bankada ASIL verimlilik olcusu (agirlik 2.0) ---
+  // --- 1) ROA — bankada ASIL verimlilik olcusu (2.0) ---
   const roas = ys.filter(y => y.netIncome != null && y.totalAssets != null && y.totalAssets > 0)
     .map(y => y.netIncome / y.totalAssets);
   const roaLo = isTRY ? 0.010 : 0.006, roaHi = isTRY ? 0.035 : 0.018;
@@ -2572,7 +2837,7 @@ function bfScoreFinancial(ctx) {
     extra.roa = bfR(med, 5);
   } else add('roa', 'Varlık kârlılığı (ROA)', 2.0, null, 'Net kâr / toplam varlık serisi yetersiz.');
 
-  // --- 2) ROE (agirlik 2.0) — bankada kaldirac ISKONTOSU YOK, kaldirac yapisaldir
+  // --- 2) ROE (2.0) — bankada kaldirac ISKONTOSU YOK, kaldirac yapisaldir ---
   const roes = ys.filter(y => y.netIncome != null && y.equity != null && y.equity > 0)
     .map(y => y.netIncome / y.equity);
   let roeMean = null;
@@ -2588,7 +2853,7 @@ function bfScoreFinancial(ctx) {
     extra.roe = bfR(roeMean, 4);
   } else add('roe', 'Özsermaye kârlılığı (ROE)', 2.0, null, 'Yıllık özsermaye/net kâr verisi yetersiz.');
 
-  // --- 3) Kaldirac: varlik / ozsermaye (agirlik 2.0) ---
+  // --- 3) Kaldirac: varlik / ozsermaye (2.0) ---
   // Buffett 1990: "20:1 varlik/ozsermaye oraninda varliklarin sadece %5'i
   // bozulursa ozsermaye TAMAMEN silinir." Bankada asil risk budur.
   const levs = ys.filter(y => y.totalAssets != null && y.equity != null && y.equity > 0)
@@ -2601,21 +2866,19 @@ function bfScoreFinancial(ctx) {
     if (med > 12) flags.push(`Kaldıraç yüksek (${bfR(med, 1)}×): varlıkların yalnızca %${bfR(100 / med, 1)}'i bozulsa özsermaye silinir.`);
   } else add('leverage', 'Kaldıraç (varlık / özsermaye)', 2.0, null, 'Toplam varlık / özsermaye verisi gelmedi.');
 
-  // --- 4) Defter degeri buyumesi (agirlik 1.5) ---
-  // Berkshire'in kendi karnesi bu satirdi: bankada bilesik getirinin olcusu
-  // kar degil, hisse basi defter degerinin buyumesidir.
-  const eqY = ys.filter(y => y.equity != null && y.equity > 0);
+  // --- 4) Defter degeri buyumesi (1.5) — TMS 29 guvenli penceresi ---
+  const eqY = cmpRows.filter(y => y.equity != null && y.equity > 0);
   if (eqY.length >= 2) {
-    const span = Math.max(1, eqY[0].year - eqY[eqY.length - 1].year);
-    const g = bfCagr(eqY[0].equity, eqY[eqY.length - 1].equity, span);
+    const nSpan = Math.max(1, eqY[0].year - eqY[eqY.length - 1].year);
+    const g = bfCagr(eqY[0].equity, eqY[eqY.length - 1].equity, nSpan);
     if (g != null) {
       add('bvg', 'Defter değeri büyümesi', 1.5, bfLin(g / hur, 0.5, 1.3),
-        `Yıllık bileşik ${bfPct(g)} (${span} yıl) · engel oranı ${bfPct(hur, 0)}${isTRY ? ' · ⚠️ enflasyon muhasebesi özsermayeyi yeniden değerlemeyle de büyütür, bu oran nominaldir' : ''}`);
+        `Yıllık bileşik ${bfPct(g)} (${nSpan} yıl) · engel oranı ${bfPct(hur, 0)}${cmpNote}`);
       extra.bvCagr = bfR(g, 4);
     } else add('bvg', 'Defter değeri büyümesi', 1.5, null, 'Özsermaye serisi pozitif değil — bileşik büyüme hesaplanamaz.');
-  } else add('bvg', 'Defter değeri büyümesi', 1.5, null, 'En az 2 yıllık özsermaye verisi gerekli.');
+  } else add('bvg', 'Defter değeri büyümesi', 1.5, null, 'Karşılaştırma için en az 2 yıllık özsermaye verisi gerekli (TMS 29 sınırı sonrası).');
 
-  // --- 5) Faaliyet verimliligi (agirlik 1.0) ---
+  // --- 5) Faaliyet verimliligi (1.0) ---
   const effs = ys.filter(y => y.operatingIncome != null && y.revenue != null && y.revenue > 0)
     .map(y => y.operatingIncome / y.revenue);
   if (effs.length >= 2) {
@@ -2624,20 +2887,24 @@ function bfScoreFinancial(ctx) {
       `Faaliyet kârı / gelir medyanı ${bfPct(med)} · Buffett Wells Fargo\'da maliyet disiplinini açıkça övmüştü`);
   } else add('efficiency', 'Faaliyet verimliliği', 1.0, null, 'Faaliyet kârı / gelir serisi gelmedi.');
 
-  // --- 6) Kar istikrari (agirlik 1.5) ---
+  // --- 6) Kar istikrari (1.5) ---
   const st = bfStabilityPart(ys);
   add('stability', 'Kâr istikrarı', 1.5, st.score, st.note);
 
-  // --- 7) Seyreltme (agirlik 0.5) ---
+  // --- 7) Sermaye dagitimi rasyonelligi (1.0) — Buffett 1984 ---
+  const ca = bfCapAllocPart(ys, roeMean, hur);
+  add('capalloc', 'Sermaye dağıtımı rasyonelliği', 1.0, ca.score, ca.note);
+  if (ca.flag) flags.push(ca.flag);
+
+  // --- 8) Seyreltme (0.5) ---
   const dil = bfDilutionPart(ys, isTRY);
   add('dilution', 'Sermaye artırımı / seyreltme', 0.5, dil.score, dil.note);
   if (dil.flag) flags.push(dil.flag);
 
-  // --- 8) GUVENLIK PAYI: PD/DD vs HAK EDILEN PD/DD (agirlik 2.0) ---
+  // --- 9) GUVENLIK PAYI: PD/DD vs HAK EDILEN PD/DD (2.0) ---
   // 🧮 Bir banka ozsermayesi uzerinden ROE kazaniyorsa ve bu getiri r oraniyla
   // iskonto ediliyorsa, defterinin HAK ETTIGI kat = ROE ÷ r'dir (sifir buyume,
-  // sonsuz vade). Bankada iskontolu nakit akisi anlamsizdir (capex/serbest nakit
-  // akisi kavrami yok) — dogru deger olcusu budur.
+  // sonsuz vade). Bankada iskontolu nakit akisi anlamsizdir.
   const pb = (f.priceToBook != null && isFinite(f.priceToBook) && f.priceToBook > 0) ? f.priceToBook : null;
   if (pb != null && roeMean != null && roeMean > 0) {
     const just = roeMean / hur;
@@ -2650,10 +2917,8 @@ function bfScoreFinancial(ctx) {
     if (mos < 0) flags.push('Güvenlik payı YOK: PD/DD, mevcut kârlılığın hak ettiği katın üstünde.');
   } else add('mos', 'Güvenlik payı (PD/DD vs hak edilen)', 2.0, null, 'PD/DD ya da ROE gelmedi — hak edilen kat hesaplanamadı.');
 
-  // --- Bu setin kor noktalari, acikca yazilir ---
   flags.push('⚠️ Bu modelin en büyük kör noktası: takipteki kredi oranı, karşılık yeterliliği ve sermaye yeterlilik rasyosu (SYR) Yahoo verisinde YOK. Bir banka bu üçü bozulurken kâğıt üstünde hâlâ kârlı görünür.');
   flags.push('Borç/özsermaye, Owner Earnings, capex ve 1 Dolar Testi bankada anlamlı olmadığı için bu skora KASITLI olarak girmedi.');
-  if (isTRY) flags.push('BIST notu: 2023 sonrası enflasyon muhasebesi banka bilançosunu ağır etkiler — özsermaye ve kâr nominal okunmalıdır.');
   return { parts, flags, extra, dollar: null };
 }
 
@@ -2677,8 +2942,27 @@ function bfFinalize(r, base, ctx) {
   }
   const raw = have.reduce((s, p) => s + p.score * p.weight, 0) / haveW;
   out.score = Math.round(bfClamp01(raw) * 100);
-  out.label = out.score >= 75 ? 'güçlü kalite' : out.score >= 60 ? 'iyi' : out.score >= 45 ? 'karışık'
-    : out.score >= 30 ? 'zayıf' : 'filtreden geçmiyor';
+  const ladder = ['filtreden geçmiyor', 'zayıf', 'karışık', 'iyi', 'güçlü kalite'];
+  let idx = out.score >= 75 ? 4 : out.score >= 60 ? 3 : out.score >= 45 ? 2 : out.score >= 30 ? 1 : 0;
+  // 🔴 YIL SAYISI TAVANI — Buffett 10 YILLIK istikrar ister; Yahoo genelde 4
+  // veriyor. Skor kendi icinde durust (eksik kriter zaten atlaniyor) ama
+  // ETIKET asiri iddia etmemeli: 3 yillik pencereden "guclu kalite" denmez.
+  // ⚠️ TAVAN 4 YILDA BASLAMAZ, 4 YIL YAHOO'NUN PRATIK USTU SINIRIDIR. Herkesi
+  // veri kaynaginin sinirindan cezalandirmak bilgi eklemez, sadece tum olcegi
+  // asagi kaydirir ve en ust etiketi olu koda cevirir. Tavan yalnizca gercekten
+  // KISA pencerede (2-3 yil) uygulanir; 10 yil ideali her durumda not dusulur.
+  const n = base.years;
+  let cap = null;
+  if (n < 3) cap = 2;        // en fazla "karisik"
+  else if (n < 4) cap = 3;   // en fazla "iyi"
+  if (cap != null && idx > cap) {
+    idx = cap;
+    flags.push(`Etiket sınırlandı: yalnızca ${n} yıllık tablo var. Buffett 10 yıllık tutarlı geçmiş ister — bu skor çok kısa bir pencereden bakıyor.`);
+    out.labelCapped = true;
+  } else if (n < 6) {
+    flags.push(`Veri derinliği sınırı: ${n} yıllık tablo var, Buffett 10 yıllık tutarlı geçmiş ister. İstikrar kriterleri bu pencereden ölçüldü — Yahoo daha fazlasını vermiyor.`);
+  }
+  out.label = ladder[idx];
   return out;
 }
 
@@ -2702,6 +2986,7 @@ function buffettScore(f, hurdlePct) {
   }
   const ctx = { f, ys, hur, cur, isTRY, kind: k.kind };
   const r = k.kind === 'financial' ? bfScoreFinancial(ctx) : bfScoreOperating(ctx);
+  if (isTRY) r.flags.push('BIST notu: 2023 sonrası enflasyon muhasebesi (TMS 29) net kârı ve özsermayeyi çarpıtır — yıl içi oranlara, Owner Earnings ve ROIC satırlarına daha çok güven.');
   return bfFinalize(r, base, ctx);
 }
 
@@ -2777,6 +3062,8 @@ function buildStockAnalysisFacts(ta, j) {
       roic: _stockBuffett.roic ?? null,
       grossMargin: _stockBuffett.grossMargin ?? null,
       capexIntensity: _stockBuffett.capexIntensity ?? null,
+      taxRate: _stockBuffett.taxRate ?? null,
+      labelCapped: _stockBuffett.labelCapped || false,
       roa: _stockBuffett.roa ?? null,
       leverage: _stockBuffett.leverage ?? null,
       bvCagr: _stockBuffett.bvCagr ?? null,
@@ -3356,6 +3643,15 @@ const SCREEN_LIMITS = {
   deepCount: 25,        // 2. kademede kaç hisseye gerçek Buffett skoru çalışsın
   listCount: 15,        // ekranda kaç satır gösterilsin
   maxSymbols: 120,      // worker tavanıyla aynı
+  // 🏦 Bankalar ROE kapısını ATLAR (aşağıdaki gerekçe) — ama yüksek ROE'li
+  // sanayi şirketleri tarafından derin aşamadan tamamen dışlanmasınlar diye
+  // kendi kotaları var.
+  finQuota: 6,
+  // 🛟 KIYI PAYI: yalnızca tek yıllık ROE kapısından KIL PAYI dönen hisseler.
+  // Kapı tek yıla bakar; geçici olarak bastırılmış bir yıl gerçekten iyi bir
+  // şirketi eleyebilir. Bunlar mali tabloya sorulur, kararı çok yıllı veri verir.
+  edgeQuota: 8,
+  edgeBand: 0.70,       // engel oranının %70'i ve üstü "kıyı" sayılır
 };
 
 const SCREEN_DROP_LABELS = {
@@ -3368,6 +3664,14 @@ const SCREEN_DROP_LABELS = {
   expensive: 'F/K tavanın üstünde',
   rich: 'PD/DD anormal — özsermaye çok küçük, ROE şişmiş olabilir',
 };
+
+// ——— Kademe 1'de banka tespiti ———
+// ⚠️ Toplu quote SEKTÖR DÖNDÜRMEZ; kademe 1'de elimizdeki tek ipucu semboldür.
+// buffettScore'un kullandığı listenin aynısı kullanılır (tek kaynak).
+function screenIsFinancial(r) {
+  const s = String((r && r.symbol) || '').toUpperCase().replace(/\.IS$/, '');
+  return BF_FIN_SYMBOLS.indexOf(s) >= 0;
+}
 
 // ——— Türetilmiş ROE ———
 // PD/DD ÷ F/K = (Fiyat/Defter) × (Kazanç/Fiyat) = Kazanç/Defter = ROE.
@@ -3398,13 +3702,28 @@ function screenHygiene(r, lim, hurdlePct) {
   if (r.trailingPE == null || !isFinite(r.trailingPE) || r.trailingPE <= 0) return { ok: false, why: 'loss' };
   if (r.priceToBook == null || !isFinite(r.priceToBook) || r.priceToBook <= 0) return { ok: false, why: 'nobook' };
   const roe = screenRoe(r);
-  if (roe == null || roe < hur) return { ok: false, why: 'lowroe' };
+  const fin = screenIsFinancial(r);
+  // 🔴 BANKA YALNIZCA ROE KAPISINI ATLAR — bu bir muafiyet değil, ölçüm
+  // imkânsızlığı. Bankanın ROE'si tasarımı gereği 8-10 kat kaldıraçla şişer;
+  // kademe 1'de toplam varlık verisi OLMADIĞI için bu kaldıracı arındırmak
+  // matematiksel olarak mümkün değil. Sanayi şirketiyle aynı eşiği uygulamak
+  // bankayı haksız GEÇİRİR, keyfî bir çarpan uydurmak da sayı üretmek olurdu.
+  // Doğru çözüm: kararı ölçebilen yere bırak — banka kademe 2'ye gider, orada
+  // ROA ve varlık/özsermaye kaldıracıyla düzgün puanlanır.
+  // ⚠️ DİĞER KAPILAR BANKAYA DA UYGULANIR (büyüklük, likidite, F/K, PD/DD).
+  // İlk yazımda banka erken `ok` dönüyordu ve o kapıları da atlıyordu — test
+  // yakaladı. Erken dönüş YOK, sadece bu kapı koşullu.
+  if (!fin && (roe == null || roe < hur)) {
+    // Kıl payı kalanlar ayrı işaretlenir (kıyı payı kurtarma şeridi)
+    const edge = roe != null && roe >= hur * L.edgeBand;
+    return { ok: false, why: 'lowroe', edge };
+  }
   if (r.marketCap == null || !isFinite(r.marketCap) || r.marketCap < L.minMarketCap) return { ok: false, why: 'small' };
   const to = screenTurnover(r);
   if (to == null || to < L.minTurnover) return { ok: false, why: 'illiquid' };
   if (r.trailingPE > L.maxPE) return { ok: false, why: 'expensive' };
   if (r.priceToBook > L.maxPB) return { ok: false, why: 'rich' };
-  return { ok: true };
+  return { ok: true, fin };
 }
 
 // ——— KALİTE SKORU (0-100) — kademe 1 ———
@@ -3426,9 +3745,15 @@ function screenHygiene(r, lim, hurdlePct) {
 //
 // Veri gelmeyen kriter ATLANIR ve paydadan da düşer (buffettScore kalıbı).
 // Kapsama %60 altına düşerse skor null — UYDURMA YOK.
-function screenPreScore(r, hurdlePct) {
+function screenPreScore(r, hurdlePct, isFin) {
   if (!r) return null;
   const hur = (isFinite(hurdlePct) && hurdlePct > 0) ? hurdlePct / 100 : 0.35;
+  // 🏦 BANKADA AGIRLIK YER DEGISTIRIR — keyfi degil, olculebilirlik gerekcesi:
+  // kademe 1'de bankanin kaldiracli ROE'si ARINDIRILAMAZ (toplam varlik yok),
+  // yani ROE burada guvenilmez bir kalite olcusudur. Kazanc getirisi ise
+  // kaldiractan bagimsizdir — fiyat, kaldiracla sismez. Bu yuzden bankada
+  // agirlik olculebilir boyuta kayar; kalite kararini kademe 2 verir.
+  const wRoe = isFin ? 4.0 : 7.0, wEy = isFin ? 6.0 : 3.0;
   const parts = [];
   const add = (key, label, weight, score, note) => parts.push({ key, label, weight, score, note });
   const pct = v => (v == null || !isFinite(v)) ? '—' : ('%' + (Math.round(v * 1000) / 10));
@@ -3438,19 +3763,19 @@ function screenPreScore(r, hurdlePct) {
   // 2,5 katında dolar: "engeli geçmek" yetmez, ne kadar aştığı önemlidir.
   const roe = screenRoe(r);
   if (roe != null) {
-    add('roe', 'İş kalitesi — özsermaye kârlılığı', 7.0, bfLin(roe / hur, 1.0, 2.5),
-      `${pct(roe)} · engel oranı ${pct(hur)} · engelin ${bfR(roe / hur, 2)} katı · PD/DD ÷ F/K ile türetildi, TEK yıllıktır`);
+    add('roe', 'İş kalitesi — özsermaye kârlılığı', wRoe, bfLin(roe / hur, 1.0, 2.5),
+      `${pct(roe)} · engel oranı ${pct(hur)} · engelin ${bfR(roe / hur, 2)} katı · PD/DD ÷ F/K ile türetildi, TEK yıllıktır${isFin ? ' · ⚠️ banka: bu ROE kaldıraçla şişer, kademe 1\'de arındırılamaz' : ''}`);
   } else {
-    add('roe', 'İş kalitesi — özsermaye kârlılığı', 7.0, null, 'F/K veya PD/DD gelmedi.');
+    add('roe', 'İş kalitesi — özsermaye kârlılığı', wRoe, null, 'F/K veya PD/DD gelmedi.');
   }
 
   // 2) FİYAT MAKUL MU — kazanç getirisi (ucuzluk YARIŞI değil, makullük kontrolü)
   if (r.trailingPE != null && isFinite(r.trailingPE) && r.trailingPE > 0) {
     const ey = 1 / r.trailingPE;
-    add('ey', 'Fiyat makul mü — kazanç getirisi', 3.0, bfLin(ey / hur, 0.15, 0.5),
-      `${pct(ey)} · F/K ${bfR(r.trailingPE, 1)} · engel oranının ${bfR(ey / hur, 2)} katı`);
+    add('ey', 'Fiyat makul mü — kazanç getirisi', wEy, bfLin(ey / hur, 0.15, 0.5),
+      `${pct(ey)} · F/K ${bfR(r.trailingPE, 1)} · engel oranının ${bfR(ey / hur, 2)} katı${isFin ? ' · bankada bu ölçü kaldıraçtan bağımsızdır' : ''}`);
   } else {
-    add('ey', 'Fiyat makul mü — kazanç getirisi', 3.0, null, 'F/K gelmedi.');
+    add('ey', 'Fiyat makul mü — kazanç getirisi', wEy, null, 'F/K gelmedi.');
   }
 
   const used = parts.filter(p => p.score != null);
@@ -3475,24 +3800,64 @@ function screenRank(rows, opts) {
   const o = opts || {};
   const hur = (isFinite(o.hurdlePct) && o.hurdlePct > 0) ? o.hurdlePct : 35;
   const lim = Object.assign({}, SCREEN_LIMITS, o.limits || {});
-  const passed = [], dropCounts = {};
+  const passed = [], edge = [], dropCounts = {};
+  const mkRow = (r, ps, extra) => Object.assign({}, r, {
+    preScore: ps.score, preParts: ps.parts, roe: ps.roe,
+    turnover: screenTurnover(r), buffett: null,
+  }, extra || {});
   for (const r of (Array.isArray(rows) ? rows : [])) {
+    const fin = screenIsFinancial(r);
     const h = screenHygiene(r, lim, hur);
-    if (!h.ok) { dropCounts[h.why] = (dropCounts[h.why] || 0) + 1; continue; }
-    const ps = screenPreScore(r, hur);
+    if (!h.ok) {
+      dropCounts[h.why] = (dropCounts[h.why] || 0) + 1;
+      // 🛟 Kıyı payı: SADECE ROE kapısından kıl payı dönenler ayrı tutulur.
+      // Elenmiş sayılırlar (dökümde görünürler) ama mali tabloya sorulurlar.
+      if (h.edge) {
+        const ps = screenPreScore(r, hur, fin);
+        if (ps && ps.score != null) edge.push(mkRow(r, ps, { fin, edge: true }));
+      }
+      continue;
+    }
+    const ps = screenPreScore(r, hur, fin);
     if (!ps || ps.score == null) { dropCounts.nodata = (dropCounts.nodata || 0) + 1; continue; }
-    passed.push(Object.assign({}, r, {
-      preScore: ps.score, preParts: ps.parts, roe: ps.roe,
-      turnover: screenTurnover(r), buffett: null,
-    }));
+    passed.push(mkRow(r, ps, { fin }));
   }
-  passed.sort((a, b) => (b.preScore - a.preScore) || String(a.symbol).localeCompare(String(b.symbol), 'tr'));
+  const byScore = (a, b) => (b.preScore - a.preScore) || String(a.symbol).localeCompare(String(b.symbol), 'tr');
+  passed.sort(byScore);
+  edge.sort(byScore);
   const scanned = Array.isArray(rows) ? rows.length : 0;
   return {
-    passed, dropCounts, scanned,
+    passed, edge, dropCounts, scanned,
     dropped: scanned - passed.length,
     hurdlePct: hur,
   };
+}
+
+// ——— Derin aşamaya KİM gidecek ———
+// Saf fonksiyon (teste bağlı). Üç kaynak, sırayla:
+//   ① banka kotası — bankalar ROE kapısını atladığı için kademe 1 skorları
+//     sanayi şirketlerininkiyle aynı ölçekte değil; kota olmasa yüksek ROE'li
+//     sanayi hisseleri onları tamamen dışarıda bırakırdı
+//   ② genel sıra — kademe 1 skoruna göre kalan slotlar
+//   ③ kıyı payı — tek yıllık kapıdan kıl payı dönenler, ayrı kota
+// Kademe 1 skoru burada SADECE "kime mali tablo okunacak"ı seçer; nihai sırayı
+// gerçek Buffett skoru belirler.
+function screenSelectDeep(res, limits) {
+  const L = Object.assign({}, SCREEN_LIMITS, limits || {});
+  const passed = Array.isArray(res && res.passed) ? res.passed : [];
+  const edge = Array.isArray(res && res.edge) ? res.edge : [];
+  const out = [], seen = new Set();
+  const push = r => {
+    const k = String(r.symbol || '');
+    if (!k || seen.has(k)) return false;
+    seen.add(k); out.push(r); return true;
+  };
+  let n = 0;
+  for (const r of passed) { if (n >= L.finQuota) break; if (r.fin && push(r)) n++; }
+  for (const r of passed) { if (out.length >= L.deepCount) break; push(r); }
+  let e = 0;
+  for (const r of edge) { if (e >= L.edgeQuota) break; if (push(r)) e++; }
+  return out;
 }
 
 // ——— Buffett skoruna göre sıralama ———
@@ -3643,8 +4008,9 @@ function screenNormalize(f, marketCap) {
 // (PD/DD ÷ normF/K = defter basina normalize kar = ortalama ROE). Yani tek
 // satirlik degisiklikle butun skor cok yilli hale geliyor — ayri formul YOK.
 function screenNormScore(row, cyc, hurdlePct) {
+  // Banka agirligi burada da korunur (screenPreScore ile ayni sozlesme)
   if (!row || !cyc || !cyc.ok || cyc.normPE == null || !(cyc.normPE > 0)) return null;
-  const s = screenPreScore(Object.assign({}, row, { trailingPE: cyc.normPE }), hurdlePct);
+  const s = screenPreScore(Object.assign({}, row, { trailingPE: cyc.normPE }), hurdlePct, !!(row && row.fin));
   return (s && s.score != null) ? s.score : null;
 }
 
@@ -3705,11 +4071,10 @@ async function runScreener() {
 
     const res = screenRank(rows, { hurdlePct: hur });
     // 🔴 Kademe 1'in TEK isi "kime mali tablo okunacak"i secmektir; nihai sirayi
-    // gercek Buffett skoru belirler. Bu yuzden derin asamaya deepCount (25) hisse
-    // gider ve HEPSI saklanir — ekranda listCount (15) satir gosterilir ama
-    // siralama 25'in tamami uzerinden yapilir. (Eskiden once 15'e kirpiliyordu:
-    // derin asama 15 hisse goruyordu, dokumanda yazan 25 gerceklesmiyordu.)
-    const top = res.passed.slice(0, SCREEN_LIMITS.deepCount);
+    // gercek Buffett skoru belirler. Secim banka kotasi + genel sira + kiyi payi
+    // seklinde yapilir (screenSelectDeep). HEPSI saklanir; ekranda listCount (15)
+    // satir gosterilir ama siralama tamami uzerinden yapilir.
+    const top = screenSelectDeep(res, SCREEN_LIMITS);
 
     const sc = ensureScreen();
     sc.at = Date.now();
@@ -3717,6 +4082,8 @@ async function runScreener() {
     sc.scanned = res.scanned;
     sc.dropped = res.dropped;
     sc.dropCounts = res.dropCounts;
+    sc.edgeCount = top.filter(r => r.edge).length;
+    sc.finCount = top.filter(r => r.fin).length;
     sc.asked = symbols.length;
     sc.rows = top;
     sc.comment = null;
@@ -3805,7 +4172,9 @@ async function setScreenHurdle() {
   const sc = data.screen;
   if (sc && Array.isArray(sc.rows) && sc.rows.length) {
     for (const row of sc.rows) {
-      const ps = screenPreScore(row, n);
+      // ⚠️ `row.fin` GECIRILMELI — yoksa banka satiri yeniden hesaplandiginda
+      // sanayi agirligina (7/3) doner ve skor sessizce degisir.
+      const ps = screenPreScore(row, n, !!row.fin);
       if (ps && ps.score != null) { row.preScore = ps.score; row.preParts = ps.parts; }
       // normalize skor da ayni esige bagli — bayat kalmasin (mali tablo istegi GEREKMEZ,
       // cycle zaten kayitli; sadece Buffett skoru yeniden tarama ister)
@@ -3919,6 +4288,11 @@ function screenRowHtml(r, i) {
     ? `<span class="scr-kind ${escapeHtml(String(bf.kind))}">${escapeHtml(String(bf.kindLabel || bf.kind))} · ayrı kriter seti</span>` : '';
   const mosHtml = (bf && bf.mos != null && isFinite(bf.mos))
     ? `<span class="scr-mos ${bf.mos >= 0.33 ? 'good' : (bf.mos >= 0 ? 'mid' : 'bad')}">güvenlik payı ${pct(bf.mos)}</span>` : '';
+  // 🛟 Kıyı payı rozeti — bu satır tek yıllık ROE kapısından KIL PAYI döndü,
+  // kararı mali tabloya sorduk. Kullanıcı bunun normal bir "geçen" satır
+  // olmadığını görmeli.
+  const edgeHtml = r.edge
+    ? `<span class="scr-edge">kıyı payı — tek yıllık kapıdan geçemedi, mali tabloya soruldu</span>` : '';
   const weak = (bf && Array.isArray(bf.weak) && bf.weak.length)
     ? `<div class="scr-weak">En zayıf: ${bf.weak.map(w => escapeHtml(String(w))).join(' · ')}</div>` : '';
 
@@ -3967,6 +4341,7 @@ function screenRowHtml(r, i) {
     <div class="scr-bar"><i class="${cls}" style="width:${Math.max(2, Math.min(100, r.preScore))}%"></i></div>
     ${normHtml}
     <div class="scr-cells">${cells}</div>
+    ${edgeHtml}
     <div class="scr-row-foot">${bfHtml}${mosHtml}${kindHtml}
       <button type="button" class="scr-add" onclick="screenAddToWatchlist('${escapeHtml(String(r.symbol || ''))}')">Listeme ekle</button>
     </div>

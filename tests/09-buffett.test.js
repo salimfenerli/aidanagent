@@ -77,7 +77,11 @@ test('saglikli sirket yuksek skor alir', () => {
   const r = score(fund());
   assert.ok(r.score >= 75, `beklenen >=75, gelen ${r.score}`);
   assert.strictEqual(r.label, 'güçlü kalite');
-  assert.strictEqual(r.coverage, 1, 'tam veride kapsama 1 olmali');
+  // Sektor gelmeyince "cember" kriteri DURUSTCE atlanir → kapsama 1 olmaz.
+  assert.ok(r.coverage > 0.9 && r.coverage < 1, `sektorsuz kapsama: ${r.coverage}`);
+  // Sektor verildiginde tum kriterler dolar
+  const tam = score(fund({ sector: 'Consumer Defensive', industry: 'Packaged Foods' }));
+  assert.strictEqual(tam.coverage, 1, 'tam veride kapsama 1 olmali');
 });
 
 test('kotu sirket dusuk skor alir', () => {
@@ -251,22 +255,25 @@ test('TRY enflasyon muhasebesi notu sadece TRY icin eklenir', () => {
 // ============================================================
 // Agirliklar / sozlesme
 // ============================================================
-test('operasyonel set: 11 kriter, toplam agirlik 16 sabit', () => {
+test('operasyonel set: 13 kriter, toplam agirlik 18 sabit', () => {
   const r = score(fund());
-  assert.strictEqual(r.parts.length, 11);
+  assert.strictEqual(r.parts.length, 13);
   const tot = r.parts.reduce((s, p) => s + p.weight, 0);
-  assert.strictEqual(tot, 16);
+  assert.strictEqual(tot, 18);
   // jsdom realm'inden gelen dizi — reference-equal olmaz, string olarak karsilastir
   const keys = r.parts.map(p => p.key).sort().join(',');
-  assert.strictEqual(keys, 'debt,dilution,dollar,inflation,margin,moat,mos,owner,roe,roic,stability');
+  assert.strictEqual(keys,
+    'capalloc,circle,debt,dilution,dollar,inflation,margin,moat,mos,owner,roe,roic,stability');
 });
 
 test('agirlik dagilimi Buffett sirasinda: kalite > fiyat', () => {
   const r = score(fund());
   const w = k => r.parts.find(p => p.key === k).weight;
-  const kalite = w('roe') + w('roic') + w('moat') + w('margin') + w('inflation') + w('owner') + w('stability');
+  const kalite = w('roe') + w('roic') + w('moat') + w('margin') + w('circle') + w('inflation') + w('owner') + w('stability');
+  const dagitim = w('dollar') + w('capalloc') + w('dilution');
   const fiyat = w('mos');
-  assert.strictEqual(kalite, 10.5, 'kalite agirligi 10,5 olmali');
+  assert.strictEqual(kalite, 11.5, 'kalite agirligi 11,5 olmali');
+  assert.strictEqual(dagitim, 3, 'sermaye dagitimi agirligi 3 olmali');
   assert.ok(kalite > fiyat * 3, 'kalite, fiyatin en az 3 kati agirlikta olmali (Buffett sirasi)');
 });
 
@@ -314,7 +321,7 @@ test('facts icine buffett blogu girer ve sayi uydurma alani yok', () => {
   ).buffett;
   assert.ok(bf, 'facts.buffett bos');
   assert.ok(bf.score > 0);
-  assert.ok(Array.isArray(bf.parts) && bf.parts.length === 11);
+  assert.ok(Array.isArray(bf.parts) && bf.parts.length === 13);
   assert.ok(bf.parts.every(p => 'pts' in p && 'max' in p && 'note' in p));
   assert.strictEqual(bf.hurdlePct, 10);
 });
@@ -435,16 +442,16 @@ test('normal sirket bankaya benzemez (yanlis pozitif korumasi)', () => {
 });
 
 // ——— Banka kriter seti ———
-test('banka seti: 8 kriter, toplam agirlik 12,5', () => {
+test('banka seti: 9 kriter, toplam agirlik 13,5', () => {
   const r = score(mk({ ySymbol: 'AKBNK.IS', currency: 'TRY' }, [
     { year: 2025, totalAssets: 10000, equity: 1000, revenue: 900, capex: -5 },
     { year: 2024, totalAssets: 9000, equity: 900, revenue: 800, capex: -5 },
     { year: 2023, totalAssets: 8000, equity: 800, revenue: 700, capex: -5 },
   ]), 35);
-  assert.strictEqual(r.parts.length, 8);
-  assert.strictEqual(r.parts.reduce((s, p) => s + p.weight, 0), 12.5);
+  assert.strictEqual(r.parts.length, 9);
+  assert.strictEqual(r.parts.reduce((s, p) => s + p.weight, 0), 13.5);
   assert.strictEqual(r.parts.map(p => p.key).sort().join(','),
-    'bvg,dilution,efficiency,leverage,mos,roa,roe,stability');
+    'bvg,capalloc,dilution,efficiency,leverage,mos,roa,roe,stability');
 });
 
 test('banka setinde borc / owner earnings / capex / 1 Dolar Testi KASITLI YOK', () => {
@@ -452,7 +459,7 @@ test('banka setinde borc / owner earnings / capex / 1 Dolar Testi KASITLI YOK', 
     { year: 2025, totalAssets: 10000, equity: 1000, revenue: 900, capex: -5 },
     { year: 2024, totalAssets: 9000, equity: 900, revenue: 800, capex: -5 },
   ]), 35);
-  for (const k of ['debt', 'owner', 'dollar', 'inflation', 'moat', 'roic']) {
+  for (const k of ['debt', 'owner', 'dollar', 'inflation', 'moat', 'roic', 'circle']) {
     assert.strictEqual(part(r, k), undefined, k + ' bankada bulunmamali');
   }
   assert.ok(part(r, 'roa') && part(r, 'leverage') && part(r, 'bvg'), 'banka kriterleri olmali');
@@ -667,7 +674,7 @@ test('TRY esigi daha genis — enflasyon muhasebesi yanlis alarm uretmesin', () 
   const usd = part(score(mk({ currency: 'USD' }, rows), 10), 'dilution').score;
   const tryS = part(score(mk({ currency: 'TRY' }, rows), 35), 'dilution').score;
   assert.ok(tryS > usd, 'TRY esigi daha musamahali olmali');
-  assert.match(part(score(mk({ currency: 'TRY' }, rows), 35), 'dilution').note, /enflasyon muhasebesi/);
+  assert.match(part(score(mk({ currency: 'TRY' }, rows), 35), 'dilution').note, /TMS 29/);
 });
 
 // ——— Dayaniklilik ———
@@ -818,4 +825,366 @@ test('kaynakta CAGR FARKI degil ORANI kullanildigi kilitli', () => {
   const block = src.slice(i, i + 3000);
   assert.ok(/\(1 \+ niC\) \/ \(1 \+ asC\)/.test(block), 'buyume carpanlarinin orani kullanilmali');
   assert.ok(!/gap = niC - asC/.test(block), 'CAGR farki geri gelmemeli (enflasyonda sapar)');
+});
+
+// ============================================================
+// TAM ALGORITMA — TMS 29 siniri, cember, sermaye dagitimi,
+// efektif vergi, yil sayisi tavani
+// ============================================================
+
+// ——— TMS 29 enflasyon muhasebesi siniri ———
+test('TMS 29: seri 2023 sinirini gecince bayrak kalkar (sadece TRY)', () => {
+  const rows = [{ year: 2025 }, { year: 2024 }, { year: 2023 }, { year: 2022 }];
+  const t = score(mk({ currency: 'TRY' }, rows), 35);
+  const u = score(mk({ currency: 'USD' }, rows), 10);
+  assert.ok(t.flags.some(f => /TMS 29 uyarısı/.test(f)), 'TRY de sinir bayragi bekleniyor');
+  assert.ok(!u.flags.some(f => /TMS 29 uyarısı/.test(f)), 'USD de sinir bayragi OLMAMALI');
+});
+
+test('TMS 29: sinir sonrasi 2+ yil varsa karsilastirmalar SADECE onlarla yapilir', () => {
+  // 2022 kasitli olarak uc bir deger — dahil edilirse trend/CAGR savrulur.
+  const rows = [
+    { year: 2025, netIncome: 300, totalAssets: 2000, revenue: 1000, grossProfit: 400 },
+    { year: 2024, netIncome: 250, totalAssets: 1900, revenue: 1000, grossProfit: 380 },
+    { year: 2023, netIncome: 200, totalAssets: 1800, revenue: 1000, grossProfit: 360 },
+    { year: 2022, netIncome: 5000, totalAssets: 100, revenue: 1000, grossProfit: 10 },
+  ];
+  const t = score(mk({ currency: 'TRY' }, rows), 35);
+  const note = part(t, 'inflation').note;
+  assert.match(note, /TMS 29/, 'karsilastirmanin sinirlandigi yazilmali');
+  assert.match(note, /2023 ve sonrası/);
+  // Ayni seri USD olsa 2022 dahil edilir → farkli sonuc cikmali
+  const u = score(mk({ currency: 'USD' }, rows), 35);
+  assert.notStrictEqual(part(t, 'inflation').score, part(u, 'inflation').score,
+    'TRY penceresi kisitlandigi icin skor USD den farkli olmali');
+});
+
+test('TMS 29: sinir sonrasi TEK yil varsa hesap yapilir ama GUVENILMEZ yazilir', () => {
+  const rows = [
+    { year: 2023, netIncome: 200, totalAssets: 1800 },
+    { year: 2022, netIncome: 150, totalAssets: 1600 },
+    { year: 2021, netIncome: 120, totalAssets: 1400 },
+  ];
+  const t = score(mk({ currency: 'TRY' }, rows), 35);
+  assert.ok(t.flags.some(f => /TMS 29/.test(f) && /GÜVENİLMEZ/.test(f)));
+  assert.match(part(t, 'inflation').note, /GÜVENİLMEZ/);
+});
+
+test('TMS 29: yil ici oranlar (medyan marj) TUM yillari kullanmaya devam eder', () => {
+  // Seviye/medyan hesaplari sinirdan ETKILENMEZ — pay ve payda ayni yilin parasi.
+  const rows = [
+    { year: 2025, revenue: 1000, grossProfit: 400 },
+    { year: 2024, revenue: 1000, grossProfit: 400 },
+    { year: 2023, revenue: 1000, grossProfit: 400 },
+    { year: 2022, revenue: 1000, grossProfit: 400 },
+  ];
+  const t = score(mk({ currency: 'TRY' }, rows), 35);
+  assert.match(part(t, 'moat').note, /Medyan %40/, 'medyan tum yillardan hesaplanmali');
+});
+
+test('TMS 29 siniri gecmeyen TRY seride kisitlama YOK', () => {
+  const rows = [{ year: 2025 }, { year: 2024 }, { year: 2023 }];
+  const t = score(mk({ currency: 'TRY' }, rows), 35);
+  assert.ok(!t.flags.some(f => /TMS 29 uyarısı/.test(f)));
+  assert.ok(!/TMS 29: karşılaştırma/.test(part(t, 'inflation').note || ''));
+});
+
+// ——— Cember / is tipi ———
+test('cember: emtia sektoru ceza verir, rakamlar onaylayinca AGIRLASIR', () => {
+  const temiz = score(mk({ sector: 'Consumer Defensive', industry: 'Packaged Foods' }));
+  const emtia = score(mk({ sector: 'Basic Materials', industry: 'Steel' }));
+  const emtiaOnayli = score(mk({ sector: 'Basic Materials', industry: 'Steel' }, [
+    { year: 2025, revenue: 1000, grossProfit: 60 }, { year: 2024, revenue: 1000, grossProfit: 220 },
+    { year: 2023, revenue: 1000, grossProfit: 40 }, { year: 2022, revenue: 1000, grossProfit: 180 },
+  ]));
+  assert.strictEqual(part(temiz, 'circle').score, 1);
+  assert.ok(part(emtia, 'circle').score < 1, 'emtia etiketi ceza vermeli');
+  assert.ok(part(emtiaOnayli, 'circle').score < part(emtia, 'circle').score,
+    'rakamlar da onayladiginda ceza agirlasmali');
+});
+
+test('cember: etiket TEK BASINA tavan uygulamaz (kanit etiketin onunde)', () => {
+  // Celik etiketi var ama marj yuksek ve istikrarli → moat kriteri cezalanmaz
+  const r = score(mk({ sector: 'Basic Materials', industry: 'Steel' }, [
+    { year: 2025, revenue: 1000, grossProfit: 420 }, { year: 2024, revenue: 1000, grossProfit: 410 },
+    { year: 2023, revenue: 1000, grossProfit: 400 }, { year: 2022, revenue: 1000, grossProfit: 405 },
+  ]));
+  assert.ok(part(r, 'moat').score > 0.7, 'sektor etiketi brut marj puanini dusurmemeli');
+});
+
+test('cember: Buffett in uzak durdugu kol daha agir ceza alir', () => {
+  const hava = score(mk({ sector: 'Industrials', industry: 'Airlines' }));
+  assert.ok(part(hava, 'circle').score <= 0.5);
+  assert.ok(hava.flags.some(f => /açıkça uzak durdu/.test(f)));
+});
+
+test('cember: sektor verisi yoksa kriter ATLANIR (uydurma yok)', () => {
+  const r = score(mk({}));
+  assert.strictEqual(part(r, 'circle').score, null);
+  assert.match(part(r, 'circle').note, /gelmedi/);
+});
+
+// ——— Sermaye dagitimi rasyonelligi (Buffett 1984) ———
+test('sermaye dagitimi: getiri engelin USTUNDE ise kar TUTULMALI', () => {
+  // Yuksek ROIC + dusuk temettu = dogru karar
+  const tutan = score(mk({}, [
+    { year: 2025, operatingIncome: 400, equity: 800, netIncome: 300, dividendsPaid: -10 },
+    { year: 2024, operatingIncome: 400, equity: 800, netIncome: 300, dividendsPaid: -10 },
+  ]), 10);
+  const dagitan = score(mk({}, [
+    { year: 2025, operatingIncome: 400, equity: 800, netIncome: 300, dividendsPaid: -290 },
+    { year: 2024, operatingIncome: 400, equity: 800, netIncome: 300, dividendsPaid: -290 },
+  ]), 10);
+  assert.ok(part(tutan, 'capalloc').score > part(dagitan, 'capalloc').score,
+    'engel ustunde getiride kari tutmak daha iyi puan almali');
+  assert.match(part(tutan, 'capalloc').note, /ÜSTÜNDE/);
+});
+
+test('sermaye dagitimi: getiri engelin ALTINDA ise kar DAGITILMALI + bayrak', () => {
+  const rows = pay => [
+    { year: 2025, operatingIncome: 20, equity: 800, longTermDebt: 0, shortDebt: 0, cash: 0, netIncome: 100, dividendsPaid: pay },
+    { year: 2024, operatingIncome: 20, equity: 800, longTermDebt: 0, shortDebt: 0, cash: 0, netIncome: 100, dividendsPaid: pay },
+  ];
+  const tutan = score(mk({}, rows(-5)), 35);
+  const dagitan = score(mk({}, rows(-90)), 35);
+  assert.ok(part(dagitan, 'capalloc').score > part(tutan, 'capalloc').score,
+    'engel altinda getiride kari dagitmak daha iyi puan almali');
+  assert.match(part(tutan, 'capalloc').note, /ALTINDA/);
+  assert.ok(tutan.flags.some(f => /1984/.test(f)), 'Buffett 1984 kurali bayrakta olmali');
+});
+
+test('sermaye dagitimi: temettu verisi yoksa kriter ATLANIR', () => {
+  const r = score(mk({}, [
+    { year: 2025, dividendsPaid: null }, { year: 2024, dividendsPaid: null },
+  ]));
+  assert.strictEqual(part(r, 'capalloc').score, null);
+});
+
+// ——— Efektif vergi orani ———
+test('efektif vergi orani ROIC te kullanilir, yoksa yasal orana duser', () => {
+  const yasal = score(mk({}, [
+    { year: 2025, operatingIncome: 200, equity: 800, longTermDebt: 0, shortDebt: 0, cash: 0 },
+    { year: 2024, operatingIncome: 200, equity: 800, longTermDebt: 0, shortDebt: 0, cash: 0 },
+  ]));
+  const efektif = score(mk({}, [
+    { year: 2025, operatingIncome: 200, equity: 800, longTermDebt: 0, shortDebt: 0, cash: 0, incomeBeforeTax: 200, incomeTaxExpense: 10 },
+    { year: 2024, operatingIncome: 200, equity: 800, longTermDebt: 0, shortDebt: 0, cash: 0, incomeBeforeTax: 200, incomeTaxExpense: 10 },
+  ]));
+  assert.strictEqual(yasal.taxRate, 0.21, 'USD yasal oran');
+  assert.strictEqual(efektif.taxRate, 0.05, 'efektif oran kullanilmali');
+  assert.ok(efektif.roic > yasal.roic, 'dusuk efektif vergi ROIC i yukseltmeli');
+  assert.match(part(efektif, 'roic').note, /efektif oran/);
+});
+
+test('sacma vergi orani (negatif ya da %60 ustu) yasal orana duser', () => {
+  const r = score(mk({}, [
+    { year: 2025, operatingIncome: 200, equity: 800, incomeBeforeTax: 100, incomeTaxExpense: -900 },
+    { year: 2024, operatingIncome: 200, equity: 800, incomeBeforeTax: 100, incomeTaxExpense: 700 },
+  ]));
+  assert.strictEqual(r.taxRate, 0.21);
+});
+
+// ——— Yil sayisi tavani ———
+test('yil sayisi tavani: 2-3 yillik tabloda "guclu kalite" verilmez', () => {
+  const iki = score(fund({ sector: 'Consumer Defensive', industry: 'Packaged Foods',
+    years: [2025, 2024].map((y, i) => ({ year: y, revenue: 1000 - i * 60, netIncome: 200 - i * 15,
+      equity: 800, longTermDebt: 100, shortDebt: 50, cash: 100, dna: 50, capex: -80,
+      dividendsPaid: -50, opCashFlow: 240 - i * 15, totalLiab: 400, totalAssets: 1200,
+      retainedEarnings: 500, grossProfit: 400, operatingIncome: 250 })) }));
+  assert.strictEqual(iki.years, 2);
+  assert.ok(iki.labelCapped, 'etiket sinirlanmis olmali');
+  assert.notStrictEqual(iki.label, 'güçlü kalite');
+  assert.ok(iki.flags.some(f => /Etiket sınırlandı/.test(f)));
+});
+
+test('4 yillik tabloda tavan UYGULANMAZ ama 10 yil notu dusulur', () => {
+  // 4 yil Yahoo nun pratik ust siniri — herkesi kaynak sinirindan cezalandirmak
+  // bilgi eklemez, sadece en ust etiketi olu koda cevirirdi.
+  const r = score(fund({ sector: 'Consumer Defensive', industry: 'Packaged Foods' }));
+  assert.strictEqual(r.years, 4);
+  assert.ok(!r.labelCapped, '4 yilda tavan olmamali');
+  assert.strictEqual(r.label, 'güçlü kalite');
+  assert.ok(r.flags.some(f => /Veri derinliği sınırı/.test(f) && /10 yıl/.test(f)));
+});
+
+// ——— Dayaniklilik (yeni kriterlerle birlikte) ———
+test('yeni kriterlerde de NaN sizmaz', () => {
+  const bozuk = mk({ marketCap: null, sharesOutstanding: null, priceHistory: null,
+    sector: 'Basic Materials', industry: 'Steel' }, [
+    { year: 2025, revenue: 0, netIncome: null, equity: 0, totalAssets: 0, grossProfit: null,
+      operatingIncome: null, capex: null, dna: null, opCashFlow: null, dividendsPaid: null,
+      incomeBeforeTax: 0, incomeTaxExpense: null },
+    { year: 2024, revenue: null, netIncome: NaN, equity: -50, totalAssets: null, dividendsPaid: NaN },
+  ]);
+  for (const h of [10, 35]) {
+    const r = score(bozuk, h);
+    for (const p of r.parts) {
+      assert.ok(p.score === null || isFinite(p.score), `${p.key} NaN sizdirdi`);
+      assert.ok(!/NaN|Infinity|undefined/.test(String(p.note || '')), `${p.key} notunda NaN: ${p.note}`);
+    }
+    for (const f of r.flags) assert.ok(!/NaN|Infinity|undefined/.test(f), `bayrakta NaN: ${f}`);
+  }
+});
+
+// ——— Worker sozlesmesi ———
+test('worker prompt: TMS 29, cember ve 1984 sermaye dagitimi kurali ogretiliyor', () => {
+  const w = readText('aidan-worker/worker.js');
+  assert.ok(/TMS 29 KATMANI/.test(w), 'TMS 29 ogretisi yok');
+  assert.ok(/YIL İÇİ oranlar/.test(w), 'hangi hesabin bozuldugu ogretilmeli');
+  assert.ok(/circle of competence/.test(w), 'cember ogretisi yok');
+  assert.ok(/kanıt, etiketin önündedir/.test(w), 'etiket-kanit onceligi yazilmali');
+  assert.ok(/1984 mektubu/.test(w), 'sermaye dagitimi kurali yok');
+  assert.ok(/ÖLÇÜLEMEZ/.test(w), 'yonetim kalitesinin olculemeyen yani soylenmeli');
+  assert.ok(/ETİKET SINIRI/.test(w), 'yil sayisi sinirinin ogretisi yok');
+});
+
+test('worker /stock-fundamentals efektif vergi alanlarini istiyor', () => {
+  const w = readText('aidan-worker/worker.js');
+  assert.ok(/incomeBeforeTax/.test(w) && /incomeTaxExpense/.test(w),
+    'efektif vergi icin vergi oncesi kar ve vergi gideri cekilmeli');
+});
+
+// ============================================================
+// 🇹🇷 İŞ YATIRIM 10 YILLIK KATMANI (12 Agu 2026)
+// ============================================================
+// Bu katmanin en tehlikeli hatasi SESSIZ BIRIM HATASIDIR: yanlis carpan
+// oranlari bozmaz (marj/ROE sadelesir) ama icsel deger 1000 kat kayar.
+// O yuzden olcek TAHMIN EDILMEZ, olculur; olculemezse veri KULLANILMAZ.
+
+test('birim olcegi Yahoo ile cakisan yildan OLCULUR (bin TL tespiti)', () => {
+  const yahoo = [
+    { year: 2024, revenue: 5000000000, totalAssets: 9000000000, equity: 3000000000, netIncome: 700000000 },
+    { year: 2023, revenue: 4000000000, totalAssets: 8000000000, equity: 2500000000, netIncome: 600000000 },
+  ];
+  // Is Yatirim ayni yillari BIN TL olarak veriyor
+  const isy = [
+    { year: 2024, revenue: 5000000, totalAssets: 9000000, equity: 3000000, netIncome: 700000 },
+    { year: 2023, revenue: 4000000, totalAssets: 8000000, equity: 2500000, netIncome: 600000 },
+    { year: 2018, revenue: 900000, totalAssets: 2000000, equity: 700000, netIncome: 100000 },
+  ];
+  const det = W.isyDetectScale(isy, yahoo);
+  assert.strictEqual(det.scale, 1000, 'bin TL olcegi tespit edilmeliydi');
+});
+
+test('kaynak zaten tam TL veriyorsa olcek 1 cikar', () => {
+  const yahoo = [{ year: 2024, revenue: 5000000000, equity: 3000000000 }];
+  const isy = [{ year: 2024, revenue: 5000000000, equity: 3000000000 }];
+  assert.strictEqual(W.isyDetectScale(isy, yahoo).scale, 1);
+});
+
+test('cakisan yil yoksa olcek NULL — uydurma carpan yok', () => {
+  const det = W.isyDetectScale([{ year: 2015, revenue: 100 }], [{ year: 2024, revenue: 100000 }]);
+  assert.strictEqual(det.scale, null);
+  assert.match(det.reason, /çakışan yıl/);
+});
+
+test('iki kaynak tutarsizsa olcek NULL (yanlis birlestirme onlenir)', () => {
+  // Oran 10'un kuvvetine oturmuyor → ayni seyi olcmuyorlar
+  const yahoo = [{ year: 2024, revenue: 5000, totalAssets: 9000, equity: 3000, netIncome: 700 }];
+  const isy = [{ year: 2024, revenue: 1750, totalAssets: 3100, equity: 1040, netIncome: 245 }];
+  const det = W.isyDetectScale(isy, yahoo);
+  assert.strictEqual(det.scale, null);
+  assert.match(det.reason, /tutarsız/);
+});
+
+test('birlestirme: Yahoo yillari KORUNUR, eski yillar eklenir', () => {
+  const yahoo = [
+    { year: 2024, revenue: 1000, netIncome: 100, capex: null },
+    { year: 2023, revenue: 900, netIncome: 90, capex: null },
+  ];
+  const isy = [
+    { year: 2024, revenue: 1, netIncome: 0.1, capex: -0.08 },
+    { year: 2023, revenue: 0.9, netIncome: 0.09, capex: -0.07 },
+    { year: 2022, revenue: 0.8, netIncome: 0.08, capex: -0.06 },
+    { year: 2021, revenue: 0.7, netIncome: 0.07, capex: -0.05 },
+  ];
+  const m = W.isyMergeYears(yahoo, isy, 1000);
+  assert.strictEqual(m.years.length, 4);
+  assert.strictEqual(m.added, 2, 'iki eski yil eklenmeliydi');
+  // Cakisan yilda YAHOO kazanir
+  const y24 = m.years.find(y => y.year === 2024);
+  assert.strictEqual(y24.revenue, 1000);
+  assert.strictEqual(y24.src, 'yahoo');
+  // Ama Yahoo'da eksik olan alan Is Yatirim'dan TAMAMLANIR
+  assert.strictEqual(y24.capex, -80, 'eksik alan olcekle tamamlanmali');
+  assert.ok(m.filled >= 2);
+  // Eklenen yil olcekli
+  assert.strictEqual(m.years.find(y => y.year === 2022).revenue, 800);
+  // Yeniden eskiye sirali
+  assert.strictEqual(m.years.map(y => y.year).join(','), '2024,2023,2022,2021');
+});
+
+test('birlestirme: longDebt -> longTermDebt e cevrilir (motorun bekledigi ad)', () => {
+  const m = W.isyMergeYears([], [{ year: 2020, longDebt: 5, shortDebt: 3 }], 1000);
+  const y = m.years[0];
+  assert.strictEqual(y.longTermDebt, 5000);
+  assert.strictEqual(y.shortDebt, 3000);
+  assert.strictEqual(y.longDebt, undefined, 'ham alan adi kalmamali');
+});
+
+test('10 yila cikinca yil sayisi tavani KALKAR ve derinlik notu duser', () => {
+  const yrs = [];
+  for (let i = 0; i < 10; i++) {
+    yrs.push({ year: 2024 - i, revenue: 1000, netIncome: 150, equity: 800, grossProfit: 400,
+      operatingIncome: 250, totalAssets: 1200, longTermDebt: 100, shortDebt: 50, cash: 100,
+      dna: 50, capex: -80, dividendsPaid: -30, opCashFlow: 200, retainedEarnings: 500 });
+  }
+  const r = score(fund({ currency: 'USD', sector: 'Consumer Defensive', industry: 'Packaged Foods', years: yrs }));
+  assert.strictEqual(r.years, 10);
+  assert.ok(!r.labelCapped, '10 yilda tavan olmamali');
+  assert.ok(!r.flags.some(f => /Veri derinliği sınırı/.test(f)), '10 yilda derinlik notu dusmemeli');
+});
+
+test('bozuk / eksik girdide olcek tespiti cokmez', () => {
+  for (const [a, b2] of [[null, null], [[], []], [[{ year: 2024 }], [{ year: 2024 }]],
+    [[{ year: 2024, revenue: 0 }], [{ year: 2024, revenue: 0 }]],
+    [[{ year: 2024, revenue: NaN }], [{ year: 2024, revenue: 5 }]]]) {
+    const d = W.isyDetectScale(a, b2);
+    assert.ok(d && (d.scale === null || isFinite(d.scale)));
+  }
+});
+
+test('mimari sozlesme: 10 yillik uc TARAMADA kullanilmaz', () => {
+  const src = readText('stocks.js');
+  const i = src.indexOf('async function runScreener');
+  const block = src.slice(i, i + 2600);
+  assert.ok(!/bist-financials|loadBistDeepFinancials/.test(block),
+    'tarama resmi olmayan uca 25 sembolluk istek atmamali');
+  // Sadece hisse kartindan tetiklenir
+  assert.ok(/w\.market === 'bist'[\s\S]{0,200}loadBistDeepFinancials/.test(src),
+    'derin veri yalnizca BIST hisse kartinda tetiklenmeli');
+});
+
+test('veri gelmezse kart Yahoo ile CALISMAYA DEVAM eder (sessiz bozulma yok)', () => {
+  const src = readText('stocks.js');
+  const i = src.indexOf('async function loadBistDeepFinancials');
+  const block = src.slice(i, i + 2800);
+  // Hata yolunda d.years'a DOKUNULMAZ
+  assert.ok(/_stockDeepFin = \{ ok: false/.test(block), 'hata durumu isaretlenmeli');
+  assert.ok(/det\.scale == null/.test(block), 'olcek olculemezse birlestirme yapilmamali');
+  const bad = block.slice(0, block.indexOf('const m = isyMergeYears'));
+  assert.ok(!/d\.years = /.test(bad), 'hata yollarinda Yahoo verisi bozulmamali');
+});
+
+test('worker: 10 yillik uc auth istiyor, 4 donem/istek ve cache kurali var', () => {
+  const w = readText('aidan-worker/worker.js');
+  const i = w.indexOf('async function handleBistFinancialsApi');
+  assert.ok(i > 0, 'uc yok');
+  const block = w.slice(i, i + 3000);
+  assert.ok(/verifyUser/.test(block), 'auth zorunlu');
+  assert.ok(/unauthorized/.test(block));
+  assert.strictEqual(/ISY_PER_REQ = 4/.test(w), true, 'istek basina 4 donem');
+  assert.ok(/cacheTtl: 86400/.test(w), '24 saat cache olmali');
+  // Grup listesi iki kriter setimizle ortusuyor
+  assert.ok(/XI_29/.test(w) && /UFRS/.test(w));
+});
+
+test('worker: kalem adi normalizasyonu roma rakami ve madde numarasini atar', () => {
+  // "XVI. ÖZKAYNAKLAR" ve "16.4.2 Dönem Net Kar/Zararı" gibi basliklar yildan
+  // yila degisiyor — ham string eslesmesi kirilgan olurdu.
+  const w = readText('aidan-worker/worker.js');
+  const i = w.indexOf('function isyNorm');
+  const block = w.slice(i, i + 700);
+  assert.ok(/IVXLCDM/.test(block), 'roma rakami temizligi olmali');
+  assert.ok(/toLocaleLowerCase\('tr'\)/.test(block), 'Turkce kucuk harf donusumu olmali');
 });

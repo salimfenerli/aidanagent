@@ -3999,7 +3999,10 @@ function buildFundYears(res, raw) {
   const slot = y => {
     if (!map.has(y)) map.set(y, { year: y, revenue: null, netIncome: null, grossProfit: null, operatingIncome: null,
       equity: null, totalAssets: null, totalLiab: null, longTermDebt: null, shortDebt: null, cash: null, retainedEarnings: null,
-      dna: null, capex: null, dividendsPaid: null, opCashFlow: null });
+      dna: null, capex: null, dividendsPaid: null, opCashFlow: null,
+      // ROIC'te YASAL degil EFEKTIF vergi orani icin (tesvikli/serbest bolge
+      // sirketinde fark buyuk olur). Ayni istekten bedava gelir.
+      incomeBeforeTax: null, incomeTaxExpense: null });
     return map.get(y);
   };
   for (const s of inc) {
@@ -4009,6 +4012,8 @@ function buildFundYears(res, raw) {
     o.netIncome = raw(s.netIncome);
     o.grossProfit = raw(s.grossProfit);
     o.operatingIncome = raw(s.operatingIncome) != null ? raw(s.operatingIncome) : raw(s.ebit);
+    o.incomeBeforeTax = raw(s.incomeBeforeTax);
+    o.incomeTaxExpense = raw(s.incomeTaxExpense);
   }
   for (const s of bal) {
     const y = yearOf(s); if (y == null) continue;
@@ -4031,6 +4036,220 @@ function buildFundYears(res, raw) {
     o.opCashFlow = raw(s.totalCashFromOperatingActivities);
   }
   return Array.from(map.values()).sort((a, b) => b.year - a.year).slice(0, 6);
+}
+
+// ============================================================
+// 🇹🇷 İŞ YATIRIM MALİ TABLO — BIST için 10 YILLIK geçmiş
+// ============================================================
+// NEDEN AYRI KAYNAK: Yahoo, BIST'te yalnızca 4 yıllık tablo veriyor (kendi
+// Financials sekmesi de ücretsiz hesapta 4 yıl gösteriyor, 10 yıl Premium'da).
+// Buffett 10 YILLIK tutarlı geçmiş ister; 4 yıl bir çevrimi bile kapsamayabilir.
+// İş Yatırım'ın kendi sitesinin kullandığı MaliTablo ucu bunu ücretsiz veriyor.
+//
+// ⚠️ RESMİ API DEĞİL — İş Yatırım'ın iç ucu. Habersiz kırılabilir ve aşırı
+// istek IP engeline yol açabilir. Bu yüzden:
+//   · YALNIZCA tek hisse kartında kullanılır, TARAMADA KULLANILMAZ
+//     (tarama 25 sembol × 3 istek = tek taramada ~75 istek eder)
+//   · 24 saat Cloudflare cache — aynı hisseye gün içinde tekrar bakmak istek üretmez
+//   · Hata olursa SESSİZCE Yahoo'ya düşer, uygulama hiçbir şey kaybetmez
+//
+// İstek başına EN FAZLA 4 dönem taşır → 10 yıl = 3 istek (Cloudflare'ın istek
+// başına 50 subrequest sınırı içinde rahat).
+const ISY_BASE = 'https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo';
+const ISY_MAX_YEARS = 12;
+const ISY_PER_REQ = 4;
+// financialGroup — bizim iki kriter setimizle BİREBİR örtüşür:
+//   XI_29  = sanayi/hizmet şirketi  (bfScoreOperating)
+//   UFRS   = banka/finans           (bfScoreFinancial)
+// Yani bu uç, kurum tipi tespitine DÖRDÜNCÜ ve en güvenilir katmanı ekler:
+// hangi grup veri döndürdüyse şirket odur.
+const ISY_GROUPS = ['XI_29', 'UFRS', 'UFRS_K'];
+
+const ISY_HEADERS = {
+  'Accept': '*/*',
+  'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+  'X-Requested-With': 'XMLHttpRequest',
+  'Referer': 'https://www.isyatirim.com.tr/',
+};
+
+// Kalem adlarını eşleştirmeden ÖNCE normalize et: başlardaki roma rakamları
+// ("XVI. ÖZKAYNAKLAR"), madde numaraları ("16.4.2 Dönem Net Kar/Zararı"),
+// parantez içi açıklamalar ve noktalama temizlenir. Tablo başlıkları yıldan
+// yıla küçük farklarla yazıldığı için ham string eşleşmesi kırılgan olurdu.
+function isyNorm(s) {
+  return String(s == null ? '' : s)
+    .replace(/^[IVXLCDM]+\s*[.\-]\s*/i, '')
+    .replace(/^\d+(\.\d+)*\s*[.\-]?\s*/, '')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^0-9A-Za-zÇĞİıÖŞÜçğöşü ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLocaleLowerCase('tr');
+}
+
+// Alan → aday kalem adları (normalize edilmiş halleriyle karşılaştırılır).
+// İlk eşleşen kazanır; sıra ÖNEMLİ (en spesifik başta).
+const ISY_FIELDS_OPER = {
+  revenue: ['satis gelirleri', 'hasilat', 'satis gelirleri net'],
+  grossProfit: ['brut kar zarar', 'brut esas faaliyet kari zarari', 'brut kar'],
+  operatingIncome: ['faaliyet kari zarari', 'esas faaliyet kari zarari'],
+  netIncome: ['donem kari zarari', 'donem net kar zarari', 'net donem kari zarari'],
+  incomeBeforeTax: ['surdurulen faaliyetler vergi oncesi kari zarari', 'vergi oncesi kar zarar'],
+  incomeTaxExpense: ['surdurulen faaliyetler vergi geliri gideri', 'donem vergi geliri gideri', 'vergi geliri gideri'],
+  totalAssets: ['toplam varliklar', 'aktif toplami'],
+  totalLiab: ['toplam kaynaklar', 'pasif toplami'],
+  equity: ['ozkaynaklar', 'ana ortakliga ait ozkaynaklar'],
+  cash: ['nakit ve nakit benzerleri'],
+  retainedEarnings: ['gecmis yillar kar zararlari', 'gecmis yillar karlari zararlari'],
+  opCashFlow: ['isletme faaliyetlerinden kaynaklanan net nakit', 'isletme faaliyetlerinden nakit akislari'],
+  capex: ['sabit sermaye yatirimlari', 'maddi duran varlik alimlari'],
+  dna: ['amortisman giderleri', 'amortisman itfa paylari', 'amortisman ve itfa paylari'],
+  dividendsPaid: ['odenen temettuler', 'odenen kar paylari', 'temettu odemeleri', 'odenen temettu'],
+};
+const ISY_FIELDS_BANK = {
+  totalAssets: ['aktif toplami', 'toplam varliklar'],
+  totalLiab: ['pasif toplami', 'toplam kaynaklar'],
+  equity: ['ozkaynaklar'],
+  revenue: ['faiz gelirleri'],
+  operatingIncome: ['net faiz geliri gideri', 'net faiz geliri'],
+  netIncome: ['net donem kari zarari', 'donem net kar zarari'],
+  incomeBeforeTax: ['vergi oncesi kar zarar', 'surdurulen faaliyetler vergi oncesi kari zarari'],
+  incomeTaxExpense: ['vergi karsiligi', 'surdurulen faaliyetler vergi karsiligi'],
+  cash: ['nakit degerler ve merkez bankasi'],
+  retainedEarnings: ['gecmis yillar kar zararlari'],
+  dividendsPaid: ['odenen temettuler', 'odenen kar paylari'],
+};
+
+function isyNum(v) {
+  if (v == null || v === '' || v === 'null') return null;
+  const n = Number(String(v).replace(/\s/g, '').replace(/,/g, '.'));
+  return isFinite(n) ? n : null;
+}
+
+// Tek istek = 4 yıl. Dönem 12 → yıllık (konsolide tam yıl).
+async function isyFetchChunk(code, group, years) {
+  const p = new URLSearchParams({ companyCode: code, exchange: 'TRY', financialGroup: group });
+  years.forEach((y, i) => { p.set('year' + (i + 1), String(y)); p.set('period' + (i + 1), '12'); });
+  const r = await fetch(ISY_BASE + '?' + p.toString(), {
+    headers: ISY_HEADERS,
+    // 24 saat cache — mali tablo yılda 4 kez değişir, günde bir çekmek fazlasıyla yeter
+    cf: { cacheTtl: 86400, cacheEverything: true },
+  });
+  if (!r.ok) throw new Error('http ' + r.status);
+  const j = await r.json();
+  if (!j || j.ok === false) throw new Error('kaynak ok=false döndü');
+  const items = Array.isArray(j.value) ? j.value : [];
+  return items;
+}
+
+// Kalem listesini yıl bazlı objelere çevirir.
+// ⚠️ "Finansal Borçlar" tabloda İKİ KEZ geçer (kısa ve uzun vadeli bölümlerde).
+// itemCode sırasına göre ilki kısa, ikincisi uzun vadeli kabul edilir; ikisi de
+// bulunamazsa alan null kalır — UYDURULMAZ.
+function isyRows(items, years, isBank) {
+  const map = isBank ? ISY_FIELDS_BANK : ISY_FIELDS_OPER;
+  const out = years.map(y => ({ year: y, src: 'isyatirim' }));
+  const matched = {}, unmatched = [];
+  const debtHits = [];
+  for (const it of items) {
+    const desc = isyNorm(it && it.itemDescTr);
+    if (!desc) continue;
+    if (desc === 'finansal borclar') { debtHits.push(it); continue; }
+    let field = null;
+    for (const k of Object.keys(map)) {
+      if (matched[k]) continue;              // ilk eşleşen kazanır
+      if (map[k].indexOf(desc) >= 0) { field = k; break; }
+    }
+    if (!field) { if (unmatched.length < 60) unmatched.push(it.itemDescTr); continue; }
+    matched[field] = it.itemDescTr;
+    for (let i = 0; i < years.length; i++) out[i][field] = isyNum(it['value' + (i + 1)]);
+  }
+  if (debtHits.length) {
+    for (let i = 0; i < years.length; i++) {
+      out[i].shortDebt = isyNum(debtHits[0]['value' + (i + 1)]);
+      out[i].longDebt = debtHits[1] ? isyNum(debtHits[1]['value' + (i + 1)]) : null;
+    }
+    matched.shortDebt = 'Finansal Borçlar (1.)';
+    if (debtHits[1]) matched.longDebt = 'Finansal Borçlar (2.)';
+  }
+  return { rows: out, matched, unmatched };
+}
+
+async function handleBistFinancialsApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const code = String(body.symbol || '').trim().toUpperCase().replace(/\.IS$/, '');
+  if (!code || !/^[A-Z0-9]{2,10}$/.test(code)) return jsonCors({ error: 'bad symbol' }, 400, cors);
+  const user = await verifyUser(env, (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, ''));
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+
+  const want = Math.min(ISY_MAX_YEARS, Math.max(4, Number(body.years) || 10));
+  // Son KAPANMIŞ yıl — içinde bulunduğumuz yılın tablosu henüz yok
+  const lastYear = new Date().getUTCFullYear() - 1;
+  const allYears = [];
+  for (let i = 0; i < want; i++) allYears.push(lastYear - i);
+
+  try {
+    let group = null, items = null;
+    // Grup denemesi SADECE ilk parça için — hangisinin veri döndürdüğü
+    // şirketin tipini de söyler (4. kurum tipi katmanı).
+    const first = allYears.slice(0, ISY_PER_REQ);
+    for (const g of ISY_GROUPS) {
+      try {
+        const got = await isyFetchChunk(code, g, first);
+        if (got.length) { group = g; items = got; break; }
+      } catch (_) { /* sonraki grubu dene */ }
+    }
+    if (!group) return jsonCors({ ok: false, error: 'İş Yatırım bu sembol için veri döndürmedi' }, 200, cors);
+
+    const isBank = group !== 'XI_29';
+    const chunks = [{ years: first, items }];
+    // Kalan yıllar — biri patlarsa DİĞERLERİ KAYBOLMAZ, elde ne varsa onunla devam
+    for (let i = ISY_PER_REQ; i < allYears.length; i += ISY_PER_REQ) {
+      const ys = allYears.slice(i, i + ISY_PER_REQ);
+      try {
+        const got = await isyFetchChunk(code, group, ys);
+        if (got.length) chunks.push({ years: ys, items: got });
+      } catch (_) { break; }
+    }
+
+    let rows = [], matched = {}, unmatched = [];
+    for (const c of chunks) {
+      const p = isyRows(c.items, c.years, isBank);
+      rows = rows.concat(p.rows);
+      matched = Object.assign({}, p.matched, matched);
+      if (unmatched.length < 60) unmatched = unmatched.concat(p.unmatched).slice(0, 60);
+    }
+    // Tamamen boş yılları at (şirket o yıl halka açık değildi vb.)
+    rows = rows.filter(r => Object.keys(r).some(k => k !== 'year' && k !== 'src' && r[k] != null));
+    rows.sort((a, b) => b.year - a.year);
+
+    return jsonCors({
+      ok: true,
+      source: 'isyatirim',
+      symbol: code,
+      group,
+      kind: isBank ? 'financial' : 'operating',
+      years: rows,
+      requested: allYears.length,
+      // 🔬 TEŞHİS — birim ve eşleşme sorunları canlıda tek bakışta görülsün.
+      // Eşleşmeyen kalem adları burada döner; yeni bir alan gerekirse
+      // ISY_FIELDS_* haritasına eklemek için kaynağa bakmak gerekmez.
+      diag: { matched, unmatchedSample: unmatched.slice(0, 40) },
+      at: Date.now(),
+    }, 200, cors);
+  } catch (e) {
+    return jsonCors({ ok: false, error: e.message }, 200, cors);
+  }
 }
 
 async function handleStockFundamentalsApi(request, env) {
@@ -4571,9 +4790,13 @@ async function handleStockAnalysisApi(request, env) {
   · Owner Earnings = Buffett'in 1986 mektubunda tanıttığı "sahip kârı", işletme nakit akışından bakım yatırımı düşülmüş hali; muhasebe kârından daha dürüsttür çünkü makineyi yenilemenin maliyetini saymaya devam eder.
   · 1 Dolar Testi = şirketin dağıtmayıp tuttuğu her 1 birim kârın piyasa değerine en az 1 birim eklemesi beklenir, eklemiyorsa o para temettü olarak dağıtılsaydı daha iyiydi.
   · Seyreltme = özsermaye yalnızca ① tutulan kâr ② dış sermaye ile büyür; ikisinin farkı sermaye artırımını gösterir. Buffett sermaye artırımını sevmez, geri alımı sever.
+  · Çember / iş tipi = "circle of competence". Emtia tipi iş (çelik, rafineri, madencilik, çimento, denizcilik) satış fiyatını belirleyemez; Buffett'in açıkça uzak durduğu kollar (havayolu, altın) ayrıca işaretlenir. ⚠️ ETİKET TEK BAŞINA KARAR VERMEZ — ceza yalnızca rakamlar da onayladığında (brüt marj hem düşük hem dalgalı) ağırlaşır. Bunu ${name}'e söyle: kanıt, etiketin önündedir.
+  · Sermaye dağıtımı rasyonelliği = Buffett'in 1984 mektubu. Kural: "tutulan her 1 dolar en az 1 dolar piyasa değeri yaratacaksa TUTULMALI, yaratmayacaksa DAĞITILMALI." Yani getiri engel oranının üstündeyse temettü dağıtmamak DOĞRUDUR; altındaysa kârı elde tutmak değer yakar. Bu kriter yönetim kalitesinin ölçülebilen tek yüzüdür — dürüstlük, şeffaflık ve "kurumsal zorlama"ya direnç ÖLÇÜLEMEZ, bunu da söyle.
   · Güvenlik payı = Buffett'in "margin of safety" ilkesi. Operasyonel şirkette içsel değer = normalize sahip kârı ÷ engel oranı; bankada hak edilen PD/DD = ROE ÷ engel oranı. ⚠️ HER İKİSİNDE DE BÜYÜME SIFIR VARSAYILDI — bunu MUTLAKA söyle. Sebebini de açıkla: %35 iskonto oranında küçük bir büyüme varsayımı sonucu savurur, büyüme eklemek hassasiyet tiyatrosu olurdu. Yani bu içsel değer bir TABAN tahminidir, hedef fiyat DEĞİLDİR.
   · engel oranı = paranın alternatif getirisi (TR'de mevduat/tahvil faizi).
 - "veri yok" yazan kriter hakkında YORUM YAPMA — sadece eksik olduğunu söyle. Veri kapsamı %70'in altındaysa skoru temkinli sun.
+- 🇹🇷 TMS 29 KATMANI: bayraklarda "TMS 29" geçiyorsa MUTLAKA açıkla. Türkiye'de 2023 yıl sonundan itibaren enflasyon muhasebesi uygulanıyor; 2022 ve öncesi tablolar farklı satın alma gücüyle yazıldı. Sonucu net söyle: YIL İÇİ oranlar (marj, ROE, ROA, capex/ciro) güvenlidir çünkü pay ve payda aynı yılın parasıdır; ama TREND, BİLEŞİK BÜYÜME ve 1 Dolar Testi gibi YILLAR ARASI karşılaştırmalar bozulur. Model bu hesapları 2023 sonrasıyla sınırladı — bunu bir güç değil, bir SINIR olarak anlat.
+- ⏳ ETİKET SINIRI: "labelCapped" işaretliyse ya da yıl sayısı 5'ten azsa söyle — Buffett 10 yıllık tutarlı geçmiş ister, Yahoo genelde 4 yıl verir. Bu skor kısa bir pencereden bakıyor; "güçlü kalite" etiketi bilinçli olarak verilmedi.
 - KURUM TİPİ "holding" ya da "gayrimenkul yatırım ortaklığı" ise bunu ayrıca söyle: holdingde konsolide tablo bağlı ortaklıkları ve azınlık paylarını karıştırır, GYO'da kâr amortisman ve yeniden değerlemeden ağır etkilenir — her iki yapıda da oranlar olduğundan farklı görünebilir.
 - BANKA setinde şu kör noktayı MUTLAKA söyle: takipteki kredi oranı, karşılık yeterliliği ve sermaye yeterlilik rasyosu Yahoo verisinde YOKTUR; bir banka bu üçü bozulurken kâğıt üstünde hâlâ kârlı görünebilir.
 - BUFFETT'İN REDDETTİKLERİNİ sen de kullanma: FAVÖK/EBITDA'ya dayanma (amortismanı geri eklemek makinelerin bedava yenilendiğini varsaymaktır), beta/oynaklığı "risk" diye sunma (risk = kalıcı sermaye kaybı ihtimalidir, fiyatın oynaması değil), analist hedefini kanıt sayma, faiz/makro tahmini yapma. ${name} sorarsa NEDEN reddedildiğini açıklayabilirsin.
@@ -7624,6 +7847,12 @@ export default {
     // 📰 Hisse haberleri — Yahoo news proxy + opsiyonel AI özet
     if (url.pathname === '/stock-fundamentals') {
       return handleStockFundamentalsApi(request, env);
+    }
+
+    // 🇹🇷 BIST 10 yillik mali tablo (Is Yatirim) — SADECE hisse karti,
+    // taramada KULLANILMAZ (resmi olmayan uc, IP engeli riski).
+    if (url.pathname === '/bist-financials') {
+      return handleBistFinancialsApi(request, env);
     }
     // 💪 Hevy antrenman senkronu
     if (url.pathname === '/hevy-sync') {

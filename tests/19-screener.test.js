@@ -26,6 +26,9 @@ after(() => { try { A.close(); } catch (_) {} });
 // ile canli referans alinir (tarayicidaki global lexical scope davranisi).
 function D() { return A.evalIn('data'); }
 
+// ⚠️ SCREEN_LIMITS top-level `const` — window'a YAZILMAZ (data ile ayni kural)
+const LIM = A.evalIn('SCREEN_LIMITS');
+
 const SRC = readText('stocks.js');
 const WK = readText('aidan-worker/worker.js');
 
@@ -394,7 +397,7 @@ test('engel orani her zaman TRY yazar — setBuffettHurdle() cagirmaz', () => {
   assert.match(fn, /buffettHurdle\('TRY'\)/);
   assert.match(fn, /buffettHurdle\.TRY = n/);
   // esik degisince on skorlar yeniden hesaplanmali, Buffett skoru DOKUNULMAZ
-  assert.match(fn, /screenPreScore\(row, n\)/);
+  assert.match(fn, /screenPreScore\(row, n, !!row\.fin\)/);
   assert.ok(!/buffettScore\(/.test(fn), 'esik degisince Buffett skoru yeniden hesaplanmamali');
 });
 
@@ -761,8 +764,8 @@ test('REGRESYON: derin asamaya deepCount hisse gider, listCount kadari GOSTERILI
   const i = src.indexOf('async function runScreener');
   assert.ok(i > 0);
   const block = src.slice(i, i + 2600);
-  assert.ok(/res\.passed\.slice\(0, SCREEN_LIMITS\.deepCount\)/.test(block),
-    'kademe 1 ciktisi deepCount ile kirpilmali');
+  assert.ok(/screenSelectDeep\(res, SCREEN_LIMITS\)/.test(block),
+    'derin asama secimi screenSelectDeep ile yapilmali');
   assert.ok(!/res\.passed\.slice\(0, SCREEN_LIMITS\.listCount\)/.test(block),
     'listCount ile erken kirpma geri gelmemeli');
   assert.ok(/await screenDeepStage\(top, token\)/.test(block),
@@ -789,4 +792,113 @@ test('worker tarama prompt u kurum tipi ve guvenlik payini ogretiyor', () => {
   assert.ok(/BİREBİR AYNI ÖLÇEK DEĞİLDİR/.test(w), 'banka-sanayi skoru karsilastirma yasagi yok');
   // Tavsiye yasaklari gevsemedi
   assert.ok(/güvenlik payı pozitif olsa BİLE/i.test(w), 'pozitif guvenlik payi deger yargisina izin vermemeli');
+});
+
+// ============================================================
+// KADEME 1'DE BANKA AYRIMI + KIYI PAYI (12 Agu 2026)
+// ============================================================
+test('banka ROE kapisini ATLAR — kaldirac kademe 1 de arindirilamaz', () => {
+  const hyg = (r, h) => W.screenHygiene(r, {}, h);
+  // Kaldiracsiz sanayi sirketi: ROE engelin altinda → elenir
+  const sanayi = row({ symbol: 'FROTO', trailingPE: 20, priceToBook: 2 }); // ROE %10
+  assert.strictEqual(hyg(sanayi, 35).ok, false);
+  assert.strictEqual(hyg(sanayi, 35).why, 'lowroe');
+  // Ayni oranlarla banka: ROE kapisindan gecer, karari kademe 2 verir
+  const banka = row({ symbol: 'GARAN', trailingPE: 20, priceToBook: 2 });
+  assert.strictEqual(hyg(banka, 35).ok, true);
+  assert.strictEqual(hyg(banka, 35).fin, true);
+});
+
+test('banka DIGER kapilardan muaf DEGIL (likidite, buyukluk, F/K)', () => {
+  const hyg = (r, h) => W.screenHygiene(r, {}, h);
+  assert.strictEqual(hyg(row({ symbol: 'GARAN', marketCap: 1e8 }), 35).why, 'small');
+  assert.strictEqual(hyg(row({ symbol: 'GARAN', avgVolume: 100 }), 35).why, 'illiquid');
+  assert.strictEqual(hyg(row({ symbol: 'GARAN', trailingPE: 90, priceToBook: 40 }), 35).why, 'expensive');
+});
+
+test('kademe 1 skorunda bankada agirlik FIYATA kayar (7/3 degil 4/6)', () => {
+  const r = row({ symbol: 'GARAN', trailingPE: 5, priceToBook: 2 });
+  const sanayi = W.screenPreScore(r, 35, false);
+  const banka = W.screenPreScore(r, 35, true);
+  const w = (s, k) => s.parts.find(p => p.key === k).weight;
+  assert.strictEqual(w(sanayi, 'roe'), 7);
+  assert.strictEqual(w(sanayi, 'ey'), 3);
+  assert.strictEqual(w(banka, 'roe'), 4);
+  assert.strictEqual(w(banka, 'ey'), 6);
+  // Toplam agirlik iki sette de 10 — olcek kaymaz
+  assert.strictEqual(sanayi.parts.reduce((a, p) => a + p.weight, 0), 10);
+  assert.strictEqual(banka.parts.reduce((a, p) => a + p.weight, 0), 10);
+  assert.match(banka.parts.find(p => p.key === 'roe').note, /kaldıraçla şişer/);
+});
+
+test('banka kotasi: yuksek ROE li sanayi hisseleri bankayi tamamen disari itemez', () => {
+  const rows = [];
+  // 30 tane cok yuksek skorlu sanayi hissesi
+  for (let i = 0; i < 30; i++) {
+    rows.push(row({ symbol: 'SAN' + i, ySymbol: 'SAN' + i + '.IS', trailingPE: 4, priceToBook: 8 }));
+  }
+  // 3 banka, daha dusuk kademe 1 skoruyla
+  for (const s of ['GARAN', 'AKBNK', 'YKBNK']) {
+    rows.push(row({ symbol: s, ySymbol: s + '.IS', trailingPE: 6, priceToBook: 1.2 }));
+  }
+  const res = W.screenRank(rows, { hurdlePct: 35 });
+  const deep = W.screenSelectDeep(res, LIM);
+  const banks = deep.filter(r => r.fin).map(r => r.symbol).sort().join(',');
+  assert.strictEqual(banks, 'AKBNK,GARAN,YKBNK', 'uc banka da derin asamaya girmeliydi');
+  assert.ok(deep.length <= LIM.deepCount + LIM.edgeQuota);
+});
+
+test('kiyi payi: kil payi elenen hisse mali tabloya sorulur, isaretlenir', () => {
+  const rows = [
+    // ROE %30 — engel %35'in altinda ama %70 bandinin (24,5) ustunde → kiyi
+    row({ symbol: 'KIYI', ySymbol: 'KIYI.IS', trailingPE: 10, priceToBook: 3 }),
+    // ROE %5 — bandin cok altinda → kiyi DEGIL, sadece elenmis
+    row({ symbol: 'DIP', ySymbol: 'DIP.IS', trailingPE: 20, priceToBook: 1 }),
+  ];
+  const res = W.screenRank(rows, { hurdlePct: 35 });
+  assert.strictEqual(res.passed.length, 0, 'ikisi de kapidan gecmemeli');
+  assert.strictEqual(res.edge.map(r => r.symbol).join(','), 'KIYI');
+  assert.strictEqual(res.dropCounts.lowroe, 2, 'ikisi de elenen sayisina yazilmali');
+  const deep = W.screenSelectDeep(res, LIM);
+  assert.strictEqual(deep.length, 1);
+  assert.strictEqual(deep[0].edge, true, 'kiyi satiri isaretli olmali');
+});
+
+test('kiyi payi kotayi asamaz ve normal siranin ONUNE gecemez', () => {
+  const rows = [];
+  for (let i = 0; i < 30; i++) rows.push(row({ symbol: 'OK' + i, ySymbol: 'OK' + i + '.IS', trailingPE: 5, priceToBook: 5 }));
+  for (let i = 0; i < 20; i++) rows.push(row({ symbol: 'ED' + i, ySymbol: 'ED' + i + '.IS', trailingPE: 10, priceToBook: 3 }));
+  const res = W.screenRank(rows, { hurdlePct: 35 });
+  const deep = W.screenSelectDeep(res, LIM);
+  const edges = deep.filter(r => r.edge);
+  assert.strictEqual(edges.length, LIM.edgeQuota, 'kiyi kotasi kadar olmali');
+  // Kiyi satirlari listenin SONUNDA
+  const firstEdgeIdx = deep.findIndex(r => r.edge);
+  assert.ok(deep.slice(0, firstEdgeIdx).every(r => !r.edge), 'kiyi satirlari sonda olmali');
+  assert.strictEqual(firstEdgeIdx, LIM.deepCount);
+});
+
+test('screenSelectDeep deterministik ve tekrarsiz', () => {
+  const rows = [];
+  for (const s of ['GARAN', 'AKBNK', 'ASELS', 'BIMAS', 'FROTO']) {
+    rows.push(row({ symbol: s, ySymbol: s + '.IS', trailingPE: 6, priceToBook: 3 }));
+  }
+  const res = W.screenRank(rows, { hurdlePct: 35 });
+  const a = W.screenSelectDeep(res, LIM).map(r => r.symbol).join(',');
+  const b = W.screenSelectDeep(res, LIM).map(r => r.symbol).join(',');
+  assert.strictEqual(a, b, 'ayni girdi ayni cikti');
+  assert.strictEqual(new Set(a.split(',')).size, a.split(',').length, 'tekrar eden sembol olmamali');
+});
+
+test('kademe 1 banka listesi buffettScore ile AYNI kaynagi kullanir', () => {
+  // Iki ayri liste tutulsa biri gunceLLenir digeri unutulur — tek kaynak sart.
+  const i = SRC.indexOf('function screenIsFinancial');
+  assert.ok(i > 0);
+  assert.ok(/BF_FIN_SYMBOLS\.indexOf/.test(SRC.slice(i, i + 400)),
+    'kademe 1 kendi banka listesini tutmamali');
+});
+
+test('engel orani degisince banka agirligi KORUNUR', () => {
+  const src = SRC.slice(SRC.indexOf('async function setScreenHurdle'), SRC.indexOf('async function setScreenHurdle') + 1600);
+  assert.ok(/screenPreScore\(row, n, !!row\.fin\)/.test(src), 'fin bayragi gecirilmeli');
 });
