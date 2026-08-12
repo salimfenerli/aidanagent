@@ -1188,3 +1188,67 @@ test('worker: kalem adi normalizasyonu roma rakami ve madde numarasini atar', ()
   assert.ok(/IVXLCDM/.test(block), 'roma rakami temizligi olmali');
   assert.ok(/toLocaleLowerCase\('tr'\)/.test(block), 'Turkce kucuk harf donusumu olmali');
 });
+
+test('KRITIK: Yahoo hic mali tablo vermese bile olcek TURETILMIS CAPA ile bulunur', () => {
+  // BIST'te Yahoo cogu hisse icin yillik tablo dondurmuyor — Is Yatirim'a EN COK
+  // ihtiyac duyulan durum tam bu. Cakisan yil yok; olcek piyasa degeri, PD/DD ve
+  // F/K'dan turetilir (bunlar mali tablodan BAGIMSIZ modullerden gelir).
+  const quote = { marketCap: 6e10, priceToBook: 2, trailingPE: 10 };
+  // => beklenen ozsermaye 3e10, beklenen net kar 6e9
+  const isy = [{ year: 2024, equity: 3e7, netIncome: 6e6, revenue: 5e7 }]; // bin TL
+  const det = W.isyDetectScale(isy, [], quote);
+  assert.strictEqual(det.scale, 1000);
+  assert.match(det.method, /türetilmiş/);
+});
+
+test('turetilmis capa: kaynak tam TL veriyorsa olcek 1', () => {
+  const quote = { marketCap: 6e10, priceToBook: 2, trailingPE: 10 };
+  const isy = [{ year: 2024, equity: 3e10, netIncome: 6e9 }];
+  assert.strictEqual(W.isyDetectScale(isy, [], quote).scale, 1);
+});
+
+test('turetilmis capa YAKLASIKTIR — makul sapmayi kabul eder', () => {
+  const quote = { marketCap: 6e10, priceToBook: 2, trailingPE: 10 };
+  // %40 sapma (PD/DD son ceyrek defter degerini kullanir) → yine 1000 demeli
+  assert.strictEqual(W.isyDetectScale([{ year: 2024, equity: 4.2e7, netIncome: 8.4e6 }], [], quote).scale, 1000);
+});
+
+test('CAPRAZ KONTROL: iki capa birbirini tutmuyorsa olcek NULL', () => {
+  // Ozsermaye capasi ×1000, net kar capasi ×10 diyor → ayni sirketi/konsolidasyonu
+  // anlatmiyorlar. 10'un kuvvetine oturmasi burada hicbir sey kanitlamaz.
+  const quote = { marketCap: 6e10, priceToBook: 2, trailingPE: 10 };
+  const det = W.isyDetectScale([{ year: 2024, equity: 3e7, netIncome: 6e8 }], [], quote);
+  assert.strictEqual(det.scale, null);
+  assert.match(det.reason, /çapalar birbirini tutmuyor/);
+});
+
+test('capalar UYUMLUYSA gecer (yanlis pozitif korumasi asiri sikmasin)', () => {
+  const quote = { marketCap: 6e10, priceToBook: 2, trailingPE: 10 };
+  // ikisi de ~1000 kat, aralarinda %30 fark var — kabul edilmeli
+  const det = W.isyDetectScale([{ year: 2024, equity: 3e7, netIncome: 7.8e6 }], [], quote);
+  assert.strictEqual(det.scale, 1000);
+});
+
+test('cakisan yil VARSA o yontem kazanir (daha kesin)', () => {
+  const quote = { marketCap: 6e10, priceToBook: 2, trailingPE: 10 };
+  const yahoo = [{ year: 2024, equity: 3e10, revenue: 5e10, totalAssets: 8e10, netIncome: 6e9 }];
+  const isy = [{ year: 2024, equity: 3e7, revenue: 5e7, totalAssets: 8e7, netIncome: 6e6 }];
+  const det = W.isyDetectScale(isy, yahoo, quote);
+  assert.strictEqual(det.scale, 1000);
+  assert.strictEqual(det.method, 'çakışan yıl');
+});
+
+test('ne cakisan yil ne piyasa degeri varsa NULL (uydurma yok)', () => {
+  const det = W.isyDetectScale([{ year: 2024, equity: 100 }], [], {});
+  assert.strictEqual(det.scale, null);
+  assert.match(det.reason, /ölçek ölçülemedi/);
+});
+
+test('Yahoo 0 yil verse bile birlestirme 10 yili getirir', () => {
+  const isy = [];
+  for (let i = 0; i < 10; i++) isy.push({ year: 2024 - i, revenue: 1000, netIncome: 100, equity: 800 });
+  const m = W.isyMergeYears([], isy, 1000);
+  assert.strictEqual(m.years.length, 10);
+  assert.strictEqual(m.added, 10);
+  assert.strictEqual(m.years[0].revenue, 1000000);
+});

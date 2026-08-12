@@ -38,7 +38,11 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15   # test adimi eklendi (jsdom yuklemeleri sure alir)
+    # ⚠️ 12 Agu 2026: 20 test dosyasi × jsdom penceresi. Varsayilan paralellikte
+    # (CPU sayisi kadar) GitHub runner'inda bellek yetmeyip is dusebiliyor —
+    # o zaman TESTLER degil DEPLOY'UN TAMAMI bloke olur ve sessizce eski surum
+    # canlida kalir. Sure ve paralellik bilincli olarak gevsetildi.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 

@@ -1043,7 +1043,7 @@ function bfDeepFinHtml() {
         <div>${un.map(x => escapeHtml(String(x))).join(' · ')}</div></details>` : '';
   return `<div class="bf-deep good">
     <b>${tr(s.total)} yıllık tablo</b> — İş Yatırım'dan ${tr(s.added)} yıl eklendi${s.filled ? `, ${tr(s.filled)} eksik alan tamamlandı` : ''} · ${escapeHtml(grp)}
-    <span class="bf-deep-why">birim ölçeği ölçüldü: ×${tr(s.scale)} (Yahoo ile çakışan yıldan)</span>${diag}
+    <span class="bf-deep-why">birim ölçeği ölçüldü: ×${tr(s.scale)} · yöntem: ${escapeHtml(String(s.method || '—'))}</span>${diag}
   </div>`;
 }
 
@@ -1115,10 +1115,20 @@ const ISY_MONEY_FIELDS = ['revenue', 'grossProfit', 'operatingIncome', 'netIncom
 // tamamen bozar. Sabit bir çarpan varsaymak yerine ÇAKIŞAN yıldan ölçülür:
 // aynı yılın aynı kalemi iki kaynakta karşılaştırılır, oran 10'un kuvvetine
 // yuvarlanır. Oran tutarsızsa ölçek `null` döner ve veri KULLANILMAZ.
-function isyDetectScale(isyYears, yahooYears) {
+// İKİ YÖNTEM, sırayla:
+//   A) Yahoo ile ÇAKIŞAN yıl — aynı yılın aynı kalemi. Kesin, dar tolerans.
+//   B) TÜRETİLMİŞ ÇAPA — Yahoo mali tablo vermese bile piyasa değeri, PD/DD ve
+//      F/K'yı verir (bunlar ayrı modüllerden gelir). Oradan beklenen özsermaye
+//      ve net kâr türetilip İş Yatırım'ınkiyle karşılaştırılır.
+// 🔴 B ŞART: Yahoo'nun BIST'te mali tablo döndürmediği hisseler tam da İş
+// Yatırım'a en çok ihtiyaç duyulan hisselerdir. Yalnız A olsaydı katman tam
+// orada çalışmazdı — ölçek ölçülemez, veri çöpe giderdi.
+function isyDetectScale(isyYears, yahooYears, quote) {
+  const rows = Array.isArray(isyYears) ? isyYears : [];
+  // ——— A) Çakışan yıl ———
   const cand = ['revenue', 'totalAssets', 'equity', 'netIncome'];
   const ratios = [];
-  for (const iy of (isyYears || [])) {
+  for (const iy of rows) {
     const yy = (yahooYears || []).find(y => y && y.year === iy.year);
     if (!yy) continue;
     for (const f of cand) {
@@ -1128,16 +1138,57 @@ function isyDetectScale(isyYears, yahooYears) {
       ratios.push(Math.abs(v / a));
     }
   }
-  if (!ratios.length) return { scale: null, reason: 'Yahoo ile çakışan yıl bulunamadı — ölçek ölçülemedi' };
-  const med = bfMedian(ratios);
-  if (!(med > 0)) return { scale: null, reason: 'ölçek oranı geçersiz' };
-  const scale = Math.pow(10, Math.round(Math.log10(med)));
-  // Güven kontrolü: medyan, yuvarlanan değerden %25'ten fazla sapıyorsa iki
-  // kaynak aynı şeyi ölçmüyor demektir (farklı konsolidasyon, düzeltme vb.)
-  if (Math.abs(med / scale - 1) > 0.25) {
-    return { scale: null, reason: `iki kaynak tutarsız (oran ${bfR(med, 3)}) — veri kullanılmadı` };
+  if (ratios.length) {
+    const med = bfMedian(ratios);
+    if (med > 0) {
+      const scale = Math.pow(10, Math.round(Math.log10(med)));
+      // Dar tolerans: aynı yılın aynı kalemi, iki kaynak da doğruysa neredeyse birebir olmalı
+      if (Math.abs(med / scale - 1) <= 0.25) {
+        return { scale, method: 'çakışan yıl', samples: ratios.length, med: bfR(med, 4) };
+      }
+      return { scale: null, reason: `iki kaynak tutarsız (oran ${bfR(med, 3)}) — veri kullanılmadı` };
+    }
   }
-  return { scale, samples: ratios.length, med: bfR(med, 4) };
+  // ——— B) Türetilmiş çapa ———
+  // özsermaye ≈ piyasa değeri ÷ PD/DD · net kâr ≈ piyasa değeri ÷ F/K
+  const q = quote || {};
+  const mc = (q.marketCap != null && isFinite(q.marketCap) && q.marketCap > 0) ? q.marketCap : null;
+  const anchors = [];
+  if (mc) {
+    if (q.priceToBook > 0 && isFinite(q.priceToBook)) anchors.push({ f: 'equity', v: mc / q.priceToBook });
+    if (q.trailingPE > 0 && isFinite(q.trailingPE)) anchors.push({ f: 'netIncome', v: mc / q.trailingPE });
+  }
+  const newest = rows.slice().sort((a, b) => b.year - a.year)[0];
+  const logs = [];
+  for (const a of anchors) {
+    const got = newest && newest[a.f];
+    if (got == null || !isFinite(got) || Math.abs(got) < 1) continue;
+    const r = Math.abs(a.v / got);
+    if (r > 0 && isFinite(r)) logs.push(Math.log10(r));
+  }
+  if (!logs.length) {
+    return { scale: null, reason: 'Yahoo ile çakışan yıl yok ve piyasa değeri/oran verisi de gelmedi — ölçek ölçülemedi' };
+  }
+  // 🔴 ÇAPRAZ KONTROL: iki bağımsız çapa (özsermaye ve net kâr) birbirini
+  // tutmuyorsa İş Yatırım'ın tablosu Yahoo'nun oranlarıyla aynı şirketi/
+  // konsolidasyonu anlatmıyor demektir (solo vs konsolide, farklı dönem...).
+  // Böyle bir durumda 10'un kuvvetine oturması bir şey kanıtlamaz.
+  if (logs.length >= 2) {
+    const spread = Math.max.apply(null, logs) - Math.min.apply(null, logs);
+    if (spread > 0.3) { // ≈2 kat
+      return { scale: null, reason: `çapalar birbirini tutmuyor (${bfR(Math.pow(10, spread), 1)} kat fark) — veri kullanılmadı` };
+    }
+  }
+  const mlog = bfMedian(logs);
+  const pow = Math.round(mlog);
+  // ⚠️ GENİŞ tolerans BİLİNÇLİ: bu yöntem yaklaşıktır (PD/DD son çeyrek
+  // defter değerini, F/K son 12 ayı kullanır; İş Yatırım yıl sonunu verir).
+  // Ama ayırt etmemiz gereken şey 1 ile 1000 arası — 1000 KAT fark. Yarım
+  // logaritma (≈3,16 kat) sapma payı bunun için fazlasıyla güvenli.
+  if (Math.abs(mlog - pow) > 0.5) {
+    return { scale: null, reason: `türetilmiş çapa 10'un kuvvetine oturmadı (10^${bfR(mlog, 2)}) — veri kullanılmadı` };
+  }
+  return { scale: Math.pow(10, pow), method: 'türetilmiş çapa (piyasa değeri ÷ PD/DD)', samples: logs.length, med: bfR(Math.pow(10, mlog), 4) };
 }
 
 // Yahoo yılları OLDUĞU GİBİ kalır (birimi bilinen, aylardır test edilen kaynak).
@@ -1202,7 +1253,9 @@ async function loadBistDeepFinancials(d, w) {
     renderBuffettCard(document.getElementById('buffettCard'), _stockBuffett, d);
     return;
   }
-  const det = isyDetectScale(res.years, d.years);
+  // `d` = /stock-fundamentals cevabi: mali tablo bos gelse bile marketCap,
+  // priceToBook ve trailingPE ayri modullerden gelir — turetilmis capa onlari kullanir.
+  const det = isyDetectScale(res.years, d.years, d);
   if (det.scale == null) {
     // 🔴 ÖLÇEK BİLİNMİYORSA VERİ KULLANILMAZ. Yanlış çarpanla birleştirmek
     // içsel değeri 1000 kat şişirir/küçültür — sessiz ve ölümcül bir hata.
@@ -1213,8 +1266,8 @@ async function loadBistDeepFinancials(d, w) {
   const m = isyMergeYears(d.years, res.years, det.scale);
   d.years = m.years;
   _stockDeepFin = {
-    ok: true, group: res.group, scale: det.scale, added: m.added, filled: m.filled,
-    total: m.years.length, kind: res.kind, diag: res.diag || null,
+    ok: true, group: res.group, scale: det.scale, method: det.method, added: m.added,
+    filled: m.filled, total: m.years.length, kind: res.kind, diag: res.diag || null,
   };
   // Skoru YENİDEN hesapla — artık 10 yıllık pencereden bakıyor
   _stockBuffett = buffettScore(d, buffettHurdle(d.currency || w.currency));

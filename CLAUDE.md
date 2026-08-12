@@ -19,6 +19,21 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 12 Ağustos 2026 — 🐛 TÜRETİLMİŞ ÇAPA + CI TIKANIKLIĞI (v7-152)
+
+**1. 🔴 TASARIM HATASI — İş Yatırım katmanı en çok gerektiği yerde çalışmıyordu.** Salim canlıda gördü: BIST'te bilinen birkaç hisse dışında kart *"Yahoo bu sembol için yıllık mali tablo döndürmedi"* diyor. Yahoo'nun tablo vermediği hisseler İş Yatırım'a **en çok ihtiyaç duyulan** hisselerdir — ama `isyDetectScale` birim ölçeğini bulmak için Yahoo'yla **çakışan yıl** istiyordu. Çakışma yoksa ölçek `null`, veri **çöpe**. Katman tam da işe yarayacağı yerde ölüydü.
+- **Çözüm — B yöntemi, türetilmiş çapa:** Yahoo mali tablo vermese bile `marketCap`, `priceToBook` ve `trailingPE` **ayrı modüllerden** gelir. Oradan `özsermaye ≈ piyasa değeri ÷ PD/DD` ve `net kâr ≈ piyasa değeri ÷ F/K` türetilip İş Yatırım'ın rakamıyla karşılaştırılır.
+- **Tolerans bilinçli olarak GENİŞ (yarım logaritma ≈ 3,16 kat):** yöntem yaklaşıktır (PD/DD son çeyrek defter değerini, F/K son 12 ayı kullanır; İş Yatırım yıl sonunu verir; %35 enflasyonda çeyrekler arası fark büyük). Ama **ayırt edilmesi gereken şey 1 ile 1000 arası — 1000 kat.** Yarım logaritma bunun için fazlasıyla güvenli.
+- **🔴 ÇAPRAZ KONTROL (test yazarken bulundu):** yalnız "10'un kuvvetine oturuyor mu" bakmak yetmiyordu — iki bağımsız çapa **birbirini tutmuyorsa** (2 kattan fazla fark) İş Yatırım'ın tablosu Yahoo'nun oranlarıyla aynı şirketi/konsolidasyonu anlatmıyor demektir; oturması hiçbir şey kanıtlamaz. Artık ölçek `null` döner.
+- **A yöntemi (çakışan yıl) hâlâ öncelikli** ve dar toleranslı (%25) — aynı yılın aynı kalemi neredeyse birebir olmalı.
+
+**2. ⚙️ CI TIKANIKLIĞI — deploy sessizce hiç çalışmamıştı.** Salim "pushladım" dedi ama canlıdaki kart hâlâ eski metni gösteriyordu (*"Owner Earnings satırına"* tekil, ROIC ve TMS 29 yok) → v7-149/150/151 **hiç yayınlanmamış**. `npm test` 20 test dosyasını **CPU sayısı kadar paralel** açıyor; her biri kendi jsdom penceresini kuruyor. GitHub runner'ında bellek yetmeyince iş düşüyor ve **testler değil DEPLOY'UN TAMAMI** bloke oluyor — Pages da worker da çıkmıyor, üstelik sessizce.
+- `--test-concurrency=2` + `timeout-minutes` 15 → **30**.
+- ⚠️ **Kalıcı ders:** yeşil test ≠ yayınlanmış kod. Deploy sonrası **canlıdaki bir metni** doğrula (kart notu, `sw.js` cache sürümü) — "push ettim" tek başına kanıt değil.
+
+**Doğrulama:** `09-buffett` 100 → **108 test** (Yahoo 0 yıl verirken türetilmiş çapa · tam TL hâli · yaklaşık sapmanın kabulü · çapraz kontrolün ayrışan çapayı reddi · uyumlu çapaların geçmesi · her iki kaynak da yokken null · 0 yıldan 10 yıla birleştirme). **20 dosya toplam 644 test geçiyor.**
+**Cache:** v7-151 → **v7-152**
+
 ### 🔴 12 Ağustos 2026 — 🇹🇷 10 YILLIK MALİ TABLO / İŞ YATIRIM KAYNAĞI (v7-151)
 
 Salim: "10 yıllık veri API bul Türkiye." Buffett'in **10 yıllık tutarlı geçmiş** şartı Yahoo'yla karşılanamıyordu (4 yıl; Yahoo'nun kendi Financials sekmesi de ücretsiz hesapta 4 yıl gösteriyor, 10 yıl Premium'da).
