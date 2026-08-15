@@ -40,3 +40,7 @@ app.js
 # 8 Ağu 2026: sandbox rm yapamadığı için ölü dosyalar buraya taşındı.
 # Salim klasörü Gezgin'den silecek — commit'e girmesinler.
 SILINECEK-DOSYALAR/
+
+# 14 Agu 2026: sandbox rm yapamadigi icin silinen dosyalar buraya tasindi
+# (eski stocks.js, gecici probe scriptleri). Commit'e girmesinler.
+.trash/
