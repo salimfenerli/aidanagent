@@ -30,7 +30,6 @@ INCLUDE = [
     ("html5-qrcode.min.js", "/html5-qrcode.min.js"),  # self-host: barkod tarayici
     ("core.js", "/core.js"),
     ("tasks.js", "/tasks.js"),
-    ("stocks.js", "/stocks.js"),
     ("ui.js", "/ui.js"),
     ("program.js", "/program.js"),
     ("nutrition.js", "/nutrition.js"),

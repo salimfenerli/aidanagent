@@ -14,7 +14,8 @@
  */
 const { test, after } = require('node:test');
 const assert = require('node:assert');
-const { loadApp } = require('./helpers/load');
+// 14 Agu 2026: borsa motoru kendi sitesine tasindi -> borsa harness'i.
+const { loadBorsa: loadApp } = require('./helpers/borsa');
 const { readText, readRaw } = require('./helpers/src');
 
 // jsdom yuklemesi pahali — TEK ornek acilir (09-buffett kalibi, `after` ile kapanir)
@@ -29,7 +30,7 @@ function D() { return A.evalIn('data'); }
 // ⚠️ SCREEN_LIMITS top-level `const` — window'a YAZILMAZ (data ile ayni kural)
 const LIM = A.evalIn('SCREEN_LIMITS');
 
-const SRC = readText('stocks.js');
+const SRC = readText('borsa/stocks.js');
 const WK = readText('aidan-worker/worker.js');
 
 // ——— Saglikli bir tarama satiri (Yahoo quote normalize edilmis hali) ———
@@ -472,7 +473,7 @@ test('UI kullaniciya "bu bir alim listesi degil" diyor', () => {
 });
 
 test('Impeccable: yan-serit yok, gradient yok, glass yok, reduced-motion var', () => {
-  const css = readText('styles.css');
+  const css = readText('borsa/styles.css');
   const blk = css.slice(css.indexOf('BIST TEMEL TARAMA'));
   assert.ok(blk.length > 500, 'tarama CSS blogu bulunamadi');
   assert.ok(!/border-left:\s*[2-9]/.test(blk), 'yan-serit kenarlik yasak');
@@ -485,9 +486,9 @@ test('Impeccable: yan-serit yok, gradient yok, glass yok, reduced-motion var', (
 });
 
 test('styles.css LF, stocks.js ve worker.js CRLF kalmis', () => {
-  const css = readRaw('styles.css');
+  const css = readRaw('borsa/styles.css');
   assert.ok(!css.includes(Buffer.from('\r\n')), 'styles.css CRLF sizmis');
-  for (const f of ['stocks.js', 'aidan-worker/worker.js', 'asistan.html']) {
+  for (const f of ['aidan-worker/worker.js']) {
     const b = readRaw(f);
     const lf = (b.toString('binary').match(/\n/g) || []).length;
     const crlf = (b.toString('binary').match(/\r\n/g) || []).length;
@@ -495,13 +496,19 @@ test('styles.css LF, stocks.js ve worker.js CRLF kalmis', () => {
   }
 });
 
-test('yeni dosya yok — tarama stocks.js icinde, deploy zinciri degismedi', () => {
+test('yeni dosya yok — tarama borsa/stocks.js icinde, deploy zinciri tutarli', () => {
   const fs = require('fs');
   const path = require('path');
   const root = path.resolve(__dirname, '..');
-  assert.ok(!fs.existsSync(path.join(root, 'screener.js')),
-    'ayri dosya olusturulmus — sw.js/deploy.py/Actions paths guncellenmeli');
-  assert.ok(readText('sw.js').includes('stocks.js'), 'stocks.js SW cache listesinde olmali');
+  assert.ok(!fs.existsSync(path.join(root, 'borsa', 'screener.js')),
+    'ayri dosya olusturulmus — borsa/sw.js ve deploy zinciri guncellenmeli');
+  // 14 Agu 2026: motor Aidan'dan borsa sitesine tasindi. Cache listesi kontrolu
+  // AIDAN'IN sw.js'inde degil BORSA'nin sw.js'inde yapilir — yanlis dosyayi
+  // kontrol etmek "yesil ama anlamsiz" bir test olurdu.
+  assert.ok(readText('borsa/sw.js').includes('stocks.js'),
+    'stocks.js borsa SW cache listesinde olmali (404 = bolum hic acilmaz)');
+  assert.ok(!readText('sw.js').includes('stocks.js'),
+    "Aidan'in SW'i hala stocks.js cache liyor — dosya artik orada YOK, 404 uretir");
 });
 
 // ============================================================
@@ -683,7 +690,7 @@ test('worker cok yilli sayilari AI\'a veriyor, kendi hesaplamiyor', () => {
 });
 
 test('Impeccable: cok yilli katman CSS kurallari da uyumlu', () => {
-  const css = readText('styles.css');
+  const css = readText('borsa/styles.css');
   const blk = css.slice(css.indexOf('cok yilli (dongu) katmani'));
   assert.ok(blk.length > 300, 'CSS blogu bulunamadi');
   assert.ok(!/border-left:\s*[2-9]|border-right:\s*[2-9]/.test(blk), 'yan-serit yasak');
@@ -760,7 +767,7 @@ test('REGRESYON: derin asamaya deepCount hisse gider, listCount kadari GOSTERILI
   // Eskiden res.passed once listCount'a (15) kirpiliyordu; derin asama 25 degil
   // 15 hisse goruyordu ve dokumanda yazan "25 hisseye Buffett skoru" hic
   // gerceklesmiyordu. Kirpma artik EN SONDA, siralamadan sonra.
-  const src = readText('stocks.js');
+  const src = readText('borsa/stocks.js');
   const i = src.indexOf('async function runScreener');
   assert.ok(i > 0);
   const block = src.slice(i, i + 2600);
@@ -777,7 +784,7 @@ test('REGRESYON: derin asamaya deepCount hisse gider, listCount kadari GOSTERILI
 });
 
 test('tarama satiri kurum tipini ve guvenlik payini tasir', () => {
-  const src = readText('stocks.js');
+  const src = readText('borsa/stocks.js');
   const i = src.indexOf('async function screenDeepStage');
   const block = src.slice(i, i + 1800);
   assert.ok(/kind: bf\.kind/.test(block) && /mos: bf\.mos/.test(block),

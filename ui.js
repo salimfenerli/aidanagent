@@ -2756,8 +2756,7 @@ function calendarUrl() {
 // Ayarlar sekmesi acilinca hesaplanir (her save'de degil: JSON.stringify pahali).
 const STORAGE_ETIKET = {
   tasks: 'Görevler', chat: 'Sohbet', notes: 'Kayıtlar', diet: 'Diyet günlüğü',
-  hevy: 'Antrenman', sleep: 'Uyku', journal: 'Günlük', trades: 'İşlem günlüğü',
-  watchlist: 'Borsa listesi', portfolioHistory: 'Portföy geçmişi',
+  hevy: 'Antrenman', sleep: 'Uyku', journal: 'Günlük',
   pushLog: 'Bildirim geçmişi', dumps: 'Zihin boşalt', reminders: 'Hatırlatıcılar',
   coach: 'Sağlık koçu', templates: 'Şablonlar', settings: 'Ayarlar', dayPlan: 'Gün planı',
 };
@@ -3598,8 +3597,6 @@ function runGlobalSearch() {
     (dd[dt].meals || []).forEach(m => { if (gsMatch(q, m.name)) meals.push({ label: m.name, sub: dt + (m.kcal ? (' · ' + m.kcal + ' kcal') : ''), onclick: "gsGo('diet')" }); });
   });
   if (meals.length) groups.push({ title: 'Besin', items: meals.slice(0, 6) });
-  const stk = (data.watchlist || []).filter(w => gsMatch(q, w.symbol, w.name)).slice(0, 6);
-  if (stk.length) groups.push({ title: 'Borsa', items: stk.map(w => ({ label: w.symbol + (w.name ? (' · ' + w.name) : ''), sub: w.price != null ? String(w.price) : '', onclick: "gsGo('stocks')" })) });
   const school = (data.school || {});
   const exams = (school.exams || []).filter(e => gsMatch(q, e.subject, e.topics)).slice(0, 5);
   if (exams.length) groups.push({ title: 'Sınavlar', items: exams.map(e => ({ label: e.subject, sub: (e.date || '') + (e.topics ? (' · ' + e.topics) : ''), onclick: "gsGoSchool()" })) });

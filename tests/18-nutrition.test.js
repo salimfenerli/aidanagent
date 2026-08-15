@@ -383,7 +383,11 @@ describe('mimari sözleşmeler', () => {
 
   test('Diyet sekmesi açılınca render ediliyor', () => {
     const tasks = fs.readFileSync(path.join(ROOT, 'tasks.js'), 'utf8');
-    const i = tasks.indexOf("if (name === 'diet')");
+    // ⚠️ showTab'da artik IKI tane "if (name === 'diet')" var: biri tembel
+    // modul yukleme dali, digeri render dali. indexOf ilkini buluyordu ve
+    // test yanlislikla kirmizi oluyordu — render dalini adiyla ara.
+    const i = tasks.indexOf("if (name === 'diet') { _dietDate");
+    assert.ok(i > 0, 'diyet render dali bulunamadi');
     assert.ok(tasks.slice(i, i + 250).indexOf('renderNutrition()') >= 0);
     assert.ok(/'program', 'nutrition'/.test(tasks), 'diyet sekmesi nutrition modulunu yuklemiyor');
   });

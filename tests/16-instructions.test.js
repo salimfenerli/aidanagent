@@ -156,10 +156,18 @@ describe('enjeksiyon kapsamı — prose var, makine yok', () => {
   });
 
   test('PWA prose uçlarına talimat GÖNDERİYOR', () => {
-    const src = ['ui.js', 'tasks.js', 'stocks.js'].map((f) =>
+    // ⚠️ 14 Agu 2026: borsa ayri siteye tasindi. Esik 7'den 4'e indi cunku
+    // 4 borsa cagrisi (analiz/temel/portfoy-teknik/haber) + portfoy yorumu
+    // artik borsa/ altinda. Sozlesme AYNI, sadece iki tarafa bolundu — o
+    // yuzden borsa tarafi da asagida ayrica kilitleniyor.
+    const src = ['ui.js', 'tasks.js'].map((f) =>
       fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n');
     const n = (src.match(/aiInstructions\(\)/g) || []).length;
-    assert.ok(n >= 7, 'sadece ' + n + ' PWA cagrisi talimat yolluyor');
+    assert.ok(n >= 4, 'sadece ' + n + ' Aidan PWA cagrisi talimat yolluyor');
+    const bsrc = ['shared.js', 'stocks.js', 'app.js'].map((f) =>
+      fs.readFileSync(path.join(ROOT, 'borsa', f), 'utf8')).join('\n');
+    const bn = (bsrc.match(/aiInstructions\(\)/g) || []).length;
+    assert.ok(bn >= 5, 'sadece ' + bn + ' borsa cagrisi talimat yolluyor');
   });
 });
 

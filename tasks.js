@@ -14,23 +14,23 @@ function setModuleLoading(tab, on, failed) {
 
 // ============ TAB ============
 async function showTab(name, btn) {
+  // Bilinmeyen sekme adinda SESSIZCE gorevlere don. 14 Agu 2026'da borsa
+  // sekmesi kalkti; eski bir yer imi ya da kayitli durum 'stocks' derse
+  // getElementById null doner ve uygulama tamamen olurdu.
+  if (!document.getElementById(name)) name = 'tasks';
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(name).classList.add('active');
   if (btn) btn.classList.add('active');
   else { const _dt = document.querySelector(`[data-tab="${name}"]`); if (_dt) _dt.classList.add('active'); }
-  // Borsa modu: borsa sekmesi açıkken body.stocks-mode → tam ekran terminal hissi
-  document.body.classList.toggle('stocks-mode', name === 'stocks');
   // Sekme değişiminde hamburger drawer'ı kapat (açık kalmasın)
-  const _sm = document.getElementById('stocksMenu');
-  if (_sm) { _sm.classList.remove('open'); document.getElementById('stocksMenuBackdrop').classList.remove('open'); }
   // Global app-bar başlığı + drawer aktif vurgusu + global drawer'ı kapat
   syncAppHeader(name);
   toggleAppMenu(false);
-  // --- Tembel modul: sekme ilk acilista indirilir (ilk yukleme 55 KB gzip hafifledi) ---
-  if (name === 'stocks' || name === 'diet') {
+  // --- Tembel modul: sekme ilk acilista indirilir ---
+  if (name === 'diet') {
     // Diyet sekmesi İKİ modül ister: antrenman programı + beslenme planı.
-    const modlar = name === 'stocks' ? ['stocks'] : ['program', 'nutrition'];
+    const modlar = ['program', 'nutrition'];
     const eksik = modlar.filter(m => !moduleLoaded(m));
     if (eksik.length) {
       setModuleLoading(name, true);
@@ -41,7 +41,6 @@ async function showTab(name, btn) {
     // Kullanici beklerken baska sekmeye gectiyse render etme
     if (!document.getElementById(name).classList.contains('active')) return;
   }
-  if (name === 'stocks') tickStocksModeHeader();
   if (name === 'settings') {
     updateEstimateStats();
     renderNotifSettings();
@@ -63,61 +62,12 @@ async function showTab(name, btn) {
   if (name === 'chat') { renderChatMessages(); setTimeout(() => { const ci = document.getElementById('chatInput'); if (ci) ci.focus(); }, 60); }
   if (name === 'plan') renderDayPlan();
   if (name === 'diet') { _dietDate = null; renderDiet(); renderHealthCoach(); renderProgram(); renderNutrition(); }  // koç şeridi: uyku+spor+beslenme desenleri
-  // Borsa sekmesinden çıkınca canlı güncellemeyi durdur (batarya/kota)
-  if (name !== 'stocks') stopStockAutoRefresh();
-  if (name === 'stocks') {
-    renderStocks();
-    // Sekme açılınca taze fiyat çek (son 15 sn'de çekildiyse atla — çift istek olmasın)
-    const wl = data.watchlist || [];
-    const latest = Math.max(0, ...wl.map(w => w.fetchedAt || 0));
-    if (wl.length && (Date.now() - latest > 15000)) refreshStocks();
-    startStockAutoRefresh(); // sekme açıkken gün içi canlı güncelle
-  }
 }
 
 // Borsa sekmesi açıkken gün içi otomatik fiyat güncelleme (60 sn).
 // Sayfa gizliyse (telefon kilitli / başka uygulama) atlar — pil + kota dostu.
-let _stockAutoTimer = null, _stockTick = 0;
-function startStockAutoRefresh() {
-  stopStockAutoRefresh();
-  _stockTick = 0;
-  updateStocksMeta();                                  // anında rozet/etiket
-  tickStocksModeHeader();                              // borsa modu üst başlığı (saat + piyasa durumu)
-  _stockAutoTimer = setInterval(() => {
-    if (document.hidden) return;                       // sayfa görünmüyorsa boşa çekme
-    if (!document.getElementById('stocks').classList.contains('active')) { stopStockAutoRefresh(); return; }
-    updateStocksMeta();                                // her 20sn etiket+rozet canlı (ağ yok)
-    _stockTick++;
-    if (_stockTick % 3 === 0 && (data.watchlist || []).length) refreshStocks(); // 60sn'de bir ağ
-  }, 20000);
-  // Borsa modu saat — saniyelik canlı, sadece borsa sekmesi açıkken çalışır
-  _stocksHeaderTimer = setInterval(() => {
-    if (document.hidden) return;
-    if (!document.body.classList.contains('stocks-mode')) { clearInterval(_stocksHeaderTimer); _stocksHeaderTimer = null; return; }
-    tickStocksModeHeader();
-  }, 1000);
-}
-function stopStockAutoRefresh() {
-  if (_stockAutoTimer) { clearInterval(_stockAutoTimer); _stockAutoTimer = null; }
-  if (_stocksHeaderTimer) { clearInterval(_stocksHeaderTimer); _stocksHeaderTimer = null; }
-}
-
-// Borsa modu hamburger menüsü — drawer aç/kapa + sekmeye çıkış
-function toggleStocksMenu(open) {
-  const m = document.getElementById('stocksMenu');
-  const bd = document.getElementById('stocksMenuBackdrop');
-  if (!m || !bd) return;
-  const want = open !== undefined ? open : !m.classList.contains('open');
-  m.classList.toggle('open', want);
-  bd.classList.toggle('open', want);
-}
-function exitStocksTo(name) {
-  toggleStocksMenu(false);
-  showTab(name, document.querySelector(`[data-tab="${name}"]`));
-}
-
 // ===== Global app-bar (her sekme borsa gibi tam ekran) =====
-const APP_TAB_TITLES = { tasks: 'Görevler', plan: 'Plan', focus: 'Odak', stocks: 'Borsa', diet: 'Diyet', chat: "Aidan'a sor", settings: 'Ayarlar' };
+const APP_TAB_TITLES = { tasks: 'Görevler', plan: 'Plan', focus: 'Odak', diet: 'Diyet', chat: "Aidan'a sor", settings: 'Ayarlar' };
 // Global drawer'dan sekme seçimi
 function navTo(name) {
   toggleAppMenu(false);
@@ -155,31 +105,9 @@ tickAppHeaderClock();
 setInterval(() => { if (!document.hidden) tickAppHeaderClock(); }, 1000);
 
 // Borsa modu üst başlığı — saniyelik saat + bugünün adı + BIST/ABD durumu kompakt rozeti
-let _stocksHeaderTimer = null;
-function tickStocksModeHeader() {
-  const clk = document.getElementById('stocksModeClock');
-  const dt = document.getElementById('stocksModeDate');
-  if (!clk || !dt) return;
-  const now = new Date();
-  const HH = String(now.getHours()).padStart(2, '0');
-  const MM = String(now.getMinutes()).padStart(2, '0');
-  const SS = String(now.getSeconds()).padStart(2, '0');
-  clk.textContent = `${HH}:${MM}:${SS}`;
-  const dayName = now.toLocaleDateString('tr-TR', { weekday: 'long' });
-  // Watchlist'teki tek tek piyasaları izle — BIST/ABD aktif mi
-  const wl = data.watchlist || [];
-  const seen = new Set(wl.map(w => w.market || 'bist').filter(m => m === 'bist' || m === 'abd'));
-  const chips = [];
-  if (seen.has('bist')) chips.push({ label: 'BIST', open: isMarketOpen('bist', now) });
-  if (seen.has('abd'))  chips.push({ label: 'NYSE', open: isMarketOpen('abd', now) });
-  if (!chips.length) chips.push({ label: 'BIST', open: isMarketOpen('bist', now) });
-  const chipHtml = chips.map(c => `<span class="stocks-mode-mkt ${c.open ? 'open' : 'closed'}">${c.label} ${c.open ? '●' : '○'}</span>`).join('');
-  dt.innerHTML = `<span>${escapeHtml(dayName)}</span>${chipHtml}`;
-}
 // Sayfa tekrar görünür olunca (kilidi açınca): borsayı tazele + pomodoro'yu gerçek zamana eşitle
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
-  if (moduleLoaded('stocks') && document.getElementById('stocks').classList.contains('active') && (data.watchlist || []).length) refreshStocks();
   if (running) tickTimer(); // arka planda interval durmuş olabilir → kalan süreyi anında düzelt
 });
 
@@ -1036,6 +964,12 @@ async function planMyDay() {
         tasks: tasksForAi, from: w.from, to: w.to, now: nowHM(),
         busy: fixed.map(f => ({ label: f.label, start: f.start, end: f.end })),
         insight,
+        // 14 Agu 2026: bu satir EKSIKTI. Worker /plan tarafinda
+        // instructionsBlock(instructions) ile govdeden bekliyordu, PWA hic
+        // gondermiyordu — yani Ayarlar > Talimatlar gun planinda HIC
+        // uygulanmiyordu. Sessiz bir bosluktu; test esigini gozden
+        // gecirirken ortaya cikti.
+        instructions: aiInstructions(),
       }),
     });
     const j = await r.json();
@@ -1068,61 +1002,6 @@ async function planMyDay() {
 }
 
 // AI portföy yorumu — sayıları PWA hesaplar (uydurma yok), AI sadece betimler
-const PF_COMMENT_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/portfolio-comment';
-function buildPortfolioFacts() {
-  const holdings = (data.watchlist || []).filter(w => w.qty != null && w.qty > 0 && w.cost != null);
-  if (!holdings.length) return null;
-  const byCur = {};
-  for (const w of holdings) {
-    const cur = w.currency || 'TRY';
-    const px = (w.price != null ? w.price : w.cost);
-    const value = px * w.qty, cost = w.cost * w.qty;
-    (byCur[cur] = byCur[cur] || { items: [], value: 0, cost: 0 });
-    byCur[cur].items.push({ sym: w.symbol, value, dayPct: w.changePct, plPct: w.cost > 0 ? (px - w.cost) / w.cost * 100 : null });
-    byCur[cur].value += value; byCur[cur].cost += cost;
-  }
-  const lines = [`Portföy: ${holdings.length} pozisyon, ${Object.keys(byCur).length} para birimi.`];
-  for (const cur in byCur) {
-    const g = byCur[cur], lbl = cur === 'TRY' ? 'TL' : cur;
-    const plPct = g.cost > 0 ? (g.value - g.cost) / g.cost * 100 : 0;
-    lines.push(`${lbl} tarafı: toplam değer ${Math.round(g.value)} ${lbl}, kar/zarar ${plPct >= 0 ? '+' : ''}${plPct.toFixed(1)}%.`);
-    g.items.sort((a, b) => b.value - a.value).forEach(it => {
-      const pct = g.value > 0 ? it.value / g.value * 100 : 0;
-      const p = [`${lbl} portföyünün %${pct.toFixed(1)}'i`];
-      if (it.dayPct != null) p.push(`bugün ${it.dayPct >= 0 ? '+' : ''}${it.dayPct.toFixed(1)}%`);
-      if (it.plPct != null) p.push(`toplam ${it.plPct >= 0 ? '+' : ''}${it.plPct.toFixed(1)}%`);
-      lines.push(`  - ${it.sym}: ${p.join(', ')}`);
-    });
-  }
-  return lines.join('\n');
-}
-function openPfComment() {
-  document.getElementById('pfCommentBody').textContent = 'Aidan portföyüne bakıyor…';
-  document.getElementById('pfCommentModal').classList.add('active');
-}
-function closePfComment() { document.getElementById('pfCommentModal').classList.remove('active'); }
-async function aiCommentPortfolio() {
-  const facts = buildPortfolioFacts();
-  if (!facts) { showToast('Önce pozisyon ekle (adet + maliyet)', 'warning', 3500); return; }
-  if (!window._supa || !window._user) { showToast('AI için bulut girişi gerekli — Ayarlar → giriş yap', 'warning', 4000); return; }
-  openPfComment();
-  try {
-    const { data: sess } = await window._supa.auth.getSession();
-    const token = sess && sess.session && sess.session.access_token;
-    if (!token) throw new Error('oturum bulunamadı, tekrar giriş yap');
-    const r = await fetch(PF_COMMENT_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ facts, instructions: aiInstructions() }),
-    });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error || ('sunucu hatası ' + r.status));
-    document.getElementById('pfCommentBody').textContent = j.comment || 'Yorum üretilemedi.';
-  } catch (e) {
-    document.getElementById('pfCommentBody').textContent = 'Yorum alınamadı: ' + e.message;
-  }
-}
-
 // Akıllı quick-capture parser — AI'ya gitmeden tarih/saat/kategori/öncelik/süreyi tespit eder.
 // "yarın 14:00 dişçi" -> { text:'dişçi', due:yarın, reminderTime:14:00, category:'kisisel' }
 function parseQuickInput(raw) {

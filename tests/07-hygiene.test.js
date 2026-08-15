@@ -21,7 +21,7 @@ const { ROOT, readRaw, readText } = require('./helpers/src');
 
 const LF_DOSYALAR = ['styles.css'];
 const CRLF_DOSYALAR = [
-  'core.js', 'ui.js', 'tasks.js', 'stocks.js', 'program.js', 'sw.js', 'asistan.html',
+  'core.js', 'ui.js', 'tasks.js', 'program.js', 'sw.js', 'asistan.html',
   'aidan-worker/worker.js', 'CLAUDE.md',
 ];
 
@@ -51,7 +51,7 @@ describe('saat dilimi yasagi', () => {
     // v7-119: 21 ham cagri saat diliminden dolayi 00:00-03:00 arasi yanlis
     // gun uretiyordu. Yeni kodda ASLA yazilmaz.
     const ihlal = [];
-    for (const f of ['core.js', 'ui.js', 'tasks.js', 'stocks.js']) {
+    for (const f of ['core.js', 'ui.js', 'tasks.js']) {
       const satirlar = readText(f).split(/\r?\n/);
       satirlar.forEach((s, i) => {
         if (!/toISOString\(\)\s*\.\s*slice\(\s*0\s*,\s*10\s*\)/.test(s)) return;
@@ -121,7 +121,7 @@ describe('deploy tutarliligi', () => {
     const blok = /const LAZY_MODULES = \{([^}]*)\}/.exec(readText('core.js'));
     const tembel = (blok[1].match(/'([^']+)'/g) || []).map((s) => s.slice(1, -1).replace(/^\//, ''));
     const hepsi = new Set([...statik, ...tembel]);
-    for (const m of ['supabase.js', 'core.js', 'tasks.js', 'ui.js', 'stocks.js', 'program.js']) {
+    for (const m of ['supabase.js', 'core.js', 'tasks.js', 'ui.js', 'program.js']) {
       assert.ok(hepsi.has(m), m + ' hicbir yerden yuklenmiyor — ne script etiketi ne LAZY_MODULES');
     }
   });
@@ -163,12 +163,12 @@ describe('yukleme sirasi bagimliligi', () => {
   // MODUL GOVDESINDE (init sirasinda) cagirirsa "not defined" ile comer —
   // 6 Agu 2026 TDZ cokusunun ayni sinifi. escapeHtml tam bu durumdaydi:
   // tanim ui.js'te, 145 cagrinin cogu core/tasks/stocks icinde.
-  const SIRA = ['core.js', 'tasks.js', 'stocks.js', 'ui.js', 'program.js'];
+  const SIRA = ['core.js', 'tasks.js', 'ui.js', 'program.js'];
 
   test('escapeHtml core.js\'te tanimli (ui.js\'te DEGIL)', () => {
     assert.ok(/function escapeHtml\s*\(/.test(readText('core.js')),
       'escapeHtml core.js\'te tanimli olmali — ilk yuklenen dosya');
-    for (const f of ['tasks.js', 'stocks.js', 'ui.js', 'program.js']) {
+    for (const f of ['tasks.js', 'ui.js', 'program.js']) {
       assert.ok(!/function escapeHtml\s*\(/.test(readText(f)),
         f + ' escapeHtml\'i yeniden tanimliyor — ayni isim iki kez, sonuncusu sessizce kazanir');
     }
@@ -196,7 +196,7 @@ describe('yukleme sirasi bagimliligi', () => {
 });
 
 describe('sozdizimi', () => {
-  for (const f of ['core.js', 'tasks.js', 'stocks.js', 'ui.js', 'program.js', 'sw.js', 'aidan-worker/worker.js']) {
+  for (const f of ['core.js', 'tasks.js', 'ui.js', 'program.js', 'sw.js', 'aidan-worker/worker.js']) {
     test('node --check ' + f, () => {
       execFileSync(process.execPath, ['--check', path.join(ROOT, f)], { stdio: 'pipe' });
     });

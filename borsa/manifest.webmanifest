@@ -1,0 +1,16 @@
+{
+  "name": "Borsa",
+  "short_name": "Borsa",
+  "description": "BIST ve global piyasalar: izleme listesi, portfoy, teknik analiz, Buffett skoru, islem gunlugu.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#080a0e",
+  "theme_color": "#080a0e",
+  "lang": "tr",
+  "icons": [
+    { "src": "icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable.png", "sizes": "1024x1024", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -107,8 +107,17 @@ describe('worker guvenlik sozlesmesi', () => {
       assert.ok(/WEBHOOK_SECRET/.test(bodyBlok),
         '/body ucu CORS * ile acik AMA secret kontrolu yok — herkes tarti yazabilir');
     }
-    assert.ok(WK.includes("'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev'"),
-      'production origin tanimi bulunamadi');
+    // 14 Agu 2026: borsa ayri siteye tasindi, iki origin var. Sabit tek origin
+    // yerine ALLOWLIST kullaniliyor. Kritik olan sey degismedi: istegin Origin'i
+    // AYNEN YANSITILMAMALI — yansitilsaydi her site kullanicinin oturumuyla bu
+    // uclari cagirabilirdi. Asagidaki iki kontrol tam bunu kilitler.
+    assert.ok(/const ALLOWED_ORIGINS = \[/.test(WK), 'origin allowlist tanimi bulunamadi');
+    assert.ok(WK.includes("'https://aidanapp.pages.dev'") && WK.includes("'https://aidanborsa.pages.dev'"),
+      'izinli origin listesi eksik');
+    assert.ok(/ALLOWED_ORIGINS\.indexOf\(o\) !== -1 \? o : ALLOWED_ORIGINS\[0\]/.test(WK),
+      'origin dogrulanmadan yansitiliyor olabilir — allowlist kontrolu bulunamadi');
+    assert.ok(/'Vary': 'Origin'/.test(WK),
+      "Vary: Origin yok — onbellek bir origin'in yanitini digerine servis edebilir");
   });
 
   test('hicbir API anahtari koda gomulmemis', () => {
@@ -119,7 +128,7 @@ describe('worker guvenlik sozlesmesi', () => {
       /eyJ[A-Za-z0-9_-]{40,}\.[A-Za-z0-9_-]{20,}/,  // JWT (service key)
       /\b[0-9]{9,10}:AA[A-Za-z0-9_-]{30,}/,  // Telegram bot token
     ];
-    for (const dosya of ['aidan-worker/worker.js', 'core.js', 'ui.js', 'tasks.js', 'stocks.js', 'asistan.html']) {
+    for (const dosya of ['aidan-worker/worker.js', 'core.js', 'ui.js', 'tasks.js', 'asistan.html', 'borsa/stocks.js', 'borsa/index.html']) {
       const src = readText(dosya);
       for (const d of desenler) {
         const m = d.exec(src);

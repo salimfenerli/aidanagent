@@ -7,7 +7,7 @@
 // stocks/program: SEKME acilinca iner (showTab).
 // supabase: init'te iner ama <script> etiketi DEGIL — 50 KB gzip'i kritik
 // yoldan cikarir. Ilk cizim beklemez; auth birkac yuz ms sonra oturur.
-const LAZY_MODULES = { stocks: '/stocks.js', program: '/program.js',
+const LAZY_MODULES = { program: '/program.js',
   nutrition: '/nutrition.js', supabase: '/supabase.js' };
 const _moduleLoads = {};
 function moduleLoaded(name) { return !!(_moduleLoads[name] && _moduleLoads[name]._done); }
@@ -58,13 +58,15 @@ data.dumps = data.dumps || [];
 data.pushLog = data.pushLog || [];
 data.journal = data.journal || [];
 data.reminders = data.reminders || [];  // sabit hatırlatıcılar (ilaç/su/ders) — Worker 15dk cron push'lar
-data.watchlist = data.watchlist || [];
-data.portfolioHistory = data.portfolioHistory || [];  // [{date:'YYYY-MM-DD', byCur:{TRY:{value,cost}}}]
+// NOT (14 Agu 2026): watchlist/portfolioHistory/trades borsa sitesine tasindi
+// (public.aidan_stocks). Aidan blob'undaki ESKI kopyalar SILINMEDI — yeni site
+// canlida dogrulanana kadar geri donus yolu acik kalsin diye. Artik hicbir
+// Aidan kodu okumuyor; dogrulama sonrasi tek satirlik temizlikle atilabilir.
 // SAGLAMLIK: bozuk senkron/birlesme sonucu diziye null ya da string sizabiliyor.
 // Eskiden tek bir null gorev init'teki geriye-uyumluluk dongusunu comertip
 // TUM uygulamayi olduruyordu (6 Agu TDZ hatasiyla ayni sinif: veri -> tam olum).
 // Bu yuzden nesne bekleyen her dizi basta suzulur.
-['tasks','dumps','pushLog','journal','reminders','watchlist','portfolioHistory','chat','notes','sleep','trades','templates']
+['tasks','dumps','pushLog','journal','reminders','chat','notes','sleep','templates']
   .forEach(function (k) {
     if (!Array.isArray(data[k])) { if (data[k] !== undefined) data[k] = []; return; }
     data[k] = data[k].filter(function (x) { return x && typeof x === 'object'; });

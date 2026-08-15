@@ -2,22 +2,72 @@
 
 ## 🔴 GÜNCEL DURUM (özet — detaylı seans günlükleri: CHANGELOG.md)
 
-**Mimari:** `asistan.html` tek dosya DEĞİL — **4 modül statik + 2 modül TEMBEL** yüklenir.
-Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → `tasks.js` (sekme/gün planı/quick-capture/journal/dump) → `stocks.js` (borsa) → `ui.js` (görev render/timer/ayarlar/auth/takvim/chat).
-**Tembel (`core.js` → `loadModule`):** `supabase.js` (init'te, çizimi beklemeden) · `stocks.js` (borsa sekmesi) · `program.js` (diyet sekmesi).
-⚠️ `stocks.js` ve `tasks.js` arasındaki eski karışıklık 9 Ağu'da çözüldü — görev fonksiyonları artık `tasks.js`'te, paylaşılan yardımcılar `core.js`'te. (`app.js` eski bundle'ı repodan kalkmış — 25 Tem'de doğrulandı.)
+**🔴 İKİ AYRI SİTE (14 Ağu 2026'dan beri):**
+- **Aidan** — `aidanapp.pages.dev` · ADHD asistanı (görev/plan/odak/diyet/sohbet). Kök klasör.
+- **Borsa** — `aidanborsa.pages.dev` · `borsa/` klasörü, kendi Pages projesi, kendi PWA'sı, kendi Supabase tablosu.
+Tek repo, tek `git push`; iki ayrı deploy adımı. Ortak olan tek şey **Worker** (`aidan-pusher`) — iki origin de ona konuşuyor.
 
-**⚠️ DÜZENLEME KURALI:** Büyük dosyalarda Edit riskli + sandbox `rm` YOK (`mv` var). Düzenleme = **Python byte-replace + `node --check`**; **.bak OLUŞTURMA**; rollback = `git checkout <dosya>`. EOL eşle: **styles.css TEK BAŞINA LF** · diğer HEPSİ CRLF (core.js/ui.js/tasks.js/stocks.js/supabase.js/sw.js/asistan.html/worker.js/CLAUDE.md). ⚠️ 25 Tem'de doğrulandı — eski not yanlıştı, byte-replace'te `assert b'\r\n' in b` ile kontrol et.
+**Aidan mimarisi:** `asistan.html` tek dosya DEĞİL — **3 modül statik + 3 modül TEMBEL** yüklenir.
+Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → `tasks.js` (sekme/gün planı/quick-capture/journal/dump) → `ui.js` (görev render/timer/ayarlar/auth/takvim/chat).
+**Tembel (`core.js` → `loadModule`):** `supabase.js` (init'te, çizimi beklemeden) · `program.js` + `nutrition.js` (diyet sekmesi).
+⚠️ `stocks.js` ve `tasks.js` arasındaki eski karışıklık 9 Ağu'da çözüldü — görev fonksiyonları `tasks.js`'te, paylaşılan yardımcılar `core.js`'te.
+
+**Borsa mimarisi:** `borsa/index.html` → `shared.js` (yardımcılar + veri katmanı) → `stocks.js` (motor, 4474 satır) → `sync.js` (kimlik + çakışma korumalı senkron) → `app.js` (açılış + render sırası). `supabase.js` tembel. İlk yükleme ~105 KB gzip.
+
+**⚠️ DÜZENLEME KURALI:** Büyük dosyalarda Edit riskli + sandbox `rm` YOK (`mv` var). Düzenleme = **Python byte-replace + `node --check`**; **.bak OLUŞTURMA**; rollback = `git checkout <dosya>`. EOL eşle: **kök klasörde styles.css TEK BAŞINA LF** · diğer HEPSİ CRLF (core.js/ui.js/tasks.js/supabase.js/sw.js/asistan.html/worker.js/CLAUDE.md). **⚠️ `borsa/` klasöründe TÜM dosyalar LF** — iki proje karışmasın diye orada tek kural var (teste bağlı). ⚠️ 25 Tem'de doğrulandı — eski not yanlıştı, byte-replace'te `assert b'\r\n' in b` ile kontrol et.
 
 **AI = Google Gemini** (`gemini-3.5-flash`, ücretsiz katman; `env.GEMINI_MODEL` ile ezilir, `env.GEMINI_API_KEY` secret). Worker'da tek AI fonksiyonu `aiRun` → Gemini generateContent; `visionRun` de Gemini multimodal (portföy/Classroom görsel OCR, `{response}` sözleşmesi korunur). Cloudflare `env.AI.run` (eski Llama) **ARTIK KULLANILMIYOR** — yanıltıcı Llama yorumları 24 Tem'de temizlendi. Sesli giriş tarayıcıda Web Speech API (Whisper yok).
 
 **Deployed büyük paketler (hepsi CANLI — detay CHANGELOG.md):**
 - **AI sağlık koçu (v7-117):** uyku + Hevy antrenman + beslenme BİRLİKTE — lokal desen tespiti ($0) + `/health-coach` (Gemini) + Pazar otomatik rapor. Diyet sekmesi üstünde şerit.
 - **Diyet:** barkod tarayıcı (html5-qrcode + Open Food Facts), Türk besin DB, USDA+AI arama, özel besin/tarif, takviye takibi, BMR/TDEE (`calcGoals`), çoklu+haftalık program, makro grafik.
-- **Borsa (Analiz v2, v7-130):** uyum skoru 0-100 + koşullu senaryolar (tetik/hedef/geçersizleşme) + günlük↔haftalık zaman dilimi uyumu; 15 göstergeli teknik analiz, mum grafik, Fibonacci, temel analiz paneli (`/stock-fundamentals`), AI taktik, BIST100 kıyas, risk/stop/pozisyon-boyutu paneli, işlem alarmı, portföy görselden ekleme.
+- **Borsa → AYRI SİTE oldu (14 Ağu 2026).** Motor `borsa/stocks.js`; detay aşağıdaki bölümde.
 - **Görev/Plan:** otomatik gün planı + blok bildirimleri (v7-109), planlama zekası — geçmişten öğrenen `planHistory`/`planProfile` + otomatik toparlama (v7-110), haftalık sabit program (`fixedSchedule`).
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
+
+### 🔴 14 Ağustos 2026 — 🧱 BORSA AYRI SİTEYE TAŞINDI (borsa-v1 · Aidan v7-155)
+
+Salim: "borsa kısmına sadece borsa için başka bi site yapalım, Aidan'dan ayıralım." Kararlar: Aidan'dan **tamamen kaldırılsın** · **ayrı site** · **aynı Supabase, ayrı tablo** · **mevcut worker**.
+
+**Neden temiz çıktı:** denetimde `stocks.js` (4466 satır) Aidan çekirdeğinden yalnızca **11 fonksiyon** kullanıyordu (`escapeHtml`, `showToast`, `aidanPrompt`, `aiInstructions`, `isoLocal`/`today`, `donutChart`/`lineChart`/`sparkline`, `resizeImageToDataUrl`, `save`, `getSupaToken`) ve sahip olduğu veri alanları netti (`watchlist`, `trades`, `screen`, `portfolioHistory` + `settings`'ten 2 anahtar). Yani ayrım gerçekten mümkündü — motor **hiç değişmeden** taşındı.
+
+**Yeni yapı (`borsa/`):** `index.html` (kabuk + Aidan'dan BİREBİR alınan 5 modal) · `shared.js` (11 yardımcı + veri katmanı) · `sync.js` (kimlik + senkron) · `app.js` (açılış/render sırası/portföy yorumu) · `stocks.js` (motor) · `styles.css` · `sw.js` · `manifest` · `_headers`/`_redirects`.
+
+**🎨 CSS ÜRETİLİYOR, ELLE AYIKLANMIYOR.** Aidan'ın `styles.css`'i 4878 satır; gereken kuralları elle seçmek hata kaynağı olurdu. Bir üretici (`build_borsa_css.py`) `index.html` + `stocks.js` çıktısındaki **tüm class/id adlarını** toplayıp kuralları süzüyor: **230 KB → 73 KB**. Kazanç iki yönlü: bileşen CSS'i aylardır test edilmiş hâliyle geliyor, değişen tek şey palet.
+- **Palet bloğu EN SONDA** — `styles.css` içinde 5 ayrı `:root` var ve sonuncusu kazanır. Başta olsaydı Aidan'ın geç gelen `:root`'u `--font-sans`/`--on-accent`'i geri alırdı (teste bağlı).
+- **Token ezmek tek başına YETMEZ:** token dışında ~35 yerde amber sabit yazılıydı (gradyan durakları, rgba gölgeler). Mekanik dönüşümle maviye çevrildi. **`#ffc640` DOKUNULMADI** — o bir grafik serisi rengi (SMA20); maviye çevirmek SMA50'nin rengiyle çakışırdı.
+- **Vurgu rengi bilerek yeşil/kırmızı DEĞİL** (`#4d8df0`) — o iki renk yükseliş/düşüş anlamına ayrıldı; vurgu da o aileden olsaydı kart üzerinde "yön" ile "aksiyon" ayırt edilemezdi. Teste bağlı.
+- Font **IBM Plex Sans** (Aidan Hanken Grotesk) — iki ürün bakınca ayrılsın + tabular rakam (ekranın yarısı sayı).
+- **Yorumlar korunuyor:** ilk sürüm yorumları atıyordu; Aidan'ın test paketi bazı blokları yorum işaretinden buluyor ("BUFFETT SKORU", "Kurum tipi rozeti") ve testler "CSS bloğu yok" diye kırmızı oldu. Üretici düzeltildi — **test değil, üretici**.
+
+**🗄️ Veri: `public.aidan_stocks` (yeni tablo, RLS + realtime).** `aidan_data`'nın ~5 MB blob'u borsa verisiyle şişmesin ve iki uygulama birbirini ezmesin diye. **Çakışma koruması Aidan'dan BİREBİR taşındı** (rev izleme + kirli bayrak + "iki taraf da değişmişse SOR" + ezilen tarafı her durumda yedekle) — borsa verisi (işlem günlüğü, portföy maliyeti) yeniden üretilemez, aynı sessiz kayıp hatasını tekrarlamak daha pahalı olurdu.
+- localStorage anahtarı **`aidanborsa`**, senkron bayrakları **`borsa_*`** önekli, realtime kanalı **`borsa-sync-*`** — üçü de teste bağlı. Aidan aynı tarayıcıda kendi anahtarlarını kullanıyor.
+- **Taşıma migration'ı `on conflict do nothing`** — ikinci kez çalışırsa borsa sitesindeki daha yeni veriyi EZMEZ. **Aidan'daki eski kopyalar SİLİNMEDİ**, geri dönüş yolu açık (doğrulama sonrası tek satırlık temizlik).
+- Doğrulandı: 6 izleme · 15 portföy geçmişi · `riskPct` taşındı.
+
+**🌐 Worker: CORS 27 yerde sabitti.** Tek origin döndürmek diğerinin her isteğini tarayıcıda bloklardı → `ALLOWED_ORIGINS` allowlist + `allowOrigin(request)` + **`Vary: Origin`** (araya giren önbellek yanlış origin'i başkasına servis etmesin). **⚠️ İstek Origin'i AYNEN YANSITILMAZ** — yansıtmak her siteye kullanıcının oturumuyla bu uçları çağırma izni vermek olurdu. Teste bağlı (yabancı origin denemesi dahil).
+
+**🔴 SESSİZ BOZULMA OLABİLECEK İKİ NOKTA — kapatıldı:**
+1. **Borsa cron'ları eski tabloyu okuyacaktı.** Alarm ve akşam portföy özeti `aidan_data.watchlist`'ten besleniyordu; taşımadan sonra donmuş veriyle çalışıp **sessizce yanlış alarm** üretirdi. Artık `fetchStocksFor`/`saveStocksFor` ile `aidan_stocks`'tan okuyor. **Yazma AYRIŞTIRILDI:** borsa alanları → `aidan_stocks`, pushLog/abonelik → `aidan_data` (bildirim altyapısı ortak). İkisini tek yere yazmak ayırmanın amacını bozardı.
+2. **Aidan'ın sohbet bağlamındaki portföy özeti** de `aidan_data.watchlist` okuyordu → donmuş veriyle "portföyün şu an şu kadar" demek, hiç dememekten **daha kötü**. Blok kaldırıldı; borsa yorumu artık borsa sitesinin kendi ucunda.
+
+**🔒 GERÇEK GÜVENLİK BULGUSU (bu paketin en değerlisi).** Sembol adı `onclick="setPosition('...')"` içine **HAM** giriyordu — 4 yerde. `escapeHtml` burada **tek başına yetmez ve bu ince bir hata**: tırnağı `&#39;` yapar, ama tarayıcı özniteliği JS'e vermeden önce entity'leri çözer → tekrar `'` olur ve JS dizesinden çıkılır. Sembol kullanıcıdan **ve portföy görseli OCR'ından (yani AI çıktısından)** geliyor. Yeni `jsArg()`: önce JS dizesi için kaçır (`\'`, `\\`), sonra HTML için. **Aidan'da da vardı** — borsa oradan kalktığı için orada da kapandı.
+- Test metin eşleştirmiyor, **gerçekten tıklatıyor**: payload dizenin içinde kalıyor, `alert` çalışmıyor, fonksiyon sembolü bozulmadan alıyor. Sabotaj denemesiyle (jsArg → escapeHtml) kırmızı olduğu doğrulandı.
+
+**🐛 Yan bulgu — Aidan'da 1 satırlık gerçek eksik:** PWA'nın `/plan` çağrısı `instructions` GÖNDERMİYORDU, worker ise gövdeden bekliyordu → **Ayarlar → Talimatlar gün planında hiç uygulanmıyormuş.** Test eşiğini yeniden kalibre ederken çıktı, düzeltildi.
+
+**🧪 Testler:** yeni `tests/21-borsa.test.js` **45 test** + ayrı harness `tests/helpers/borsa.js`.
+- **En değerli iki sınıf:** ① **yalnız borsa dosyalarıyla yükleme** — Aidan çekirdeğine kalan bir bağımlılık varsa burada kırmızı olur (Aidan'ın kendi ortamında GÖRÜNMEZ, çünkü orada hepsi tanımlı) ② **veri izolasyonu** — anahtarlar/tablo/kanal çakışırsa biri diğerini sessizce ezer.
+- Ayrıca: onclick XSS (tıklatarak), açık işleme budama dokunmaması, `revMs` format farkı, `sw.js` ASSETS ↔ gerçek dosya, LF disiplini, Impeccable denetimi (9 test), worker CORS (4 test), **index.html'deki tüm `onclick`'lerin tanımlı olması** (ölü düğme yok).
+- Motoru test eden 3 dosya (`08`,`09`,`19`) yeni konuma yönlendirildi. `13-lazy` borsa yerine `program` modülüyle çalışıyor. `01-smoke` artık "bilinmeyen sekme adı" senaryosunu da deniyor.
+- **`showTab` sertleştirildi:** bilinmeyen sekme adında sessizce Görevler'e döner. Eski bir yer imi/kayıtlı durum `'stocks'` derse `getElementById` null dönüp **uygulamanın tamamı ölürdü**.
+- **21 dosya toplam 726 test geçiyor, suite tamamen yeşil.** `npm run check` borsa dosyalarını da kapsıyor.
+
+**Deploy:** yeni `borsa-pages-deploy.py` (proje `aidanborsa`) + Actions'a **ayrı adım** (biri patlarsa diğeri yayından düşmez) + `paths`'e `borsa/**`. Aidan'dan çıkanlar: `stocks.js`, Borsa sekmesi/drawer girdisi, 5 modal, `LAZY_MODULES.stocks`, sw.js/deploy.py/Actions kayıtları.
+**Cache:** Aidan v7-154 → **v7-155** · Borsa **borsa-v1**
+
+**⚠️ SALİM'İN YAPMASI GEREKEN (kod dışı):** Cloudflare'de `aidanborsa` Pages projesi ilk deploy'da otomatik oluşur. İlk açılışta **giriş yap** (aynı e-posta/şifre) — veri zaten taşındı, senkron başlar.
 
 ### 🔴 12 Ağustos 2026 — 🥗 AI BESLENME PROGRAMI YAZMA (v7-154)
 

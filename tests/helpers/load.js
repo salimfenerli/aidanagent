@@ -15,7 +15,8 @@ const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const SCRIPTS = ['core.js', 'tasks.js', 'stocks.js', 'ui.js', 'program.js'];
+// 14 Agu 2026: stocks.js borsa sitesine tasindi (bkz. tests/helpers/borsa.js).
+const SCRIPTS = ['core.js', 'tasks.js', 'ui.js', 'program.js'];
 
 function read(file) {
   return fs.readFileSync(path.join(ROOT, file), 'utf8');

@@ -20,6 +20,27 @@
  */
 
 const TR_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+// ============================================================
+// CORS — izinli origin listesi (14 Agu 2026)
+// Borsa Aidan'dan ayrilip kendi sitesine tasindi; iki origin de ayni
+// worker'a konusuyor. Origin SABIT yazilamaz: tek bir deger dondurmek
+// digerinin her istegini tarayicida bloklardi.
+// UYARI: istegin Origin'i AYNEN yansitilmaz — yalnizca listedeyse dondurulur.
+// Yansitmak, herhangi bir siteye kullanicinin oturumuyla bu uclari
+// cagirma izni vermek olurdu.
+// 'Vary: Origin' sart: yanit origin'e gore degisiyor, araya giren
+// onbellek yanlis origin'i baskasina servis etmesin.
+// ============================================================
+const ALLOWED_ORIGINS = [
+  'https://aidanapp.pages.dev',      // Aidan (ADHD asistani)
+  'https://aidanborsa.pages.dev',    // Borsa (ayri site)
+];
+function allowOrigin(request) {
+  let o = '';
+  try { o = (request && request.headers && request.headers.get('Origin')) || ''; } catch (_) {}
+  return ALLOWED_ORIGINS.indexOf(o) !== -1 ? o : ALLOWED_ORIGINS[0];
+}
 // ============================================================
 // AI PROVIDER — Google Gemini (Llama'nin yerine, Tem 2026)
 // Sozlesme CF env.AI.run ile AYNI: girdi {messages, tools?, max_tokens, temperature},
@@ -2083,7 +2104,7 @@ function allowUser(env, user) {
 
 async function handleAiApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -3053,7 +3074,7 @@ async function generateHealthCoach(env, data, name) {
 // ---------- POST /health-coach (PWA "Analiz et") ----------
 async function handleHealthCoachApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -3117,7 +3138,7 @@ async function buildHealthWeekly(env, data) {
 
 async function handleJournalApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -3354,7 +3375,7 @@ function chatHealthShort(data) {
 
 async function handleChatApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -3401,25 +3422,11 @@ async function handleChatApi(request, env) {
 
     const mitStr = mit.length ? ` Bugünün 3'ü (MIT): ${mit.join(', ')}.` : ` Bugünün 3'ü (MIT) henüz seçilmemiş.`;
 
-    // Portföy özeti — para birimine göre gruplu, cache'li fiyatlarla (yaklaşık)
-    let pfStr = '';
-    const wl = (d.watchlist || []).filter(w => w && w.qty > 0 && w.price);
-    if (wl.length) {
-      const byCur = {};
-      wl.forEach(w => {
-        const cur = w.currency || 'TRY';
-        (byCur[cur] = byCur[cur] || { val: 0, cost: 0, n: 0 });
-        byCur[cur].val += w.qty * w.price;
-        byCur[cur].cost += w.qty * (w.cost || 0);
-        byCur[cur].n++;
-      });
-      const parts = Object.entries(byCur).map(([cur, o]) => {
-        const pl = o.val - o.cost;
-        const plPct = o.cost ? (pl / o.cost * 100) : 0;
-        return `${o.n} pozisyon ${cur} — değer ~${Math.round(o.val)} ${cur}, toplam K/Z ${pl >= 0 ? '+' : ''}${Math.round(pl)} ${cur} (${plPct >= 0 ? '+' : ''}${plPct.toFixed(1)}%)`;
-      });
-      pfStr = ` Portföy (yaklaşık, son fiyatlarla): ${parts.join('; ')}.`;
-    }
+    // NOT (14 Agu 2026): burada portfoy ozeti sohbet baglamina giriyordu.
+    // Borsa ayri siteye tasindi ve verisi artik aidan_stocks tablosunda;
+    // aidan_data'daki watchlist DONMUS bir kopya. Donmus veriyle "portfoyun
+    // su an su kadar" demek, hic soylememekten DAHA KOTU olurdu.
+    // Borsa yorumu artik borsa sitesinin kendi AI ucunda.
 
     // Meta-öğrenme modu — komut varsa yöntemin kuralları sistem prompt'una eklenir
     // "/pro <istek>" = kullanıcının BİLİNÇLİ tek seferlik yükseltmesi (düğmeye basmak gibi).
@@ -3442,7 +3449,7 @@ async function handleChatApi(request, env) {
     const healthGuard = (healthShort || healthFull) ? CHAT_HEALTH_GUARD(name) : '';
     const healthRules = healthFull ? CHAT_HEALTH_RULES : '';
 
-    const ctx = `[BAĞLAM — ${name} durumu] Açık görev: ${openCount}. Bugün biten: ${doneToday}.${overdue ? ` Gecikmiş: ${overdue}.` : ''}${mitStr}${pfStr}${healthShort}${healthFull}${healthGuard}${healthRules}`;
+    const ctx = `[BAĞLAM — ${name} durumu] Açık görev: ${openCount}. Bugün biten: ${doneToday}.${overdue ? ` Gecikmiş: ${overdue}.` : ''}${mitStr}${healthShort}${healthFull}${healthGuard}${healthRules}`;
 
     const sysPrompt = `Sen Aidan'sın — ${name}'in ADHD asistanı ve düşünme ortağı. ${name} 16 yaşında, lise öğrencisi, satranç/strateji seviyor, borsada işlem yapıyor.
 
@@ -3508,7 +3515,7 @@ function extractStepsJson(raw) {
 // Görevi küçük adımlara böl (ADHD task initiation) — Gemini, tool YOK, JSON dizi döner
 async function handleSplitApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -3605,7 +3612,7 @@ function extractPlanJson(raw) {
 // 📅 Gün planlayıcı — görevler + uyanık pencere → saat saat blok dizisi. Gemini, tool YOK.
 async function handlePlanApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -3701,7 +3708,7 @@ async function generatePlanBlocks(env, { tasks, from, to, now, busy, insight, ti
 // AI portföy yorumu — BETİMLEYİCİ özet (yatırım tavsiyesi DEĞİL). Sayılar PWA'dan gelir (uydurma yok).
 async function handlePortfolioCommentApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -3830,7 +3837,7 @@ async function fetchStockQuotes(entries) {
 
 async function handleStocksApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -3880,7 +3887,7 @@ const STOCK_HISTORY_RANGES = {
 
 async function handleStockHistoryApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -4178,7 +4185,7 @@ function isyRows(items, years, isBank) {
 
 async function handleBistFinancialsApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -4254,7 +4261,7 @@ async function handleBistFinancialsApi(request, env) {
 
 async function handleStockFundamentalsApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -4467,7 +4474,7 @@ async function fetchScreenQuotes(symbols) {
 
 async function handleStockScreenApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -4614,7 +4621,7 @@ Bu tabloyu ${name}'e anlat: ① filtrenin ne yaptığı ve bu listenin ne OLMADI
 // ============================================================
 async function handleStockNewsApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -4740,7 +4747,7 @@ TON: kısa, net, haber bülteni dili. Son cümle: "Bu sadece haber özeti — ya
 // PWA göstergeleri (SMA7/SMA30/volatilite/trend) hesaplar, AI sadece tarif eder.
 async function handleStockAnalysisApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -4961,7 +4968,7 @@ Yapı: ① tablonun genel hali + uyum skorunun ne dediği ② zaman dilimi uyumu
 // ============================================================
 async function handlePortfolioTechnicalApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -5067,7 +5074,7 @@ Bu verileri 4-7 cümlelik tarafsız taktik özete dök. Geçen göstergelerin ne
 // Çıktı: {taskId, reason} — kısa Türkçe cümle.
 async function handleSuggestApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -5194,7 +5201,7 @@ Bunlardan TEK bir tanesini ${name}'e öner. SADECE JSON döndür.`;
 // frontend bundle'a düşmeden çekilsin. Auth YOK.
 async function handleConfigApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '86400',
@@ -5219,7 +5226,7 @@ function genInviteCode() {
 
 async function handleInviteCreateApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -5264,7 +5271,7 @@ async function handleInviteCreateApi(request, env) {
 
 async function handleInviteListApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -5294,7 +5301,7 @@ async function handleInviteListApi(request, env) {
 
 async function handleSignupApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -5441,7 +5448,7 @@ function extractHoldingsJson(text) {
 
 async function handlePortfolioImageApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -5545,7 +5552,7 @@ function extractDietPlanJson(text) {
 // Tarih çözümü: bugünün tarihi prompt'a verilir → "Yarın/Cuma/12 Tem" → tam YYYY-MM-DD.
 async function handleClassroomImageApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -5641,7 +5648,7 @@ function extractClassroomJson(text) {
 
 async function handleDietPlanImageApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -6038,7 +6045,7 @@ function trFoodLookup(name, grams) {
 
 async function handleFoodMacrosApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -6141,7 +6148,7 @@ function parseDietPlanJson(raw) {
 
 async function handleDietPlanApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -6261,6 +6268,57 @@ async function visionRun(env, input) {
   });
 }
 
+// ============================================================
+// BORSA VERISI — ayri tablo (14 Agu 2026)
+// ============================================================
+// Borsa Aidan'dan ayrilip kendi sitesine tasindi; watchlist/portfolioHistory
+// artik public.aidan_stocks'ta. Ama push ABONELIKLERI ve pushLog hala
+// aidan_data'da (bildirim altyapisi ortak).
+//
+// ⚠️ Bu yuzden asagidaki iki cron IKI KAYNAKTAN okur ve AYRI AYRI yazar:
+//   - borsa alanlari  -> aidan_stocks   (saveStocksFor)
+//   - pushLog/abonelik -> aidan_data    (saveUserData)
+// Ikisini tek yere yazmak, ayirmanin butun amacini bozardi: Aidan'in blob'u
+// yine borsa verisiyle sismeye devam ederdi.
+async function stocksHeaders(env) {
+  if (hasServiceKey(env)) {
+    return { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` };
+  }
+  const { token } = await login(env);
+  return { 'apikey': env.SUPABASE_KEY, 'Authorization': `Bearer ${token}` };
+}
+
+async function fetchStocksFor(env, userId) {
+  try {
+    const r = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/aidan_stocks?user_id=eq.${userId}&select=data`,
+      { headers: await stocksHeaders(env) }
+    );
+    if (!r.ok) return { watchlist: [], portfolioHistory: [], settings: {} };
+    const rows = await r.json();
+    const d = (rows[0] && rows[0].data) || {};
+    d.watchlist = d.watchlist || [];
+    d.portfolioHistory = d.portfolioHistory || [];
+    d.settings = d.settings || {};
+    return d;
+  } catch (e) {
+    // Sessiz bozulma YOK: cagiran taraf bos watchlist gorur ve "0 kontrol"
+    // doner; alarm uydurmaz.
+    console.error('fetchStocksFor fail', e.message);
+    return { watchlist: [], portfolioHistory: [], settings: {} };
+  }
+}
+
+async function saveStocksFor(env, userId, sdata) {
+  const h = await stocksHeaders(env);
+  const r = await fetch(`${env.SUPABASE_URL}/rest/v1/aidan_stocks?on_conflict=user_id`, {
+    method: 'POST',
+    headers: { ...h, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ user_id: userId, data: sdata, updated_at: new Date().toISOString() }),
+  });
+  if (!r.ok) throw new Error(`saveStocksFor fail: ${r.status} ${await r.text()}`);
+}
+
 // Borsa alarm cron — watchlist fiyatlarını kontrol et, eşik geçildiyse push (her user için)
 async function runStockCheck(env) {
   const users = await fetchAllUsers(env);
@@ -6277,8 +6335,9 @@ async function runStockCheck(env) {
 }
 
 async function runStockCheckForUser(env, u) {
-  const data = u.data;
-  const wl = (data.watchlist) || [];
+  const data = u.data;                              // push abonelikleri + pushLog
+  const sdata = await fetchStocksFor(env, u.userId); // borsa verisi (ayri tablo)
+  const wl = sdata.watchlist || [];
   if (!wl.length) return { checked: 0 };
   const quotes = await fetchStockQuotes(wl.map(w => ({ display: (w.symbol || '').toUpperCase(), yahoo: w.ySymbol || bistSymbol(w.symbol) })));
   const bySym = {};
@@ -6317,7 +6376,9 @@ async function runStockCheckForUser(env, u) {
     logPush(data, 'stocks', payload, ((data.settings && data.settings.pushSubs) || []).length);
     dirty = true;
   }
-  if (dirty) { try { await saveUserData(env, u.userId, data); } catch (e) { console.error('stock save fail', e.message); } }
+  // Alarm bayraklari (lastAlerted*) borsa tablosuna; pushLog Aidan tarafina.
+  if (dirty) { try { await saveStocksFor(env, u.userId, sdata); } catch (e) { console.error('stock save fail', e.message); } }
+  if (alerts.length) { try { await saveUserData(env, u.userId, data); } catch (e) { console.error('pushlog save fail', e.message); } }
   return { checked: wl.length, alerts: alerts.length };
 }
 
@@ -6337,8 +6398,9 @@ async function runPortfolioSummary(env) {
 }
 
 async function runPortfolioSummaryForUser(env, u) {
-  const data = u.data;
-  const wl = (data.watchlist) || [];
+  const data = u.data;                              // push abonelikleri + pushLog
+  const sdata = await fetchStocksFor(env, u.userId); // borsa verisi (ayri tablo)
+  const wl = sdata.watchlist || [];
   const holdings = wl.filter(w => w.qty != null && w.qty > 0 && w.cost != null);
   if (!holdings.length) return { holdings: 0 };
 
@@ -6368,12 +6430,12 @@ async function runPortfolioSummaryForUser(env, u) {
   if (!currencies.length) return { holdings: holdings.length, sent: 0 };
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  data.portfolioHistory = data.portfolioHistory || [];
+  sdata.portfolioHistory = sdata.portfolioHistory || [];
   // Geçmişten N gün önceki değere göre değişim % (bugünü hariç tut)
   const histFor = (cur, daysAgo) => {
     const t = new Date(); t.setDate(t.getDate() - daysAgo);
     const ts = t.toISOString().slice(0, 10);
-    const arr = data.portfolioHistory.filter(s => s.byCur && s.byCur[cur] && s.date !== todayStr);
+    const arr = sdata.portfolioHistory.filter(s => s.byCur && s.byCur[cur] && s.date !== todayStr);
     let past = null;
     for (let i = arr.length - 1; i >= 0; i--) { if (arr[i].date <= ts) { past = arr[i]; break; } }
     if (!past) return null;
@@ -6410,13 +6472,14 @@ async function runPortfolioSummaryForUser(env, u) {
   // Bugünün snapshot'ını geçmişe yaz (upsert) — kapanış değeri, otoritatif
   const snapByCur = {};
   for (const cur of currencies) snapByCur[cur] = { value: byCur[cur].value, cost: byCur[cur].cost };
-  const existIdx = data.portfolioHistory.findIndex(s => s.date === todayStr);
-  if (existIdx >= 0) data.portfolioHistory[existIdx].byCur = snapByCur;
-  else data.portfolioHistory.push({ date: todayStr, byCur: snapByCur });
-  data.portfolioHistory.sort((a, b) => a.date < b.date ? -1 : 1);
-  if (data.portfolioHistory.length > 180) data.portfolioHistory = data.portfolioHistory.slice(-180);
+  const existIdx = sdata.portfolioHistory.findIndex(s => s.date === todayStr);
+  if (existIdx >= 0) sdata.portfolioHistory[existIdx].byCur = snapByCur;
+  else sdata.portfolioHistory.push({ date: todayStr, byCur: snapByCur });
+  sdata.portfolioHistory.sort((a, b) => a.date < b.date ? -1 : 1);
+  if (sdata.portfolioHistory.length > 180) sdata.portfolioHistory = sdata.portfolioHistory.slice(-180);
 
-  try { await saveUserData(env, u.userId, data); } catch (e) { console.error('portfolio save fail', e.message); }
+  try { await saveStocksFor(env, u.userId, sdata); } catch (e) { console.error('portfolio save fail', e.message); }
+  try { await saveUserData(env, u.userId, data); } catch (e) { console.error('pushlog save fail', e.message); }
   return { holdings: holdings.length, sent: 1 };
 }
 
@@ -7354,7 +7417,7 @@ function hevyBuildExercises(gun, tplIds, restSec) {
 
 async function handleHevyRoutinesApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
@@ -7458,7 +7521,7 @@ async function handleHevyRoutinesApi(request, env) {
 
 async function handleHevySyncApi(request, env) {
   const cors = {
-    'Access-Control-Allow-Origin': 'https://aidanapp.pages.dev',
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',

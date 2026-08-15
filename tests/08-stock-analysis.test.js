@@ -7,7 +7,8 @@
  */
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { loadApp } = require('./helpers/load');
+// 14 Agu 2026: borsa motoru kendi sitesine tasindi -> borsa harness'i.
+const { loadBorsa: loadApp } = require('./helpers/borsa');
 const { readText } = require('./helpers/src');
 
 // ——— Sentetik TA nesnesi: tum gostergeler ayni yone bakar ———
@@ -356,7 +357,7 @@ test('facts: AI a giden pakette confluence/scenarios/mtf alanlari var', () => {
 // ============================================================
 // 5) DOM
 // ============================================================
-test('DOM: kapsayicilar asistan.html icinde var', () => {
+test('DOM: kapsayicilar borsa/index.html icinde var', () => {
   const a = app();
   for (const id of ['stockConfluence', 'stockMtf', 'stockScenarios']) {
     assert.ok(a.window.document.getElementById(id), '#' + id + ' yok');
@@ -449,7 +450,7 @@ test('worker: analiz cagrisi hala hesap sahibine kilitli (maliyet korumasi)', ()
 // 7) CSS / IMPECCABLE
 // ============================================================
 test('CSS: yeni siniflar tanimli', () => {
-  const css = readText('styles.css');
+  const css = readText('borsa/styles.css');
   for (const c of ['.stock-conf', '.sc-score', '.sc-bar', '.sc-fill', '.sc-vote',
                    '.stock-mtf', '.stock-scen', '.scen-card', '.scen-line', '.scen-band', '.scen-note']) {
     assert.ok(css.includes(c), 'CSS sinifi yok: ' + c);
@@ -457,15 +458,23 @@ test('CSS: yeni siniflar tanimli', () => {
 });
 
 test('CSS: Impeccable — yan-serit yok, gradient/glass yok, reduced-motion var', () => {
-  const css = readText('styles.css');
-  const blok = css.slice(css.indexOf('ANALIZ v2 (7 Agu)'));
-  assert.ok(blok.length > 500, 'analiz v2 CSS blogu bulunamadi');
+  const css = readText('borsa/styles.css');
+  // ⚠️ Eskiden blok "ANALIZ v2 (7 Agu)" yorum isaretinden kesiliyordu. Borsa
+  // stil sayfasi uretiliyor ve yorumlar tasinmiyor — isaret kayboldu. Artik
+  // blok, ILGILI SINIFLARIN kurallarindan toplaniyor: isarete degil gercek
+  // selektorlere bagli, yani yorum silinse de dogru calisir.
+  const KL = ['stock-conf','sc-score','sc-bar','sc-fill','sc-vote','sc-votes','sc-det',
+              'stock-mtf','stock-scen','scen-card','scen-line','scen-band','scen-note','scen-h','scen-dot'];
+  const kurallar = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter(m => KL.some(k => m[1].includes('.' + k)));
+  const blok = kurallar.map(m => m[0]).join('\n');
+  assert.ok(kurallar.length >= 10, 'analiz v2 CSS kurallari bulunamadi: ' + kurallar.length);
+  assert.ok(/prefers-reduced-motion/.test(css), 'reduced-motion alternatifi yok');
   assert.ok(!/border-left:\s*[2-9]/.test(blok), 'yan-serit kenarlik kullanilmis (MUTLAK YASAK)');
   assert.ok(!/border-right:\s*[2-9]/.test(blok), 'yan-serit kenarlik kullanilmis (MUTLAK YASAK)');
   assert.ok(!/backdrop-filter/.test(blok), 'glassmorphism kullanilmis');
   assert.ok(!/linear-gradient|radial-gradient/.test(blok), 'gradyan kullanilmis');
   assert.ok(!/#fff\b|#000\b/.test(blok), 'saf beyaz/siyah kullanilmis');
-  assert.ok(/prefers-reduced-motion/.test(blok), 'reduced-motion alternatifi yok');
 });
 
 test('cache versiyonu artirildi', () => {

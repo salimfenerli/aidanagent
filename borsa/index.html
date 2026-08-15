@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#080a0e">
+<meta name="description" content="BIST ve global piyasalar icin izleme listesi, portfoy, teknik analiz, Buffett skoru ve islem gunlugu.">
+<title>Borsa</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Borsa">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Ust bar: canli saat + piyasa durumu + ayarlar -->
+  <header class="bx-header">
+    <div class="bx-brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+      <span>Borsa</span>
+    </div>
+    <div class="bx-meta">
+      <div class="bx-clock" id="stocksModeClock">&mdash;</div>
+      <div class="bx-date" id="stocksModeDate">&mdash;</div>
+    </div>
+    <button type="button" class="bx-gear" onclick="openSettings()" aria-label="Ayarlar" title="Ayarlar">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </header>
+
+  <!-- Giris gerekli seridi (oturum yokken) -->
+  <div class="bx-authbar" id="bxAuthBar" style="display:none;"></div>
+
+      <div class="stocks-mode-meta">
+        <div class="stocks-mode-clock" id="stocksModeClock">—</div>
+        <div class="stocks-mode-date" id="stocksModeDate">—</div>
+      </div>
+    </div>
+    <div class="portfolio-summary" id="portfolioSummary" style="display:none;"></div>
+    <div class="portfolio-risk-panel" id="portfolioRiskPanel" style="display:none;"></div>
+    <div class="portfolio-pie" id="portfolioPie" style="display:none;"></div>
+    <div class="portfolio-history" id="portfolioHistory" style="display:none;"></div>
+    <div class="bist100-compare" id="bist100Compare" style="display:none;"></div>
+    <section class="screener" id="screenerSection"></section>
+    <button class="pf-comment-btn" id="pfCommentBtn" onclick="aiCommentPortfolio()" style="display:none;"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg> Portföyü yorumla</button>
+    <button class="pf-tech-btn" id="pfTechBtn" onclick="openPfTechModal()" style="display:none;"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/><circle cx="11" cy="11" r="1.2"/><circle cx="14" cy="14" r="1.2"/><circle cx="19" cy="8" r="1.2"/></svg> Portföy teknik özet</button>
+    <div class="market-chips" id="marketChips">
+      <button class="market-chip active" data-market="bist" onclick="selectMarket('bist')">🇹🇷 BIST</button>
+      <button class="market-chip" data-market="abd" onclick="selectMarket('abd')">🇺🇸 ABD</button>
+      <button class="market-chip" data-market="fx" onclick="selectMarket('fx')">Döviz</button>
+      <button class="market-chip" data-market="crypto" onclick="selectMarket('crypto')">₿ Kripto</button>
+    </div>
+    <div class="stocks-add">
+      <input type="text" id="stockSymInput" placeholder="THYAO, GARAN, ASELS, TUPRS" maxlength="15" onkeydown="if(event.key==='Enter')addStock()" autocapitalize="characters">
+      <button onclick="addStock()" id="stockAddBtn">Ekle</button>
+    </div>
+    <button class="stocks-photo-btn" id="stocksPhotoBtn" onclick="document.getElementById('portfolioPhotoInput').click()">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      Ekran görüntüsünden portföy ekle
+      <span class="stocks-photo-multi">birden fazla seçebilirsin</span>
+    </button>
+    <input type="file" id="portfolioPhotoInput" accept="image/*" multiple style="display:none;" onchange="handlePortfolioPhoto(event)">
+    <div class="stocks-toolbar">
+      <div class="stocks-meta">
+        <span class="mkt-status" id="marketStatus"></span>
+        <span class="stocks-updated" id="stocksUpdated">—</span>
+      </div>
+      <button class="stocks-refresh" onclick="refreshStocks()" id="stocksRefreshBtn" title="Fiyatları güncelle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg> Yenile</button>
+    </div>
+    <div class="stocks-list" id="stocksList"></div>
+    <div class="stocks-hint" id="stocksHint">BIST · ABD · Döviz · Kripto — fiyatlar Yahoo Finance'tan · alarm kurarsan eşik geçilince push bildirimi gelir.</div>
+    <section class="trade-journal" id="tradeJournal"></section>
+
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="modal-overlay" id="inputModal" onclick="if(event.target.id==='inputModal')cancelInputModal()">
+  <div class="modal">
+    <div class="modal-title" id="inputModalTitle">Düzenle</div>
+    <div class="modal-task" id="inputModalLabel" style="font-size:1em; font-weight:500; margin-bottom:12px; color: var(--text-muted);"></div>
+    <input type="text" id="inputModalInput" class="modal-input">
+    <textarea id="inputModalTextarea" class="modal-input" style="display:none;"></textarea>
+    <div class="modal-actions">
+      <button onclick="resolveInputModal()">Tamam</button>
+      <button class="secondary" onclick="cancelInputModal()">İptal</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="tradeModal" onclick="if(event.target.id==='tradeModal')closeTradeModal()">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-title">İşlem aç</div>
+    <div class="tm-warn" id="tmWarn" style="display:none;"></div>
+    <input type="text" id="tmSymbol" class="modal-input" list="tmSymList" placeholder="Sembol (THYAO)" autocapitalize="characters">
+    <datalist id="tmSymList"></datalist>
+    <div class="tm-chips" id="tmSideChips">
+      <button type="button" class="tm-chip sel" data-v="long" onclick="tjPick('side','long',this)">▲ Long</button>
+      <button type="button" class="tm-chip" data-v="short" onclick="tjPick('side','short',this)">▼ Short</button>
+    </div>
+    <div class="tm-grid">
+      <div><label class="tm-label" for="tmEntry">Giriş</label><input type="text" inputmode="decimal" id="tmEntry" class="modal-input" oninput="updateTradePreview()"></div>
+      <div><label class="tm-label" for="tmStop">Stop</label><input type="text" inputmode="decimal" id="tmStop" class="modal-input" oninput="updateTradePreview()"></div>
+      <div><label class="tm-label" for="tmTarget">Hedef</label><input type="text" inputmode="decimal" id="tmTarget" class="modal-input" oninput="updateTradePreview()"></div>
+      <div><label class="tm-label" for="tmQty">Adet</label><input type="text" inputmode="decimal" id="tmQty" class="modal-input" oninput="updateTradePreview()"></div>
+    </div>
+    <div class="tm-preview" id="tmPreview"></div>
+    <div class="tm-field-label">Neden giriyorum?</div>
+    <div class="tm-chips" id="tmReasonChips">
+      <button type="button" class="tm-chip" onclick="tjPick('reason','kirilim',this)">Kırılım</button>
+      <button type="button" class="tm-chip" onclick="tjPick('reason','pullback',this)">Geri çekilme</button>
+      <button type="button" class="tm-chip" onclick="tjPick('reason','trend',this)">Trend</button>
+      <button type="button" class="tm-chip" onclick="tjPick('reason','temel',this)">Temel/haber</button>
+      <button type="button" class="tm-chip" onclick="tjPick('reason','diger',this)">Diğer</button>
+    </div>
+    <div class="tm-field-label">Şu an ruh halim</div>
+    <div class="tm-chips" id="tmEmotionChips">
+      <button type="button" class="tm-chip" onclick="tjPick('emotion','plan',this)">Plana uygun</button>
+      <button type="button" class="tm-chip" onclick="tjPick('emotion','sakin',this)">Sakin</button>
+      <button type="button" class="tm-chip" onclick="tjPick('emotion','fomo',this)">FOMO</button>
+      <button type="button" class="tm-chip" onclick="tjPick('emotion','intikam',this)">İntikam</button>
+    </div>
+    <input type="text" id="tmNote" class="modal-input" placeholder="Not (opsiyonel)">
+    <div class="modal-actions">
+      <button onclick="saveTradeModal()">İşlemi kaydet</button>
+      <button class="secondary" onclick="closeTradeModal()">Vazgeç</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="portfolioImportModal" onclick="if(event.target.id==='portfolioImportModal')closePortfolioImport()">
+  <div class="modal" style="max-width:540px;">
+    <div class="modal-title">Görselden portföy</div>
+    <div id="portfolioImportStatus" class="pf-import-status">Görsel okunuyor…</div>
+    <div id="portfolioImportList" class="pf-import-list"></div>
+    <label id="pfImportSyncRow" class="pf-import-sync" style="display:none;">
+      <input type="checkbox" id="pfImportSync" onchange="togglePfImportSync(this.checked)">
+      <span><b>Portföyü bununla değiştir</b><br><small>Fotoğrafta olmayan pozisyonlar satılmış sayılır, kaldırılır. (Sadece izleme listendeki fiyat takipleri kalır.)</small></span>
+    </label>
+    <div class="modal-actions" id="portfolioImportActions" style="margin-top:14px; display:none;">
+      <button onclick="confirmPortfolioImport()" id="pfImportConfirmBtn"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Portföye ekle</button>
+      <button class="secondary" onclick="closePortfolioImport()">İptal</button>
+    </div>
+    <button class="modal-close" onclick="closePortfolioImport()">Kapat</button>
+  </div>
+</div>
+
+<!-- AI portfoy yorumu modali -->
+<div class="modal-overlay" id="pfCommentModal" onclick="if(event.target.id==='pfCommentModal')closePfComment()">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-title">Portfoy yorumu</div>
+    <div class="pf-comment-body" id="pfCommentBody">Hazirlaniyor&hellip;</div>
+    <p class="stock-ta-disclaimer">Betimleyici ozettir &mdash; yatirim tavsiyesi degildir.</p>
+    <button class="modal-close" onclick="closePfComment()">Kapat</button>
+  </div>
+</div>
+
+<div class="modal-overlay pf-tech-modal" id="pfTechModal" onclick="if(event.target.id==='pfTechModal')closePfTechModal()">
+  <div class="modal">
+    <div class="modal-title">Portföy teknik özet</div>
+    <div id="pfTechStatus" class="pf-tech-status">Hisseler tek tek hesaplanıyor…</div>
+    <div id="pfTechList" class="pf-tech-list"></div>
+    <button type="button" class="pf-tech-ai-btn" id="pfTechAiBtn" onclick="aiPortfolioTechnical()" disabled>
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/></svg>
+      AI taktik özet
+    </button>
+    <div class="pf-tech-ai-result" id="pfTechAiResult" style="display:none;"></div>
+    <p class="pf-tech-disclaimer">Teknik göstergeler bilgi amaçlıdır — yatırım tavsiyesi değildir.</p>
+    <button class="modal-close" onclick="closePfTechModal()">Kapat</button>
+  </div>
+</div>
+
+<div class="modal-overlay stock-chart-modal" id="stockChartModal" onclick="if(event.target.id==='stockChartModal')closeStockChart()">
+  <div class="modal">
+    <div class="stock-chart-head">
+      <div>
+        <div class="sym" id="stockChartSym">—</div>
+        <div class="name" id="stockChartName"></div>
+      </div>
+      <div class="last">
+        <div class="price" id="stockChartPrice">—</div>
+        <div class="pct flat" id="stockChartPct"></div>
+      </div>
+    </div>
+    <div class="stock-chart-views" id="stockChartViews">
+      <button data-view="chart" class="active" onclick="setStockView('chart')">Grafik</button>
+      <button data-view="news" onclick="setStockView('news')">Haberler</button>
+      <button data-view="fund" id="stockFundTabBtn" onclick="setStockView('fund')">Temel</button>
+    </div>
+    <div id="stockChartView">
+    <div class="stock-chart-ranges" id="stockChartRanges">
+      <button data-range="1mo" class="active" onclick="loadStockHistory('1mo')">1 ay</button>
+      <button data-range="3mo" onclick="loadStockHistory('3mo')">3 ay</button>
+      <button data-range="6mo" onclick="loadStockHistory('6mo')">6 ay</button>
+      <button data-range="1y" onclick="loadStockHistory('1y')">1 yıl</button>
+    </div>
+    <div class="stock-chart-modes" id="stockChartModes" style="display:none;">
+      <button data-mode="line" class="active" onclick="setChartMode('line')">Çizgi</button>
+      <button data-mode="candle" onclick="setChartMode('candle')">Mum</button>
+      <button id="stockChartFibBtn" onclick="toggleFib()" title="Fibonacci geri çekilme seviyeleri">Fib</button>
+    </div>
+    <div class="stock-chart-area" id="stockChartArea"><div class="stock-chart-loading">Yükleniyor…</div></div>
+    <div class="stock-chart-legend" id="stockChartLegend" style="display:none;">
+      <span><i style="background:#34c759;"></i>Fiyat</span>
+      <span><i style="background:#ffc640;"></i>SMA20</span>
+      <span><i style="background:#5aa2ff;"></i>SMA50</span>
+    </div>
+    <div class="stock-chart-stats" id="stockChartStats" style="display:none;"></div>
+    <div class="stock-ta-panel" id="stockTaPanel" style="display:none;">
+      <div class="stock-conf" id="stockConfluence" style="display:none;"></div>
+      <div class="stock-mtf" id="stockMtf" style="display:none;"></div>
+      <div class="stock-ta-title">Teknik göstergeler</div>
+      <div class="stock-ta-grid" id="stockTaGrid"></div>
+      <div class="stock-ta-title" style="margin-top:4px;">Taktik gözlemler</div>
+      <div class="stock-ta-signals" id="stockTaSignals"></div>
+      <div class="stock-ta-title" style="margin-top:4px;">Koşullu senaryolar</div>
+      <div class="stock-scen" id="stockScenarios"></div>
+      <div class="stock-ta-title" style="margin-top:4px;">Risk / stop önerisi</div>
+      <div class="stock-risk-panel" id="stockRiskPanel"></div>
+      <button type="button" class="stock-ta-ai-btn" id="stockTaAiBtn" onclick="aiStockAnalysis()">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/></svg>
+        AI teknik yorum
+      </button>
+      <div class="stock-ta-ai-result" id="stockTaAiResult" style="display:none;"></div>
+      <p class="stock-ta-disclaimer">Göstergeler bilgi amaçlıdır — yatırım tavsiyesi değildir.</p>
+    </div>
+    </div>
+    <div id="stockNewsView" style="display:none;">
+      <button type="button" class="stock-ta-ai-btn" id="stockNewsAiBtn" onclick="aiStockNews()" disabled>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/></svg>
+        AI ile özetle
+      </button>
+      <div class="stock-ta-ai-result" id="stockNewsAiResult" style="display:none;"></div>
+      <div class="stock-news-list" id="stockNewsList"><div class="stock-chart-loading">Yükleniyor…</div></div>
+      <p class="stock-ta-disclaimer">Haberler Yahoo Finance kaynaklıdır — yatırım tavsiyesi değildir.</p>
+    </div>
+    <div id="stockFundView" style="display:none;">
+      <div class="buffett-card" id="buffettCard"></div>
+      <div class="stock-ta-title" style="margin-top:4px;">Klasik oranlar</div>
+      <div class="stock-ta-grid" id="stockFundGrid"><div class="stock-chart-loading">Yükleniyor…</div></div>
+      <button type="button" class="stock-ta-ai-btn" id="stockFundAiBtn" onclick="aiStockAnalysis('fund')">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/></svg>
+        AI temel yorum
+      </button>
+      <div class="stock-ta-ai-result" id="stockFundAiResult" style="display:none;"></div>
+      <p class="stock-ta-disclaimer">Temel veriler Yahoo Finance kaynaklıdır — BIST'te bazı alanlar boş gelebilir. Yatırım tavsiyesi değildir.</p>
+    </div>
+    <button class="modal-close" onclick="closeStockChart()">Kapat</button>
+  </div>
+</div>
+
+<!-- Ayarlar modali: hesap + senkron + AI talimatlari + yedek -->
+<div class="modal-overlay" id="settingsModal" onclick="if(event.target.id==='settingsModal')closeSettings()">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-title">Ayarlar</div>
+
+    <div class="bx-sec-title">Hesap</div>
+    <div class="bx-auth" id="bxAuthBox"></div>
+    <div class="bx-sync-status" id="bxSyncStatus"></div>
+
+    <div class="bx-sec-title">AI talimatlari</div>
+    <p class="bx-sec-note">AI yorumlarinda uyulacak kalici kurallar. Guvenlik kurallarini ezemez &mdash; al/sat tavsiyesi, fiyat tahmini ve deger yargisi her durumda yasaktir.</p>
+    <textarea id="bxInstructions" class="modal-input" rows="4" maxlength="2000" placeholder="Ornek: Kisa yaz, madde madde goster, sayilari her zaman belirt." oninput="onInstructionsInput()"></textarea>
+    <div class="bx-instr-foot"><span id="bxInstrCount">0 / 2000</span><button type="button" class="bx-mini-btn" onclick="saveInstructions()">Kaydet</button></div>
+
+    <div class="bx-sec-title">Veri</div>
+    <div class="bx-data-row">
+      <button type="button" class="bx-mini-btn" onclick="exportBorsaData()">Yedek indir (JSON)</button>
+      <button type="button" class="bx-mini-btn" onclick="document.getElementById('bxImportFile').click()">Yedekten yukle</button>
+      <input type="file" id="bxImportFile" accept="application/json,.json" style="display:none;" onchange="importBorsaData(event)">
+    </div>
+    <div class="bx-data-row">
+      <button type="button" class="bx-mini-btn" onclick="restoreConflictBackup()">Cakisma yedegini geri al</button>
+    </div>
+    <div class="bx-storage" id="bxStorage"></div>
+
+    <button class="modal-close" onclick="closeSettings()">Kapat</button>
+  </div>
+</div>
+
+<script defer src="shared.js"></script>
+<script defer src="stocks.js"></script>
+<script defer src="sync.js"></script>
+<script defer src="app.js"></script>
+</body>
+</html>

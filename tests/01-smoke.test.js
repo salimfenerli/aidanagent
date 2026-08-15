@@ -87,11 +87,13 @@ describe('baslatma dumani', () => {
     app.close();
   });
 
-  test('sekme degistirme 6 sekmede de patlamaz', () => {
+  test('sekme degistirme tum sekmelerde patlamaz (+ bilinmeyen ad)', () => {
     const app = loadApp();
     const w = app.window;
     assert.strictEqual(typeof w.showTab, 'function');
-    for (const t of ['tasks', 'focus', 'diet', 'stocks', 'settings']) {
+    // 14 Agu 2026: 'stocks' sekmesi kalkti. 'stocks' yine deneniyor — AMA
+    // artik cokmemesi, gorevlere donmesi bekleniyor (eski yer imi senaryosu).
+    for (const t of ['tasks', 'plan', 'focus', 'diet', 'chat', 'settings', 'stocks']) {
       try { w.showTab(t); } catch (e) { assert.fail('showTab("' + t + '") patladi: ' + e.message); }
     }
     assert.deepStrictEqual(app.errors, []);

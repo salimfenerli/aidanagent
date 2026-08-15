@@ -26,7 +26,10 @@ const { loadApp } = require('./helpers/load');
 const html = readText('asistan.html');
 const core = readText('core.js');
 const tasks = readText('tasks.js');
-const stocks = readText('stocks.js');
+// 14 Agu 2026: borsa motoru kendi sitesine tasindi. Asagidaki regresyon
+// kilitleri hala anlamli: paylasilan yardimcilar ve gorev fonksiyonlari
+// motora GERI kaymamali (kaysalar Aidan'da ayni isim iki kez tanimlanirdi).
+const stocks = readText('borsa/stocks.js');
 const css = readText('styles.css');
 
 // ---------------------------------------------------------------------------
@@ -67,18 +70,18 @@ describe('tembel yukleme sozlesmesi', () => {
     const son = govde.indexOf('\n}');
     const blok = govde.slice(0, son);
     assert.ok(/loadModule\(/.test(blok) && /await /.test(blok), 'showTab modulu beklemiyor');
-    // Borsa render'i modul yuklendikten SONRA cagrilmali
-    assert.ok(blok.indexOf('loadModule(') < blok.indexOf('renderStocks()'),
-      'renderStocks modul yuklenmeden cagriliyor — "not defined" ile patlar');
+    // Diyet render'i modul yuklendikten SONRA cagrilmali
+    assert.ok(blok.indexOf('loadModule(') < blok.indexOf('renderProgram()'),
+      'renderProgram modul yuklenmeden cagriliyor — "not defined" ile patlar');
     // Diyet sekmesi IKI modul ister (program + nutrition)
     assert.ok(/'program', 'nutrition'/.test(blok), 'diyet sekmesi beslenme modulunu yuklemiyor');
   });
 
-  test('LAZY_MODULES tam olarak stocks + program + nutrition + supabase', () => {
+  test('LAZY_MODULES tam olarak program + nutrition + supabase', () => {
     const blok = /const LAZY_MODULES = \{([\s\S]*?)\};/.exec(core);
     assert.ok(blok, 'LAZY_MODULES okunamadi');
     const anahtarlar = [...blok[1].matchAll(/(\w+)\s*:/g)].map((m) => m[1]).sort();
-    assert.deepStrictEqual(anahtarlar, ['nutrition', 'program', 'stocks', 'supabase'],
+    assert.deepStrictEqual(anahtarlar, ['nutrition', 'program', 'supabase'],
       'modul listesi degisti — sw.js/deploy.py/Actions paths da guncellendi mi?');
   });
 });
@@ -127,11 +130,14 @@ describe('cozulen bagimliliklar (regresyon kilidi)', () => {
       'core.js/ui.js tembel modulun fonksiyonunu cagiriyor — borsa sekmesi acilmadan calisirsa "not defined"');
   });
 
-  test('visibilitychange handler modul yuklenmeden refreshStocks cagirmiyor', () => {
+  test('visibilitychange handler borsa fonksiyonu cagirmiyor (14 Agu 2026)', () => {
+    // Borsa ayri siteye tasindi. Bu handler'da bir refreshStocks cagrisi kalirsa
+    // kilit her acildiginda "not defined" ile patlar — sessiz degil, gurultulu bir
+    // hata, ama yine de her seferinde.
     const blok = tasks.slice(tasks.indexOf("addEventListener('visibilitychange'"));
     const kesit = blok.slice(0, 400);
-    assert.ok(/moduleLoaded\('stocks'\)/.test(kesit),
-      'kilit acildiginda modul yuklenmemisse refreshStocks patlar — moduleLoaded korumasi yok');
+    assert.ok(!/refreshStocks|renderStocks|watchlist/.test(kesit),
+      'visibilitychange hala borsaya dokunuyor — borsa Aidan\'da YOK');
   });
 });
 
@@ -148,46 +154,46 @@ describe('calisma zamani davranisi', () => {
   test('ayni modul iki kez INDIRILMEZ (soz onbellegi)', () => {
     // jsdom script indirmez; sozun ayni nesne oldugunu dogrulamak yeterli —
     // asil koruma "iki <script> etiketi eklenmesin" davranisi.
-    const once = W.document.querySelectorAll('script[src="/stocks.js"]').length;
-    const p1 = W.loadModule('stocks');
-    const p2 = W.loadModule('stocks');
+    const once = W.document.querySelectorAll('script[src="/program.js"]').length;
+    const p1 = W.loadModule('program');
+    const p2 = W.loadModule('program');
     assert.strictEqual(p1, p2, 'ikinci cagri yeni indirme baslatti — modul iki kez iner');
-    const sonra = W.document.querySelectorAll('script[src="/stocks.js"]').length;
+    const sonra = W.document.querySelectorAll('script[src="/program.js"]').length;
     assert.strictEqual(sonra - once, 1, 'birden fazla <script> etiketi eklendi');
     p1.catch(() => {});
   });
 
   test('moduleLoaded yuklenmemis modul icin false', () => {
-    assert.strictEqual(W.moduleLoaded('program'), false);
+    assert.strictEqual(W.moduleLoaded('nutrition'), false);
   });
 
   test('setModuleLoading iskelet gosterir ve temizler', () => {
-    const panel = W.document.getElementById('stocks');
-    W.setModuleLoading('stocks', true);
+    const panel = W.document.getElementById('diet');
+    W.setModuleLoading('diet', true);
     assert.ok(panel.querySelector('.mod-loading'), 'iskelet eklenmedi');
     assert.match(panel.querySelector('.mod-loading').textContent, /yukleniyor/i);
-    W.setModuleLoading('stocks', false);
+    W.setModuleLoading('diet', false);
     assert.strictEqual(panel.querySelector('.mod-loading'), null, 'iskelet kaldirilmadi');
   });
 
   test('yukleme hatasi SESSIZ kalmiyor — tekrar dene cikiyor', () => {
-    const panel = W.document.getElementById('stocks');
-    W.setModuleLoading('stocks', false, 'stocks');
+    const panel = W.document.getElementById('diet');
+    W.setModuleLoading('diet', false, 'stocks');
     const el = panel.querySelector('.mod-loading');
     assert.ok(el, 'hata durumunda iskelet yok — kullanici bos ekran gorur');
     assert.ok(/Tekrar dene/.test(el.innerHTML), 'tekrar deneme yolu yok');
     assert.ok(el.querySelector('.mod-loading-dot.err'), 'hata noktasi yok');
-    W.setModuleLoading('stocks', false);
+    W.setModuleLoading('diet', false);
   });
 
   test('iskelet XSS kacisi — sekme adi HTML olarak yorumlanmiyor', () => {
     // setModuleLoading tab adini onclick icine koyuyor; ad sabit listeden gelir
     // ama sozlesmeyi yine de kilitle.
-    const panel = W.document.getElementById('stocks');
-    W.setModuleLoading('stocks', false, 'stocks');
+    const panel = W.document.getElementById('diet');
+    W.setModuleLoading('diet', false, 'stocks');
     const el = panel.querySelector('.mod-loading');
     assert.ok(!/<img|<script/i.test(el.innerHTML), 'iskelette beklenmedik etiket');
-    W.setModuleLoading('stocks', false);
+    W.setModuleLoading('diet', false);
   });
 });
 
@@ -197,7 +203,7 @@ describe('calisma zamani davranisi', () => {
 // once ve sonra ayni ortami gorurler. Gercek kullanicinin ilk aciliski ise
 // SADECE core+tasks+ui'dir. Bir gorev fonksiyonu ya da paylasilan yardimci
 // yanlislikla stocks.js'e geri kayarsa, kirmizi olacak TEK yer burasi.
-describe('GERCEK ilk yukleme — stocks.js ve program.js YOKKEN', () => {
+describe('GERCEK ilk yukleme — tembel moduller YOKKEN', () => {
   const A = loadApp({ scripts: ['core.js', 'tasks.js', 'ui.js'] });
   const W = A.window;
   after(() => { try { A.close(); } catch (_) {} });
@@ -227,10 +233,11 @@ describe('GERCEK ilk yukleme — stocks.js ve program.js YOKKEN', () => {
     assert.deepStrictEqual(eksik, [], 'paylasilan yardimci tembel modulde kalmis');
   });
 
-  test('borsa fonksiyonlari HENUZ tanimsiz (gercekten tembel)', () => {
-    assert.strictEqual(typeof W.renderStocks, 'undefined',
-      'stocks.js zaten yuklenmis — tembel yukleme calismiyor');
+  test('tembel modul fonksiyonlari HENUZ tanimsiz (gercekten tembel)', () => {
     assert.strictEqual(typeof W.renderProgram, 'undefined', 'program.js zaten yuklenmis');
+    assert.strictEqual(typeof W.renderNutrition, 'undefined', 'nutrition.js zaten yuklenmis');
+    // Borsa artik Aidan'da YOK — hicbir kosulda tanimli olmamali
+    assert.strictEqual(typeof W.renderStocks, 'undefined', 'borsa kodu Aidan\'a geri sizmis');
   });
 
   test('gorev ekle -> tamamla akisi calisiyor', () => {
@@ -243,7 +250,7 @@ describe('GERCEK ilk yukleme — stocks.js ve program.js YOKKEN', () => {
     W.deleteTask(t.id);
   });
 
-  test('borsa disi sekme gecisleri patlamiyor', async () => {
+  test('sekme gecisleri patlamiyor', async () => {
     for (const s of ['focus', 'settings', 'plan', 'chat', 'tasks']) {
       await W.showTab(s);
       assert.ok(W.document.getElementById(s).classList.contains('active'), s + ' acilmadi');
@@ -251,13 +258,13 @@ describe('GERCEK ilk yukleme — stocks.js ve program.js YOKKEN', () => {
     assert.deepStrictEqual(A.errors, [], 'sekme gecisinde hata');
   });
 
-  test('borsa sekmesi: modul inerken iskelet gosterilir, uygulama COKMEZ', () => {
-    const p = W.showTab('stocks');
+  test('diyet sekmesi: modul inerken iskelet gosterilir, uygulama COKMEZ', () => {
+    const p = W.showTab('diet');
     if (p && p.catch) p.catch(() => {});
-    const el = W.document.querySelector('#stocks .mod-loading');
+    const el = W.document.querySelector('#diet .mod-loading');
     assert.ok(el, 'modul inerken kullanici bos ekran goruyor');
     assert.match(el.textContent, /yukleniyor/i);
-    assert.deepStrictEqual(A.errors, [], 'borsa sekmesine gecerken hata olustu');
+    assert.deepStrictEqual(A.errors, [], 'diyet sekmesine gecerken hata olustu');
   });
 });
 
@@ -282,10 +289,10 @@ describe('ilk yukleme butcesi', () => {
 
   test('tembel moduller butceye DAHIL DEGIL (gercekten ayrildilar)', () => {
     const statik = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1].replace(/^\//, ''));
-    for (const m of ['stocks.js', 'program.js', 'supabase.js', 'nutrition.js']) {
+    for (const m of ['program.js', 'supabase.js', 'nutrition.js']) {
       assert.ok(!statik.includes(m), m + ' hala statik');
     }
-    assert.ok(gz('stocks.js') + gz('program.js') + gz('supabase.js') > 80 * 1024,
+    assert.ok(gz('program.js') + gz('supabase.js') + gz('nutrition.js') > 80 * 1024,
       'tembel moduller beklenenden kucuk — dogru dosyalar mi olculuyor?');
   });
 

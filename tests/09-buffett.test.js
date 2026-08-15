@@ -10,7 +10,8 @@
  */
 const { test, after } = require('node:test');
 const assert = require('node:assert');
-const { loadApp } = require('./helpers/load');
+// 14 Agu 2026: borsa motoru kendi sitesine tasindi -> borsa harness'i.
+const { loadBorsa: loadApp } = require('./helpers/borsa');
 const { readText } = require('./helpers/src');
 
 // ——— Aylik fiyat serisi: 2021-01'den bugune, p0'dan p1'e duz artis ———
@@ -355,7 +356,7 @@ test('heavy maliyet kilidi korunuyor (stock-analysis)', () => {
 // Impeccable CSS denetimi
 // ============================================================
 test('buffett CSS Impeccable kurallarina uyuyor', () => {
-  const css = readText('styles.css');
+  const css = readText('borsa/styles.css');
   const i = css.indexOf('BUFFETT SKORU');
   assert.ok(i > 0, 'CSS blogu yok');
   const block = css.slice(i);
@@ -371,7 +372,7 @@ test('styles.css LF, js dosyalari CRLF kaldi', () => {
   const fs = require('fs'), path = require('path');
   const root = path.resolve(__dirname, '..');
   assert.ok(!fs.readFileSync(path.join(root, 'styles.css')).includes(0x0d), 'styles.css LF olmali');
-  for (const f of ['stocks.js', 'aidan-worker/worker.js', 'asistan.html', 'sw.js']) {
+  for (const f of ['aidan-worker/worker.js', 'sw.js']) {
     assert.ok(fs.readFileSync(path.join(root, f)).includes(0x0d), f + ' CRLF olmali');
   }
 });
@@ -785,7 +786,7 @@ test('worker: banka skoru sanayi skoruyla karsilastirilmasin kurali var', () => 
 
 // ——— CSS ———
 test('yeni kurum-tipi / guvenlik-payi CSS i Impeccable uyumlu', () => {
-  const css = readText('styles.css');
+  const css = readText('borsa/styles.css');
   const i = css.indexOf('Kurum tipi rozeti');
   assert.ok(i > 0, 'yeni CSS blogu yok');
   const block = css.slice(i);
@@ -819,7 +820,7 @@ test('KANIT: naif "CAGR farki" yontemi enflasyonda SAPARDI, oran yontemi sapmaz'
 });
 
 test('kaynakta CAGR FARKI degil ORANI kullanildigi kilitli', () => {
-  const src = readText('stocks.js');
+  const src = readText('borsa/stocks.js');
   const i = src.indexOf('ENFLASYON DAYANIKLILIGI');
   assert.ok(i > 0);
   const block = src.slice(i, i + 3000);
@@ -1145,7 +1146,7 @@ test('bozuk / eksik girdide olcek tespiti cokmez', () => {
 });
 
 test('mimari sozlesme: 10 yillik uc TARAMADA kullanilmaz', () => {
-  const src = readText('stocks.js');
+  const src = readText('borsa/stocks.js');
   const i = src.indexOf('async function runScreener');
   const block = src.slice(i, i + 2600);
   assert.ok(!/bist-financials|loadBistDeepFinancials/.test(block),
@@ -1156,7 +1157,7 @@ test('mimari sozlesme: 10 yillik uc TARAMADA kullanilmaz', () => {
 });
 
 test('veri gelmezse kart Yahoo ile CALISMAYA DEVAM eder (sessiz bozulma yok)', () => {
-  const src = readText('stocks.js');
+  const src = readText('borsa/stocks.js');
   const i = src.indexOf('async function loadBistDeepFinancials');
   const block = src.slice(i, i + 2800);
   // Hata yolunda d.years'a DOKUNULMAZ
@@ -1256,7 +1257,7 @@ test('Yahoo 0 yil verse bile birlestirme 10 yili getirir', () => {
 test('REGRESYON: skor hesaplanamadiginda da tesis seridi cizilir', () => {
   // Bu, Is Yatirim katmaninin EN GEREKLI oldugu durum — kullanici 10 yillik
   // verinin denenip denenmedigini gormeli. Ilk yazimda yalnizca basarili dalda vardi.
-  const src = readText('stocks.js');
+  const src = readText('borsa/stocks.js');
   const i = src.indexOf('function renderBuffettCard');
   const block = src.slice(i, src.indexOf('function bfDeepFinHtml'));
   const nullBranch = block.slice(block.indexOf('if (bf.score == null)'), block.indexOf('const cls ='));
@@ -1265,7 +1266,7 @@ test('REGRESYON: skor hesaplanamadiginda da tesis seridi cizilir', () => {
 });
 
 test('tesis seridi 4 halin hepsini ayirt eder', () => {
-  const src = readText('stocks.js');
+  const src = readText('borsa/stocks.js');
   const i = src.indexOf('function bfDeepFinHtml');
   const block = src.slice(i, i + 1800);
   assert.ok(/s\.pending/.test(block), 'araniyor hali');
