@@ -1,0 +1,48 @@
+# ============================================================
+# SATIR SONLARI — 14 Agu 2026
+# ============================================================
+# 🔴 NEDEN VAR: bu dosya yoktu ve git satir sonlarina kendi karar veriyordu.
+# Windows'ta varsayilan `core.autocrlf=true` → depoya LF yazilir, calisma
+# kopyasina CRLF olarak acilir. Yani:
+#   Salim'in diski : CRLF
+#   depo           : LF
+#   GitHub Linux   : LF
+# `07-hygiene` testi "core.js CRLF olmali" diyor. Lokalde GECIYOR (diskte
+# gercekten CRLF var), CI'da HIC gecmiyor. Sonuc: 9 Agustos'tan 14 Agustos'a
+# kadar HER deploy kirmizi oldu ve kimse fark etmedi — canlida sessizce
+# v7-134 kaldi, 3 haftalik is yayinlanmadi.
+#
+# Cozum: EOL'u ortama birakma, burada sabitle. Artik her checkout (Windows,
+# Linux CI, sandbox) ayni seyi gorur ve test ne olcuyorsa o gerceklesir.
+#
+# ⚠️ SIRA ONEMLI: asagidaki kurallarda SONRAKI kazanir. Egik cizgisiz desen
+# (or. `sw.js`) her klasordeki o dosyayla eslesir — bu yuzden `borsa/**`
+# kurali onlardan SONRA geliyor. (Ayni tuzak .gitignore'da `app.js` ile
+# yasandi: borsa/app.js hic push edilmemisti.)
+
+# Varsayilan: metin olarak tani, depoda LF sakla
+* text=auto
+
+# --- CRLF kalmasi gereken Aidan dosyalari (07-hygiene / 09 / 19 / 20 testleri) ---
+core.js         text eol=crlf
+tasks.js        text eol=crlf
+ui.js           text eol=crlf
+program.js      text eol=crlf
+nutrition.js    text eol=crlf
+sw.js           text eol=crlf
+asistan.html    text eol=crlf
+CLAUDE.md       text eol=crlf
+aidan-worker/worker.js  text eol=crlf
+
+# --- LF kalmasi gerekenler ---
+styles.css      text eol=lf
+
+# --- borsa/ klasorunde TUM dosyalar LF (proje kurali) ---
+#     Bu blok yukaridakilerden SONRA: borsa/sw.js ve borsa/styles.css
+#     yukaridaki `sw.js`/`styles.css` desenlerine takilmasin diye.
+borsa/**        text eol=lf
+
+# --- Ikili dosyalar: git EOL'e dokunmasin ---
+*.png           binary
+*.ico           binary
+*.webp          binary

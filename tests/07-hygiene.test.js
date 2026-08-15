@@ -44,6 +44,46 @@ describe('satir sonu disiplini', () => {
       assert.ok(!/\r\n/.test(s), f + ' CRLF olmus — bu dosya LF kalmali');
     });
   }
+
+  // 🔴 14 Agu 2026 — BU TESTIN VAR OLMA SEBEBI.
+  // Yukaridaki testler CALISMA KOPYASININ satir sonuna bakiyor. Ama calisma
+  // kopyasinin satir sonuna GIT karar verir. `.gitattributes` yoksa karar
+  // ortama gore degisir: Windows'ta CRLF, Linux'ta LF. Yani yukaridaki
+  // testler Salim'in diskinde YESIL, GitHub'da KIRMIZI oluyordu — ve bu
+  // 5 gun boyunca butun deploy'lari sessizce blokladi.
+  // Beklenti ile git kurali arasindaki bagi burada kilitliyoruz.
+  test('.gitattributes beklentilerle ortusuyor (ortama gore degismesin)', () => {
+    const ga = readRaw('.gitattributes').toString('utf8');
+    const kural = (dosya) => {
+      let bulunan = null;
+      for (const satir of ga.split(/\r?\n/)) {
+        const t = satir.trim();
+        if (!t || t.startsWith('#')) continue;
+        const [desen, ...ozellikler] = t.split(/\s+/);
+        const d = desen.replace(/\/\*\*$/, '');
+        const eslesti = desen.includes('/')
+          ? dosya.startsWith(d)                       // yola bagli (borsa/**)
+          : dosya.split('/').pop() === desen;         // taban ad
+        if (eslesti) {
+          const eol = ozellikler.find((o) => o.startsWith('eol='));
+          if (eol) bulunan = eol.slice(4);            // SONRAKI kural kazanir
+        }
+      }
+      return bulunan;
+    };
+    for (const f of CRLF_DOSYALAR) {
+      assert.strictEqual(kural(f), 'crlf',
+        f + ' icin .gitattributes eol=crlf demiyor — CI checkout LF verir ve test kirmizi olur');
+    }
+    for (const f of LF_DOSYALAR) {
+      assert.strictEqual(kural(f), 'lf', f + ' icin .gitattributes eol=lf demiyor');
+    }
+    // borsa/ klasoru: LF kurali gercekten borsa dosyalarina ulasiyor mu
+    for (const f of ['borsa/sw.js', 'borsa/styles.css', 'borsa/app.js', 'borsa/stocks.js']) {
+      assert.strictEqual(kural(f), 'lf',
+        f + ' LF kurali disinda kalmis — kok klasordeki ayni adli desen onu yakalamis olabilir');
+    }
+  });
 });
 
 describe('saat dilimi yasagi', () => {
