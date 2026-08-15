@@ -311,6 +311,46 @@ describe('mimari sozlesme', () => {
     }
   });
 
+  test('borsa/ dosyalarinin HICBIRI .gitignore tarafindan yok sayilmiyor', () => {
+    // 🔴 14 Agu 2026 — GERCEK OLAY. .gitignore'da eski bir `app.js` satiri vardi
+    // (2 ay once silinen kok dosyasi icin). Git'te EGIK CIZGISIZ desen HER
+    // klasordeki o isimle eslesir → `borsa/app.js` hic push edilmedi.
+    // Sonuc: CI 28 saniyede "dosya yok" ile dustu, site yayina cikmadi.
+    // Bu test o sinifi kalici olarak kapatir: siteye yeni bir dosya eklenip
+    // adi tesadufen bir gitignore desenine uyarsa BURADA kirmizi olur, canlida
+    // "sayfa bos" olarak degil.
+    const gi = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
+    const patterns = gi.split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith('#') && !l.startsWith('!'));
+
+    const toRe = (p) => new RegExp('^' + p.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]') + '$');
+
+    const ignored = [];
+    for (const f of fs.readdirSync(path.join(ROOT, 'borsa'))) {
+      for (const p0 of patterns) {
+        const p = p0.replace(/\/$/, '');
+        if (p.includes('/')) continue;          // yola bagli desen: taban adiyla eslesmez
+        if (toRe(p).test(f)) ignored.push(`borsa/${f}  <-- .gitignore: "${p0}"`);
+      }
+    }
+    assert.deepStrictEqual(ignored, [],
+      'Bu dosyalar git tarafindan yok sayiliyor, yani PUSH EDILMIYOR:\n  ' + ignored.join('\n  '));
+  });
+
+  test('borsa/ deploy listesi ile gercek dosyalar ortusuyor', () => {
+    // Deploy scriptindeki liste eksikse site 404'lerle yayina cikar (sessiz).
+    const dep = fs.readFileSync(path.join(ROOT, 'borsa-pages-deploy.py'), 'utf8');
+    const listed = [...dep.matchAll(/\("([^"]+)",\s*"\/[^"]*"\)/g)].map(m => m[1]);
+    for (const f of BORSA_JS.concat(['index.html', 'styles.css', 'sw.js', 'manifest.webmanifest'])) {
+      assert.ok(listed.includes(f), 'deploy listesinde eksik: ' + f);
+    }
+    for (const f of listed) {
+      assert.ok(fs.existsSync(path.join(BORSA, f)), 'deploy listesinde olmayan dosya: ' + f);
+    }
+  });
+
   test('borsa dosyalarinda satir sonu LF (klasor kurali)', () => {
     for (const f of BORSA_FILES) {
       const b = fs.readFileSync(path.join(BORSA, f));
