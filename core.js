@@ -1285,7 +1285,7 @@ function renderDiary() {
     if (items.length) {
       html += '<div class="diary-items">';
       items.forEach(m => {
-        const macroTag = (m.protein != null || m.carb != null || m.fat != null) ? ` · P${m.protein || 0} K${m.carb || 0} Y${m.fat || 0}` : '';
+        const macroTag = (m.protein != null || m.carb != null || m.fat != null) ? ` · P${_mShow(m.protein)} K${_mShow(m.carb)} Y${_mShow(m.fat)}` : '';
         html += `<div class="meal-item"><span class="meal-name meal-name-edit" onclick="editMeal(${m.id})">${escapeHtml(m.name)}</span><span class="meal-kcal-tag">${m.kcal != null ? m.kcal + ' kcal' : ''}${macroTag}</span><button class="meal-del" onclick="removeMeal(${m.id})" title="Sil" aria-label="Sil">✕</button></div>`;
       });
       html += '</div>';
@@ -2217,13 +2217,19 @@ function applyPickQty() {
   const el = document.getElementById('aiQty');
   if (el) { el.value = _pickQty; updateAiPreview(); }
 }
+// Bilinmeyen makro 0 DEGILDIR. 0 yazmak "olcduk, sifir cikti" demektir;
+// hcNutritionStats bunu girilmis sayip protein ortalamasini asagi cekiyor
+// ve saglik kocu haksiz yere "protein yetersiz" diyordu. scaleFood zaten
+// dogru kaliba sahipti, yalniz AI/temel besin yolu bozuktu.
+function _mScale(v, m) { return (v == null) ? null : Math.round(v * m); }
+function _mShow(v) { return (v == null) ? '\u2014' : v; }
 function _aiQtyVal() { const el = document.getElementById('aiQty'); if (!el) return 1; const v = Number(el.value); return (isFinite(v) && v > 0) ? v : 0; }
 function updateAiPreview() {
   if (!_aiFood) return;
   const m = _aiQtyVal();
-  const k = Math.round((_aiFood.kcal || 0) * m);
-  const p = Math.round((_aiFood.protein || 0) * m), c = Math.round((_aiFood.carb || 0) * m), f = Math.round((_aiFood.fat || 0) * m);
-  document.getElementById('aiPreview').innerHTML = `${k} kcal · P${p} K${c} Y${f}`;
+  const k = _mScale(_aiFood.kcal, m);
+  const p = _mScale(_aiFood.protein, m), c = _mScale(_aiFood.carb, m), f = _mScale(_aiFood.fat, m);
+  document.getElementById('aiPreview').innerHTML = `${_mShow(k)} kcal · P${_mShow(p)} K${_mShow(c)} Y${_mShow(f)}`;
 }
 function addAiFood() {
   if (!_aiFood) return;
@@ -2234,10 +2240,10 @@ function addAiFood() {
   const label = _aiFood.name + (m !== 1 ? ` ×${qStr}` : '');
   day.meals.push({
     id: Date.now(), slot: _mealSlot, name: label,
-    kcal: Math.round((_aiFood.kcal || 0) * m),
-    protein: Math.round((_aiFood.protein || 0) * m),
-    carb: Math.round((_aiFood.carb || 0) * m),
-    fat: Math.round((_aiFood.fat || 0) * m),
+    kcal: _mScale(_aiFood.kcal, m),
+    protein: _mScale(_aiFood.protein, m),
+    carb: _mScale(_aiFood.carb, m),
+    fat: _mScale(_aiFood.fat, m),
     at: mealNow()
   });
   save(); renderDiet(); closeFoodModal();
