@@ -14,6 +14,10 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 
 **Borsa mimarisi:** `borsa/index.html` → `shared.js` (yardımcılar + veri katmanı) → `stocks.js` (motor, 4474 satır) → `sync.js` (kimlik + çakışma korumalı senkron) → `app.js` (açılış + render sırası). `supabase.js` tembel. İlk yükleme ~105 KB gzip.
 
+**⚠️ SATIR SONU ARTIK `.gitattributes` İLE SABİT (14 Ağu 2026).** Dosya yoktu; git Windows'ta `autocrlf=true` ile depoya LF yazıp diske CRLF açıyordu. `07-hygiene`'in "core.js CRLF olmalı" testi **lokalde yeşil, Linux CI'da hep kırmızı** oluyordu → **9-14 Ağustos arası HİÇBİR deploy çıkmadı**, canlıda sessizce v7-134 kaldı ve 3 haftalık iş yayınlanmadı. Artık EOL ortama değil dosyaya bağlı; beklenti ile git kuralının örtüştüğü de teste bağlı. ⚠️ `.gitattributes`'ta **sıra önemli** — eğik çizgisiz desen (`sw.js`) her klasörde eşleşir, o yüzden `borsa/**` bloğu en sonda.
+
+**⚠️ `.gitignore`'da EĞİK ÇİZGİSİZ DESEN TEHLİKELİ.** `app.js` satırı `borsa/app.js`'i de yok saydı ve dosya **hiç push edilmedi** — GitHub Desktop'ta "her şey commit edildi" görünüyordu. Kök dizini kastediyorsan `/app.js` yaz. Teste bağlı (borsa dosyalarından biri gitignore'a takılırsa kırmızı).
+
 **⚠️ DÜZENLEME KURALI:** Büyük dosyalarda Edit riskli + sandbox `rm` YOK (`mv` var). Düzenleme = **Python byte-replace + `node --check`**; **.bak OLUŞTURMA**; rollback = `git checkout <dosya>`. EOL eşle: **kök klasörde styles.css TEK BAŞINA LF** · diğer HEPSİ CRLF (core.js/ui.js/tasks.js/supabase.js/sw.js/asistan.html/worker.js/CLAUDE.md). **⚠️ `borsa/` klasöründe TÜM dosyalar LF** — iki proje karışmasın diye orada tek kural var (teste bağlı). ⚠️ 25 Tem'de doğrulandı — eski not yanlıştı, byte-replace'te `assert b'\r\n' in b` ile kontrol et.
 
 **AI = Google Gemini** (`gemini-3.5-flash`, ücretsiz katman; `env.GEMINI_MODEL` ile ezilir, `env.GEMINI_API_KEY` secret). Worker'da tek AI fonksiyonu `aiRun` → Gemini generateContent; `visionRun` de Gemini multimodal (portföy/Classroom görsel OCR, `{response}` sözleşmesi korunur). Cloudflare `env.AI.run` (eski Llama) **ARTIK KULLANILMIYOR** — yanıltıcı Llama yorumları 24 Tem'de temizlendi. Sesli giriş tarayıcıda Web Speech API (Whisper yok).
@@ -1500,4 +1504,5 @@ curl -s "https://aidanapp.pages.dev/sw.js" | head -1  # cache versiyonu
 5. ⚠️ Push bildirimi sorununda 3 şart: Worker `Urgency: high` + SW her push'ta `showNotification` + fresh subscription (Ayarlar → "Push'u sıfırla"). Kayıtlar `data.settings.pushSubs[]`.
 6. ⚠️ Tasarım: Impeccable standardı (üstte, KALICI) — koyu tema + amber accent. Eski mor/indigo YOK.
 7. Kaldırılmış özellikleri yeniden önerme — "Önemli Kararlar" + "Kaldırılan özellikler" listesine bak.
-8. Salim'in test sonuçlarını sor; sıradaki iş için "Açık işler / backlog" bölümüne bak.
+8. ⚠️ **Yeşil test ≠ yayınlanmış kod.** Deploy sonrası CANLIDAKİ bir metni doğrula — **ama MUTLAKA cache kırıcı ile**: `curl "…/sw.js?cb=$(date +%s)"`. ⚠️ 15 Ağu 2026'da çıplak `curl .../sw.js` **v7-134** döndürdü, `?cb=` ekli aynı istek **v7-155** — yani doğrulama adımının kendisi bayat cevap verip "deploy çıkmamış" yanılgısı yarattı. Sorgu dizesi olmadan araya giren bir önbellek eski kopyayı servis edebiliyor. CI hatası artık kendini raporluyor: iş kırmızıysa Actions **özet sayfasında** hangi adımın düştüğü + hata satırı yazılı (`GITHUB_STEP_SUMMARY`) — ham log'a girmeye gerek yok. Bu, 5 gün fark edilmeyen bir tıkanmadan sonra eklendi.
+9. Salim'in test sonuçlarını sor; sıradaki iş için "Açık işler / backlog" bölümüne bak.
