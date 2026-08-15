@@ -30,6 +30,27 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 15 Ağustos 2026 — 🎨 GECE PALETİ / AMBER EMEKLİ (v7-156)
+
+Salim: "jenerik duruyor, daha profesyonel duran." Şikayet renk değil **karakter** üzerineydi — koyu + amber her dev tool'da, her kripto panelinde var; Stitch de o kalıbın içinden üretmişti. Üç yön sunuldu (Kağıt / Enstrüman / Gece), **Gece** seçildi: koyu kalsın, amber gitsin.
+
+**🔴 EN ÖNEMLİ BULGU — amber İKİ İŞ YAPIYORDU ve aynı renkti.** `--accent: #f5a524` ve `--warning: #f5a524` **birebir aynı değerdi**. Yani "bas bana" ile "dikkat et" ekranda ayırt edilemiyordu; kullanıcı bir rengi iki farklı anlamda öğrenmek zorundaydı. Ayrıldı: **aksiyon terracotta `#e08a63`**, **uyarı gerçek amber `#e0a83c`**. Bu, borsa'da vurgunun bilerek yeşil/kırmızı seçilmemesiyle aynı gerekçe — bir renk tek anlam taşımalı.
+
+**Palet — mavi-siyah değil SICAK KÖMÜR.** Eski zemin `#0c0d11` maviye çalıyordu ve amberle birlikte "terminal" hissi veriyordu. Yeni: `#121211` · yüzeyler `#1e1c1a`/`#24211d`/`#2c2823` · kenar `#3a352e`. Metin de nötrden sıcağa: `#e5e1d9`, başlık `#f5f3ee`, muted `#9a9389`, faint `#857e74` (AA korundu).
+- Semantikler sıcak zemine göre yumuşatıldı: success `#5cbf7a` · danger `#ea5a52` · info `#6fa8e8`. Eski `#34c759` sıcak kömürde neon duruyordu.
+
+**⚠️ 5. `:root` KATMANI — EN SONDA KALMALI.** Mevcut 4 katmana (STITCH → v7 → v8 → v9) dokunulmadı; palet **v10 GECE** bloğu olarak dosyanın sonuna eklendi ve son `:root` kazanıyor. Borsa'da öğrenilen kuralın aynısı. Blok başa alınırsa eski katmanların amber token'ları geri gelir.
+
+**Token ezmek tek başına YETMEDİ — 264 sabit renk mekanik çevrildi.** `#f5a524` 35 yerde, `rgba(245,165,36,…)` onlarca varyasyonla (boşluklu/boşluksuz, `.4`/`0.4`) doğrudan yazılıydı; ayrıca `#e7e8ec` (27) ve `#f4f4f7` (20) gibi metin tonları da token yerine sabit geçiyordu. Regex ile normalize edilip çevrildi.
+- **⚠️ `#ffc640` DOKUNULMADI** — o accent değil: `.stock-ta-cell.warn`, `.pf-tech-badge.warn` ve `.cal-dot.cat-ders` kullanıyor. Uyarı ve kategori rengi; terracottaya çevirmek anlamı bozardı. (Borsa'da SMA20 için verilen kararın aynısı.)
+- **`core.js`/`ui.js`'teki `#f5a524` de DOKUNULMADI** — makro grafiğinde **karbonhidrat serisinin** rengi, veri rengi accent değildir. Yalnız `ui.js`'teki hatırlatıcı rozeti (`var(--accent)` ile eşleşen `rgba(245,165,36,…)`) çevrildi.
+
+**Tipografi: Hanken Grotesk → Onest** (`asistan.html` Google Fonts linki + `--font-sans`). Tek aile korundu, `--font-display` hâlâ ona eşit. Ek olarak `body { font-variant-numeric: tabular-nums }` — ekranın yarısı sayı (kcal, kg, set, fiyat, skor) ve hizasız rakamlar "amatör" hissinin sessiz kaynağıydı.
+
+**Doğrulama:** 21 dosya **729 test yeşil**, `npm run check` temiz, styles.css **LF disiplini korundu** (tek LF dosyası, 4929 satır), asistan.html/ui.js CRLF sayıları değişmedi. `21-borsa`'nın "Aidan amber paleti sızmadı" testi hâlâ geçiyor.
+**⚠️ Bilinen açık:** `icon.png` mascot hâlâ MOR — artık palete iki kat uzak, terracotta'ya çevrilmeli.
+**Cache:** v7-155 → **v7-156**
+
 ### 🔴 14 Ağustos 2026 — 🧱 BORSA AYRI SİTEYE TAŞINDI (borsa-v1 · Aidan v7-155)
 
 Salim: "borsa kısmına sadece borsa için başka bi site yapalım, Aidan'dan ayıralım." Kararlar: Aidan'dan **tamamen kaldırılsın** · **ayrı site** · **aynı Supabase, ayrı tablo** · **mevcut worker**.
@@ -991,13 +1012,15 @@ Salim'in talebi (Haz 13): **Tüm UI/arayüz işlerinde Impeccable framework stan
 6. **Mikro etkileşim:** bounce/elastik YOK; ease-out (quart/quint/expo), 150–250ms, durum bildiren hareket. `prefers-reduced-motion` alternatifi zorunlu.
 7. **Product ban:** standart affordance'ları yeniden icat etme — **özel scrollbar YOK**, garip form kontrolü YOK, "modal ilk düşünce" YOK (önce inline/progressive). Ghost-card YOK (1px kenar + ≥16px gölge aynı öğede birlikte değil).
 
-**Aidan'da uygulanan token'lar (asistan.html, v7-59):**
-- Tema: **koyu** (mor TAMAMEN kaldırıldı). `--bg:#0c0d11`, yüzeyler `#16171d`/`#1b1c23`/`#24262e`.
-- Accent: **amber** `#f5a524` (hover `#ffb43a`, light `#fbbf5a`, tint `#fcd34d`). Amber dolgular üzerine **koyu** metin `--on-accent:#1c1206` (beyaz okunmaz!).
-- Tonlu beyaz/siyah: başlık `--text-strong:#f4f4f7`, gövde `--text:#e7e8ec`, açık metin `--on-dark:#f6f5f2`. Saf beyaz/siyah kullanılmaz.
-- Semantik: success `#34c759`, danger `#ef4444` (üstüne `--on-dark`), info/mavi `#5aa2ff`, kategori şeritleri amber/mavi/teal/coral (mor yok).
-- Font: **tek aile — Hanken Grotesk** (400–800, `--font-sans`; `--font-display` de buna eşit). Bricolage düştü (display font UI/data'da yasak + iki grotesk eşleştirme öneriye aykırı). Google Fonts ile yüklü; CSP `_headers`'da `fonts.googleapis.com`+`fonts.gstatic.com` izinli.
-- CSS katmanları (hepsi tek dosyada, en sondaki en yüksek öncelik): STITCH `:root` (aktif palet) → "DARK + AMBER THEME (v7)" (amber kontrast) → "IMPECCABLE PASS (v8)" (tipografi, 8pt ritim, glow/glass/gradyan temizliği) → **"IMPECCABLE FRAMEWORK SPEC (v9)"** (`</style>` öncesi: yan-şerit→tam kenar+tint, tek aile, özel scrollbar kaldırma, ghost-card düzeltme, ease-out motion).
+**Aidan'da uygulanan token'lar (styles.css, v7-156 — GECE):**
+- Tema: **koyu ve SICAK** (mavi-siyah düştü). `--bg:#121211`, yüzeyler `#1e1c1a`/`#24211d`/`#2c2823`, kenar `#3a352e`.
+- Accent: **terracotta** `#e08a63` (hover `#eda07c`, light `#f0b498`, tint `#f5c6ad`). Dolgular üzerine **koyu** metin `--on-accent:#2a1408` (beyaz okunmaz!).
+- ⚠️ **Accent ile warning ARTIK AYRI.** v7-155'e kadar ikisi de `#f5a524` idi — "bas bana" ile "dikkat et" ekranda ayırt edilemiyordu. Uyarı artık gerçek amber `#e0a83c`. Bir renk tek anlam taşır; bu kural gevşetilmemeli.
+- Tonlu beyaz/siyah: başlık `--text-strong:#f5f3ee`, gövde `--text:#e5e1d9`, muted `#9a9389`, faint `#857e74`, açık metin `--on-dark:#f6f4ef`. Saf beyaz/siyah kullanılmaz.
+- Semantik: success `#5cbf7a`, danger `#ea5a52`, info `#6fa8e8` — sıcak kömür zeminde neon durmasınlar diye yumuşatıldı.
+- ⚠️ **Accent OLMAYAN amberler:** `#ffc640` (TA warn rozeti + `.cal-dot.cat-ders`) ve `core.js`/`ui.js`'teki `#f5a524` (makro grafiğinde **karbonhidrat serisi**). Bunlar veri/semantik renk — palet değişiminde ÇEVRİLMEZ.
+- Font: **tek aile — Onest** (400–800, `--font-sans`; `--font-display` de buna eşit). Hanken Grotesk v7-156'da düştü. `body { font-variant-numeric: tabular-nums }` — ekranın yarısı sayı. Google Fonts ile yüklü; CSP `_headers`'da `fonts.googleapis.com`+`fonts.gstatic.com` izinli.
+- CSS katmanları (hepsi `styles.css` içinde, en sondaki en yüksek öncelik): STITCH `:root` → "DARK + AMBER THEME (v7)" → "IMPECCABLE PASS (v8)" → "IMPECCABLE FRAMEWORK SPEC (v9)" (yan-şerit→tam kenar+tint, tek aile, özel scrollbar kaldırma, ghost-card düzeltme, ease-out motion) → **"GECE (v10)"** (aktif palet + tipografi). ⚠️ **Palet bloğu EN SONDA kalmalı** — 5 `:root` var, sonuncusu kazanır.
 - Emoji politikası (v60): **dekoratif/corny emojiler tamamen kaldırıldı** (kategori/başlık/buton/toast prefix'leri + 💜🎉🌙☀️ vb. ~400+ yer). Korunanlar yalnız işlevsel olanlar: durum noktaları 🟢🔴🟡, bayraklar 🇹🇷🇺🇸, onay/çarpı ✓✕❌, oklar →↑↓ ve birkaç buton ikon glyph'i (✏️🗑️✂️🎧). Bunlar ileride Lucide/Tabler SVG'ye çevrilecek (Impeccable "tutarlı ikon stili"). Yeni UI'da emoji KULLANMA — SVG ikon kullan.
 - ⏳ Açık iş: kalan buton-glyph emojilerini SVG'ye çevir; `icon.png` mascot logosu hâlâ MOR — amber tonlu yeniden üretilecek. Değişiklikler henüz **deploy edilmedi** (Salim onayı bekliyor). Cache `v7-60`.
 

@@ -526,7 +526,7 @@ function renderTaskItem(t) {
             return `<span class="badge">✓ ${t.actualMin}dk sürdü</span>`;
           })() : ''}
           ${t.repeat ? `<span class="badge">${({daily:'Günlük',weekly:'Haftalık',weekdays:'Hafta içi',weekends:'Hafta sonu'})[t.repeat] || t.repeat}</span>` : ''}
-          ${t.reminderTime ? `<span class="badge" style="background:rgba(245,165,36,0.15);color:var(--accent);border-color:rgba(245,165,36,0.3);">${t.reminderTime}</span>` : ''}
+          ${t.reminderTime ? `<span class="badge" style="background:rgba(224,138,99,0.15);color:var(--accent);border-color:rgba(224,138,99,0.3);">${t.reminderTime}</span>` : ''}
           ${showAge ? `<span class="badge" style="background:rgba(210,153,34,0.12);color:var(--warning);border-color:rgba(210,153,34,0.3);" title="Bu görev ${age} gündür duruyor — bitirebilir misin yoksa silmeli mi?"> ${age}g</span>` : ''}
           ${t.seriesId ? (() => { const sp = seriesProgress(t.seriesId); return `<span class="badge series-badge" title="${escapeHtml(t.seriesName||'Seri')}" onclick="event.stopPropagation(); showSeries('${t.seriesId}')">${escapeHtml((t.seriesName||'Seri').slice(0,18))} ${sp.done}/${sp.total}</span>`; })() : ''}
         </div>
