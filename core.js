@@ -1273,6 +1273,16 @@ function applyMacro(m) {
 }
 
 // ===== FatSecret tarzı GÜNLÜK (diary) — öğüne göre bölümler + inline ekle =====
+// Ad icindeki miktar ekini ("Tavuk (180g)", "Yumurta ×2") ikinci satira ayirir.
+// Boylece ad okunur kalir, miktar da kaybolmaz — Stitch yerlesiminin ana fikri.
+function splitMealName(name) {
+  const s = String(name || '');
+  let m = s.match(/^(.*?)\s*\((\d+)g\)\s*$/);
+  if (m) return { ad: m[1], mik: m[2] + ' g' };
+  m = s.match(/^(.*?)\s*×\s*([\d,\.]+)\s*$/);
+  if (m) return { ad: m[1], mik: m[2] + ' porsiyon' };
+  return { ad: s, mik: '' };
+}
 function renderDiary() {
   const day = dietDay(false);
   const el = document.getElementById('diaryList');
@@ -1281,16 +1291,28 @@ function renderDiary() {
   Object.keys(MEAL_SLOTS).forEach(slot => {
     const items = day.meals.filter(m => m.slot === slot);
     const sub = items.reduce((s, m) => s + (Number(m.kcal) || 0), 0);
-    html += `<div class="diary-sec"><div class="diary-sec-head"><span class="diary-sec-name">${MEAL_SLOTS[slot]}</span><span class="diary-sec-kcal">${sub ? sub + ' kcal' : ''}</span></div>`;
+    html += '<section class="dt-sec">' +
+      `<div class="dt-sec-head"><span class="dt-sec-name">${MEAL_SLOTS[slot]}</span>` +
+      `<span class="dt-sec-kcal">${sub ? sub : ''}</span></div>`;
+    html += '<div class="dt-card">';
     if (items.length) {
-      html += '<div class="diary-items">';
       items.forEach(m => {
-        const macroTag = (m.protein != null || m.carb != null || m.fat != null) ? ` · P${_mShow(m.protein)} K${_mShow(m.carb)} Y${_mShow(m.fat)}` : '';
-        html += `<div class="meal-item"><span class="meal-name meal-name-edit" onclick="editMeal(${m.id})">${escapeHtml(m.name)}</span><span class="meal-kcal-tag">${m.kcal != null ? m.kcal + ' kcal' : ''}${macroTag}</span><button class="meal-del" onclick="removeMeal(${m.id})" title="Sil" aria-label="Sil">✕</button></div>`;
+        const sp = splitMealName(m.name);
+        const macro = (m.protein != null || m.carb != null || m.fat != null)
+          ? `P${_mShow(m.protein)} · K${_mShow(m.carb)} · Y${_mShow(m.fat)}` : '';
+        const alt = [sp.mik, macro].filter(Boolean).join('  ·  ');
+        html += '<div class="dt-row">' +
+          `<button class="dt-row-main" onclick="editMeal(${m.id})">` +
+            `<span class="dt-row-name">${escapeHtml(sp.ad)}</span>` +
+            (alt ? `<span class="dt-row-sub">${escapeHtml(alt)}</span>` : '') +
+          '</button>' +
+          `<span class="dt-row-kcal">${m.kcal != null ? m.kcal : '—'}</span>` +
+          `<button class="dt-row-del" onclick="removeMeal(${m.id})" aria-label="Sil">✕</button>` +
+        '</div>';
       });
-      html += '</div>';
     }
-    html += `<button class="diary-add" onclick="openFoodModal('${slot}')"><span class="diary-add-plus">＋</span> ekle</button></div>`;
+    html += `<button class="dt-add" onclick="openFoodModal('${slot}')">＋ ekle</button>`;
+    html += '</div></section>';
   });
   el.innerHTML = html;
 }
