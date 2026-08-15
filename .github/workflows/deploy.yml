@@ -53,14 +53,58 @@ jobs:
         with:
           node-version: '22'
 
+      # ⚠️ 14 Agu 2026 — HATA ARTIK KENDINI RAPORLAR.
+      # 9 Agu'dan beri her deploy kirmiziydi ve sebep yalnizca ham log'un
+      # icinde goruluyordu; Salim oraya ulasamadigi icin hata HAFTALARCA
+      # tespit edilemedi (canlida sessizce v7-134 kaldi).
+      # Artik her adim id'li ve basarisizlikta ozet Summary sayfasina yazilir —
+      # yani ilk acilan ekranda gorunur, log kazmaya gerek yok.
       - name: Install test deps
+        id: deps
         run: npm ci || npm install
 
       - name: Run tests
-        run: npm test
+        id: tests
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee /tmp/test.log
 
       - name: Syntax check
-        run: npm run check
+        id: syntax
+        run: |
+          set -o pipefail
+          npm run check 2>&1 | tee /tmp/check.log
+
+      - name: Hata raporu (Summary sayfasinda gorunur)
+        if: failure()
+        run: |
+          {
+            echo "## Deploy durdu"
+            echo ""
+            echo "| Adim | Sonuc |"
+            echo "|---|---|"
+            echo "| Bagimlilik kurulumu | ${{ steps.deps.outcome }} |"
+            echo "| Testler | ${{ steps.tests.outcome }} |"
+            echo "| Sozdizimi | ${{ steps.syntax.outcome }} |"
+            echo ""
+            echo "(bos hucre = o adima hic sira gelmedi)"
+            echo ""
+            if [ -f /tmp/test.log ]; then
+              echo "### Test ciktisi"
+              echo '```'
+              grep -E "^not ok|^# fail|Error|error:|Cannot find" /tmp/test.log | head -40 || tail -40 /tmp/test.log
+              echo '```'
+            else
+              echo "### Testler hic calismadi"
+              echo "Bagimlilik kurulumu (npm ci / npm install) patlamis olabilir."
+            fi
+            if [ -f /tmp/check.log ]; then
+              echo "### Sozdizimi ciktisi"
+              echo '```'
+              tail -20 /tmp/check.log
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/setup-python@v5
         with:
