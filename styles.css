@@ -5139,3 +5139,17 @@
   }
   .dt-sec-name { display: inline-flex; align-items: center; gap: 7px; }
   .dt-sec-name .icon { width: 16px; height: 16px; color: var(--text-muted); }
+
+  /* Alt gezinmede odak halkasi KUTU CIZMEZ.
+     Global kural `button:focus-visible { outline: 2px solid var(--accent) }`
+     accent terracotta iken turuncuydu ve goze batmiyordu; monokroma gecince
+     accent #e2e2e2 oldu ve iOS'ta dokunma sonrasi odak UZERINDE KALDIGI icin
+     secili sekmenin etrafinda bembeyaz bir kare beliriyordu.
+     Odak gostergesi KALDIRILMIYOR (klavye erisilebilirligi) — kutu yerine
+     ustte ince cizgiye cevriliyor; Stitch'in aktif sekme cizgisiyle ayni dil. */
+  .dt-bnav .dt-bnav-btn:focus,
+  .dt-bnav .dt-bnav-btn:focus-visible {
+    outline: none;
+    box-shadow: inset 0 2px 0 0 var(--accent);
+  }
+  .dt-bnav .dt-bnav-btn { -webkit-tap-highlight-color: transparent; }
