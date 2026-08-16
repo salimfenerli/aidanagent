@@ -1283,16 +1283,48 @@ function splitMealName(name) {
   if (m) return { ad: m[1], mik: m[2] + ' porsiyon' };
   return { ad: s, mik: '' };
 }
+// Gunluk basliklarinda Stitch'in kucuk harfli adlari + ikon.
+// MEAL_SLOTS'a DOKUNULMADI: o adlar dugmelerde de geciyor
+// ("Ogle'ye ekle"); "ogle yemegi'e ekle" bozuk Turkce olurdu.
+const DIARY_SLOT_UI = {
+  kahvalti: { ad: 'kahvaltı', ikon: '<path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" y1="2" x2="6" y2="4"/><line x1="10" y1="2" x2="10" y2="4"/><line x1="14" y1="2" x2="14" y2="4"/>' },
+  ogle: { ad: 'öğle yemeği', ikon: '<path d="M3 2v7c0 1.1.9 2 2 2h1a2 2 0 0 0 2-2V2"/><line x1="5.5" y1="2" x2="5.5" y2="11"/><line x1="5.5" y1="11" x2="5.5" y2="22"/><path d="M17 2v20"/><path d="M17 2a4 4 0 0 1 4 4v5a2 2 0 0 1-2 2h-2"/>' },
+  aksam: { ad: 'akşam yemeği', ikon: '<path d="M3 11h18"/><path d="M12 11a9 9 0 0 1 9 9H3a9 9 0 0 1 9-9Z"/><line x1="12" y1="4" x2="12" y2="7"/>' },
+  atistirma: { ad: 'atıştırmalık', ikon: '<circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="1"/><circle cx="14" cy="9" r="1"/><circle cx="13" cy="15" r="1"/><circle cx="9" cy="15" r="1"/>' },
+};
+function dtIcon(d) {
+  return `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+}
+// Stitch'in ozet karti: kalori solda kahraman sayi, makrolar sagda kolon.
+function renderDietSummaryCard(day) {
+  const kcal = day.meals.reduce((s, m) => s + (Number(m.kcal) || 0), 0);
+  const mac = k => {
+    const v = day.meals.reduce((s, m) => s + (m[k] != null ? Number(m[k]) : 0), 0);
+    const kayit = day.meals.some(m => m[k] != null);
+    return kayit ? Math.round(v) + 'g' : '—';
+  };
+  return '<div class="dt-sum">' +
+    `<div class="dt-sum-main"><span class="dt-sum-lab">kalori</span>` +
+      `<span class="dt-sum-num">${kcal.toLocaleString('tr-TR')}</span></div>` +
+    '<div class="dt-sum-macros">' +
+      `<div class="dt-sum-cell"><span class="dt-sum-clab">pro</span><span class="dt-sum-cval">${mac('protein')}</span></div>` +
+      `<div class="dt-sum-cell"><span class="dt-sum-clab">yağ</span><span class="dt-sum-cval">${mac('fat')}</span></div>` +
+      `<div class="dt-sum-cell"><span class="dt-sum-clab">krb</span><span class="dt-sum-cval">${mac('carb')}</span></div>` +
+    '</div></div>';
+}
 function renderDiary() {
   const day = dietDay(false);
   const el = document.getElementById('diaryList');
   if (!el) return;
-  let html = '';
+  const k = dietKey();
+  const bas = (k === today()) ? 'bugün' : k;
+  let html = `<h2 class="dt-day-title">${escapeHtml(bas)}</h2>` + renderDietSummaryCard(day);
   Object.keys(MEAL_SLOTS).forEach(slot => {
     const items = day.meals.filter(m => m.slot === slot);
     const sub = items.reduce((s, m) => s + (Number(m.kcal) || 0), 0);
+    const ui = DIARY_SLOT_UI[slot] || { ad: MEAL_SLOTS[slot], ikon: '' };
     html += '<section class="dt-sec">' +
-      `<div class="dt-sec-head"><span class="dt-sec-name">${MEAL_SLOTS[slot]}</span>` +
+      `<div class="dt-sec-head"><span class="dt-sec-name">${dtIcon(ui.ikon)}${escapeHtml(ui.ad)}</span>` +
       `<span class="dt-sec-kcal">${sub ? sub : ''}</span></div>`;
     html += '<div class="dt-card">';
     if (items.length) {
