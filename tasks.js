@@ -23,6 +23,9 @@ async function showTab(name, btn) {
   document.getElementById(name).classList.add('active');
   if (btn) btn.classList.add('active');
   else { const _dt = document.querySelector(`[data-tab="${name}"]`); if (_dt) _dt.classList.add('active'); }
+  // Alt gezinme (mobil) ayni durumu gostermeli — iki cubuk tek kaynaktan besleniyor.
+  document.querySelectorAll('.dt-bnav-btn').forEach(x =>
+    x.classList.toggle('active', x.getAttribute('data-bnav') === name));
   // Sekme değişiminde hamburger drawer'ı kapat (açık kalmasın)
   // Global app-bar başlığı + drawer aktif vurgusu + global drawer'ı kapat
   syncAppHeader(name);
