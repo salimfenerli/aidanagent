@@ -82,10 +82,97 @@ const PROGRAM_GOALS = {
              tiers: { 1: [3, 5], 2: [6, 10], 3: [10, 15] }, setsByTier: { 1: 4, 2: 3, 3: 3 } },
 };
 
+// ⚠️ DINLENME KADEMEYE GORE (18 Agu 2026).
+// Eskiden tek `restSec` vardi ve HER harekete uygulaniyordu: atletik hedefte
+// Leg Curl'e de 3 dk dinlenme yaziliyordu. Kanit: agir bileskede 2+ dk hem
+// kuvvet hem hipertrofi icin daha iyi; izolasyonda 60-90 sn ile fark yok.
+// ASIL SORUN YAN ETKISIYDI: seans kapasitesi bu tek (uzun) dinlenmeye gore
+// hesaplaniyordu, 60 dk'lik seansta 4 harekete duşuyordu ve sablonun son
+// slotu — CORE — programa HIC girmiyordu.
+const PROGRAM_REST_ORAN = { 1: 1, 2: 0.65, 3: 0.4 };
+for (const __k of Object.keys(PROGRAM_GOALS)) {
+  const __G = PROGRAM_GOALS[__k];
+  if (__G.restByTier) continue;
+  __G.restByTier = {
+    1: __G.restSec,
+    2: Math.max(45, Math.round(__G.restSec * PROGRAM_REST_ORAN[2] / 15) * 15),
+    3: Math.max(30, Math.round(__G.restSec * PROGRAM_REST_ORAN[3] / 15) * 15),
+  };
+}
+function programRest(G, tier) {
+  return (G && G.restByTier && G.restByTier[tier]) || (G && G.restSec) || 90;
+}
+
 const PROGRAM_MUSCLES = {
   chest: 'Göğüs', back: 'Sırt', quads: 'Ön bacak', hams: 'Arka bacak',
   glutes: 'Kalça', shoulders: 'Omuz', biceps: 'Biseps', triceps: 'Triseps',
   core: 'Karın/Core', calves: 'Baldır', neck: 'Boyun',
+};
+
+/**
+ * TEMPO (18 Agu 2026) — biçim: eksantrik · alt bekleme · konsantrik · üst bekleme.
+ * 'X' = maksimum hız niyeti (yük ağır olduğu için bar yavaş kalkar, NIYET hızlıdır).
+ *
+ * NEDEN VAR: bağ dokusu (tendon/ligament) kas kadar hızlı adapte olmaz. Tendon
+ * sertliği uzun süreli yüksek gerilimle artar ve bunun ana kaynağı EKSANTRIK
+ * fazdır. Kickboks gibi eklemi hızla yükleyen bir branşta bu koruyucu bir
+ * özelliktir, kozmetik değil.
+ *
+ * ⚠️ EN ONEMLI AYRIM — "yavaş tempo her yere iyi gelir" YANLIS.
+ * Kademe 1'de (3-5 tekrar, ağır) konsantriği kasten yavaşlatmak kaldırılan
+ * yükü DUSURUR ve kuvvet kazanımını azaltır. Doğrusu: iniş kontrollü (2 sn),
+ * kalkışta maksimum hız niyeti. 5 saniyelik negatif ana kaldırışta yanlıştır —
+ * yeri yardımcı hareketler ve izolasyondur.
+ */
+const PROGRAM_TEMPO_TIER = { 1: '2-1-X-0', 2: '3-1-1-0', 3: '3-0-1-1' };
+const PROGRAM_TEMPO = {
+  // Calisthenics: tepede izometrik bekleme — barfikste çene üstü, dipste dip
+  pullup: '3-1-1-1', chinup: '3-1-1-1', dip: '3-1-1-1', pushup: '3-1-1-1',
+  invrow: '3-1-1-1', pikepush: '3-1-1-1', closepush: '3-1-1-1',
+  // Hinge: hamstring tendonu eksantrikte yüklenir
+  rdl: '3-1-1-0', dbrdl: '3-1-1-0',
+  // Nordic: hareketin TAMAMI eksantrik — hamstring yaralanma korumasının
+  // en güçlü kanıtı olan çalışma biçimi
+  nordic: '5-0-1-0',
+  // Kalça: tepede sıkma olmadan uyaranın yarısı kaybolur
+  hipthrust: '2-1-1-2', glutebr: '2-1-1-2',
+  // Aşil tendonu: altta 2 sn gerilme — tekme ve sıçramanın yay mekanizması
+  calfraise: '3-2-1-1',
+  legcurl: '3-0-1-1', legext: '3-0-1-1',
+  bulgarian: '3-1-1-0', lunge: '2-1-1-0', stepup: '2-1-1-0',
+};
+
+/**
+ * RPE — algılanan zorluk (10 = bir tekrar daha yapılamaz).
+ * ⚠️ 16 YAS KAPISI: hiçbir sette RPE 10 yazılmaz. Yetmezliğe (0 RIR) gitmek
+ * ek kazanç getirmeden yorgunluğu katlar; teknik bozulur, dövüş antrenmanına
+ * yorgun gidilir. Tavan 9.
+ */
+const PROGRAM_RPE = { 1: [7, 8], 2: [8, 8], 3: [8, 9] };
+
+/**
+ * VUCUT AGIRLIGI HAREKETLERINDE YUK ORANI — kaldırılan yükün vücut
+ * ağırlığına oranı. Barfikste neredeyse tamamı, şınavda ~%65.
+ * Bu oran olmadan "kaç barfiks çekebiliyorsun" verisi programa çevrilemez.
+ */
+const PROGRAM_BW_LOAD = {
+  pullup: 1.0, chinup: 1.0, dip: 0.95, pikepush: 0.7,
+  pushup: 0.65, closepush: 0.65, invrow: 0.55,
+};
+// Hangi hareket hangi max testinden beslenir
+const PROGRAM_BW_TEST = {
+  pullup: 'pullup', chinup: 'pullup', invrow: 'pullup',
+  dip: 'dip', pushup: 'pushup', closepush: 'pushup', pikepush: 'pushup',
+};
+// Yetmeyen harekete regresyon (kolaylastirma) onerisi
+const PROGRAM_BW_REGRES = {
+  pullup: 'bant destekli ya da negatif barfiks (5 sn iniş)',
+  chinup: 'bant destekli ya da negatif chin-up (5 sn iniş)',
+  invrow: 'ayakları öne alarak açıyı dikleştir',
+  dip: 'bant destekli dips ya da bench dips',
+  pushup: 'eğik şınav (eller sehpada) — dizden şınav son seçenek',
+  closepush: 'eğik dar tutuş şınav (eller sehpada)',
+  pikepush: 'ayakları yere indir, kalçayı biraz alçalt',
 };
 
 // ---------- Egzersiz kutuphanesi ----------
@@ -148,7 +235,7 @@ const PROGRAM_EXERCISES = [
   { id: 'plank',     tr: 'Plank',                    en: 'Plank',                      muscle: 'core', pattern: 'core', compound: false, places: ['gym', 'home', 'bw'], sure: true },
   { id: 'hollow',    tr: 'Hollow Hold',              en: 'Hollow Hold',                muscle: 'core', pattern: 'core', compound: false, places: ['gym', 'home', 'bw'], sure: true },
   { id: 'legraise',  tr: 'Bacak Kaldırış',           en: 'Hanging Leg Raise',          muscle: 'core', pattern: 'core', compound: false, places: ['gym', 'home', 'bw'] },
-  { id: 'palloff',   tr: 'Pallof Press',             en: 'Pallof Press',               muscle: 'core', pattern: 'core', compound: false, places: ['gym', 'home'] },
+  { id: 'palloff',   tr: 'Pallof Press',             en: 'Pallof Press',               muscle: 'core', pattern: 'core', compound: false, places: ['gym', 'home'], antiRot: true },
   { id: 'deadbug',   tr: 'Dead Bug',                 en: 'Dead Bug',                   muscle: 'core', pattern: 'core', compound: false, places: ['gym', 'home', 'bw'] },
 
   // --- Baldir ---
@@ -214,9 +301,34 @@ const PROGRAM_FAMILY = {
   pullup: 'pullup', chinup: 'pullup',                   // ayni cekis, tutus farkli
 };
 function programFamily(e) { return PROGRAM_FAMILY[e.id] || e.id; }
+// ⚠️ HAREKET KALITESI / TRANSFER PUANI (18 Agu 2026) — `pri`.
+//   3 = serbest agirlik TEMEL bileske (stabilizasyon talebi var, sporcuya
+//       transferi en yuksek olan uyaran)
+//   2 = serbest agirlik yardimci / tek tarafli / serbest izolasyon
+//   1 = makine ya da kablo (yol sabit, stabilizasyon yok)
+// NEDEN EKLENDI: aile cezasi yuzunden motor ikinci bacak gununde serbest
+// squat yerine LEG PRESS yaziyordu — "cesitlilik" hareket kalitesinin onune
+// geciyordu. Makine bir squat degildir; cesitlilik ucuz, transfer degil.
+const PROGRAM_PRI3 = new Set(['squat', 'bench', 'ohp', 'rdl', 'bbrow', 'pullup',
+  'chinup', 'dip', 'hangclean', 'pushpress']);
+const PROGRAM_MAKINE = new Set(['legpress', 'latpull', 'seatedrow', 'legext',
+  'legcurl', 'cablefly', 'pushdown', 'neckharn']);
+
+// ⚠️ TEKRAR TABANI (18 Agu 2026) — kademe araligi her harekete uymaz.
+// Atletik hedefte kademe 1 araligi 3-5 ve motor bunu HIP THRUST'a da
+// yaziyordu. Kisa ROM'lu, kalca dominant ya da makine hareketlerinde 3 tekrar
+// ne kuvvet uyaranidir ne de guvenli teknik verir — bu hareketler kendi
+// alt sinirlarini dayatir. Kademe araligi bu tabanin altina inemez.
+const PROGRAM_REP_FLOOR = {
+  hipthrust: 6, latpull: 6, seatedrow: 6, dbrow: 6, dbrdl: 6, legpress: 5,
+  rdl: 5, dbbench: 5, dbohp: 5, glutebr: 8, calfraise: 8, legcurl: 8,
+  legext: 8, nordic: 3,
+};
+
 for (const e of PROGRAM_EXERCISES) {
   if (e.tier == null) e.tier = PROGRAM_TIER1.has(e.id) ? 1 : (PROGRAM_TIER2.has(e.id) ? 2 : 3);
   if (PROGRAM_UNI.has(e.id)) e.uni = true;
+  if (e.pri == null) e.pri = PROGRAM_MAKINE.has(e.id) ? 1 : (PROGRAM_PRI3.has(e.id) ? 3 : 2);
 }
 
 // Bolunmedeki her gunun hangi kaliplari isteyecegi
@@ -229,18 +341,24 @@ const PROGRAM_SPLITS = {
   fullbody: [
     { ad: 'Full Body A', patterns: ['squat', 'push_h', 'pull_v', 'hinge', 'core'] },
     { ad: 'Full Body B', patterns: ['hinge', 'push_v', 'pull_h', 'lunge', 'core'] },
-    { ad: 'Full Body C', patterns: ['squat', 'push_h', 'pull_h', 'iso', 'core'] },
+    { ad: 'Full Body C', patterns: ['squat', 'push_h', 'pull_h', 'core', 'iso'] },
   ],
+  // ⚠️ CORE HER GUNDE ve IZOLASYONDAN ONCE (18 Agu 2026). Eskiden core yalniz
+  // bacak/full-body sablonlarinda ve EN SON slottaydi; kapasite kesintisi hep
+  // oraya denk geliyordu, 60 dk'lik programda haftalik core = 0 set cikiyordu.
+  // Dovus sporcusunda govde isi pazarlik konusu degil: vurus gucu bacaktan
+  // gelip GOVDE DONUSUYLE aktarilir, anti-rotasyon dayanikliligi ayni zamanda
+  // bel korumasidir. Bir yan kaldiristan once gelir.
   upperlower: [
-    { ad: 'Üst Vücut A', patterns: ['push_h', 'pull_v', 'push_v', 'pull_h', 'iso'], focus: UST },
-    { ad: 'Alt Vücut A', patterns: ['squat', 'hinge', 'lunge', 'iso', 'core'], focus: ALT, agirBacak: true },
-    { ad: 'Üst Vücut B', patterns: ['push_v', 'pull_h', 'push_h', 'pull_v', 'iso'], focus: UST },
-    { ad: 'Alt Vücut B', patterns: ['hinge', 'squat', 'lunge', 'iso', 'core'], focus: ALT, agirBacak: true },
+    { ad: 'Üst Vücut A', patterns: ['push_h', 'pull_v', 'push_v', 'pull_h', 'core', 'iso'], focus: UST },
+    { ad: 'Alt Vücut A', patterns: ['squat', 'hinge', 'lunge', 'core', 'iso'], focus: ALT, agirBacak: true },
+    { ad: 'Üst Vücut B', patterns: ['push_v', 'pull_h', 'push_h', 'pull_v', 'core', 'iso'], focus: UST },
+    { ad: 'Alt Vücut B', patterns: ['hinge', 'squat', 'lunge', 'core', 'iso'], focus: ALT, agirBacak: true },
   ],
   ppl: [
-    { ad: 'İtme', patterns: ['push_h', 'push_v', 'push_h', 'iso', 'iso'], focus: ['chest', 'shoulders', 'triceps'] },
-    { ad: 'Çekme', patterns: ['pull_v', 'pull_h', 'pull_h', 'iso', 'iso'], focus: ['back', 'biceps'] },
-    { ad: 'Bacak', patterns: ['squat', 'hinge', 'lunge', 'iso', 'core'], focus: ALT, agirBacak: true },
+    { ad: 'İtme', patterns: ['push_h', 'push_v', 'push_h', 'core', 'iso'], focus: ['chest', 'shoulders', 'triceps'] },
+    { ad: 'Çekme', patterns: ['pull_v', 'pull_h', 'pull_h', 'core', 'iso'], focus: ['back', 'biceps'] },
+    { ad: 'Bacak', patterns: ['squat', 'hinge', 'lunge', 'core', 'iso'], focus: ALT, agirBacak: true },
   ],
 };
 
@@ -287,6 +405,97 @@ function programStartWeight(exercise, repTarget, workouts) {
   const kg = (best / (1 + repTarget / 30)) * 0.9;
   if (!Number.isFinite(kg) || kg <= 0) return null;
   return Math.max(2.5, Math.round(kg / 2.5) * 2.5);   // 2.5 kg adimina yuvarla
+}
+
+/**
+ * Bir hareketin tempo dizesi. Patlayici ve sure bazli hareketlerde tempo YOK
+ * (birinin olcusu hiz, digerinin olcusu zaten sure).
+ */
+function programTempo(e) {
+  if (!e || e.explosive || e.sure) return null;
+  return PROGRAM_TEMPO[e.id] || PROGRAM_TEMPO_TIER[e.tier || 3] || '2-1-1-0';
+}
+
+/**
+ * TEMPO + RPE'yi programin TAMAMINA uygula. Hafta bagimlidir, bu yuzden hem
+ * buildProgram sonunda hem advanceProgram sonunda cagrilir (idempotent).
+ *   - Teknik haftalarinda (ilk 2 hafta) RPE bir kademe duser: once hareket otursun.
+ *   - Hafifletme (deload) haftasinda tavan 6 — amac toparlanmak.
+ *   - Patlayici iste RPE YOK: olcu efor degil HIZ. "Zorlanana kadar" yapmak
+ *     patlayici isin amacini bozar.
+ */
+function programApplyEffort(p) {
+  if (!p) return p;
+  const teknik = (Number(p.week) || 1) <= PLYO_LIMITS.teachWeeks;
+  const deload = !!p.deload;
+  for (const d of (p.days || [])) {
+    for (const e of (d.exercises || [])) {
+      e.tempo = programTempo(e);
+      if (e.explosive) { e.rpe = null; continue; }
+      // Boyun asla zorlanmaz — izometrik is, amaci hipertrofi degil koruma.
+      let [a, b] = e.muscle === 'neck' ? [6, 7] : (PROGRAM_RPE[e.tier || 3] || [8, 8]);
+      if (teknik && e.muscle !== 'neck') { a -= 1; b -= 1; }
+      if (deload) { a = Math.min(a, 6); b = Math.min(b, 6); }
+      e.rpe = a === b ? String(a) : (a + '-' + b);
+    }
+  }
+  return p;
+}
+
+/**
+ * VUCUT AGIRLIGI KALIBRASYONU.
+ * "Barfiks 4 × 3-5" yazmak, 2 barfiks cekebilen biri icin imkansiz; 20
+ * cekebilen icin isinma. Motor bunu bilmeden yazmamali.
+ *
+ * Yontem barbell ile AYNI: Epley. Toplam yuk = vucut agirligi x hareket orani.
+ *   e1RM = yuk x (1 + maxTekrar / 30)
+ *   hedefYuk = e1RM / (1 + hedefTekrar / 30)
+ *   ek = hedefYuk - yuk        (kemerle eklenecek kg; negatifse hareket agir geliyor)
+ * Boylece ayni formul hem 1RM denemesi ISTEMEDEN calisir hem de tutarli kalir.
+ */
+function programBodyweightCue(id, bw, maxRep, repTarget) {
+  const oran = PROGRAM_BW_LOAD[id];
+  if (!oran || !(bw > 0) || !(maxRep > 0) || !(repTarget > 0)) return null;
+  const yuk = bw * oran;
+  const e1 = yuk * (1 + maxRep / 30);
+  const hedefYuk = e1 / (1 + repTarget / 30);
+  const ek = hedefYuk - yuk;
+  if (ek >= 2.5) {
+    return { tip: 'ekle', kg: Math.round(ek / 2.5) * 2.5,
+      not: 'Kemerle +' + (Math.round(ek / 2.5) * 2.5) + ' kg ekle — vücut ağırlığı bu tekrar ' +
+        'aralığı için hafif kalıyor (' + maxRep + ' tekrar çekebiliyorsun).' };
+  }
+  if (ek <= -3) {
+    return { tip: 'regresyon',
+      not: 'Bu tekrarı temiz yapamazsın (' + maxRep + ' tekrar maksimumun) — ' +
+        (PROGRAM_BW_REGRES[id] || 'hareketi kolaylaştır') + '. Sayı değil TEKNİK kovala.' };
+  }
+  return { tip: 'uygun', not: null };
+}
+
+/**
+ * SOGUMA / MOBILITE — programin ayri bir blogu, "unutulursa olur" degil.
+ * ⚠️ STATIK GERME ANTRENMANDAN SONRA. Once yapilan uzun statik germe kuvvet
+ * ve sicrama ciktisini gecici olarak DUSURUR — isinma dinamik olmali (bkz.
+ * programWarmup), germe buraya aittir.
+ * Dovus sporcusunda hedef bolgeler rastgele degil: kalca (tekme yuksekligi),
+ * torasik (vurusun donusu), ayak bilegi (adim ve denge).
+ */
+function programCooldown(d, G) {
+  const alt = !!d.agirBacak || (d.odak || []).indexOf('quads') >= 0;
+  const out = [];
+  if (alt) {
+    out.push('Kalça fleksör germe 2 × 30 sn/taraf — tekme yüksekliğinin ilk sınırı burası');
+    out.push('90/90 kalça dönüşü 8 tekrar/taraf');
+    out.push('Ayak bileği duvar testi 10 tekrar/taraf');
+  } else {
+    out.push('Torasik açılım (foam roller ya da duvar) 10 tekrar — vuruşun dönüşü buradan gelir');
+    out.push('Lat + göğüs germe 2 × 30 sn/taraf');
+    out.push('Omuz dış rotasyon mobilitesi 10 tekrar/taraf');
+  }
+  if (G && G.athletic) out.push('Boyun serbest hareket: her yöne 5 yavaş tekrar — zorlama, uç noktada bekleme');
+  out.push('⚠️ Statik germe seansın SONUNDA. Öncesinde yapılırsa kuvvet ve sıçrama çıktısı düşer.');
+  return out;
 }
 
 // Gun adi (JS getDay: 0=Pazar)
@@ -344,6 +553,14 @@ function buildProgram(cfg, workouts) {
     .filter(d => d >= 0 && d <= 6);
   const avoid = Array.isArray(c.avoid) ? c.avoid : [];
   const sessionMin = Math.max(20, Math.min(120, Number(c.sessionMin) || 60));
+  // Vucut agirligi: beslenme hesaplayicisindan okunur, ayri soru sorulmaz.
+  // ⚠️ BOY antrenman programlamasinda KULLANILMAZ. ROM'u etkiler ama hareket
+  // secimini ya da hacmi degistirecek bir kanit yok — uydurma parametre eklemek
+  // motoru bilimsel degil, bilimsel GORUNUMLU yapar.
+  const bw = Number(c.bodyweight) ||
+    (typeof data === 'object' && data && data.diet && data.diet.calc &&
+      Number(data.diet.calc.weight)) || 0;
+  const bwMax = (c.bwMax && typeof c.bwMax === 'object') ? c.bwMax : {};
 
   // Guc gunu sayisi: istenen, ama agir gun tavanina kirpilir
   let sd = Math.max(1, Math.min(PROGRAM_LIMITS.maxStrengthDays, Number(c.strengthDays) || 3));
@@ -354,13 +571,20 @@ function buildProgram(cfg, workouts) {
   const splitKey = sd <= 3 ? 'fullbody' : (sd === 4 ? 'upperlower' : 'ppl');
   const sablon = PROGRAM_SPLITS[splitKey];
 
-  // Seans basina egzersiz sayisi — sureden turetilir (kaba: bileske 4 dk/set,
-  // izolasyon 2.5 dk/set; 3 set varsayimi + 8 dk isinma)
-  const setBasi = (G.restSec + 45) / 60;
-  const kapasite = Math.max(3, Math.min(
-    PROGRAM_LIMITS.maxExercisesPerSession,
-    Math.floor((sessionMin - 8) / (3 * setBasi))
-  ));
+  // ⚠️ SEANS SURESI: sabit "hareket sayisi" yerine GERCEK ZAMAN BUTCESI
+  // (18 Agu 2026). Eski hesap en uzun dinlenmeyi her harekete uyguluyor,
+  // 60 dk'lik atletik seansta kapasiteyi 4 harekete indiriyor ve sablonun
+  // son slotlarini (core dahil) sessizce dusuruyordu. Artik her hareketin
+  // suresi KENDI kademesinin dinlenmesiyle hesaplanir.
+  const ISINMA_DK = 8;
+  const PATLAYICI_DK = G.athletic ? 10 : 0;   // seans basindaki patlayici blok
+  const butceSn = Math.max(300, (sessionMin - ISINMA_DK - PATLAYICI_DK) * 60);
+  // ⚠️ %15 tolerans: butce sert bir duvar degil. Seans sonunda antagonist
+  // superset uygulanip sure GERI kazanildigi icin (bkz. programPairSupersets)
+  // secim asamasinda hafif tasmaya izin verilir; aksi halde ucuz ama degerli
+  // son slotlar (core, izolasyon) 15 saniyelik farkla programdan dusuyordu.
+  const butceTavan = butceSn * 1.15;
+  const hareketSn = (tier, sets) => programHareketSn(programRest(G, tier), sets);
 
   const gunler = programAssignDays(sd, fightDays);
   const havuz = programExercisePool(places, avoid);
@@ -395,12 +619,15 @@ function buildProgram(cfg, workouts) {
     const odak = sab.focus || null;
     const secilenler = [];
     const gunKas = {};
+    let harcanan = 0;
     for (let slot = 0; slot < sab.patterns.length; slot++) {
       const pat = sab.patterns[slot];
-      if (secilenler.length >= kapasite) break;
-      // 'iso'/'core' serbest kaliplari gunun odagiyla sinirlanir
+      if (secilenler.length >= PROGRAM_LIMITS.maxExercisesPerSession) break;
+      // 'iso' serbest kalibi gunun odagiyla sinirlanir (bacak gununde yan
+      // kaldiris cikmasin diye). ⚠️ CORE ODAKLA SINIRLANMAZ: govde her gune
+      // aittir, ust gunun odagi (gogus/sirt/omuz) core'u eliyordu.
       const uygun = (e) => e.pattern === pat &&
-        (!odak || (pat !== 'iso' && pat !== 'core') || odak.includes(e.muscle)) &&
+        (!odak || pat !== 'iso' || odak.includes(e.muscle)) &&
         !secilenler.some(x => x.ex.id === e.id);
       // ⚠️ Eskiden "havuzdaki ilk uyan" seciliyordu — hep Bench Press cikiyordu.
       // Artik puanlama: ilk slot ANA KALDIRIS ister, sonraki slotlar yardimci/
@@ -422,14 +649,58 @@ function buildProgram(cfg, workouts) {
       const kAile = programFamily(aday);
       aileSayaci[kAile] = (aileSayaci[kAile] || 0) + 1;
       const tier = aday.tier || 3;
-      const [tMin, tMax] = (G.tiers && G.tiers[tier]) || [G.repMin, G.repMax];
+      const setSayisi = (G.setsByTier && G.setsByTier[tier]) || 3;
+      const sure = hareketSn(tier, setSayisi);
+      // Zaman butcesi dolduysa bu slotu ATLA (donguyu kirma — sonraki slot
+      // daha kisa olabilir). En az 3 hareket her zaman kalir; CORE ve gunun
+      // ana kaldirisi butceye bakilmaksizin girer.
+      if (harcanan + sure > butceTavan && secilenler.length >= 3 && pat !== 'core') {
+        kullanilan.delete(aday.id);
+        gunKas[aday.muscle] = Math.max(0, (gunKas[aday.muscle] || 1) - 1);
+        kalipSayaci[kAnahtar] = Math.max(0, (kalipSayaci[kAnahtar] || 1) - 1);
+        aileSayaci[kAile] = Math.max(0, (aileSayaci[kAile] || 1) - 1);
+        continue;
+      }
+      harcanan += sure;
+      const [tMin0, tMax0] = (G.tiers && G.tiers[tier]) || [G.repMin, G.repMax];
+      // ⚠️ Hareketin kendi tekrar tabani kademe araligini EZER (hip thrust 3
+      // tekrar yazilmaz). Aralik daralmasin diye tavan da birlikte kayar.
+      const taban = PROGRAM_REP_FLOOR[aday.id] || 0;
+      const tMin = Math.max(tMin0, taban);
+      const tMax = Math.max(tMax0, tMin + 2);
       secilenler.push({
         ex: aday, tier,
-        sets: (G.setsByTier && G.setsByTier[tier]) || 3,
+        sets: setSayisi,
         repMin: tMin, repMax: tMax,
         reps: tMin,
+        rest: programRest(G, tier),
         kg: programStartWeight(aday, tMin, workouts),
+        bw: programBodyweightCue(aday.id, bw, Number(bwMax[PROGRAM_BW_TEST[aday.id]]) || 0, tMin),
       });
+    }
+
+    // ⚠️ CORE GARANTISI (18 Agu 2026): sablonda core slotu varsa ama secim
+    // sirasinda dusmusse ZORLA eklenir. Maliyeti ~3 dk; dovus sporcusunda
+    // haftalik core = 0 set kabul edilebilir bir sonuc degil.
+    if (sab.patterns.indexOf('core') >= 0 && !secilenler.some(x => x.ex.pattern === 'core')) {
+      const coreAdaylar = havuz.filter(e => e.pattern === 'core' && !e.explosive &&
+        !secilenler.some(x => x.ex.id === e.id));
+      let cAday = null, cEnIyi = -Infinity;
+      for (const e of coreAdaylar) {
+        const sk = programPickScore(e, 4, { kullanilan, gunKas, kalipSayaci, aileSayaci, athletic: !!G.athletic });
+        if (sk > cEnIyi) { cEnIyi = sk; cAday = e; }
+      }
+      if (cAday) {
+        kullanilan.add(cAday.id);
+        kalipSayaci['core|' + (cAday.tier || 3)] = (kalipSayaci['core|' + (cAday.tier || 3)] || 0) + 1;
+        const cTier = cAday.tier || 3;
+        const [cMin, cMax] = (G.tiers && G.tiers[cTier]) || [G.repMin, G.repMax];
+        secilenler.push({
+          ex: cAday, tier: cTier, sets: (G.setsByTier && G.setsByTier[cTier]) || 3,
+          repMin: cMin, repMax: cMax, reps: cMin,
+          rest: programRest(G, cTier), kg: null,
+        });
+      }
     }
     days.push({
       dow,
@@ -442,7 +713,10 @@ function buildProgram(cfg, workouts) {
         sets: s.sets,
         repMin: s.repMin, repMax: s.repMax,
         tier: s.tier, uni: !!s.ex.uni,
-        kg: s.kg,
+        rest: s.rest,
+        kg: (s.bw && s.bw.tip === 'ekle') ? s.bw.kg : s.kg,
+        bwNot: (s.bw && s.bw.not) || null,
+        bwTip: (s.bw && s.bw.tip) || null,
         sure: !!s.ex.sure,
       })),
     });
@@ -462,6 +736,8 @@ function buildProgram(cfg, workouts) {
     updatedAt: Date.now(),
     goal, sessionMin, places, fightDays, avoid,
     strengthDays: sd,
+    bodyweight: bw || null,
+    bwMax,
     split: splitKey,
     week: 1,
     days,
@@ -481,9 +757,60 @@ function buildProgram(cfg, workouts) {
   programBalanceVolume(p, G);   // haftalik hacmi hedefin bandina otur
   programEnforceVolumeCap(p);   // 16 yas tavani: rapor degil, ZORLA
   programEnforceContacts(p);    // temas butcesi: dovus gunleri dahil
-  for (const d of p.days) if (d.type === 'strength') d.warmup = programWarmup(d, G);
+  for (const d of p.days) if (d.type === 'strength') {
+    d.warmup = programWarmup(d, G);
+    d.cooldown = programCooldown(d, G);
+  }
+  programApplyEffort(p);
+  // ⚠️ SURE DURUSTLUGU (18 Agu 2026). Motor "60 dk" diyen kullaniciya 77 dk'lik
+  // seans yaziyor ve bunu SOYLEMIYORDU. Atletik hedefte ana kaldirislarda 3 dk
+  // dinlenme sart oldugu icin 3 agir hareket tek basina 45 dk eder.
+  // Once bilimsel cozum denenir (antagonist superset), yetmiyorsa DURUSTCE
+  // sure yazilir — sessizce kirpmak da, susmak da yanlis.
+  const hedefDk = Math.max(20, sessionMin - ISINMA_DK);
+  const tasan = [];
+  for (const d of p.days) {
+    if (d.type !== 'strength') continue;
+    if (programSessionMinutes(d) > hedefDk) programPairSupersets(d, hedefDk);
+    d.estMin = programSessionMinutes(d) + ISINMA_DK;
+    if (d.estMin > sessionMin + 3) tasan.push(d.estMin);
+  }
+  if (p.days.some(d => d.type === 'strength' && (d.exercises || []).some(e => e.pair))) {
+    p.notes.push('Seans süreye sığsın diye bazı hareketler EŞLEŞTİRİLDİ (aynı harfli ' +
+      'olanlar): itiş–çekiş dönüşümlü yapılır. A1 → 45-60 sn → A2 → tam dinlenme → tekrar. ' +
+      'Çalışan kasın dinlenmesi kısalmaz, sadece boş bekleme dolar. ' +
+      'Dinlenmeyi kısaltmak yerine bunu tercih et — kısaltmak kuvvet çıktısını düşürür.');
+  }
+  if (tasan.length) {
+    p.notes.push('Dürüst uyarı: seansların ' + Math.min.apply(null, tasan) + '-' +
+      Math.max.apply(null, tasan) + ' dk sürüyor, sen ' + sessionMin + ' dk demiştin. ' +
+      'Sebep uydurma değil: ağır ana kaldırışta 3 dk dinlenme patlayıcılık ve kuvvet ' +
+      'için şart, kısaltırsan bu programın amacı kalmaz. İki gerçek seçenek var — ' +
+      'ya süreyi ' + Math.max.apply(null, tasan) + ' dk’ya çıkar, ya da güç günü sayısını ' +
+      'artırıp seans başına düşen hareketi azalt.');
+  }
   p.conditioning = programConditioning(p);
   // Patlayici olcum hareketlerinde kg ZATEN olmaz (cm/m ile olculur) — sayma.
+  const bwUyari = [];
+  for (const d of p.days) {
+    for (const e of (d.exercises || [])) {
+      if (e.bwTip === 'regresyon' && bwUyari.indexOf(e.tr) < 0) bwUyari.push(e.tr);
+    }
+  }
+  if (bwUyari.length) {
+    p.notes.push('Vücut ağırlığı hareketlerinde mevcut kapasiten hedef tekrarı ' +
+      'karşılamıyor (' + bwUyari.join(', ') + '). Kartta yazan kolaylaştırmayı kullan — ' +
+      'yarım tekrar yapmak yerine hareketi kolaylaştırmak doğru olan.');
+  } else if (bw > 0 && Object.keys(bwMax).length) {
+    const ekleyenler = [];
+    for (const d of p.days) for (const e of (d.exercises || [])) {
+      if (e.bwTip === 'ekle' && ekleyenler.indexOf(e.tr) < 0) ekleyenler.push(e.tr);
+    }
+    if (ekleyenler.length) {
+      p.notes.push('Şu hareketlerde vücut ağırlığın artık yetmiyor, ağırlık ekleniyor: ' +
+        ekleyenler.join(', ') + '. Kilo kemeri ya da sırt çantası yeterli.');
+    }
+  }
   const eksikKg = days.reduce((n, d) => n +
     d.exercises.filter(e => e.kg == null && !(e.explosive && e.metric !== 'kg')).length, 0);
   if (eksikKg) {
@@ -507,6 +834,9 @@ function programPickScore(e, slot, ctx) {
   if (slot === 0) s += tier === 1 ? 45 : (tier === 2 ? 12 : 0);
   else if (slot === 1) s += tier === 1 ? 28 : (tier === 2 ? 22 : 6);
   else s += tier === 3 ? 16 : (tier === 2 ? 14 : 8);
+  // ⚠️ HAREKET KALITESI CESITLILIKTEN ONCE GELIR (18 Agu 2026).
+  // pri: 3 serbest temel bileske · 2 serbest yardimci · 1 makine/kablo.
+  s += (e.pri || 2) * 12;
   // Cesitlilik: hafta icinde tekrarlanan hareketi geri plana at
   if (!ctx.kullanilan.has(e.id)) s += 20;
   // ⚠️ ASIL CESITLILIK KALIP DUZEYINDE. Eskiden sadece id'ye bakiliyordu, o
@@ -515,14 +845,29 @@ function programPickScore(e, slot, ctx) {
   // KADEME tekrari cezalandirilir; farkli kademe (agir squat + tek bacak
   // squat) serbest, cunku onlar gercekten farkli uyaran.
   // Ayni AILE (ayni hareketin baska aleti) — agir ceza, gercek tekrar.
+  // ⚠️ 18 Agu 2026 — 2x/HAFTA FREKANS ARTIK CEZALANDIRILMIYOR.
+  // Ana kaldirisin haftada ikinci kez tekrarlanmasi "cesitlilik eksigi" degil
+  // DOGRU programlamadir; kas grubu basina 2 frekans yerlesik bilgidir.
+  // Eski kural yuzunden motor ikinci bacak gununde squat yerine leg press
+  // yaziyordu. Muafiyet DAR: yalniz AYNI hareketin (ayni id) kademe 1 olarak
+  // IKINCI kez girmesi bedava. Ayni ailenin BASKA ALETLE tekrari (bar RDL +
+  // dambil RDL) hala sahte cesitliliktir ve tam ceza alir. Ucuncu tekrar da.
   const aile = programFamily(e);
-  s -= ((ctx.aileSayaci && ctx.aileSayaci[aile]) || 0) * 40;
+  const aileKez = (ctx.aileSayaci && ctx.aileSayaci[aile]) || 0;
+  if (aileKez) {
+    const frekansMuaf = ctx.kullanilan.has(e.id) && (e.tier || 3) === 1 && aileKez === 1;
+    if (!frekansMuaf) s -= aileKez * 40;
+  }
   // Ayni KALIP + KADEME — hafif ceza. Farkli kademe serbest: agir bilateral
   // squat ile tek bacak is gercekten farkli uyarandir.
   const anahtar = e.pattern + '|' + tier;
   s -= ((ctx.kalipSayaci && ctx.kalipSayaci[anahtar]) || 0) * 14;
   // Dovus sporcusu: tek bacak kuvveti ve asimetri kontrolu ayri deger tasir
   if (ctx.athletic && e.uni) s += 12;
+  // Dovus sporcusunda ANTI-ROTASYON ve TASIMA isi, plank'tan once gelir:
+  // govde donusune direnc ve tek tarafli yuk altinda pozisyon korumak
+  // vurusa ve klinclere dogrudan aktarilir.
+  if (ctx.athletic && (e.antiRot || e.pattern === 'carry')) s += 10;
   // Ayni kasi o gun ust uste yuklemeyi cezalandir
   s -= (ctx.gunKas[e.muscle] || 0) * 8;
   return s;
@@ -609,23 +954,46 @@ function programBalanceVolume(p, G) {
   for (let tur = 0; tur < 60; tur++) {
     const sets = programWeeklySets(p);
     const kaslar = Object.keys(sets).filter(m => !ATLA.has(m));
-    const dusuk = kaslar.filter(m => sets[m] < low)
-      .sort((a, b) => sets[a] - sets[b])[0];
+    // ⚠️ 18 Agu 2026: eskiden SADECE en dusuk kas alinip, ona set eklenemezse
+    // dongu kiriliyordu — band altindaki diger kaslar hic denenmiyordu
+    // (arka bacak tavana dayaninca gogus 7 sette unutuluyordu).
+    const dusukler = kaslar.filter(m => sets[m] < low).sort((a, b) => sets[a] - sets[b]);
     const yuksek = kaslar.filter(m => sets[m] > bandHigh(m))
       .sort((a, b) => sets[b] - sets[a])[0];
+    const dusuk = dusukler[0];
     if (!dusuk && !yuksek) break;
-    if (dusuk) {
-      const aday = hareketler(dusuk).filter(e => e.sets < 5)
-        .sort((a, b) => a.sets - b.sets)[0];
+    let eklendiTur = false;
+    for (const mKas of dusukler) {
+      // ⚠️ SET EKLERKEN KADEME ONEMLI (18 Agu 2026). Eskiden "en az setli
+      // hareket" seciliyordu ve bu hep IZOLASYONA denk geliyordu: Leg Curl
+      // 4 sete cikiyor, Lunge 2 sette kaliyordu. Dovus sporcusunda tek
+      // tarafli bileske isin degeri izolasyonun onundedir. Sira: 2 > 1 > 3.
+      const ONCELIK_EKLE = { 2: 0, 1: 1, 3: 2 };
+      // Tek harekette set tavani 5. Bir kasi tek hareket tasiyorsa (orn.
+      // arka bacagi sadece RDL) motor bandi TUTTURAMAZ — ve tutturmak icin
+      // tek harekete 6-7 set yiginmak dogru cozum degil: 16 yasta, ustelik
+      // haftada 2 gun kickboks varken tek seansta 6 set RDL arka zincir
+      // yorgunlugunu gereksiz yukseltir. Motor 5'te durur ve DURUMU SOYLER.
+      const aday = hareketler(mKas).filter(e => e.sets < 5)
+        .sort((a, b) => (ONCELIK_EKLE[a.tier || 3] - ONCELIK_EKLE[b.tier || 3]) ||
+                        (a.sets - b.sets))[0];
       if (aday) {
         aday.sets += 1;
-        if (eklendi.indexOf(dusuk) < 0) eklendi.push(dusuk);
-        continue;
+        if (eklendi.indexOf(mKas) < 0) eklendi.push(mKas);
+        eklendiTur = true;
+        break;
       }
     }
+    if (eklendiTur) continue;
     if (yuksek) {
+      // ⚠️ KIRPARKEN SIRA: once izolasyon, esitlikte once MAKINE (18 Agu 2026).
+      // Eskiden iki kademe-1 hareket esit oldugunda dizi sonundaki kirpiliyor,
+      // sonuc olarak SQUAT 4->3 sete iniyor, Leg Press 4 sette kaliyordu.
+      const __lib = id => PROGRAM_EXERCISES.find(x => x.id === id) || {};
       const aday = hareketler(yuksek).filter(e => e.sets > 2)
-        .sort((a, b) => (a.tier || 3) - (b.tier || 3)).pop();
+        .sort((a, b) => ((b.tier || 3) - (a.tier || 3)) ||
+                        ((__lib(a.id).pri || 2) - (__lib(b.id).pri || 2)) ||
+                        (b.sets - a.sets))[0];
       if (aday) {
         aday.sets -= 1;
         if (kirpildi.indexOf(yuksek) < 0) kirpildi.push(yuksek);
@@ -646,6 +1014,18 @@ function programBalanceVolume(p, G) {
   if (eklendi.length) {
     p.notes.push('Şu kaslarda haftalık hacim hedefin alt bandının (' + low + ' set) ' +
       'altında kalıyordu, set eklendi: ' + eklendi.map(ad).join(', ') + '.');
+  }
+  // ⚠️ SESSIZ KALMA (18 Agu 2026): set ekleyecek hareket bulunamadiginda motor
+  // hicbir sey demeden bandin altinda birakiyordu. Bu bir programlama hatasi
+  // degil kutuphane/sure sinirinin sonucudur ama kullanici BILMELI.
+  const kalanSets = programWeeklySets(p);
+  const eksikKalan = Object.keys(kalanSets)
+    .filter(m => !ATLA.has(m) && kalanSets[m] < low).map(ad);
+  if (eksikKalan.length) {
+    p.notes.push('Şu kaslar hâlâ hedef bandın (' + low + ' set) altında: ' +
+      eksikKalan.join(', ') + '. Sebep: o kası çalıştıran hareket sayısı ya da ' +
+      'seans süresi yetmiyor. Seans süresini artırırsan ya da salon seçeneğini ' +
+      'açarsan motor buraya hareket ekleyebilir.');
   }
   return p;
 }
@@ -698,9 +1078,14 @@ function programEnforceVolumeCap(p) {
       }
     }
     const lib = id => PROGRAM_EXERCISES.find(x => x.id === id) || {};
+    // ⚠️ 18 Agu 2026: 'compound' ikili bir bayrakti, kademe ayrimini gormuyordu.
+    // Sira: once izolasyon (kademe 3), esitlikte once MAKINE, sonra cok setli.
+    // Ana kaldiris (kademe 1, serbest agirlik) en son kirpilir.
     adaylar.sort((a, b) => {
-      const ai = lib(a.id).compound ? 1 : 0, bi = lib(b.id).compound ? 1 : 0;
-      if (ai !== bi) return ai - bi;              // izolasyon once kirpilir
+      const at = a.tier || (lib(a.id).tier || 3), bt = b.tier || (lib(b.id).tier || 3);
+      if (at !== bt) return bt - at;              // izolasyon once kirpilir
+      const ap = lib(a.id).pri || 2, bp = lib(b.id).pri || 2;
+      if (ap !== bp) return ap - bp;              // makine once kirpilir
       return b.sets - a.sets;                     // cok setli once
     });
     const hedef = adaylar.find(e => e.sets > 2);
@@ -723,6 +1108,91 @@ function programEnforceVolumeCap(p) {
       kirpilan.map(m => PROGRAM_MUSCLES[m] || m).join(', ') + '.');
   }
   return p;
+}
+
+/**
+ * SEANS SURESI TAHMINI — dakika.
+ * Bir setin maliyeti: dinlenme + ~45 sn calisma. Eslestirilmis (superset)
+ * hareketlerde iki hareket TEK dinlenme penceresini paylasir.
+ */
+/**
+ * Bir hareketin gercek suresi.
+ * ⚠️ Eski model `set x (dinlenme + 45)` idi ve her hareket icin BIR fazla
+ * dinlenme sayiyordu: son setten sonra o hareketin dinlenmesi degil, bir
+ * sonraki harekete GECIS dinlenmesi vardir (farkli kas, ~60 sn yeter).
+ * 4 set x 3 dk'lik bir kaldiriste fark 2 dk — seans basina 6-8 dk, yani
+ * tam bir hareketlik yer. Bu yuzden onemli.
+ */
+function programHareketSn(rest, sets) {
+  const n = Math.max(1, Number(sets) || 0);
+  const r = Number(rest) || 90;
+  return n * 45 + (n - 1) * r + 60;
+}
+
+function programSessionMinutes(d) {
+  const ex = (d && d.exercises) || [];
+  const ciftler = {};
+  let sn = 0;
+  for (const e of ex) {
+    if (e.pair) { (ciftler[e.pair] = ciftler[e.pair] || []).push(e); continue; }
+    sn += programHareketSn(e.rest, e.sets);
+  }
+  for (const k of Object.keys(ciftler)) {
+    const g = ciftler[k];
+    const sets = Math.max.apply(null, g.map(e => Number(e.sets) || 0));
+    const rest = Math.max.apply(null, g.map(e => Number(e.rest) || 90));
+    // Cift: iki hareketin CALISMA suresi toplanir, dinlenme PAYLASILIR.
+    sn += sets * 45 * g.length + (Math.max(1, sets) - 1) * rest + 60;
+  }
+  return Math.round(sn / 60);
+}
+
+/**
+ * ANTAGONIST SUPERSET — seans suresini kisaltmanin BILIMSEL yolu.
+ *
+ * Zit kalibi (itis <-> cekis) donusumlu yapmak, CALISAN KASIN dinlenmesini
+ * kisaltmadan toplam sureyi ~%30-35 dusurur; kuvvet ciktisi duz setlere
+ * kiyasla anlamli olarak dusmez. Alternatifi — herkesin yaptigi sey —
+ * dinlenmeyi 90 sn'ye indirmektir; O kuvvet ciktisini gercekten dusurur.
+ *
+ * ⚠️ Kurallar:
+ *   - AYNI kas ya da ayni kalip ASLA eslestirilmez (dinlenme amaci kalkar).
+ *   - Patlayici is eslestirilmez: amaci maksimum hiz, tam dinlenme sart.
+ *   - Alt vucut ana kaldirislari (squat/hinge) eslestirilmez — teknik
+ *     yorgunlukla bozulur, risk kazanctan buyuk.
+ *   - Yalnizca seans istenen sureye SIGMIYORSA uygulanir.
+ */
+const PROGRAM_ITIS = new Set(['push_h', 'push_v']);
+const PROGRAM_CEKIS = new Set(['pull_h', 'pull_v']);
+
+function programPairSupersets(d, hedefDk) {
+  const ex = (d.exercises || []).filter(e => !e.explosive && !e.pair);
+  const lib = id => PROGRAM_EXERCISES.find(x => x.id === id) || {};
+  const kalip = e => lib(e.id).pattern;
+  let harf = 65;   // 'A'
+  // Once itis <-> cekis; sonra bileske <-> core (govde isi dolgu olarak ideal)
+  const turler = [
+    (a, b) => PROGRAM_ITIS.has(kalip(a)) && PROGRAM_CEKIS.has(kalip(b)),
+    (a, b) => (PROGRAM_ITIS.has(kalip(a)) || PROGRAM_CEKIS.has(kalip(a))) && kalip(b) === 'core',
+  ];
+  for (const eslesir of turler) {
+    for (let i = 0; i < ex.length; i++) {
+      if (programSessionMinutes(d) <= hedefDk) return d;
+      const a = ex[i];
+      if (a.pair) continue;
+      for (let j = 0; j < ex.length; j++) {
+        const b = ex[j];
+        if (i === j || b.pair) continue;
+        if (a.muscle === b.muscle) continue;
+        if (!eslesir(a, b) && !eslesir(b, a)) continue;
+        const et = harf++;
+        a.pair = String.fromCharCode(et);
+        b.pair = String.fromCharCode(et);
+        break;
+      }
+    }
+  }
+  return d;
 }
 
 // ---------- Haftalik progresyon ----------
@@ -844,6 +1314,10 @@ function programAddExplosive(p) {
         sets, repMin: teknik ? rMin : rMin, repMax: reps,
         kg: aday.metric === 'kg' ? null : undefined,
         explosive: true, pattern: aday.pattern, contact: Number(aday.contact) || 0,
+        // Patlayici iste dinlenme TAM olmali: amac yorulmak degil, her
+        // tekrarda maksimum hiz uretmek. Kisa dinlenme bunu imkansiz kilar.
+        // 180 sn = notta ve Hevy'de yazan "2-3 dk" ile ayni deger.
+        rest: 180,
         metric: aday.metric || 'reps', order: 0,
       });
     }
@@ -852,16 +1326,23 @@ function programAddExplosive(p) {
     d.exercises = secilenler.concat(d.exercises || []);
   });
 
-  // Boyun: dovus sporunda kafa hizlanmasini azaltir. Haftada 1 gun, UST gunune.
+  // Boyun: dovus sporunda kafa hizlanmasini (dolayisiyla konkusyon riskini)
+  // azaltir. ⚠️ 18 Agu 2026: haftada 1 gundu, 2 gune cikti. Boyun da diger
+  // kaslar gibi frekansa cevap verir ve izometrik is toparlanma maliyeti
+  // neredeyse sifirdir — 1 seans koruyucu esik icin zayif kaliyordu.
   const boyun = havuz.find(e => e.pattern === 'neck');
   if (boyun) {
-    const hedefGun = gucGunler.find(d => !d.agirBacak) || gucGunler[0];
-    if (hedefGun && !(hedefGun.exercises || []).some(e => e.muscle === 'neck')) {
-      hedefGun.exercises.push({
+    const sirali = gucGunler.filter(d => !d.agirBacak).concat(gucGunler.filter(d => d.agirBacak));
+    let kondu = 0;
+    for (const g of sirali) {
+      if (kondu >= 2) break;
+      if ((g.exercises || []).some(e => e.muscle === 'neck')) { kondu++; continue; }
+      g.exercises.push({
         id: boyun.id, tr: boyun.tr, en: boyun.en, muscle: 'neck',
         sets: 3, repMin: 15, repMax: 25, kg: null, sure: !!boyun.sure,
-        metric: boyun.metric || 'reps', order: 2,
+        rest: 60, metric: boyun.metric || 'reps', order: 2,
       });
+      kondu++;
     }
   }
 
@@ -978,6 +1459,10 @@ function advanceProgram(p, workouts, todayStr) {
       'Aynı programı bir hafta daha dene.'];
     yeni.history = [{ week: p.week, at: Date.now(), changes: ['seans eksik — hacim sabit'] }]
       .concat(p.history || []).slice(0, 12);
+    // ⚠️ Hacim sabit kalir ama HAFTA ilerler: teknik haftasi bitiyorsa RPE
+    // yukselmeli. Erken cikista bunu atlamak, 10. haftada hala teknik haftasi
+    // eforu yazmak demekti.
+    programApplyEffort(yeni);
     return yeni;
   }
 
@@ -1082,6 +1567,9 @@ function advanceProgram(p, workouts, todayStr) {
        'ilerleme sadece ağırlıkla olmuyor.'];
   yeni.history = [{ week: p.week, at: Date.now(), changes: degisiklikler.slice(0, 8) }]
     .concat(p.history || []).slice(0, 12);
+  // ⚠️ RPE hafta bagimlidir: teknik haftasi bitince yukselir, hafifletme
+  // haftasinda 6'ya iner. Hacmi guncelleyip eforu guncellememek tutarsiz olurdu.
+  programApplyEffort(yeni);
   return yeni;
 }
 
@@ -1106,6 +1594,13 @@ function programLastPerformance(e, workouts) {
 // ---------- Render ----------
 
 function programDayLabel(dow) { return PROGRAM_GUNLER[dow] || '—'; }
+
+// Dinlenme metni: 180 -> "3 dk", 75 -> "75 sn"
+function programRestText(sn) {
+  const v = Number(sn) || 0;
+  if (!v) return '';
+  return v >= 120 ? (Math.round(v / 60 * 10) / 10) + ' dk' : v + ' sn';
+}
 
 function programRepText(e) {
   const tek = Number(e.repMin) === Number(e.repMax);
@@ -1239,6 +1734,14 @@ function renderProgram() {
     // Patlayici is HER ZAMAN once gosterilir — sira bilimsel olarak zorunlu.
     const sirali = (d.exercises || []).slice()
       .sort((a, b) => ((a.order == null ? 1 : a.order) - (b.order == null ? 1 : b.order)));
+    // Superset numaralandirmasi: A1 / A2 — ayni harf donusumlu yapilir.
+    const ciftSayac = {};
+    const ciftEtiket = {};
+    for (const e of sirali) {
+      if (!e.pair) continue;
+      ciftSayac[e.pair] = (ciftSayac[e.pair] || 0) + 1;
+      ciftEtiket[e.id + '|' + e.pair] = e.pair + ciftSayac[e.pair];
+    }
     const satirlar = sirali.map(e => {
       const olcum = (e.explosive && e.metric !== 'kg')
         ? (function () {
@@ -1249,19 +1752,43 @@ function renderProgram() {
               (son != null ? escapeHtml(String(son)) + br : 'ölç') + '</button>';
           })()
         : '<span class="pe-kg">' + (e.kg != null ? escapeHtml(String(e.kg)) + ' kg' : '—') + '</span>';
-      return '<div class="pd-ex' + (e.explosive ? ' pd-ex-pow' : '') + '">' +
-        (e.explosive ? '<span class="pe-badge">patlayıcı</span>' : '') +
-        '<span class="pe-name">' + escapeHtml(e.tr) + '</span>' +
-        '<span class="pe-sets">' + escapeHtml(programRepText(e)) + '</span>' + olcum + '</div>';
+      const ciftEt = e.pair ? (ciftEtiket[e.id + '|' + e.pair] || e.pair) : '';
+      return '<div class="pd-ex' + (e.explosive ? ' pd-ex-pow' : '') +
+        (e.pair ? ' pd-ex-pair' : '') +
+        (e.bwTip === 'regresyon' ? ' pd-ex-reg' : '') + '">' +
+        '<span class="pe-name">' +
+          (ciftEt ? '<span class="pe-pair">' + escapeHtml(ciftEt) + '</span>' : '') +
+          (e.explosive ? '<span class="pe-badge">patlayıcı</span>' : '') +
+          escapeHtml(e.tr) + '</span>' +
+        '<span class="pe-sets">' + escapeHtml(programRepText(e)) + '</span>' +
+        '<span class="pe-tempo" title="eksantrik-bekleme-konsantrik-bekleme">' +
+          (e.tempo ? escapeHtml(e.tempo) : (e.explosive ? 'MAKS HIZ' : '—')) + '</span>' +
+        '<span class="pe-rest">' + (e.rest ? escapeHtml(programRestText(e.rest)) : '—') + '</span>' +
+        '<span class="pe-rpe">' + (e.rpe ? escapeHtml(e.rpe) : '—') + '</span>' +
+        olcum +
+        (e.bwNot ? '<span class="pe-bwnot">' + escapeHtml(e.bwNot) + '</span>' : '') +
+        '</div>';
     }).join('');
+    const baslik = '<div class="pd-ex pd-ex-head">' +
+      '<span class="pe-name">Hareket</span>' +
+      '<span class="pe-sets">Set × Tekrar</span>' +
+      '<span class="pe-tempo">Tempo</span>' +
+      '<span class="pe-rest">Dinlenme</span>' +
+      '<span class="pe-rpe">RPE</span>' +
+      '<span class="pe-kg">Yük</span></div>';
     const isinma = (d.warmup || []).length
-      ? '<details class="pd-warm"><summary>Isınma</summary>' +
+      ? '<details class="pd-warm"><summary>Isınma · 8 dk</summary>' +
         d.warmup.map(w => '<div class="pw-row">' + escapeHtml(w) + '</div>').join('') + '</details>'
+      : '';
+    const soguma = (d.cooldown || []).length
+      ? '<details class="pd-warm pd-cool"><summary>Soğuma · mobilite</summary>' +
+        d.cooldown.map(w => '<div class="pw-row">' + escapeHtml(w) + '</div>').join('') + '</details>'
       : '';
     return '<div class="prog-day">' +
       '<div class="pd-head"><span class="pd-dow">' + escapeHtml(programDayLabel(d.dow)) + '</span>' +
-      '<span class="pd-name">' + escapeHtml(d.name) + '</span></div>' +
-      isinma + '<div class="pd-list">' + satirlar + '</div></div>';
+      '<span class="pd-name">' + escapeHtml(d.name) + '</span>' +
+      (d.estMin ? '<span class="pd-min">~' + d.estMin + ' dk</span>' : '') + '</div>' +
+      isinma + '<div class="pd-list">' + baslik + satirlar + '</div>' + soguma + '</div>';
   }).join('');
 
   const hacimHtml = Object.keys(sets).sort((a, b) => sets[b] - sets[a]).map(m =>
@@ -1342,6 +1869,7 @@ function openProgramSetup() {
     places: (p && p.places) ? p.places.slice() : ['gym'],
     fightDays: (p && p.fightDays) ? p.fightDays.slice() : [],
     avoid: (p && p.avoid) ? p.avoid.slice() : [],
+    bwMax: (p && p.bwMax) ? Object.assign({}, p.bwMax) : {},
   };
   renderProgramSetup();
   const m = document.getElementById('programModal');
@@ -1351,6 +1879,14 @@ function openProgramSetup() {
 function closeProgramSetup() {
   const m = document.getElementById('programModal');
   if (m) m.classList.remove('open');
+}
+
+// Vucut agirligi max tekrar girdisi (barfiks / sinav / dips)
+function progSetupBw(test, deger) {
+  if (!_progSetup) return;
+  const n = Math.max(0, Math.min(100, Math.floor(Number(deger) || 0)));
+  _progSetup.bwMax = _progSetup.bwMax || {};
+  if (n > 0) _progSetup.bwMax[test] = n; else delete _progSetup.bwMax[test];
 }
 
 function progSetupPick(alan, deger) {
@@ -1395,6 +1931,15 @@ function renderProgramSetup() {
     [1, 2, 3, 4, 5, 6, 0].map(d => chip('fightDays', d, PROGRAM_GUNLER[d].slice(0, 3))).join('') +
     '</div><div class="prog-hint">Bu günlere ağırlık koymaz; ağır bacak gününü de bu günlerin ' +
     'yanına yerleştirmez.</div></div>' +
+    '<div class="prog-f"><label>Şu an kaç tekrar yapabiliyorsun?</label><div class="prog-nums">' +
+    [['pullup', 'Barfiks'], ['pushup', 'Şınav'], ['dip', 'Dips']].map(t =>
+      '<label class="prog-num"><span>' + t[1] + '</span>' +
+      '<input type="number" min="0" max="100" inputmode="numeric" value="' +
+      (s.bwMax && s.bwMax[t[0]] ? escapeHtml(String(s.bwMax[t[0]])) : '') +
+      '" oninput="progSetupBw(\'' + t[0] + '\', this.value)"></label>').join('') +
+    '</div><div class="prog-hint">Tek sette temiz yapabildiğin maksimum. Boş bırakabilirsin — ' +
+    'yazarsan motor bu hareketleri sana göre ayarlar: yetmiyorsa kolaylaştırma önerir, ' +
+    'fazla geliyorsa kemerle kaç kg ekleyeceğini yazar. 1RM denemesi asla istenmez.</div></div>' +
     '<div class="prog-f"><label>Ağrıyan / kaçınılacak bölge</label><div class="prog-chips">' +
     Object.keys(PROGRAM_MUSCLES).map(m => chip('avoid', m, PROGRAM_MUSCLES[m])).join('') +
     '</div><div class="prog-hint">Seçtiğin bölgeyi çalıştıran hareketler programa hiç girmez.</div></div>' +

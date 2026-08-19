@@ -4254,10 +4254,56 @@
 .pd-dow { font-size: 0.74em; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
 .pd-name { font-size: 0.9em; font-weight: 600; color: var(--text-strong, #f5f3ee); }
 .pd-list { display: grid; gap: 3px; }
-.pd-ex { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: baseline; font-size: 0.85em; }
-.pe-name { color: var(--text); }
+.pd-list { overflow-x: auto; }
+/* Sozlesme: Hareket | Set x Tekrar | Tempo | Dinlenme | RPE | Yuk */
+.pd-ex {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 84px 66px 62px 46px 68px;
+  gap: 10px; align-items: baseline; font-size: 0.85em; min-width: 470px;
+}
+.pd-ex-head {
+  font-size: 0.72em; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text-muted); padding-bottom: 4px; margin-bottom: 2px;
+  border-bottom: 1px solid var(--border, #2a2c35);
+}
+.pd-ex-head span { color: inherit; opacity: 0.9; }
+.pe-name { color: var(--text); min-width: 0; }
 .pe-sets { color: var(--text-muted); font-variant-numeric: tabular-nums; }
-.pe-kg { min-width: 58px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-strong, #f5f3ee); }
+.pe-tempo { color: var(--text-muted); font-variant-numeric: tabular-nums; opacity: 0.8; letter-spacing: -0.01em; }
+.pe-rest { color: var(--text-muted); font-variant-numeric: tabular-nums; opacity: 0.75; }
+.pe-rpe { color: var(--text-muted); font-variant-numeric: tabular-nums; font-weight: 600; }
+.pe-kg { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-strong, #f5f3ee); }
+/* Vucut agirligi kalibrasyon notu — satirin altinda tam genislik */
+.pe-bwnot {
+  grid-column: 1 / -1; margin-top: 2px;
+  font-size: 0.88em; line-height: 1.45; color: var(--warning, #e0a458);
+}
+.pd-ex-reg .pe-name { color: var(--warning, #e0a458); }
+/* Seans suresi tahmini — gun basliginda, sag tarafta */
+.pd-min { margin-left: auto; font-size: 0.74em; font-weight: 600; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.pd-cool summary { color: var(--text-muted); }
+/* Antagonist superset: ayni harf dönüsümlü yapilir (A1 -> A2 -> dinlen) */
+.pe-pair {
+  display: inline-block; margin-right: 6px; min-width: 22px;
+  padding: 1px 5px; border-radius: 5px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em; text-align: center;
+  border: 1px solid color-mix(in srgb, var(--info, #6fa8e8) 42%, transparent);
+  background: color-mix(in srgb, var(--info, #6fa8e8) 14%, transparent);
+  color: var(--info, #6fa8e8);
+}
+/* Kurulum: vucut agirligi max tekrar girdileri */
+.prog-nums { display: flex; gap: 10px; flex-wrap: wrap; }
+.prog-num { display: flex; flex-direction: column; gap: 4px; font-size: 0.82em; color: var(--text-muted); }
+.prog-num input {
+  width: 84px; padding: 7px 9px; border-radius: 8px;
+  border: 1px solid var(--border, #2a2c35); background: var(--surface-2, #1b1c23);
+  color: var(--text-strong, #f5f3ee); font: inherit; font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.prog-num input:focus { outline: none; border-color: var(--accent, #e2e2e2); }
+/* Seans suresi tahmini — gun basliginda, sag tarafta */
+.pd-min { margin-left: auto; font-size: 0.74em; font-weight: 600; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+/* Antagonist superset: ayni harf dönüsümlü yapilir (A1 -> A2 -> dinlen) */
+
 .prog-day-fight .pd-name { color: var(--info, #6fa8e8); }
 .pd-note { font-size: 0.78em; line-height: 1.5; color: var(--text-muted); }
 
@@ -4515,6 +4561,83 @@
   font-size: 13px; line-height: 1.7; color: var(--text, #e5e1d9);
 }
 .nm-qty { color: var(--text-muted, #a9abb3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* ===== Beslenme: ogun zamani · mikro besin · sapma notu (18 Agu 2026) ===== */
+.nm-when {
+  display: block; margin-top: 2px;
+  font-size: 10.5px; font-style: normal; font-weight: 600;
+  letter-spacing: 0.03em; text-transform: uppercase;
+  color: var(--info, #6fa8e8);
+}
+.nut-note {
+  margin: 8px 0; padding: 10px 12px; border-radius: 10px;
+  font-size: 12.5px; line-height: 1.55;
+  border: 1px solid color-mix(in srgb, var(--warning, #e0a458) 30%, transparent);
+  background: color-mix(in srgb, var(--warning, #e0a458) 8%, transparent);
+  color: var(--text, #d8d9de);
+}
+.nut-micro-wrap { margin: 12px 0; }
+.nut-micro-wrap summary {
+  cursor: pointer; font-size: 13px; font-weight: 600;
+  color: var(--text-strong, #f5f3ee); list-style: none;
+}
+.nut-micro-wrap summary::-webkit-details-marker { display: none; }
+.nut-micro-wrap summary::before { content: '+ '; color: var(--accent, #e2e2e2); }
+.nut-micro-wrap[open] summary::before { content: '\2013 '; }
+.nut-micro-note {
+  margin: 8px 0 10px; font-size: 12px; line-height: 1.55;
+  color: var(--text-muted, #a9abb3);
+}
+.nut-micro {
+  margin-bottom: 8px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--border, #2a2c35); background: var(--surface-2, #1b1c23);
+}
+.nmi-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.nmi-head b { font-size: 13px; color: var(--text-strong, #f5f3ee); }
+.nmi-hedef { font-size: 12px; color: var(--text-muted, #a9abb3); font-variant-numeric: tabular-nums; }
+.nmi-durum {
+  margin-left: auto; padding: 1px 7px; border-radius: 6px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em;
+  border: 1px solid color-mix(in srgb, var(--warning, #e0a458) 40%, transparent);
+  color: var(--warning, #e0a458);
+}
+.nut-micro.ok .nmi-durum {
+  border-color: color-mix(in srgb, var(--success, #7bbf7b) 40%, transparent);
+  color: var(--success, #7bbf7b);
+}
+.nut-micro.belirsiz .nmi-durum {
+  border-color: var(--border, #2a2c35); color: var(--text-muted, #a9abb3);
+}
+/* Doluluk cubugu — hedefin yuzde kaci */
+.nmi-bar {
+  margin-top: 7px; height: 4px; border-radius: 3px; overflow: hidden;
+  background: color-mix(in srgb, var(--text-muted, #a9abb3) 18%, transparent);
+}
+.nmi-bar i {
+  display: block; height: 100%; border-radius: 3px;
+  background: var(--warning, #e0a458);
+  transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.nut-micro.ok .nmi-bar i { background: var(--success, #7bbf7b); }
+.nut-micro.belirsiz .nmi-bar i { background: var(--text-muted, #a9abb3); }
+/* Takviye onerisi — yalnizca gercek acikta gorunur */
+.nmi-supp {
+  margin-top: 7px; padding: 8px 10px; border-radius: 8px;
+  font-size: 12px; line-height: 1.55;
+  border: 1px solid color-mix(in srgb, var(--info, #6fa8e8) 32%, transparent);
+  background: color-mix(in srgb, var(--info, #6fa8e8) 9%, transparent);
+  color: var(--text, #d8d9de);
+}
+.nmi-supp b { color: var(--text-strong, #f5f3ee); }
+/* Performans takviyeleri — bilgi blogu */
+.nut-ergo-head { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border, #2a2c35); }
+.nut-ergo { margin-bottom: 7px; padding: 9px 11px; border-radius: 9px; background: var(--surface-2, #1b1c23); }
+.ne-head { font-size: 12.5px; color: var(--text-strong, #f5f3ee); }
+.ne-ne { margin-top: 3px; font-size: 12px; line-height: 1.5; color: var(--text, #d8d9de); }
+.ne-not { margin-top: 3px; font-size: 11.5px; line-height: 1.5; color: var(--text-muted, #a9abb3); }
+.nmi-neden { margin-top: 5px; font-size: 12px; line-height: 1.55; color: var(--text, #d8d9de); }
+.nmi-kaynak { margin-top: 5px; font-size: 12px; line-height: 1.5; color: var(--text-muted, #a9abb3); }
+.nmi-ipucu { margin-top: 5px; font-size: 11.5px; line-height: 1.5; color: var(--text-muted, #a9abb3); opacity: 0.9; }
+
 .nut-disc {
   margin-top: 12px; padding: 11px 13px; border-radius: 11px;
   border: 1px solid var(--border, #2a2c35);

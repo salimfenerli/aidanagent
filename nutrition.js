@@ -26,6 +26,337 @@ const NUT_LIMITS = {
   waterPerSession: 600,     // ml, antrenman basina ek
 };
 
+/**
+ * MIKRO BESIN VERISI (18 Agu 2026) — PORSIYON BASINA.
+ *
+ * ⚠️ KAPSAM DURUSTLUGU — bu tablonun en onemli ozelligi.
+ * TURK_FOODS 410 besin iceriyor; bu tabloda ~65'i var. Kismi veriyle "bugun
+ * 1180 mg kalsiyum aldin" demek YANILTICI olur: hesaba katilmayan besinler
+ * de kalsiyum tasiyor ve kullanici eksik sanip gereksiz takviye alabilir.
+ * Bu yuzden motor her zaman KAPSAMI da yaziyor: "1180 mg — planin %85'i
+ * hesaplandi, kalan %15'te veri yok". Sayi tek basina asla verilmiyor.
+ *
+ * 🟡 Degerler USDA / TurKomp ortalamalarindan porsiyona cevrilmis
+ * YAKLASIK degerlerdir. Ayni yemegin evden eve degismesi zaten bu
+ * hassasiyetin ustunde bir belirsizlik — hedefin %10'u icin ugrasmak
+ * anlamsiz, buyuk aciklari gormek anlamli.
+ *
+ * Alanlar: ca (mg) · fe (mg) · d (IU) · lif (g)
+ */
+const NUT_MICRO_DATA = {
+  // --- Sut urunleri: kalsiyumun ana kaynagi ---
+  'Süt':              { ca: 225, fe: 0,   d: 5,   lif: 0 },
+  'Ayran':            { ca: 150, fe: 0,   d: 3,   lif: 0 },
+  'Kefir':            { ca: 180, fe: 0,   d: 3,   lif: 0 },
+  'Yoğurt':           { ca: 220, fe: 0.1, d: 3,   lif: 0 },
+  'Süzme yoğurt':     { ca: 230, fe: 0.1, d: 3,   lif: 0 },
+  'Meyveli yoğurt':   { ca: 190, fe: 0.1, d: 2,   lif: 0.5 },
+  'Beyaz peynir':     { ca: 145, fe: 0.1, d: 4,   lif: 0 },
+  'Kaşar peyniri':    { ca: 240, fe: 0.1, d: 6,   lif: 0 },
+  'Lor peyniri':      { ca: 15,  fe: 0,   d: 0,   lif: 0 },
+  'Labne':            { ca: 20,  fe: 0,   d: 1,   lif: 0 },
+  'Krem peynir':      { ca: 15,  fe: 0,   d: 1,   lif: 0 },
+  'Haydari':          { ca: 120, fe: 0.2, d: 2,   lif: 0.5 },
+  // --- Yumurta: D vitamininin gidadaki az kaynagindan biri ---
+  'Yumurta':          { ca: 25,  fe: 0.9, d: 40,  lif: 0 },
+  'Haşlanmış yumurta':{ ca: 25,  fe: 0.9, d: 40,  lif: 0 },
+  'Omlet':            { ca: 50,  fe: 1.8, d: 80,  lif: 0 },
+  'Menemen':          { ca: 55,  fe: 2.0, d: 80,  lif: 2 },
+  'Peynirli omlet':   { ca: 210, fe: 1.8, d: 85,  lif: 0 },
+  'Sahanda yumurta':  { ca: 30,  fe: 1.1, d: 45,  lif: 0 },
+  // --- Kirmizi et: demirin en iyi emilen formu (hem demir) ---
+  'Dana kıyma':       { ca: 15,  fe: 3.4, d: 5,   lif: 0 },
+  'Dana bonfile':     { ca: 12,  fe: 3.6, d: 5,   lif: 0 },
+  'Kuzu pirzola':     { ca: 18,  fe: 3.0, d: 3,   lif: 0 },
+  'Kavurma':          { ca: 12,  fe: 2.8, d: 3,   lif: 0 },
+  'İzgara köfte':     { ca: 30,  fe: 3.2, d: 4,   lif: 0.5 },
+  'Et döner':         { ca: 20,  fe: 3.5, d: 4,   lif: 0 },
+  'Ciğer tava':       { ca: 10,  fe: 7.0, d: 15,  lif: 0 },
+  'Adana kebap':      { ca: 25,  fe: 3.8, d: 4,   lif: 0.5 },
+  'Şiş kebap':        { ca: 18,  fe: 3.4, d: 4,   lif: 0 },
+  // --- Kanatli: demiri kirmizi etin yarisi kadar ---
+  'Tavuk göğsü':      { ca: 15,  fe: 1.2, d: 5,   lif: 0 },
+  'Tavuk but':        { ca: 15,  fe: 1.6, d: 8,   lif: 0 },
+  'Tavuk şiş':        { ca: 15,  fe: 1.3, d: 5,   lif: 0 },
+  // --- Yagli balik: D vitamininin gidadaki EN iyi kaynagi ---
+  'Somon':            { ca: 15,  fe: 0.5, d: 750, lif: 0 },
+  'Uskumru':          { ca: 20,  fe: 1.4, d: 500, lif: 0 },
+  'Sardalya':         { ca: 300, fe: 2.4, d: 300, lif: 0 },
+  'Hamsi tava':       { ca: 200, fe: 2.2, d: 400, lif: 0.5 },
+  'Palamut':          { ca: 25,  fe: 1.6, d: 350, lif: 0 },
+  'Ton balığı':       { ca: 15,  fe: 1.5, d: 250, lif: 0 },
+  'Balık ızgara':     { ca: 25,  fe: 0.8, d: 200, lif: 0 },
+  'Levrek':           { ca: 20,  fe: 0.5, d: 150, lif: 0 },
+  // --- Baklagil: demir + lifin birlikte geldigi yer ---
+  'Mercimek çorbası': { ca: 35,  fe: 2.5, d: 0,   lif: 5 },
+  'Ezogelin çorbası': { ca: 35,  fe: 2.3, d: 0,   lif: 5 },
+  'Nohut':            { ca: 65,  fe: 3.9, d: 0,   lif: 10 },
+  'Etli nohut':       { ca: 60,  fe: 4.2, d: 2,   lif: 9 },
+  'Kuru fasulye':     { ca: 90,  fe: 3.8, d: 0,   lif: 11 },
+  'Etli kuru fasulye':{ ca: 85,  fe: 4.0, d: 2,   lif: 10 },
+  'Mercimek yemeği':  { ca: 40,  fe: 3.5, d: 0,   lif: 8 },
+  'Humus':            { ca: 50,  fe: 2.0, d: 0,   lif: 5 },
+  'Piyaz':            { ca: 70,  fe: 2.4, d: 0,   lif: 7 },
+  // --- Tahil ---
+  'Tam buğday ekmek': { ca: 15,  fe: 0.7, d: 0,   lif: 2 },
+  'Ekmek':            { ca: 10,  fe: 0.6, d: 0,   lif: 0.7 },
+  'Simit':            { ca: 80,  fe: 2.2, d: 0,   lif: 3 },
+  'Yulaf ezmesi':     { ca: 20,  fe: 1.8, d: 0,   lif: 4 },
+  'Bulgur pilavı':    { ca: 12,  fe: 1.0, d: 0,   lif: 4.5 },
+  'Sebzeli bulgur':   { ca: 20,  fe: 1.1, d: 0,   lif: 5 },
+  'Pilav':            { ca: 8,   fe: 0.6, d: 0,   lif: 0.7 },
+  'Makarna':          { ca: 12,  fe: 1.3, d: 0,   lif: 3 },
+  'Tam buğday makarna': { ca: 20, fe: 1.5, d: 0,  lif: 6 },
+  'Kinoa':            { ca: 20,  fe: 1.5, d: 0,   lif: 3 },
+  'Leblebi':          { ca: 45,  fe: 1.4, d: 0,   lif: 4 },
+  // --- Sebze / meyve: lif ---
+  'Çoban salata':     { ca: 30,  fe: 0.8, d: 0,   lif: 2.5 },
+  'Mevsim salata':    { ca: 25,  fe: 0.7, d: 0,   lif: 2 },
+  'Ispanak yemeği':   { ca: 200, fe: 3.6, d: 0,   lif: 6 },
+  'Fırında sebze':    { ca: 60,  fe: 1.2, d: 0,   lif: 5 },
+  'Türlü':            { ca: 45,  fe: 1.0, d: 0,   lif: 4 },
+  'Karnıyarık':       { ca: 45,  fe: 1.4, d: 2,   lif: 5 },
+  'Domates':          { ca: 8,   fe: 0.2, d: 0,   lif: 1.5 },
+  'Salatalık':        { ca: 6,   fe: 0.1, d: 0,   lif: 0.5 },
+  'Haşlanmış patates':{ ca: 8,   fe: 0.5, d: 0,   lif: 2 },
+  'Muz':              { ca: 8,   fe: 0.5, d: 0,   lif: 3 },
+  'Elma':             { ca: 10,  fe: 0.2, d: 0,   lif: 4 },
+  'Armut':            { ca: 15,  fe: 0.3, d: 0,   lif: 5 },
+  'Portakal':         { ca: 50,  fe: 0.1, d: 0,   lif: 3 },
+  'Kuru üzüm':        { ca: 15,  fe: 0.5, d: 0,   lif: 1 },
+  'Kuru kayısı':      { ca: 5,   fe: 0.2, d: 0,   lif: 0.5 },
+  // --- Kuruyemis / yag ---
+  'Badem':            { ca: 33,  fe: 0.4, d: 0,   lif: 1.5 },
+  'Ceviz':            { ca: 15,  fe: 0.5, d: 0,   lif: 1 },
+  'Fındık':           { ca: 18,  fe: 0.7, d: 0,   lif: 1.5 },
+  'Antep fıstığı':    { ca: 30,  fe: 1.1, d: 0,   lif: 2.8 },
+  'Yer fıstığı':      { ca: 25,  fe: 1.3, d: 0,   lif: 2.4 },
+  'Kabak çekirdeği':  { ca: 15,  fe: 4.2, d: 0,   lif: 2 },
+  'Ay çekirdeği':     { ca: 20,  fe: 1.5, d: 0,   lif: 2 },
+  'Tahin':            { ca: 65,  fe: 0.7, d: 0,   lif: 1.4 },
+  'Fıstık ezmesi':    { ca: 8,   fe: 0.6, d: 0,   lif: 1 },
+  'Zeytin':           { ca: 15,  fe: 0.6, d: 0,   lif: 0.6 },
+  'Zeytinyağı':       { ca: 0,   fe: 0.1, d: 0,   lif: 0 },
+  'Tereyağı':         { ca: 2,   fe: 0,   d: 5,   lif: 0 },
+  'Avokado':          { ca: 15,  fe: 0.7, d: 0,   lif: 8 },
+  // --- Diger ---
+  'Protein tozu':     { ca: 100, fe: 0.3, d: 0,   lif: 0.5 },
+  'Bal':              { ca: 1,   fe: 0.1, d: 0,   lif: 0 },
+  'Sütlaç':           { ca: 150, fe: 0.2, d: 2,   lif: 0.5 },
+  'Chia puding':      { ca: 180, fe: 2.0, d: 1,   lif: 8 },
+  'Müsli':            { ca: 40,  fe: 2.0, d: 0,   lif: 5 },
+  'Granola':          { ca: 30,  fe: 1.6, d: 0,   lif: 4 },
+};
+
+/**
+ * MIKRO BESIN HEDEFLERI — erkek, 14-18 yas.
+ * Neden bu dortlu: 16 yasinda, haftada 6 gun antrenman yapan bir dovus
+ * sporcusunda risk sirasi bu.
+ */
+const NUT_MICRO = [
+  {
+    id: 'kalsiyum', alan: 'ca', birim: 'mg', hedefSayi: 1300, ustSinir: 2500,
+    ad: 'Kalsiyum', hedef: '1300 mg',
+    neden: 'Zirve kemik kütlesinin yaklaşık %90\'ı 18 yaşına kadar kuruluyor. ' +
+      'Bu pencere kapandıktan sonra geri alınamaz; darbeli bir sporda ayrıca korumadır.',
+    kaynak: ['Süt', 'Yoğurt', 'Kefir', 'Ayran', 'Beyaz peynir', 'Kaşar peyniri',
+      'Süzme yoğurt', 'Lor peyniri', 'Labne', 'Haydari'],
+    porsiyon: '3-4 porsiyon süt ürünü',
+  },
+  {
+    id: 'demir', alan: 'fe', birim: 'mg', hedefSayi: 11, ustSinir: 45,
+    ad: 'Demir', hedef: '11 mg',
+    neden: 'Büyüme + haftada 6 gün antrenman demir ihtiyacını yükseltir. ' +
+      'Eksikliğin ilk belirtisi dayanıklılık düşüşü — 3. raundda biten kişi.',
+    kaynak: ['Dana kıyma', 'Dana bonfile', 'Kuzu pirzola', 'Kavurma', 'Ciğer tava',
+      'Mercimek çorbası', 'Etli nohut', 'Etli kuru fasulye', 'Kuru fasulye', 'Nohut'],
+    porsiyon: 'Haftada 3-4 kez kırmızı et ya da baklagil',
+    ipucu: 'Demir emilimi C vitaminiyle artar — yanına salata, limon ya da meyve koy. ' +
+      'Çayı öğünden 1 saat sonra iç, öğünle birlikte emilimi düşürür.',
+  },
+  {
+    id: 'dvit', alan: 'd', birim: 'IU', hedefSayi: 600, ustSinir: 4000,
+    ad: 'D vitamini', hedef: '600 IU',
+    neden: 'Kalsiyumun kemiğe girmesi için gerekli; Türkiye\'de eksikliği yaygın. ' +
+      'Gıdadan tam karşılanması zordur — kışın kan değerine bakılması gereken tek madde budur.',
+    kaynak: ['Somon', 'Uskumru', 'Sardalya', 'Hamsi tava', 'Palamut', 'Yumurta'],
+    porsiyon: 'Haftada 2 kez yağlı balık + güneş',
+    ipucu: 'Takviye kararı kan değerine bakan hekimin işi — motor takviye önermez.',
+  },
+  {
+    id: 'lif', alan: 'lif', birim: 'g', hedefSayi: 30, ustSinir: null,
+    ad: 'Lif', hedef: '30-38 g',
+    neden: 'Yüksek kalorili bir planda lif kolayca düşer; sindirim ve tokluk bozulur.',
+    kaynak: ['Çoban salata', 'Mercimek çorbası', 'Nohut', 'Kuru fasulye', 'Yulaf ezmesi',
+      'Tam buğday ekmek', 'Bulgur pilavı', 'Elma', 'Armut', 'Muz', 'Fırında sebze'],
+    porsiyon: 'Her ana öğünde sebze/salata + günde 1 baklagil ya da tam tahıl',
+  },
+];
+
+/**
+ * TAKVIYE KATMANI (18 Agu 2026).
+ *
+ * 🔴 SIRA DEGISMEZ: ONCE GIDA. Takviye yalnizca gida hedefi tutturmuyorsa
+ * gundeme gelir ve o zaman bile ilk oneri "su gidayi ekle" olur. Bunun
+ * sebebi ahlaki degil pratik: gidadan gelen mikro besin, yaninda geldigi
+ * diger seylerle (protein, lif, potasyum, matris) birlikte calisiyor.
+ *
+ * 🔴 IKI SERT KAPI:
+ *   - DEMIR: kan degeri olmadan ASLA onerilmez. Fazla demir vucuttan
+ *     atilamaz, karacigerde birikir. Motor demir acigini yalniz GIDAYLA
+ *     kapatmayi onerir.
+ *   - UST SINIR: gida + takviye toplami ust sinirin ustune cikacaksa
+ *     takviye onerilmez.
+ */
+const NUT_SUPP = {
+  kalsiyum: {
+    ad: 'Kalsiyum sitrat', kanit: '🟡',
+    dozKurali: (acik) => Math.min(500, Math.round(acik / 100) * 100),
+    birim: 'mg',
+    oncelik: 'Önce süt ürünü: 1 bardak süt 225 mg, 1 kase yoğurt 220 mg. ' +
+      'Günde bir porsiyon eklemek açığın çoğunu kapatır.',
+    nasil: 'Tek seferde 500 mg üstü emilmiyor — bölerek al. Yemekle birlikte.',
+    uyari: 'Demir takviyesiyle AYNI öğünde alınmaz, emilimi düşürür.',
+  },
+  dvit: {
+    ad: 'D3 vitamini', kanit: '🟢',
+    dozKurali: (acik) => (acik > 400 ? 1000 : 600),
+    birim: 'IU',
+    oncelik: 'Gıdadan karşılanması pratikte zor: 600 IU için haftada 2 kez yağlı balık ' +
+      'ya da her gün ~15 yumurta gerekir. Güneş yazın ana kaynak, kışın değil.',
+    nasil: 'Yağda çözünür — yağ içeren bir öğünle al.',
+    uyari: '⚠️ Doz kan değerine göre belirlenir. 25(OH)D testi yaptırmadan yüksek doz ' +
+      '(4000 IU üstü) alınmaz; karar hekimin. Aidan sadece açığın büyüklüğünü gösterir.',
+  },
+  demir: {
+    ad: null, kanit: '🔴',
+    dozKurali: null,   // ⚠️ TAKVIYE ONERILMEZ
+    birim: 'mg',
+    oncelik: 'Açığı gıdayla kapat: 1 porsiyon kırmızı et 3.4 mg, 1 porsiyon nohut 3.9 mg, ' +
+      '1 kase mercimek çorbası 2.5 mg.',
+    nasil: 'Emilimi C vitamini artırır — yanına salata, limon ya da portakal. ' +
+      'Çayı öğünden 1 saat sonra iç; öğünle birlikte emilimi yarı yarıya düşürür.',
+    uyari: '🔴 KAN DEĞERİ OLMADAN DEMİR TAKVİYESİ ALINMAZ. Fazla demir vücuttan ' +
+      'atılamaz, karaciğerde birikir. Ferritin ve hemoglobin bakılmadan başlanmaz — ' +
+      'bu yüzden Aidan demirde takviye önermiyor, sadece gıda öneriyor.',
+  },
+  lif: {
+    ad: null, kanit: '🟢',
+    dozKurali: null,   // gida ile kolayca kapaniyor
+    birim: 'g',
+    oncelik: '1 porsiyon nohut 10 g, kuru fasulye 11 g, 1 armut 5 g, ' +
+      '1 kase mercimek çorbası 5 g.',
+    nasil: 'Lifi artırırken suyu da artır, yoksa tersi olur.',
+    uyari: 'Lif takviyesi (psyllium vb.) sporcuda gerekmez — gıdayla kapanır.',
+  },
+};
+
+/**
+ * PERFORMANS TAKVIYELERI — bilgi, RECETE DEGIL.
+ * ⚠️ Motor bunlari plana KOYMAZ ve "al" demez. Kanit seviyesini yaziyor ki
+ * kullanici internetteki iddialarla karsilastirabilsin; 16 yasinda karar
+ * antrenor + hekim isidir.
+ */
+const NUT_ERGO = [
+  { ad: 'Kreatin monohidrat', kanit: '🟢',
+    ne: 'Tekrarli patlayici efor ve kuvvette en cok calisilmis, en tutarli etkiyi gosteren madde.',
+    not: 'Genc sporcularda kullanimini destekleyen pozisyon bildirileri var, ama 16 yasinda ' +
+      'karar antrenör + hekimin. Aidan plana koymuyor.' },
+  { ad: 'Kafein', kanit: '🟢',
+    ne: 'Algilanan efor duser, dayaniklilik ve tepki suresi iyilesir.',
+    not: 'Ergende uyku ve buyume hormonu salinimi kritik — aksam antrenmaninda kullanimi ' +
+      'uykuyu bozar ve kazanci geri alir. Aidan onermiyor.' },
+  { ad: 'Beta-alanin', kanit: '🟡',
+    ne: '1-4 dakikalik yuksek siddetli efordda (bir raunt tam bu araliktadir) yorgunlugu geciktiriyor.',
+    not: 'Etkisi kreatinden kucuk ve haftalar suren yukleme gerektiriyor.' },
+  { ad: 'Omega-3 (EPA/DHA)', kanit: '🟡',
+    ne: 'Haftada 2 kez yagli balik yenmiyorsa akla gelen tek genel takviye.',
+    not: 'Once balik. Takviye ikinci secenek.' },
+  { ad: 'Protein tozu', kanit: '🟢',
+    ne: 'Takviye degil, pratik bir GIDA. Gunluk protein hedefi zaten tutuyorsa ek fayda yok.',
+    not: 'Aidan bunu zaten ogun sablonlarinda kullaniyor — ayrica onerilecek bir sey degil.' },
+];
+
+/**
+ * Gunluk planin mikro besin toplami + KAPSAM.
+ * ⚠️ Kapsam olmadan toplam yaniltici: veri tablosunda olmayan besinler de
+ * mikro besin tasiyor. Kapsam, hesaba KATILAN kalorilerin gun toplamina orani.
+ */
+function nutMicroTotals(meals) {
+  const toplam = { ca: 0, fe: 0, d: 0, lif: 0 };
+  let kapsananK = 0, tumK = 0;
+  const eksikBesinler = [];
+  for (const m of meals || []) {
+    for (const it of (m.items || [])) {
+      const k = (Number(it.adet) || 0) * (Number(it.k) || 0);
+      tumK += k;
+      const v = NUT_MICRO_DATA[it.n];
+      if (!v) { if (eksikBesinler.indexOf(it.n) < 0) eksikBesinler.push(it.n); continue; }
+      kapsananK += k;
+      for (const alan of ['ca', 'fe', 'd', 'lif']) {
+        toplam[alan] += (Number(it.adet) || 0) * (Number(v[alan]) || 0);
+      }
+    }
+  }
+  return {
+    toplam: {
+      ca: Math.round(toplam.ca), fe: Math.round(toplam.fe * 10) / 10,
+      d: Math.round(toplam.d), lif: Math.round(toplam.lif),
+    },
+    kapsam: tumK > 0 ? Math.round((kapsananK / tumK) * 100) : 0,
+    kapsanmayan: eksikBesinler,
+  };
+}
+
+/**
+ * Mikro besin durumu + TAKVIYE PLANI.
+ * Sira: gida hedefi tutuyor mu → tutmuyorsa once gida onerisi → takviye
+ * yalnizca gerekiyorsa ve guvenliyse.
+ */
+function nutMicroCheck(meals) {
+  const t = nutMicroTotals(meals);
+  const adlar = new Set();
+  for (const m of meals || []) for (const it of (m.items || [])) adlar.add(it.n);
+
+  return NUT_MICRO.map(mi => {
+    const alinan = t.toplam[mi.alan];
+    const hedef = mi.hedefSayi;
+    const acik = Math.max(0, hedef - alinan);
+    const oran = hedef > 0 ? Math.round((alinan / hedef) * 100) : 0;
+    const supp = NUT_SUPP[mi.id] || {};
+
+    // ⚠️ Kapsam dusukse "eksik" demek yanlis olur — bilmedigimiz besinler de
+    // tasiyor. %70'in altinda kapsamda motor yorum yapmaz, veriyi gosterir.
+    const guvenilir = t.kapsam >= 70;
+    const yeterli = alinan >= hedef * 0.9;
+
+    // Takviye onerisi UC kosula birden bagli:
+    //   1) gercek bir acik var (hedefin %90'inin altinda)
+    //   2) kapsam guvenilir (yoksa hayali acik uretiriz)
+    //   3) o besin icin takviye GUVENLI (demirde degil)
+    let takviye = null;
+    if (acik > 0 && !yeterli && guvenilir && typeof supp.dozKurali === 'function') {
+      const doz = supp.dozKurali(acik);
+      const toplamTahmin = alinan + doz;
+      // Ust sinir kapisi: gida + takviye toplami ust siniri gecmez
+      if (!mi.ustSinir || toplamTahmin <= mi.ustSinir) {
+        takviye = { ad: supp.ad, doz, birim: mi.birim, kanit: supp.kanit, nasil: supp.nasil };
+      }
+    }
+
+    return {
+      id: mi.id, ad: mi.ad, hedef: mi.hedef, hedefSayi: hedef, birim: mi.birim,
+      neden: mi.neden, porsiyon: mi.porsiyon, ipucu: mi.ipucu || null,
+      alinan, oran, acik, yeterli, guvenilir, kapsam: t.kapsam,
+      varMi: mi.kaynak.some(k => adlar.has(k)),
+      oneri: mi.kaynak.slice(0, 4),
+      gidaOnce: supp.oncelik || null,
+      uyari: supp.uyari || null,
+      takviye,
+    };
+  });
+}
+
 // Gun tipine gore fiziksel aktivite katsayisi (PAL).
 // Tek bir "aktivite seviyesi" sormak yerine PROGRAMDAN turetiliyor —
 // antrenman gunu ile dinlenme gunu ayni kalori DEGILDIR.
@@ -104,6 +435,41 @@ function nutTargets(profil, dayType, hedef) {
 }
 
 /**
+ * OGUN ORANLARI — [kalori orani, KARBONHIDRAT orani].
+ *
+ * ⚠️ 18 Agu 2026 — iki degisiklik:
+ *
+ * 1) KARBONHIDRAT ANTRENMANIN ETRAFINA KAYIYOR. Motor zamanlama kuralini
+ *    METIN olarak yaziyordu ("antrenmandan 1-3 saat once karbonhidrat") ama
+ *    makro dagilimi bunu YANSITMIYORDU — her ogun ayni orani aliyordu.
+ *    Yazip uygulamamak, hic yazmamaktan daha kotu.
+ * 2) YUKSEK KALORIDE 5. OGUN. 3200 kcal'i 4 ogune bolmek ogun basi 800-950
+ *    kcal demek. 16 yasinda, gunde bir de dovus antrenmani varken bu miktar
+ *    pratikte yenmez — plan kagit uzerinde dogru, hayatta uygulanamaz olur.
+ *
+ * Yag orani ayri tanimlanmaz: ogunun kalorisinden protein ve karbonhidrat
+ * dusuldukten sonra KALAN yagdir. Boylece antrenman etrafindaki ogunlerde yag
+ * dogal olarak duser (mide rahat olsun), uzak ogunlerde yukselir.
+ */
+const NUT_MEAL_RATIO = {
+  4: {
+    rest:  { kahvalti: [0.25, 0.25], ogle: [0.30, 0.30], aksam: [0.30, 0.30], atistirma: [0.15, 0.15] },
+    train: { kahvalti: [0.22, 0.18], ogle: [0.30, 0.34], aksam: [0.33, 0.36], atistirma: [0.15, 0.12] },
+  },
+  5: {
+    rest:  { kahvalti: [0.22, 0.22], ara: [0.13, 0.13], ogle: [0.26, 0.26], aksam: [0.26, 0.26], atistirma: [0.13, 0.13] },
+    train: { kahvalti: [0.19, 0.15], ara: [0.12, 0.11], ogle: [0.27, 0.31], aksam: [0.29, 0.32], atistirma: [0.13, 0.11] },
+  },
+};
+// Ustune cikilinca 5. ogun acilir
+const NUT_FIVE_MEAL_KCAL = 3000;
+
+/** Kac ogun? Kalori esigine gore — 5. ogun kalabalik olsun diye degil, ogun basi miktar yenebilir olsun diye. */
+function nutMealCount(kcal) {
+  return (Number(kcal) || 0) > NUT_FIVE_MEAL_KCAL ? 5 : 4;
+}
+
+/**
  * Gunluk hedefi ogunlere bol.
  * ⚠️ Protein EŞIT dagitilir — toplam kadar DAGILIM da onemli. Ogun basina
  * 0.25-0.40 g/kg araligi kas protein sentezini maksimuma cikarir; gunun
@@ -111,22 +477,31 @@ function nutTargets(profil, dayType, hedef) {
  */
 function nutMealSplit(t, kg) {
   if (!t) return [];
-  const oran = { kahvalti: 0.25, ogle: 0.30, aksam: 0.30, atistirma: 0.15 };
-  const sira = ['kahvalti', 'ogle', 'aksam', 'atistirma'];
+  const n = nutMealCount(t.kcal);
+  const tip = t.dayType === 'rest' ? 'rest' : 'train';
+  const tablo = NUT_MEAL_RATIO[n][tip];
+  const sira = Object.keys(tablo);
   // ⚠️ Gunluk protein hedefi ogun basi tavana KIRPILMAZ — kirpilirsa
-  // 4 x tavan < gunluk hedef olur ve toplam tutmaz. Tavan bir REHBERDIR:
+  // n x tavan < gunluk hedef olur ve toplam tutmaz. Tavan bir REHBERDIR:
   // ogun basi 0.25-0.40 g/kg araligi verimin en yuksek oldugu bant.
   const ogunProtein = Math.round(t.protein / sira.length);
   const idealAlt = Math.round(kg * NUT_LIMITS.proteinPerMealMin);
   const idealUst = Math.round(kg * NUT_LIMITS.proteinPerMealMax);
-  return sira.map(slot => ({
-    slot,
-    kcal: Math.round(t.kcal * oran[slot]),
-    protein: ogunProtein,
-    bantIci: ogunProtein >= idealAlt && ogunProtein <= idealUst,
-    carb: Math.round(t.carb * oran[slot]),
-    fat: Math.round(t.fat * oran[slot]),
-  }));
+  return sira.map(slot => {
+    const [kOran, cOran] = tablo[slot];
+    const kcal = Math.round(t.kcal * kOran);
+    const carb = Math.round(t.carb * cOran);
+    // Yag = kalan kalori. Taban 0 — negatife dusmez.
+    const fat = Math.max(0, Math.round((kcal - ogunProtein * 4 - carb * 4) / 9));
+    return {
+      slot, kcal, protein: ogunProtein,
+      bantIci: ogunProtein >= idealAlt && ogunProtein <= idealUst,
+      carb, fat,
+      // Antrenman gununde hangi ogun antrenmanin neresine denk geliyor
+      zaman: t.dayType === 'rest' ? null
+        : (slot === 'ogle' ? 'once' : (slot === 'aksam' ? 'sonra' : null)),
+    };
+  });
 }
 
 /**
@@ -158,25 +533,40 @@ function nutCarbTiming(dayType) {
 // Sablon: her ogunde bir PROTEIN capasi + bir KARBONHIDRAT capasi + sabit ekler.
 // Capalar hedefi tutturacak sekilde porsiyon olceklenir (0.5 adimlarla).
 // ⚠️ Referans verilen her besin adinin TURK_FOODS'ta bulunmasi teste baglidir.
+// ⚠️ 18 Agu 2026 — UCUNCU CAPA: YAG.
+// Motorda protein ve karbonhidrat capasi vardi, yag capasi YOKTU. Sonuc:
+// yag hedefin %30 altinda kaliyor (68 g / 97 g) ve acik karbonhidratla
+// doluyordu. Karbonhidrat capasi tek basina kalan kaloriyi kapatmak zorunda
+// kalinca da "5 muz" gibi ogunler cikiyordu — protein tarafinda cozulen
+// hatanin (4 bardak kefir) aynisi karbonhidrat tarafinda duruyordu.
+// Yag capasi kucuk ve kalori yogun olmali: 1 kasik zeytinyagi = 14 g yag.
 const NUT_TEMPLATES = {
   kahvalti: [
-    { protein: 'Yumurta', carb: 'Tam buğday ekmek', ek: ['Beyaz peynir', 'Zeytin', 'Domates'] },
-    { protein: 'Süzme yoğurt', carb: 'Yulaf ezmesi', ek: ['Muz', 'Ceviz', 'Bal'] },
+    { protein: 'Yumurta', carb: 'Tam buğday ekmek', yag: 'Tahin', ek: ['Beyaz peynir', 'Zeytin', 'Domates'] },
+    { protein: 'Süzme yoğurt', carb: 'Yulaf ezmesi', yag: 'Ceviz', ek: ['Muz', 'Bal'] },
+  ],
+  // ⚠️ Capa PROTEIN YOGUN olmali — bkz. asagidaki kefir notu. Ilk denemede
+  // buraya Kefir ve Sut capa yazilmisti (6 g/bardak) ve motor 90 kg'lik
+  // profilde "4 bardak sut" uretti. Ayni hata, yeni ogunde tekrar etti.
+  // Sut/kefir artik EK; capa yogun olan.
+  ara: [
+    { protein: 'Süzme yoğurt', carb: 'Simit', yag: 'Fıstık ezmesi', ek: ['Elma'] },
+    { protein: 'Protein tozu', carb: 'Leblebi', yag: 'Badem', ek: ['Süt', 'Kuru üzüm'] },
   ],
   ogle: [
-    { protein: 'Tavuk göğsü', carb: 'Bulgur pilavı', ek: ['Çoban salata', 'Ayran'] },
-    { protein: 'Ton balığı', carb: 'Makarna', ek: ['Çoban salata', 'Zeytinyağı'] },
+    { protein: 'Tavuk göğsü', carb: 'Bulgur pilavı', yag: 'Zeytinyağı', ek: ['Çoban salata', 'Ayran'] },
+    { protein: 'Ton balığı', carb: 'Makarna', yag: 'Zeytinyağı', ek: ['Çoban salata'] },
   ],
   aksam: [
-    { protein: 'Dana kıyma', carb: 'Pilav', ek: ['Çoban salata', 'Yoğurt'] },
-    { protein: 'Somon', carb: 'Haşlanmış patates', ek: ['Çoban salata', 'Zeytinyağı'] },
+    { protein: 'Dana kıyma', carb: 'Pilav', yag: 'Zeytinyağı', ek: ['Çoban salata', 'Yoğurt'] },
+    { protein: 'Somon', carb: 'Haşlanmış patates', yag: 'Zeytinyağı', ek: ['Çoban salata'] },
   ],
   // ⚠️ Capa PROTEIN YOGUN olmali. Kefir (6 g/bardak) capa yapilinca motor
   // hedefi tutturmak icin "4 bardak kefir" yaziyordu — teknik olarak dogru,
   // pratikte sacma. Capa g/porsiyon degeri yuksek olandan secilir.
   atistirma: [
-    { protein: 'Süzme yoğurt', carb: 'Muz', ek: ['Badem'] },
-    { protein: 'Protein tozu', carb: 'Elma', ek: ['Fındık', 'Süt'] },
+    { protein: 'Süzme yoğurt', carb: 'Muz', yag: 'Badem', ek: [] },
+    { protein: 'Protein tozu', carb: 'Elma', yag: 'Fındık', ek: ['Süt'] },
   ],
 };
 
@@ -212,31 +602,94 @@ function nutBuildMeal(slot, hedefOgun, sablonIdx) {
   const pf = nutFood(t.protein), cf = nutFood(t.carb);
   if (!pf || !cf) return null;
 
+  const yf = t.yag ? nutFood(t.yag) : null;
+  // ⚠️ ANA OGUN KORUMASI (18 Agu 2026). Capa sifirlanabilir kurali dogruydu
+  // ama fazla genisti: ogle ve aksamda protein capasi silinince tabakta
+  // "3 porsiyon pilav + salata" kaliyordu. Ana ogunde protein capasi
+  // ogunun KENDISIDIR — makro matematigi tutsa bile o tabak yanlistir.
+  const anaOgun = slot === 'ogle' || slot === 'aksam';
+
   const ekler = (t.ek || []).map(nutFood).filter(Boolean)
     .map(f => ({ n: f.n, u: f.u, adet: 1, k: f.k, p: f.p, c: f.c, f: f.f }));
   const ekK = ekler.reduce((a, x) => a + x.k, 0);
   const ekP = ekler.reduce((a, x) => a + x.p, 0);
+  const ekY = ekler.reduce((a, x) => a + x.f, 0);
 
-  // Protein capasi: kalan protein hedefini karsila (0.5 porsiyon adimlarla, 1-6 arasi)
-  // ⚠️ Alt sinir 0.5 porsiyon: tavuk gogsu 47 g protein tasiyor, "en az 1
-  // porsiyon" kurali hedefi tek basina %50 asiyordu (126 g hedefe 189 g cikti).
-  const gerekP = Math.max(0, hedefOgun.protein - ekP);
-  let pAdet = pf.p > 0 ? nutRound(gerekP / pf.p, pf.u) : 1;
-  pAdet = Math.max(pf.u === 'porsiyon' ? 0.5 : 1, Math.min(4, pAdet));
+  // ⚠️ CAPALAR BIRBIRINI ETKILER — TEK GECISTE COZULMEZ (18 Agu 2026).
+  // Eski kod protein capasini yalniz EKLERI dusup hesapliyordu. Ama Turk
+  // mutfaginda karbonhidrat kaynagi da protein tasir (bulgur 5 g, pilav 4 g,
+  // ekmek 3 g/porsiyon) ve o miktar HENUZ BILINMIYORDU. Sonuc sistematikti:
+  // protein hedefin %20-48 ustunde, karbonhidrat %20 altinda.
+  // Cozum: uc gecislik sabit nokta. Her turda capa, digerlerinin o anki
+  // katkisi dusulerek yeniden boyutlanir; uc turda oturuyor.
+  let pAdet = 1, yAdet = 0, cAdet = 1;
+  // Capanin inebilecegi TABAN — denge adimi da bunu bilmeli, yoksa gun
+  // toplamini duzeltirken proteinsiz bir ara ogun birakiyor.
+  let pDip = 1;
+  for (let tur = 0; tur < 3; tur++) {
+    // Protein capasi: ekler + karbonhidrat + yag capasinin tasidigi protein dusulur.
+    // ⚠️ Alt sinir 0.5 porsiyon: tavuk gogsu 47 g protein tasiyor, "en az 1
+    // porsiyon" kurali hedefi tek basina %50 asiyordu (126 g hedefe 189 g cikti).
+    const gerekP = Math.max(0, hedefOgun.protein - ekP -
+      cAdet * cf.p - yAdet * (yf ? yf.p : 0));
+    const pTaban = pf.u === 'porsiyon' ? 0.5 : 1;
+    pAdet = pf.p > 0 ? nutRound(gerekP / pf.p, pf.u) : 1;
+    pAdet = Math.max(pTaban, Math.min(4, pAdet));
+    // ⚠️ CAPA SIFIRA INEBILIR (18 Agu 2026). Hafif profillerde (50 kg) ogun
+    // protein hedefi 18 g'a kadar iniyor ve sablonun SABIT EKLERI (peynir,
+    // ayran, yogurt) bunu tek basina karsiliyor. "En az yarim porsiyon capa"
+    // kurali o durumda hedefi %40 asiyordu. Ekler zaten protein kaynagi —
+    // ustune tavuk koymak plani tutarsiz yapiyor, daha iyi yapmiyor.
+    // Esik TABANA gore: yarim porsiyon verilebiliyorsa capa daha gec silinir.
+    // Iki kosul birden gerekli:
+    //   - ana ogun DEGIL (ogle/aksamda tabakta protein kalmali)
+    //   - ekler ogun hedefinin en az yarisini ZATEN tasiyor
+    // Ikinci kosul olmadan "1 simit + 1 elma" gibi proteinsiz bir ara ogun
+    // cikiyordu: makro toplami duzeliyor ama ogun basi protein dagilimi —
+    // yani kas protein sentezi esigi — coluyor.
+    const eklerYeterli = ekP >= hedefOgun.protein * 0.5;
+    pDip = (anaOgun || !eklerYeterli) ? pTaban : 0;
+    if (pDip === 0 && pf.p > 0 && gerekP < pf.p * pTaban * 0.6) pAdet = 0;
 
-  // Karbonhidrat capasi: kalan kaloriyi doldur
-  const kalanK = Math.max(0, hedefOgun.kcal - ekK - pAdet * pf.k);
-  let cAdet = cf.k > 0 ? nutRound(kalanK / cf.k, cf.u) : 1;
-  cAdet = Math.max(cf.u === 'porsiyon' ? 0.5 : 1, Math.min(4, cAdet));
+    // ⚠️ YAG CAPASI KARBONHIDRATTAN ONCE. Yag once konmazsa karbonhidrat
+    // capasi butun kaloriyi tek basina doldurur ve porsiyon sisirir. Ustelik
+    // yag hedefi hormonal saglik tabaniyla korunuyor — "kalanla doldur"
+    // muamelesi gormemeli.
+    if (yf && yf.f > 0) {
+      // ⚠️ YAG CAPASI ASAGI YUVARLANIR. 1 kasik zeytinyagi 14 g yag — en
+      // yakina yuvarlamak ogun hedefini kolayca %40 asiyordu. Yag zaten
+      // ekler (peynir, yogurt, kuruyemis) tarafindan da tasiniyor; eksik
+      // kalirsa gun sonunda denge adimi ekliyor, fazlasi ise geri alinamiyor.
+      const gerekY = Math.max(0, hedefOgun.fat - ekY - pAdet * pf.f - cAdet * cf.f);
+      const yBirim = /adet|dilim|kase|bardak|kutu|kaşık|ölçek|olcek|avuç|yarım|yarim/i.test(String(yf.u)) ? 1 : 0.5;
+      yAdet = Math.max(0, Math.min(3, Math.floor((gerekY / yf.f) / yBirim) * yBirim));
+    }
 
+    // Karbonhidrat capasi: kalan kaloriyi doldur.
+    // ⚠️ TAVAN 3 PORSIYON. Eskiden 4'tu ama gercek sinir pratikti: motor
+    // "5 muz" / "5 dilim ekmek" yaziyordu. Tavana dayanirsa acik gun sonunda
+    // nutBalanceDay tarafindan DIGER ogunlere yayilir.
+    const kalanK = Math.max(0, hedefOgun.kcal - ekK - pAdet * pf.k - yAdet * (yf ? yf.k : 0));
+    cAdet = cf.k > 0 ? nutRound(kalanK / cf.k, cf.u) : 1;
+    cAdet = Math.max(cf.u === 'porsiyon' ? 0.5 : 1, Math.min(3, cAdet));
+  }
+
+  // ⚠️ ROL etiketi (18 Agu 2026): denge adimlari eskiden items[0]/items[1]
+  // diye INDEKSLE calisiyordu. Yag capasi eklenince bu kirilgan hale geldi —
+  // capayi adiyla degil sirasiyla bulmak, siraya dokunan her degisikligi
+  // sessiz bir bug'a cevirir.
   const kalemler = [
-    { n: pf.n, u: pf.u, adet: pAdet, k: pf.k, p: pf.p, c: pf.c, f: pf.f },
-    { n: cf.n, u: cf.u, adet: cAdet, k: cf.k, p: cf.p, c: cf.c, f: cf.f },
-  ].concat(ekler);
+    { rol: 'p', n: pf.n, u: pf.u, adet: pAdet, k: pf.k, p: pf.p, c: pf.c, f: pf.f },
+    { rol: 'c', n: cf.n, u: cf.u, adet: cAdet, k: cf.k, p: cf.p, c: cf.c, f: cf.f },
+  ];
+  if (yf && yAdet > 0) kalemler.push({ rol: 'y', n: yf.n, u: yf.u, adet: yAdet, k: yf.k, p: yf.p, c: yf.c, f: yf.f });
+  for (const e of ekler) kalemler.push(Object.assign({ rol: 'ek' }, e));
+  // Yag capasi 0 cikmis olsa bile denge adimi sonradan artirabilsin
+  if (yf && yAdet === 0) kalemler.push({ rol: 'y', n: yf.n, u: yf.u, adet: 0, k: yf.k, p: yf.p, c: yf.c, f: yf.f });
 
   const topla = (alan) => Math.round(kalemler.reduce((a, x) => a + x.adet * x[alan], 0));
   return {
-    slot,
+    slot, ana: anaOgun, dipP: pDip,
     items: kalemler,
     kcal: topla('k'), protein: topla('p'), carb: topla('c'), fat: topla('f'),
   };
@@ -249,46 +702,260 @@ function nutBuildMeal(slot, hedefOgun, sablonIdx) {
  * hedefi asiyordu (126 g hedefe 168 g). Bu gecis, protein capalarini
  * kucultup toplami banda cekiyor. Zararli degil ama plan tutarsiz gorunuyordu.
  */
-function nutBalanceDay(meals, t) {
+/**
+ * ⚠️ PROTEIN HEDEFI BIR TAVAN DEGIL (18 Agu 2026).
+ * Denge adimi proteini hedefin %10 ustune kadar kirpiyordu ve bunu yapmak
+ * icin ogunlerden protein kaynagini SILIYORDU — ortaya "3 porsiyon pilav +
+ * salata" gibi ogunler cikti. Yanlis olan kirpma degil, KIME kirptigiydi:
+ *   - 1.8-2.0 g/kg bir HEDEFTIR, asilmasi zararli degildir
+ *   - 2.5 g/kg ise TAVANDIR — ustunun ek faydasi gosterilmemistir
+ * Motor artik hedefe degil TAVANA gore kirpiyor, ve gercek degeri yaziyor.
+ */
+function nutBalanceDay(meals, t, kg) {
+  const capa = (m, rol) => (m.items || []).find(x => x.rol === rol);
+  const yenile = (m) => {
+    const topla = (alan) => Math.round(m.items.reduce((a, x) => a + x.adet * x[alan], 0));
+    m.kcal = topla('k'); m.protein = topla('p'); m.carb = topla('c'); m.fat = topla('f');
+  };
+  const adimi = (u) => (/adet|dilim|kase|bardak|kutu|kaşık|ölçek|olcek|avuç|yarım|yarim/i.test(String(u)) ? 1 : 0.5);
+
   const toplamP = () => meals.reduce((a, m) => a + m.protein, 0);
+  const proteinTavan = kg > 0
+    ? Math.max(t.protein, Math.round(kg * NUT_LIMITS.proteinMaxPerKg))
+    : Math.round(t.protein * 1.25);
   for (let tur = 0; tur < 20; tur++) {
-    if (toplamP() <= t.protein * 1.1) break;
-    // En cok protein tasiyan ogunun CAPASINI (ilk kalem) kucult
+    if (toplamP() <= proteinTavan) break;
+    // Capanin inebilecegi taban ogun kurulurken belirlendi (ana ogun mu,
+    // ekler proteini karsiliyor mu). Denge adimi bunu EZEMEZ.
+    const dip = (m) => (m.dipP == null ? 0 : m.dipP);
     const aday = meals.slice().sort((a, b) => b.protein - a.protein)
-      .find(m => m.items[0] && m.items[0].adet > 0.5);
+      .find(m => { const c = capa(m, 'p'); return c && c.adet > dip(m); });
     if (!aday) break;
     // Azaltirken de birim kurali gecerli — 1.5 yumurta olmaz.
-    const c0 = aday.items[0];
-    const adim = /adet|dilim|kase|bardak|kutu/i.test(c0.u) ? 1 : 0.5;
-    if (c0.adet - adim < (adim === 1 ? 1 : 0.5)) break;
-    c0.adet = nutRound(c0.adet - adim, c0.u);
-    const topla = (alan) => Math.round(aday.items.reduce((a, x) => a + x.adet * x[alan], 0));
-    aday.kcal = topla('k'); aday.protein = topla('p');
-    aday.carb = topla('c'); aday.fat = topla('f');
+    const c0 = capa(aday, 'p');
+    const adim = adimi(c0.u);
+    const hedefAdet = c0.adet - adim;
+    c0.adet = hedefAdet <= dip(aday) ? dip(aday) : nutRound(hedefAdet, c0.u);
+    yenile(aday);
   }
 
+  // ⚠️ Capa tabana dayandiysa PROTEIN TASIYAN EKLERI kirp (18 Agu 2026).
+  // Hafif profillerde (45-55 kg) sablonun sabit ekleri — ayran, yogurt, sut,
+  // peynir — tek baslarina 2.5 g/kg tavanini asabiliyor. Bunlar ogunun
+  // omurgasi degil yanindaki seyler; birini cikarmak tabagi bozmaz. Ogunun
+  // SON protein kaynagi asla cikarilmaz.
+  const ekleriKirp = () => {
+    for (let tur = 0; tur < 12; tur++) {
+      if (toplamP() <= proteinTavan) break;
+      let hedefOgun = null, hedefEk = null;
+      for (const m of meals.slice().sort((a, b) => b.protein - a.protein)) {
+        const proteinliler = (m.items || []).filter(x => x.adet > 0 && x.p >= 4);
+        if (proteinliler.length <= 1) continue;           // son kaynak kalsin
+        const ek = proteinliler.filter(x => x.rol === 'ek').sort((a, b) => b.p - a.p)[0];
+        if (ek) { hedefOgun = m; hedefEk = ek; break; }
+      }
+      if (hedefEk) {
+        hedefEk.adet = 0;
+        hedefOgun.items = hedefOgun.items.filter(x => x.adet > 0);
+        yenile(hedefOgun);
+        continue;
+      }
+      // ⚠️ EKLER BITTIYSE ANA OLMAYAN OGUNUN CAPASINI KUCULT (18 Agu 2026).
+      // `dipP` bir vekildi; ASIL kural "ogunde protein kalsin". Hafif
+      // profilde (45 kg) 5 ogunun her birine tam capa koymak tavani
+      // yapisal olarak asiyor. Gercek sinir: ogun 8 g proteinin altina
+      // DUSMESIN. Ana ogun capasi bu adimda da korunur.
+      let kucultuldu = false;
+      for (const m of meals.slice().sort((a, b) => b.protein - a.protein)) {
+        if (m.ana) continue;
+        const c = capa(m, 'p');
+        if (!c || c.adet <= 0) continue;
+        const adim = adimi(c.u);
+        const yeni = c.adet - adim <= 0 ? 0 : nutRound(c.adet - adim, c.u);
+        if (m.protein - (c.adet - yeni) * c.p < 8) continue;   // ogun proteinsiz kalmasin
+        c.adet = yeni;
+        m.items = m.items.filter(x => x.adet > 0);
+        yenile(m); kucultuldu = true; break;
+      }
+      if (!kucultuldu) break;
+    }
+  };
+  ekleriKirp();
+
   // ⚠️ Protein capasi kuculunce KALORI de dustu (3034 hedefe 2692 cikti).
-  // Acigi KARBONHIDRAT capasindan kapat — proteini tekrar bozmadan.
+  // Acigi once KARBONHIDRAT, sonra YAG capasindan kapat — proteini bozmadan.
+  //
+  // ⚠️ 18 Agu 2026: eskiden yalniz karbonhidrat kaldiraci vardi ve tavana
+  // dayaninca dongu duruyordu; kahvalti 616 kcal hedefe 401 kcal cikiyor,
+  // gun toplami tutsa da OGUN dagilimi bozuluyordu. Yag capasi ikinci
+  // kaldiractir: kalori yogun (1 kasik zeytinyagi 119 kcal) ve porsiyonu
+  // sismez.
   const toplamK = () => meals.reduce((a, m) => a + m.kcal, 0);
-  for (let tur = 0; tur < 20; tur++) {
+  const TAVAN = { c: 3, y: 3 };
+  for (let tur = 0; tur < 40; tur++) {
     const acik = t.kcal - toplamK();
     if (acik <= t.kcal * 0.05) break;
-    const aday = meals.slice().sort((a, b) => a.kcal - b.kcal)
-      .find(m => m.items[1] && m.items[1].adet < 5);
-    if (!aday) break;
-    const c = aday.items[1];
-    c.adet = nutRound(c.adet + (/adet|dilim|kase|bardak/i.test(c.u) ? 1 : 0.5), c.u);
-    const topla = (alan) => Math.round(aday.items.reduce((a, x) => a + x.adet * x[alan], 0));
-    aday.kcal = topla('k'); aday.protein = topla('p');
-    aday.carb = topla('c'); aday.fat = topla('f');
+    // Hedefinin en gerisinde kalan ogunu doldur — "en dusuk kalorili" degil.
+    const sirali = meals.slice().sort((a, b) =>
+      ((a.kcal - ((a.hedef && a.hedef.kcal) || a.kcal)) - (b.kcal - ((b.hedef && b.hedef.kcal) || b.kcal))));
+    const yagDolu = meals.reduce((a, m) => a + m.fat, 0) >= t.fat;
+    let yapildi = false;
+    for (const m of sirali) {
+      // Yag kaldiraci yalniz gun yag hedefi ALTINDAYKEN kullanilir; yoksa
+      // acigi yagla kapatmak makro dengesini bozar (karbonhidrat eksik kalir).
+      for (const rol of (yagDolu ? ['c'] : ['c', 'y'])) {
+        const c = capa(m, rol);
+        if (!c || c.adet >= TAVAN[rol]) continue;
+        // ⚠️ DOLDURMA PROTEIN TAVANINI ASAMAZ (18 Agu 2026). Turk karbonhidrat
+        // kaynaklari protein tasir (bulgur 5 g, pilav 4 g/porsiyon); kalori
+        // acigini karbonhidratla kapatirken protein geri sisiyordu ve
+        // kirpma adiminin isini bozuyordu. Asacaksa yag kaldiracina gec.
+        if (toplamP() + adimi(c.u) * c.p > proteinTavan) continue;
+        c.adet = nutRound(c.adet + adimi(c.u), c.u);
+        yenile(m); yapildi = true; break;
+      }
+      if (yapildi) break;
+    }
+    if (!yapildi) break;
   }
+  // ⚠️ FAZLAYI DA GERI AL (18 Agu 2026). Motorda yalniz "acigi kapat" adimi
+  // vardi, "fazlayi kirp" adimi YOKTU. Bolunemeyen bir capa (1 kutu ton
+  // baligi yarimlanamaz) ogunu hedefin ustune tasiyinca gun toplami %9
+  // asiyor ve motor bunu duzeltmeye calismiyordu bile.
+  // Once KARBONHIDRAT, sonra YAG kirpilir; protein capasina dokunulmaz.
+  const fazlayiKirp = () => {
+  for (let tur = 0; tur < 24; tur++) {
+    if (toplamK() <= t.kcal * 1.05) break;
+    let yapildi = false;
+    for (const rol of ['c', 'y']) {
+      const aday = meals.slice()
+        .sort((a, b) => ((b.kcal - ((b.hedef && b.hedef.kcal) || b.kcal)) -
+                         (a.kcal - ((a.hedef && a.hedef.kcal) || a.kcal))))
+        .find(m => {
+          const c = capa(m, rol);
+          if (!c || c.adet <= 0) return false;
+          const dipC = rol === 'c' ? (adimi(c.u) === 1 ? 1 : 0.5) : 0;
+          return c.adet > dipC;
+        });
+      if (!aday) continue;
+      const c = capa(aday, rol);
+      const dipC = rol === 'c' ? (adimi(c.u) === 1 ? 1 : 0.5) : 0;
+      const yeniAdet = c.adet - adimi(c.u);
+      c.adet = yeniAdet <= dipC ? dipC : nutRound(yeniAdet, c.u);
+      yenile(aday); yapildi = true; break;
+    }
+    if (!yapildi) break;
+  }
+  };
+  fazlayiKirp();
+
+  // ⚠️ UCUNCU ADIM: OGUN DAGILIMI (18 Agu 2026).
+  // Gun toplami %5 bandina girince dongu duruyordu — ama toplam tutarken
+  // dagilim bozuk kalabiliyordu (atistirma 255 kcal / hedef 422). Bir gunun
+  // dogru olmasi, toplaminin dogru olmasi DEMEK DEGIL: 900 kcal'lik ogunun
+  // yaninda 250 kcal'lik ogun, ogun basi protein bandini da bozar.
+  // Bu adim, toplami tavanin altinda tutarak hedefinin %20'sinden fazla
+  // gerisinde kalan ogunleri doldurur.
+  for (let tur = 0; tur < 40; tur++) {
+    const tavan = t.kcal * 1.05;
+    const geri = meals.filter(m => m.hedef && m.kcal < m.hedef.kcal * 0.8)
+      .sort((a, b) => (a.kcal / a.hedef.kcal) - (b.kcal / b.hedef.kcal))[0];
+    if (!geri) break;
+    const yagDolu2 = meals.reduce((a, m) => a + m.fat, 0) >= t.fat;
+    let yapildi = false;
+    for (const rol of (yagDolu2 ? ['c'] : ['c', 'y'])) {
+      const c = capa(geri, rol);
+      if (!c || c.adet >= TAVAN[rol]) continue;
+      const artis = adimi(c.u) * c.k;
+      if (toplamK() + artis > tavan) continue;
+      if (toplamP() + adimi(c.u) * c.p > proteinTavan) continue;
+      c.adet = nutRound(c.adet + adimi(c.u), c.u);
+      yenile(geri); yapildi = true; break;
+    }
+    if (!yapildi) break;
+  }
+  // ⚠️ DORDUNCU ADIM: YAG TAMAMLAMA (18 Agu 2026).
+  // Kalori bandi tutunca dongu duruyor, ama protein kirpma adimi protein
+  // tasiyan ekleri (ayran, yogurt) cikarirken YAGI da goturuyor. Yag hormonal
+  // saglik tabaniyla korunan tek makro — "kalan" muamelesi gormemeli.
+  for (let tur = 0; tur < 12; tur++) {
+    const yagT = meals.reduce((a, m) => a + m.fat, 0);
+    if (yagT >= t.fat * 0.9) break;
+    // ⚠️ Tavan kontrolu EKLEMEDEN SONRAKI degere gore. Eskiden ekleme
+    // oncesi bakiliyordu ve son adim tavani asabiliyordu: 1 kasik
+    // zeytinyagi 119 kcal, gunu tek basina %5'ten cikariyordu.
+    const aday = meals.slice()
+      .sort((a, b) => a.fat - b.fat)
+      .find(m => {
+        const c = capa(m, 'y');
+        return c && c.adet < TAVAN.y && (toplamK() + adimi(c.u) * c.k) <= t.kcal * 1.05;
+      });
+    if (!aday) break;
+    const c = capa(aday, 'y');
+    c.adet = nutRound(c.adet + adimi(c.u), c.u);
+    yenile(aday);
+  }
+  // ⚠️ SON GECIS: doldurma adimlari karbonhidrat ekledi, karbonhidrat da
+  // protein tasiyor. Tavan yeniden asilmis olabilir — ekleri bir kez daha
+  // kirp, sonra bosalan kaloriyi YAG ile kapat (yag protein tasimaz).
+  ekleriKirp();
+  // ⚠️ Son gecisin capa tavani 4 (digerlerinde 3). Sebep: buraya ancak
+  // hafif profil + dusuk hedef gibi kose durumlarda gelinir ve orada
+  // alternatif, kaloriyi %9 eksik birakmaktir. Once YAG denenir (protein
+  // tasimaz, tavani zorlamaz), yetmezse karbonhidrat.
+  for (let tur = 0; tur < 16; tur++) {
+    if (toplamK() >= t.kcal * 0.95) break;
+    let yapildi = false;
+    for (const rol of ['y', 'c']) {
+      const aday = meals.slice().sort((a, b) => (a[rol === 'y' ? 'fat' : 'carb'] - b[rol === 'y' ? 'fat' : 'carb']))
+        .find(m => {
+          const c = capa(m, rol);
+          if (!c || c.adet >= 4) return false;
+          return toplamP() + adimi(c.u) * c.p <= proteinTavan;
+        });
+      if (!aday) continue;
+      const c = capa(aday, rol);
+      c.adet = nutRound(c.adet + adimi(c.u), c.u);
+      yenile(aday); yapildi = true; break;
+    }
+    if (!yapildi) break;
+  }
+  // Tum doldurma adimlarindan sonra son bir fazla kontrolu.
+  fazlayiKirp();
+  // Kullanilmayan yag capasini (adet 0) listeden cikar
+  for (const m of meals) m.items = (m.items || []).filter(x => x.adet > 0);
   return meals;
 }
 
 function nutBuildDay(t, kg, sablonIdx) {
   const ogunler = nutMealSplit(t, kg);
-  const meals = ogunler.map(o => nutBuildMeal(o.slot, o, sablonIdx)).filter(Boolean);
-  return nutBalanceDay(meals, t);
+  const meals = ogunler.map(o => {
+    const m = nutBuildMeal(o.slot, o, sablonIdx);
+    if (m) { m.zaman = o.zaman || null; m.hedef = { kcal: o.kcal, protein: o.protein, carb: o.carb, fat: o.fat }; }
+    return m;
+  }).filter(Boolean);
+  return nutBalanceDay(meals, t, kg);
+}
+
+/**
+ * PLANIN GERCEK DEGERLERI — hedefle yan yana.
+ * ⚠️ Sablon tabanli bir plan hedefi tam tutturamaz; tutturdugunu SOYLEMEK
+ * yanlis olur. Motor ne cikardigini yazar, kullanici karsilastirsin.
+ */
+function nutDaySummary(meals, t, kg) {
+  const topla = (alan) => (meals || []).reduce((a, m) => a + (Number(m[alan]) || 0), 0);
+  const gercek = { kcal: topla('kcal'), protein: topla('protein'), carb: topla('carb'), fat: topla('fat') };
+  const sapma = (a, b) => (b > 0 ? Math.round(((a - b) / b) * 100) : 0);
+  return {
+    gercek, hedef: { kcal: t.kcal, protein: t.protein, carb: t.carb, fat: t.fat },
+    sapma: {
+      kcal: sapma(gercek.kcal, t.kcal), protein: sapma(gercek.protein, t.protein),
+      carb: sapma(gercek.carb, t.carb), fat: sapma(gercek.fat, t.fat),
+    },
+    proteinPerKg: kg > 0 ? Math.round((gercek.protein / kg) * 10) / 10 : null,
+    proteinTavanAsildi: kg > 0 && gercek.protein > kg * NUT_LIMITS.proteinMaxPerKg,
+    yagTabanAltinda: kg > 0 && gercek.fat < kg * NUT_LIMITS.fatMinPerKg,
+  };
 }
 
 /** Haftanin 7 gunu icin hedef ozeti — gun tipleri programdan gelir. */
@@ -332,6 +999,16 @@ function nutNextTemplate() {
   renderNutrition();
 }
 
+/**
+ * Ogun basligi. ⚠️ MEAL_SLOTS'a 'ara' EKLENMEDI bilincli olarak: o sabit
+ * besin gunlugunde ve dugme etiketlerinde de kullaniliyor, oraya yeni bir
+ * ogun eklemek bu ozellikle ilgisi olmayan ekranlari degistirirdi.
+ */
+function nutSlotLabel(slot) {
+  if (slot === 'ara') return 'Ara öğün';
+  return (typeof MEAL_SLOTS !== 'undefined' && MEAL_SLOTS[slot]) || slot;
+}
+
 function renderNutrition() {
   const el = document.getElementById('nutSection');
   if (!el) return;
@@ -352,17 +1029,52 @@ function renderNutrition() {
   if (!t) { el.innerHTML = ''; return; }
 
   const ogunler = nutBuildDay(t, prof.weight, n.sablon);
-  const gercek = ogunler.reduce((a, m) => ({
-    kcal: a.kcal + m.kcal, protein: a.protein + m.protein,
-  }), { kcal: 0, protein: 0 });
+  const ozet = nutDaySummary(ogunler, t, prof.weight);
+  const gercek = ozet.gercek;
 
+  const ZAMAN = { once: 'antrenmandan önce', sonra: 'antrenmandan sonra' };
   const ogunHtml = ogunler.map(m =>
-    '<div class="nut-meal"><div class="nm-head"><span>' + escapeHtml(MEAL_SLOTS[m.slot] || m.slot) + '</span>' +
+    '<div class="nut-meal"><div class="nm-head"><span>' + escapeHtml(nutSlotLabel(m.slot)) +
+    (m.zaman ? '<i class="nm-when">' + escapeHtml(ZAMAN[m.zaman] || '') + '</i>' : '') + '</span>' +
     '<b>' + m.kcal + ' kcal · ' + m.protein + 'g P</b></div>' +
     '<div class="nm-list">' + m.items.map(x =>
       '<div class="nm-item"><span>' + escapeHtml(x.n) + '</span>' +
       '<span class="nm-qty">' + escapeHtml(nutPortion(x.adet, x.u)) + '</span></div>'
     ).join('') + '</div></div>').join('');
+
+  // ⚠️ Mikro besin blogu artik SAYI veriyor — ama her zaman KAPSAMIYLA
+  // birlikte. Kismi veriden uretilen bir toplam, kapsami yazilmadan
+  // gosterilirse kullanici hayali bir acigi takviyeyle kapatmaya kalkar.
+  const mikroToplam = nutMicroTotals(ogunler);
+  const mikro = nutMicroCheck(ogunler);
+  const mikroHtml = mikro.map(mi => {
+    const durum = !mi.guvenilir ? 'veri yetersiz' : (mi.yeterli ? 'hedef tutuyor' : 'açık var');
+    const sinif = !mi.guvenilir ? ' belirsiz' : (mi.yeterli ? ' ok' : '');
+    return '<div class="nut-micro' + sinif + '">' +
+      '<div class="nmi-head"><b>' + escapeHtml(mi.ad) + '</b>' +
+      '<span class="nmi-hedef">' + mi.alinan + ' / ' + mi.hedefSayi + ' ' +
+      escapeHtml(mi.birim) + '</span>' +
+      '<span class="nmi-durum">' + escapeHtml(durum) + '</span></div>' +
+      '<div class="nmi-bar"><i style="width:' + Math.min(100, mi.oran) + '%"></i></div>' +
+      '<div class="nmi-neden">' + escapeHtml(mi.neden) + '</div>' +
+      (mi.yeterli
+        ? '<div class="nmi-kaynak">Örnek gün bunu zaten karşılıyor — takviye gerekmiyor.</div>'
+        : '<div class="nmi-kaynak"><b>Önce gıda:</b> ' + escapeHtml(mi.gidaOnce || mi.porsiyon) + '</div>') +
+      (mi.takviye
+        ? '<div class="nmi-supp">' + escapeHtml(mi.takviye.kanit) + ' Kalan açık için: <b>' +
+          escapeHtml(mi.takviye.ad) + ' ' + mi.takviye.doz + ' ' + escapeHtml(mi.takviye.birim) +
+          '</b> — ' + escapeHtml(mi.takviye.nasil) + '</div>'
+        : '') +
+      (mi.uyari && !mi.yeterli ? '<div class="nmi-ipucu">' + escapeHtml(mi.uyari) + '</div>' : '') +
+      (mi.ipucu ? '<div class="nmi-ipucu">' + escapeHtml(mi.ipucu) + '</div>' : '') +
+      '</div>';
+  }).join('');
+
+  const ergoHtml = NUT_ERGO.map(e =>
+    '<div class="nut-ergo"><div class="ne-head">' + escapeHtml(e.kanit) + ' <b>' +
+    escapeHtml(e.ad) + '</b></div>' +
+    '<div class="ne-ne">' + escapeHtml(e.ne) + '</div>' +
+    '<div class="ne-not">' + escapeHtml(e.not) + '</div></div>').join('');
 
   const hafta = nutWeek(prof, n.hedef, data.program).map(g =>
     '<span class="nut-day' + (g.dow === bugun ? ' on' : '') + '">' +
@@ -396,10 +1108,41 @@ function renderNutrition() {
     nutCarbTiming(tip).map(x => '<div class="nt-row">' + escapeHtml(x) + '</div>').join('') +
     '</details>' +
 
-    '<div class="nut-sample-head">Örnek gün <button class="nut-mini" onclick="nutNextTemplate()">Başka öner</button></div>' +
+    '<div class="nut-sample-head">Örnek gün · ' + ogunler.length + ' öğün ' +
+    '<button class="nut-mini" onclick="nutNextTemplate()">Başka öner</button></div>' +
     '<div class="nut-meals">' + ogunHtml + '</div>' +
-    '<div class="nut-sub">Örnek toplam: ' + gercek.kcal + ' kcal · ' + gercek.protein + 'g protein. ' +
+    // ⚠️ SAPMA GIZLENMEZ: sablon tabanli bir plan hedefi tam tutturamaz.
+    // Tutturdugunu soylemek yerine ne cikardigini yazmak dogru olan.
+    '<div class="nut-sub">Örnek toplam: <b>' + gercek.kcal + ' kcal</b> (%' +
+    (ozet.sapma.kcal >= 0 ? '+' : '') + ozet.sapma.kcal + ') · ' +
+    gercek.protein + 'g P (' + ozet.proteinPerKg + ' g/kg) · ' +
+    gercek.carb + 'g K · ' + gercek.fat + 'g Y. ' +
     'Bu bir şablon — sevmediğini benzer makrolu başka yiyecekle değiştir.</div>' +
+    (ozet.proteinTavanAsildi
+      ? '<div class="nut-note">Şablonun sabit ekleri (ayran, yoğurt, peynir) yüzünden bu ' +
+        'örnek gün ' + ozet.proteinPerKg + ' g/kg protein veriyor; hedef ' + t.proteinPerKg +
+        ' g/kg. Zararlı değil — üstünün ek faydası gösterilmemiş, o kadar. İstersen ' +
+        'ayran ya da yoğurdu azalt, yerine karbonhidrat koy.</div>'
+      : '') +
+
+    '<details class="nut-micro-wrap"><summary>Mikro besinler ve takviye — ' +
+    'örnek günün %' + mikroToplam.kapsam + '\u2019i hesaplandı</summary>' +
+    '<div class="nut-micro-note">⚠️ <b>Kapsam %' + mikroToplam.kapsam + '.</b> ' +
+    'Mikro besin tablosunda 410 besinin ~90\u2019ı var; kalanlar hesaba katılmadı ' +
+    (mikroToplam.kapsanmayan.length
+      ? '(' + escapeHtml(mikroToplam.kapsanmayan.slice(0, 5).join(', ')) + ') '
+      : '') +
+    've onlar da mikro besin taşıyor. Bu yüzden sayı hiçbir zaman tek başına ' +
+    'verilmiyor — kapsam %70\u2019in altındaysa Aidan yorum yapmaz, sadece veriyi gösterir. ' +
+    'Değerler USDA/TürKomp ortalamalarından porsiyona çevrilmiş yaklaşık değerlerdir.</div>' +
+    '<div class="nut-micro-note"><b>Sıra değişmez: önce gıda.</b> Takviye yalnızca gıda ' +
+    'hedefi tutturmuyorsa öneriliyor, o zaman bile ilk satır hangi yiyeceği ekleyeceğin. ' +
+    'Demirde hiç önerilmiyor — sebebi aşağıda.</div>' +
+    mikroHtml +
+    '<div class="nut-micro-note nut-ergo-head"><b>Performans takviyeleri — bilgi, reçete değil</b><br>' +
+    'Aidan bunları plana koymuyor ve “al” demiyor. Kanıt seviyesi yazıyor ki internetteki ' +
+    'iddialarla karşılaştırabilesin; 16 yaşında karar antrenör ve hekimin.</div>' +
+    ergoHtml + '</details>' +
 
     '<div class="nut-disc">Bu plan yaşına, kilona ve antrenman programına göre hesaplanmış bir ' +
     '<b>başlangıç noktasıdır</b>; diyetisyen değildir. Kilo verme / sıklet düşürme planı ' +

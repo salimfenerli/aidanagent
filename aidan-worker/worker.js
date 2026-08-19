@@ -7393,22 +7393,31 @@ function hevyBuildExercises(gun, tplIds, restSec) {
     }
     // ⚠️ Kalite kurallari Hevy'de ZORLANAMAZ — notlara yaziliyor ki
     // kullanici salonda okusun. Sira da liste sirasiyla korunuyor.
-    let not = '';
+    const parca = [];
     if (e.explosive) {
-      not = 'PATLAYICI — maksimum hızla yap. Hız düştüğü an seti bitir. ' +
-        'Setler arası tam dinlen (2-3 dk). Isınmadan hemen sonra, ağır setten ÖNCE.';
+      parca.push('PATLAYICI — maksimum hızla yap. Hız düştüğü an seti bitir. ' +
+        'Setler arası tam dinlen (2-3 dk). Isınmadan hemen sonra, ağır setten ÖNCE.');
       if (e.metric === 'cm' || e.metric === 'm') {
-        not += ' İlerleme kiloyla değil ' + (e.metric === 'cm' ? 'yükseklikle' : 'mesafeyle') +
-          ' ölçülür — en iyi denemeni Aidan\'a gir.';
+        parca.push('İlerleme kiloyla değil ' + (e.metric === 'cm' ? 'yükseklikle' : 'mesafeyle') +
+          ' ölçülür — en iyi denemeni Aidan\'a gir.');
       }
     } else if (e.tier === 1) {
-      not = 'Ana kaldırış — önce 2 ısınma seti yap, sayıya katma.';
+      parca.push('Ana kaldırış — önce 2 ısınma seti yap, sayıya katma.');
     }
+    // Tempo ve RPE: Hevy'de alan yok, nota yaziliyor.
+    if (e.tempo) parca.push('Tempo ' + e.tempo + ' (iniş-bekle-kalkış-bekle; X = maksimum hız niyeti).');
+    if (e.rpe) parca.push('RPE ' + e.rpe + ' — yetmezliğe GITME, tankta tekrar kalsın.');
+    if (e.bwNot) parca.push(e.bwNot);
+    if (e.pair) parca.push('Süperset ' + e.pair + ': aynı harfli hareketle dönüşümlü yap.');
     out.push({
       exercise_template_id: tid,
-      superset_id: null,
-      rest_seconds: e.explosive ? 180 : (Number(restSec) || 90),
-      notes: not || null,
+      // Hevy superset_id: ayni gruptaki hareketler donusumlu gosterilir.
+      // Aidan'daki 'pair' harfi (A/B/...) sayiya cevrilir.
+      superset_id: e.pair ? (String(e.pair).charCodeAt(0) - 65) : null,
+      // ⚠️ Dinlenme artik hareket bazli (kademeye gore). Eski kod tek bir
+      // deger yaziyordu: izolasyona da 3 dk. Hareketin kendi degeri varsa o gecerli.
+      rest_seconds: Number(e.rest) || (e.explosive ? 180 : (Number(restSec) || 90)),
+      notes: parca.length ? parca.join(' ') : null,
       sets,
     });
   }

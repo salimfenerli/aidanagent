@@ -37,7 +37,7 @@ function motor() {
   vm.createContext(ctx);
   const src = fs.readFileSync(path.join(ROOT, 'program.js'), 'utf8') +
     '\n;globalThis.__SABIT = { PROGRAM_GOALS, PROGRAM_EXERCISES, PROGRAM_LIMITS,' +
-    ' PROGRAM_TIER1, PROGRAM_TIER2, PROGRAM_UNI, PROGRAM_FAMILY };';
+    ' PROGRAM_TIER1, PROGRAM_TIER2, PROGRAM_UNI, PROGRAM_FAMILY, PROGRAM_REP_FLOOR };';
   vm.runInContext(src, ctx);
   return Object.assign(ctx, ctx.__SABIT);
 }
@@ -90,13 +90,23 @@ describe('1 — kademe sistemi (ana kaldiris / yardimci / izolasyon)', () => {
 
   test('REGRESYON: yardimci hareket ana kaldiris araligini ALMAZ', () => {
     // Bulgar split squat 3-6 tekrar aliyordu — bu paketin cikis noktasi.
+    // ⚠️ 18 Agu 2026: artik kademe araligi TEK basina son soz degil. Bazi
+    // hareketlerin kendi tekrar tabani var (PROGRAM_REP_FLOOR): hip thrust'a
+    // 3 tekrar yazmak kademe araligina uysa da bilimsel olarak yanlisti.
+    // Sozlesme: aralik kademenin araligidir YA DA hareketin tabaniyla YUKARI
+    // kayar — asla asagi inmez, ve genisligi korunur.
     const p = M.buildProgram(KICKBOKS, []);
     const T = M.PROGRAM_GOALS.atletik.tiers;
     for (const e of normal(p)) {
       if (e.muscle === 'neck') continue;
       const [a, b] = T[e.tier];
-      assert.strictEqual(e.repMin, a, e.tr + ' (kademe ' + e.tier + '): repMin ' + e.repMin + ', beklenen ' + a);
-      assert.strictEqual(e.repMax, b, e.tr + ' (kademe ' + e.tier + '): repMax ' + e.repMax + ', beklenen ' + b);
+      const taban = M.PROGRAM_REP_FLOOR[e.id] || 0;
+      const beklenenMin = Math.max(a, taban);
+      assert.strictEqual(e.repMin, beklenenMin,
+        e.tr + ' (kademe ' + e.tier + '): repMin ' + e.repMin + ', beklenen ' + beklenenMin);
+      assert.ok(e.repMax >= Math.max(b, beklenenMin + 2),
+        e.tr + ': repMax ' + e.repMax + ' — aralik daraltilmis');
+      assert.ok(e.repMin >= a, e.tr + ': taban kademe araliginin ALTINA indi');
     }
   });
 
@@ -348,36 +358,61 @@ describe('6 — kalip cesitliligi (ayni hareket iki kez)', () => {
   // Salonda dikey press icin havuzda 2 secenek var (bar + dambil) ve haftada iki
   // kez dikey press yapmak ZATEN dogru programlama. Yanlis olan, tekrarin
   // SISTEMIK olmasi — yani her kalipta ayni hareketin baska aletiyle doldurmak.
-  test('ayni AILE en fazla 2 kez ve tekrar SISTEMIK degil', () => {
-    const sayim = {};
+  // ⚠️ SOZLESME DEGISTI — 18 Agu 2026.
+  // Eski kural "bir aile en fazla 1-2 kez, birden fazla aile tekrarlamasin"
+  // idi ve YANLISTI: kas grubu basina haftada 2 antrenman frekansi yerlesik
+  // bilgidir. Eski kural yuzunden motor ikinci bacak gununde serbest squat
+  // yerine LEG PRESS yaziyordu — cesitlilik ugruna hareket kalitesi feda
+  // ediliyordu. Yeni sozlesme tekrarin TURUNU ayirir:
+  //   ✅ ayni hareketin (ayni id) ana kaldiris olarak 2. kez gelmesi = FREKANS
+  //   ❌ ayni ailenin BASKA ALETLE gelmesi (bar RDL + dambil RDL) = SAHTE cesitlilik
+  test('ayni AILE en fazla 2 kez ve tekrar FREKANS, sahte cesitlilik DEGIL', () => {
+    const sayim = {}, idler = {};
     for (const e of normal(p)) {
       const lib = M.PROGRAM_EXERCISES.find((x) => x.id === e.id);
       if (!lib) continue;
       const aile = M.programFamily(lib);
       sayim[aile] = (sayim[aile] || 0) + 1;
+      (idler[aile] = idler[aile] || new Set()).add(e.id);
     }
     for (const k of Object.keys(sayim)) {
-      assert.ok(sayim[k] <= 2, k + ' ailesi ' + sayim[k] + ' kez');
+      assert.ok(sayim[k] <= 2, k + ' ailesi ' + sayim[k] + ' kez — 2x frekans tavani asildi');
+      if (sayim[k] > 1) {
+        assert.strictEqual(idler[k].size, 1,
+          k + ' ailesi farkli aletlerle tekrarliyor (' + Array.from(idler[k]).join(' + ') +
+          ') — bu frekans degil sahte cesitlilik');
+      }
     }
-    const tekrarEden = Object.keys(sayim).filter((k) => sayim[k] > 1);
-    assert.ok(tekrarEden.length <= 1,
-      'birden fazla aile tekrarliyor (' + tekrarEden.join(', ') + ') — havuz tuketilmis, ' +
-      'motor cesitlilik uretmiyor');
   });
 
-  test('REGRESYON: alt vucutta ayni aile İKİ KEZ gelmiyor', () => {
+  test('REGRESYON: alt vucutta ayni aile farkli ALETLE gelmiyor', () => {
     // Paketin cikis noktasi: 'Romen Deadlift' + 'Dambil Romen Deadlift' ayni
-    // haftada. Alt vucutta havuz genis, orada tekrar MAZERETSIZ.
-    const sayim = {};
+    // haftada. Bu hala yasak. Ama ayni barbell squat'in iki bacak gununde
+    // olmasi DOGRU programlamadir, yasak degil.
+    const idler = {};
     for (const e of normal(p)) {
       const lib = M.PROGRAM_EXERCISES.find((x) => x.id === e.id);
       if (!lib || ['quads', 'hams', 'glutes'].indexOf(lib.muscle) < 0) continue;
       const aile = M.programFamily(lib);
-      sayim[aile] = (sayim[aile] || 0) + 1;
+      (idler[aile] = idler[aile] || new Set()).add(e.id);
     }
-    for (const k of Object.keys(sayim)) {
-      assert.ok(sayim[k] <= 1, 'alt vucutta ' + k + ' ailesi ' + sayim[k] + ' kez');
+    for (const k of Object.keys(idler)) {
+      assert.strictEqual(idler[k].size, 1,
+        'alt vucutta ' + k + ' ailesi farkli aletlerle iki kez: ' + Array.from(idler[k]).join(' + '));
     }
+  });
+
+  test('REGRESYON: ikinci bacak gununde MAKINE ana kaldiris olmuyor', () => {
+    // Aile cezasi yuzunden motor squat yerine leg press yaziyordu.
+    const bacakGunleri = (p.days || []).filter((d) => d.agirBacak);
+    assert.ok(bacakGunleri.length >= 1, 'bacak gunu yok');
+    const squatlar = normal(p).filter((e) => {
+      const lib = M.PROGRAM_EXERCISES.find((x) => x.id === e.id);
+      return lib && lib.pattern === 'squat';
+    });
+    assert.ok(squatlar.length >= 1, 'squat kalibi hic gelmemis');
+    assert.ok(squatlar.some((e) => e.id === 'squat'),
+      'serbest squat programda yok — makine onun yerini almis');
   });
 
   test('haftada yeterli AILE cesitliligi var', () => {
