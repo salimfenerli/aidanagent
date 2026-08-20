@@ -141,7 +141,7 @@ function updateEstimateStats() {
   const accuratePct = Math.round((accurate / withBoth.length) * 100);
 
   let comment;
-  if (ratio >= 1.5) comment = '⏰ Görevler tahminden uzun sürüyor — daha geniş tahmin etmeyi dene.';
+  if (ratio >= 1.5) comment = 'Görevler tahminden uzun sürüyor — daha geniş tahmin etmeyi dene.';
   else if (ratio <= 0.7) comment = 'Hızlısın — tahminlerini biraz artırabilirsin.';
   else comment = 'Tahminlerin gerçeğe yakın — iyi gidiyorsun.';
 
@@ -700,9 +700,7 @@ function gymDayLine(forDate) {
   }
   if (hits < 2) return '';
   const names = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
-  return `
-
-💪 Son 3 haftanın ${hits}'inde ${names[dayIdx]} günü antrenman yapıldı — bugün büyük ihtimalle ANTRENMAN GÜNÜ. Günü hafiflet, antrenman için ~90 dk boşluk bırak.`;
+  return `\n\n💪 Son 3 haftanın ${hits}'inde ${names[dayIdx]} günü antrenman yapıldı — bugün büyük ihtimalle ANTRENMAN GÜNÜ. Günü hafiflet, antrenman için ~90 dk boşluk bırak.`;
 }
 
 function deadlineLines(forDate) {
@@ -1121,17 +1119,17 @@ function parseQuickInput(raw) {
   let em = text.match(/(^|\s)(\d+)\s*(?:saat|sa|h)\s*(\d+)\s*(?:dakika|dk|min)(\s|$)/i);
   if (em) {
     estimateMin = parseInt(em[2]) * 60 + parseInt(em[3]);
-    text = text.replace(em[0], ' '); detected.push(`⏱ ${estimateMin}dk`);
+    text = text.replace(em[0], ' '); detected.push(`${estimateMin}dk`);
   } else {
     em = text.match(/(^|\s)(\d+(?:[.,]\d+)?)\s*(?:saat|sa|hour|hr)(\s|$)/i);
     if (em) {
       estimateMin = Math.round(parseFloat(em[2].replace(',', '.')) * 60);
-      text = text.replace(em[0], ' '); detected.push(`⏱ ${estimateMin}dk`);
+      text = text.replace(em[0], ' '); detected.push(`${estimateMin}dk`);
     } else {
       em = text.match(/(^|\s)(\d+)\s*(?:dakika|dk|min)(\s|$)/i);
       if (em) {
         estimateMin = parseInt(em[2]);
-        text = text.replace(em[0], ' '); detected.push(`⏱ ${estimateMin}dk`);
+        text = text.replace(em[0], ' '); detected.push(`${estimateMin}dk`);
       }
     }
   }
@@ -1606,7 +1604,7 @@ async function postponeTask(id) {
   const nextWeek = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return isoLocal(d); })();
   menu.innerHTML = `
     <div class="postpone-title">"${escapeHtml((t.text||'').slice(0,40))}" ertele</div>
-    <button onclick="applyPostpone(${id}, '${tomorrow}')">⏭️ Yarın</button>
+    <button onclick="applyPostpone(${id}, '${tomorrow}')">Yarın</button>
     <button onclick="applyPostpone(${id}, '${in3}')">+3 gün</button>
     <button onclick="applyPostpone(${id}, '${nextWeek}')">Haftaya</button>
     <button onclick="applyPostponePick(${id})">Tarih seç</button>

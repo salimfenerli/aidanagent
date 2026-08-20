@@ -5009,62 +5009,23 @@
   word-break: break-word;
 }
 
-  /* ============================================================
-     GECE (v10) — jenerik koyu+amber dilinden cikis.
-     Mavi-siyah zemin -> sicak komur; amber -> terracotta.
-     Amber'in iki isi vardi (aksiyon + uyari) ve ayni renkti;
-     burada ayrildi: aksiyon terracotta, uyari gercek amber.
-     BU BLOK EN SONDA KALMALI — 5 :root var, sonuncusu kazanir.
-     ============================================================ */
-  :root {
-    --font-sans: "Onest", "Hanken Grotesk", "Segoe UI", system-ui, sans-serif;
-    --font-display: var(--font-sans);
-
-    --bg: #121211;
-    --bg-elev: #1a1917;
-    --surface: #1e1c1a;
-    --surface-mid: #24211d;
-    --surface-high: #2c2823;
-    --surface-2: #24211d;
-    --surface-3: #2c2823;
-    --surface-hover: #302c26;
-    --border: #3a352e;
-    --border-soft: rgba(255,252,245,0.07);
-    --border-strong: rgba(255,252,245,0.13);
-
-    --text: #e5e1d9;
-    --text-strong: #f5f3ee;
-    --text-muted: #9a9389;
-    --text-faint: #857e74;
-    --on-dark: #f6f4ef;
-    --on-accent: #2a1408;
-
-    --accent: #e2e2e2;
-    --accent-hover: #f4f4f4;
-    --accent-light: #c6c6c7;
-    --accent-tint: #b5b5b5;
-    --accent-soft: rgba(226,226,226,0.12);
-    --accent-glow: rgba(226,226,226,0.22);
-    --secondary: #e2e2e2;
-    --secondary-dim: #8e9192;
-    --secondary-soft: rgba(226,226,226,0.13);
-
-    --success: #5cbf7a;
-    --success-soft: rgba(92,191,122,0.12);
-    --warning: #e0a83c;
-    --warning-soft: rgba(224,168,60,0.12);
-    --danger: #ea5a52;
-    --danger-soft: rgba(234,90,82,0.12);
-    --info: #6fa8e8;
-  }
+  /* GECE (v10) paleti 20 Agu 2026'da SILINDI: v11 MONOKROM ayni 35 token'in
+     hepsini yeniden tanimliyordu, yani bu blok yillardir olu yukten ibaretti
+     (her kullaniciya inip hicbir seyi boyamiyordu). Tek istisna Onest ailesiydi;
+     o v11 blogunun icine tasindi. Artik kazanan blok TEK ve en sonda. */
+  
   /* ============================================================
      v11 MONOKROM (15 Agu 2026) - Stitch monokrom varyanti
      Aksiyon rengi HUE TASIMAZ, sadece parlaklik. Boylece renk
      skalasinin TAMAMI anlama kalir: yesil=iyi, kirmizi=kotu,
      amber=dikkat. "Jenerik" gorunumu yaratan sey renkli accent'ti.
-     BU BLOK EN SONDA KALMALI - 6 :root var, sonuncusu kazanir.
+     BU BLOK EN SONDA KALMALI - 5 :root var, sonuncusu kazanir.
      ============================================================ */
   :root {
+    /* v10'dan tasindi: tek aile Onest (DESIGN.md kurali). */
+    --font-sans: "Onest", "Hanken Grotesk", "Segoe UI", system-ui, sans-serif;
+    --font-display: var(--font-sans);
+
     --bg: #0a0a0a;
     --bg-elev: #0e0e0e;
     --surface: #131313;
@@ -5105,6 +5066,41 @@
     --danger: #ff4444;
     --danger-soft: rgba(255,68,68,0.12);
     --info: #6fa8e8;
+
+    /* Makro serisi (protein/karb/yag) -- 20 Agu 2026, TEK YER.
+       Monokrom accent hue tasimadigi icin hue'nun TAMAMI anlama kaldi;
+       bu uc renk YALNIZ makro grafiginde kullanilir ve semantiklerle
+       (yesil/amber/kirmizi) carpismaz. Emekli amber #f5a524 makro
+       cubugundan da kalkti -- o deger artik hicbir dosyada yok. */
+    --macro-pro: #6fa8e8;
+    --macro-carb: #a78bda;
+    --macro-fat: #e0726e;
+    --macro-other: #3a3a3a;
+  }
+  /* Supabase/auth kutulari: eskiden dolu yesil/mor Dracula bloklariydi.
+     Anlami TAM kenar tasiyor -- yan serit Impeccable'da yasak. */
+  .sb-note, .sb-panel {
+    background: var(--surface-mid);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: var(--text);
+  }
+  .sb-note { font-size: 0.9em; white-space: pre-wrap; }
+  .sb-in { width: 100%; max-width: 300px; margin: 6px 0; display: block; }
+  /* Rozet tonlari: satir ici rgba yerine token. Eski terracotta/amber
+     rgba'lari monokrom paletle uyusmuyordu -- ekranda tek dil kalsin. */
+  .badge.danger { background: var(--danger-soft); color: var(--danger); border-color: var(--danger-soft); }
+  .badge.warn { background: var(--warning-soft); color: var(--warning); border-color: var(--warning-soft); }
+  .badge.accent { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft); }
+  /* Karne uyari tonu: dolu kirmizi degil, tokenli tint + tam kenar. */
+  .krn-pill.warn { background: var(--warning-soft); color: var(--warning); border-color: var(--warning-soft); }
+  .krn-note.warn { background: var(--warning-soft); border-color: var(--warning); }
+  .krn-note.warn b { color: var(--warning); }
+  .tsk-fold {
+    cursor: pointer; padding: 10px 14px; background: var(--bg-elev);
+    border-radius: 8px; border: 1px solid var(--border-soft);
+    color: var(--text-muted); font-size: 0.88em; user-select: none;
   }
 
   /* Rakamlar hizali — ekranin yarisi sayi (kcal, kg, set, fiyat) */

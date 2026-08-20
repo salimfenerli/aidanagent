@@ -212,7 +212,11 @@ describe('makro dağılımı', () => {
   test('protein öğünlere EŞİT dağıtılıyor', () => {
     const t = M.nutTargets(PROF, 'strength', 'koru');
     const ogunler = M.nutMealSplit(t, 70);
-    assert.strictEqual(ogunler.length, 4);
+    // ⚠️ Ogun sayisi SABIT DEGIL, kalori esigine bagli (>3000 kcal -> 5).
+    // Burada 4 yazmak testi profile baglar: antrenman bilimi guncellemesi
+    // hedefi 3034'e cikarinca bu satir kirmiziya dondu, motorda bir sey
+    // bozulmamisti. Sozlesme "esit dagitim", "4 ogun" degil.
+    assert.strictEqual(ogunler.length, M.nutMealCount(t.kcal));
     const p = ogunler.map((o) => o.protein);
     assert.ok(Math.max.apply(null, p) - Math.min.apply(null, p) <= 1,
       'protein ogunlere esit dagitilmamis: ' + p.join(', '));
@@ -273,9 +277,11 @@ describe('örnek gün — gerçek Türk yemekleri', () => {
     assert.deepStrictEqual(eksik, [], 'sablon var olmayan besine referans veriyor');
   });
 
-  test('4 öğün üretiliyor', () => {
-    assert.strictEqual(gun.length, 4);
-    assert.ok(gun.every((m) => m.items.length >= 3));
+  test('öğün sayısı kalori eşiğine uyuyor', () => {
+    assert.strictEqual(gun.length, M.nutMealCount(t.kcal));
+    assert.ok(gun.every((m) => m.items.length >= 3),
+      'tabak 3 kalemin altina indi: ' +
+      gun.filter((m) => m.items.length < 3).map((m) => m.slot).join(', '));
   });
 
   test('gün toplamı hedefe yakın (kalori ±%12, protein hedefin üstünde)', () => {
@@ -284,7 +290,16 @@ describe('örnek gün — gerçek Türk yemekleri', () => {
     assert.ok(Math.abs(kcal - t.kcal) / t.kcal < 0.12,
       'kalori ' + kcal + ' vs hedef ' + t.kcal);
     assert.ok(prot >= t.protein * 0.9, 'protein ' + prot + ' vs hedef ' + t.protein);
-    assert.ok(prot <= t.protein * 1.35, 'protein hedefi cok asiyor: ' + prot);
+    // ⚠️ IKI AYRI SINIR (20 Agu 2026):
+    //   - SERT TAVAN 2.5 g/kg: guvenlik siniri, hicbir kosulda asilmaz
+    //   - HEDEF BANDI: kirpma buna dogru calisir; tabak kurallari
+    //     (ana ogunde capa kalir, 3 kalem, son protein kaynagi) onunde gelir
+    // Eskiden tek sinir vardi ve o da TAVAN'di; plan her profilde tavana
+    // yapisiyor, kullaniciya "hedef 126 g" yazip 174 g veriyorduk.
+    assert.ok(prot <= 70 * M.NUT_LIMITS.proteinMaxPerKg,
+      'SERT TAVAN asildi: ' + prot + ' > ' + 70 * M.NUT_LIMITS.proteinMaxPerKg);
+    assert.ok(prot <= t.protein * 1.25,
+      'protein hedef bandinin disinda: ' + prot + ' vs hedef ' + t.protein);
   });
 
   test('⚠️ "adet" birimli besinler TAM sayı (1.5 yumurta olmaz)', () => {
@@ -422,5 +437,165 @@ describe('Impeccable — beslenme kartı', () => {
 
   test('styles.css hâlâ LF', () => {
     assert.strictEqual(fs.readFileSync(path.join(ROOT, 'styles.css')).indexOf(Buffer.from('\r\n')), -1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 20 Agu 2026 — MOTOR GENELINDE DAVRANIS. Tek profil yesil olup digerlerinde
+// bozulmak bu motorun tekrar eden hatasiydi: 18 Agu'da 70 kg icin duzeltilen
+// sey 50 kg'de kirildi. Bu blok 40 profili birden tarar.
+describe('motor — 40 profil taramasi', () => {
+  const kilolar = [50, 60, 70, 80, 90];
+  const tipler = ['rest', 'strength', 'fight', 'both'];
+  const hedefler = ['koru', 'kas'];
+  const tara = (fn) => {
+    const kotu = [];
+    for (const kg of kilolar) {
+      for (const tip of tipler) {
+        for (const h of hedefler) {
+          const t = M.nutTargets({ sex: 'male', age: 16, height: 178, weight: kg }, tip, h);
+          if (!t) continue;
+          const gun = M.nutBuildDay(t, kg, 0);
+          const hata = fn({ kg, tip, h, t, gun });
+          if (hata) kotu.push(`${kg}kg/${tip}/${h}: ${hata}`);
+        }
+      }
+    }
+    return kotu;
+  };
+
+  test('kalori hedefin ±%8 bandinda', () => {
+    const kotu = tara(({ t, gun }) => {
+      const kcal = gun.reduce((a, m) => a + m.kcal, 0);
+      const sapma = Math.abs(kcal - t.kcal) / t.kcal;
+      return sapma > 0.08 ? `${kcal} vs ${t.kcal}` : null;
+    });
+    assert.deepStrictEqual(kotu, []);
+  });
+
+  test('SERT protein tavani (2.5 g/kg) hicbir profilde asilmiyor', () => {
+    const kotu = tara(({ kg, gun }) => {
+      const p = gun.reduce((a, m) => a + m.protein, 0);
+      const tavan = Math.round(kg * M.NUT_LIMITS.proteinMaxPerKg);
+      return p > tavan ? `${p} > ${tavan}` : null;
+    });
+    assert.deepStrictEqual(kotu, []);
+  });
+
+  test('protein tabani: hedefin altina dusmuyor', () => {
+    const kotu = tara(({ t, gun }) => {
+      const p = gun.reduce((a, m) => a + m.protein, 0);
+      return p < t.protein * 0.9 ? `${p} < ${t.protein}` : null;
+    });
+    assert.deepStrictEqual(kotu, []);
+  });
+
+  test('⚠️ her ogunde protein KAYNAGI var — tavan dayatmadikca', () => {
+    // "2 simit + 1 elma" 18 g protein tasir ve esigi gecer; ama tabakta
+    // protein kaynagi yoktur. Ogun basi kas protein sentezi esigi bu.
+    //
+    // ⚠️ TEK ISTISNA SERT TAVAN. 50 kg + dovus + kas hedefinde sablonlarin
+    // sabit ekleri tek baslarina 2.5 g/kg'i asiyor; motor kirpacak baska
+    // yer bulamayinca bir ara ogunun capasini siliyor. Guvenlik siniri
+    // tabak estetiginin onunde gelir — ama bu ancak gun TAVANDA otururken
+    // kabul edilir, "kirpacak yer vardi ama capayi sildi" degil.
+    const kotu = tara(({ kg, gun }) => {
+      const bos = gun.filter((m) => !(m.items || []).some(
+        (x) => x.adet > 0 && (x.rol === 'p' || x.p >= 8)));
+      if (!bos.length) return null;
+      const p = gun.reduce((a, m) => a + m.protein, 0);
+      const tavan = Math.round(kg * M.NUT_LIMITS.proteinMaxPerKg);
+      // Tavanin 12 g yakininda degilse bu bir kusurdur, zorunluluk degil.
+      if (p >= tavan - 12) return null;
+      return bos.map((m) => m.slot).join(',') + ` (protein ${p}/${tavan})`;
+    });
+    assert.deepStrictEqual(kotu, []);
+  });
+
+  test('sacma porsiyon yok — hicbir kalem 4 birimi gecmiyor', () => {
+    const kotu = tara(({ gun }) => {
+      const asan = [];
+      for (const m of gun) for (const x of m.items) if (x.adet > 4) asan.push(`${x.adet} ${x.n}`);
+      return asan.length ? asan.join(', ') : null;
+    });
+    assert.deepStrictEqual(kotu, []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 20 Agu 2026 — PROGRAM -> GUNLUK. Motorun urettigi gun, 'yedim' ile gunluge
+// yazan plan listesine aktarilabilir olmali. Buradaki iki fonksiyon SAF:
+// veri donusturur, DOM'a ve data'ya dokunmaz — o yuzden test edilebilir.
+describe('program -> plan aktarimi', () => {
+  const t = M.nutTargets(PROF, 'strength', 'koru');
+  const gun = M.nutBuildDay(t, 70, 0);
+  const satirlar = M.nutOrnekSatirlari(gun);
+
+  test('her satirin slotu GERCEK bir ogun kovasi', () => {
+    // ⚠️ Motorda 'ara' slotu var, MEAL_SLOTS'ta YOK. Cevrilmezse o satirlar
+    // gunlukte hicbir gruba girmez — sessizce kaybolur.
+    // MEAL_SLOTS core.js'te `const` — vm baglaminda ctx uzerine dusmuyor,
+    // kaynaktan okunuyor. Boylece test slot listesini SABITLEMIYOR.
+    const slotSrc = fs.readFileSync(path.join(ROOT, 'core.js'), 'utf8')
+      .match(/const MEAL_SLOTS = \{([^}]*)\}/)[1];
+    const gecerli = [...slotSrc.matchAll(/(\w+)\s*:/g)].map((m) => m[1]);
+    assert.ok(gecerli.length >= 4, 'MEAL_SLOTS okunamadi');
+    // ⚠️ satirlar vm baglaminda uretildi: farkli realm'in Array'i. Ondan
+    // turetilen diziyi deepStrictEqual ile [] ile karsilastirmak PROTOTIP
+    // farkindan hep kirmizi doner — Array.from ile bu realm'e cek.
+    const kacak = Array.from(satirlar).filter((x) => gecerli.indexOf(x.slot) < 0);
+    assert.deepStrictEqual(kacak.map((x) => String(x.slot)), [],
+      'gecersiz slot');
+    assert.ok(!satirlar.some((x) => x.slot === 'ara'), "'ara' cevrilmemis");
+  });
+
+  test('makrolar porsiyonla carpilarak tasiniyor', () => {
+    const topla = (alan) => satirlar.reduce((a, x) => a + (x[alan] || 0), 0);
+    const gunToplam = (alan) => gun.reduce((a, m) => a + m[alan], 0);
+    for (const [satir, meal] of [['kcal', 'kcal'], ['protein', 'protein'], ['carb', 'carb'], ['fat', 'fat']]) {
+      // Kalem bazinda yuvarlama var; 1 kalem basina en fazla 1 birim sapar.
+      assert.ok(Math.abs(topla(satir) - gunToplam(meal)) <= satirlar.length,
+        satir + ': ' + topla(satir) + ' vs ' + gunToplam(meal));
+    }
+  });
+
+  test('satir adi porsiyonu iceriyor', () => {
+    assert.ok(satirlar.every((x) => x.name && x.name.length > 2));
+    assert.ok(satirlar.some((x) => /\d/.test(x.name)), 'hicbir satirda miktar yok');
+  });
+
+  test('AI ogun adi slot\'a cevriliyor', () => {
+    const bekle = {
+      'Kahvaltı': 'kahvalti', 'sabah ogunu': 'kahvalti',
+      'Öğle yemeği': 'ogle', 'ogle': 'ogle',
+      'Akşam': 'aksam', 'aksam yemegi': 'aksam',
+      'Ara öğün': 'atistirma', 'Antrenman sonrası': 'atistirma',
+    };
+    for (const ad of Object.keys(bekle)) {
+      assert.strictEqual(M.nutSlotKey(ad), bekle[ad], ad + ' yanlis eslesti');
+    }
+  });
+
+  test('AI satiri = OGUN, kalem basina makro uydurulmuyor', () => {
+    const g = {
+      dow: 1,
+      ogunler: [{ ad: 'Kahvaltı', saat: '08:00', kcal: 600, protein: 30,
+                  kalemler: ['3 yumurta', '2 dilim ekmek', 'peynir'] }],
+    };
+    const r = M.nutAiSatirlari(g);
+    assert.strictEqual(r.length, 1);
+    assert.strictEqual(r[0].slot, 'kahvalti');
+    assert.strictEqual(r[0].kcal, 600);
+    assert.strictEqual(r[0].protein, 30);
+    assert.strictEqual(r[0].carb, null, 'AI kalem basina karb vermiyor — uydurma');
+    assert.strictEqual(r[0].fat, null);
+    assert.ok(r[0].name.indexOf('3 yumurta') > 0, 'kalemler ada yazilmali');
+  });
+
+  test('cok uzun ogun adi kirpiliyor (gunluk satiri tasmasin)', () => {
+    const g = { dow: 1, ogunler: [{ ad: 'Akşam', kcal: 900, protein: 40,
+      kalemler: Array.from({ length: 12 }, (_, i) => 'uzun yemek adi ' + i) }] };
+    const r = M.nutAiSatirlari(g);
+    assert.ok(r[0].name.length <= 90, 'ad kirpilmadi: ' + r[0].name.length);
   });
 });

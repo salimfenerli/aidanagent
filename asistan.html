@@ -140,7 +140,7 @@
       <div class="active-task-info">
         <div class="active-task-label"><span class="active-task-pulse"></span>ŞU AN ÇALIŞIYORSUN</div>
         <div class="active-task-name" id="activeTaskName">—</div>
-        <div class="active-task-elapsed" id="activeTaskElapsed">⏱ 0 dk</div>
+        <div class="active-task-elapsed" id="activeTaskElapsed">0 dk</div>
       </div>
       <div class="active-task-actions">
         <button onclick="showTab('focus', document.querySelector('[data-tab=focus]'))" title="Odak ekranına geç"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></button>
@@ -544,7 +544,7 @@
     </div>
 
     <div class="settings-row">
-      <label>🗓️ Otomatik gün planı</label>
+      <label>Otomatik gün planı</label>
       <label class="settings-check"><input type="checkbox" id="autoPlanChk" onchange="setAutoPlan(this.checked)"><span>Sabah 08:00'de günümü kendisi planlasın</span></label>
       <label class="settings-check"><input type="checkbox" id="planPingsChk" onchange="setPlanPings(this.checked)"><span>Her blok başlarken bildirim gönder</span></label>
       <label class="settings-check"><input type="checkbox" id="autoShiftChk" onchange="setAutoShift(this.checked)"><span>Plan bozulunca kendisi toparlasın</span></label>
@@ -559,7 +559,7 @@
     </div>
 
     <div class="settings-row">
-      <label>💪 Hevy bağlantısı</label>
+      <label>Hevy bağlantısı</label>
       <div id="hevyStatus" class="hevy-status"></div>
       <div class="hevy-connect">
         <input type="password" id="hevyKeyInput" placeholder="Hevy API anahtarını yapıştır" autocomplete="off" spellcheck="false">
@@ -571,7 +571,7 @@
     </div>
 
     <div class="settings-row">
-      <label>📚 Haftalık sabit program</label>
+      <label>Haftalık sabit program</label>
       <div id="fixedScheduleList"></div>
       <div class="fixedsch-add">
         <input type="text" id="fschLabel" placeholder="örn. Okul" maxlength="40">
@@ -587,7 +587,7 @@
     </div>
 
     <div class="settings-row">
-      <label>⏰ Sabit hatırlatıcılar</label>
+      <label>Sabit hatırlatıcılar</label>
       <div id="fixedRemindersList"></div>
       <div class="fixedrem-add">
         <input type="text" id="fixedRemLabel" placeholder="örn. İlacını al" maxlength="60">
@@ -602,7 +602,7 @@
     </div>
 
     <div class="settings-row">
-      <label>⏳ Geri sayımlar (sınav / teslim)</label>
+      <label>Geri sayımlar (sınav / teslim)</label>
       <div id="countdownManageList"></div>
       <div class="countdown-add">
         <input type="text" id="countdownLabel" placeholder="örn. Tarih sınavı" maxlength="60">

@@ -10,57 +10,88 @@ Design priority: **calm, scannable, number-forward**. Never decorative.
 
 Dark only. There is no light mode.
 
-The background is **warm charcoal, not blue-black**. This is deliberate — the previous
-blue-black + amber combination read as "generic dev tool / crypto dashboard" and was replaced.
+The palette is **v11 MONOKROM** (styles.css, last `:root` — five exist, the last one wins).
+The accent **carries no hue**: it is light grey. That is the whole idea — if the action colour
+is neutral, the entire colour scale is left over for *meaning*: green = good, amber = careful,
+red = bad. The earlier warm-charcoal + terracotta layer (v10 GECE) was deleted on 20 Aug 2026;
+it defined the same 35 tokens v11 redefines, so it shipped to every user and painted nothing.
 
 ## Color tokens
 
-Use these exact values. Do not substitute, tint, or "improve" them.
+Read the values from the last `:root` in `styles.css` — that file is the source of truth.
+Never write a hex literal in JavaScript. `25-gorsel-dil.test.js` fails the build if you do.
 
 ### Surfaces
 | Token | Hex | Use |
 |---|---|---|
-| `--bg` | `#121211` | Page background |
-| `--surface` | `#1e1c1a` | Cards, sheets |
-| `--surface-raised` | `#24211d` | Elevated / selected rows |
-| `--surface-input` | `#2c2823` | Input fields, wells |
-| `--border` | `#3a352e` | All 1px borders |
+| `--bg` | `#0a0a0a` | Page background |
+| `--bg-elev` | `#0e0e0e` | Folded sections, subtle wells |
+| `--surface` | `#131313` | Cards, sheets |
+| `--surface-mid` | `#1c1b1b` | Elevated / selected rows, auth panels |
+| `--surface-high` | `#20201f` | Input fields |
+| `--border` | `#333333` | All 1px borders |
 
 ### Action
 | Token | Hex | Use |
 |---|---|---|
-| `--accent` | `#e08a63` | Terracotta. Primary buttons, selected state, active tab |
-| `--accent-hover` | `#eda07c` | Hover only |
-| `--on-accent` | `#2a1408` | Text/icons **on** accent fills — dark, **never white** |
+| `--accent` | `#e2e2e2` | Primary buttons, selected state, active tab |
+| `--accent-hover` | `#f4f4f4` | Hover only |
+| `--accent-soft` | `rgba(226,226,226,0.10)` | Tinted badge / chip background |
+| `--on-accent` | `#2f3131` | Text/icons **on** accent fills — dark, **never white** |
 
-Accent is reserved for **action, selection, and state**. It is never used for decoration,
-never for large fills, never for headings.
+Accent is reserved for **action, selection, and state**. Never decoration, never large fills,
+never headings.
 
 ### Semantic
 | Token | Hex | Meaning |
 |---|---|---|
 | `--warning` | `#e0a83c` | Warning / caution only |
 | `--success` | `#5cbf7a` | Positive |
-| `--danger` | `#ea5a52` | Destructive, error |
+| `--danger` | `#ff4444` | Destructive, error |
 | `--info` | `#6fa8e8` | Neutral information |
 
+Each has a `-soft` rgba twin (`--danger-soft`, …) for tinted badge backgrounds. Use the twin —
+a filled semantic block with light text is the pattern the auth screen used, and it was wrong.
+
 > **Hard rule: one colour carries one meaning.**
-> Action (`#e08a63`) and warning (`#e0a83c`) used to be the *same* hex. "Press me" and
-> "be careful" were visually indistinguishable, and the user had to learn one colour with two
-> meanings. They are now separate and must stay separate.
+> Action and warning were once the *same* hex; "press me" and "be careful" were indistinguishable.
+> They are separate and must stay separate. The test asserts the macro series never collides
+> with a semantic value either.
+
+### Data series (macro chart only)
+| Token | Hex | Use |
+|---|---|---|
+| `--macro-pro` | `#6fa8e8` | Protein |
+| `--macro-carb` | `#a78bda` | Carbohydrate |
+| `--macro-fat` | `#e0726e` | Fat |
+| `--macro-other` | `#3a3a3a` | Unlogged / fibre remainder |
+
+These are the **only** hues allowed outside the semantic set, and only in the macro donut/bars.
+Carbohydrate was the retired amber `#f5a524` until 20 Aug 2026 — a chart slice must not be
+confusable with a warning.
 
 ### Text
 | Token | Hex | Use |
 |---|---|---|
-| `--text-strong` | `#f5f3ee` | Headings, key numbers |
-| `--text` | `#e5e1d9` | Body |
-| `--text-muted` | `#9a9389` | Labels, units, secondary |
-| `--text-faint` | `#857e74` | Timestamps, hints |
+| `--text-strong` | `#f4f4f4` | Headings, key numbers |
+| `--text` | `#e5e2e1` | Body |
+| `--text-muted` | `#a0a0a0` | Labels, units, secondary |
+| `--text-faint` | `#8e9192` | Timestamps, hints |
 
-Pure `#000` and `#fff` are never used. Every colour is slightly warmed.
-Minimum contrast: WCAG AA — 4.5:1 body, 3:1 large text. Never grey text on a coloured fill.
+Pure `#000` and `#fff` are never used. Minimum contrast: WCAG AA — 4.5:1 body, 3:1 large text.
+Never light text on a coloured fill.
 
----
+### Colour in JavaScript
+
+JS names a *meaning*, CSS owns the *value*.
+
+- DOM inline style → `var(--token)` directly.
+- SVG presentation attribute (`stroke="…"`, `stop-color="…"`) → `cssVar('--success', '#5cbf7a')`;
+  `var()` is not reliable there. This is the only place a hex literal may appear, and it must
+  equal the token.
+- Status messages → a tone name, not a colour: `showSupaStatus(msg, 'hata' | 'uyari' | 'ok' |
+  'bilgi' | 'sus')`. The mapping lives once, in `SB_TONE`.
+
 
 ## Typography
 
@@ -108,7 +139,11 @@ These are not preferences. Output containing any of them is rejected.
 3. No glassmorphism, no `backdrop-filter: blur`, no frosted panels.
 4. No glow, no drop-shadow used as decoration, no gradient text.
 5. No custom scrollbars, no reinvented form controls.
-6. No emoji in the UI. Use line icons (Lucide/Tabler style, 1.5–2px stroke).
+6. No emoji in the UI. Use line icons (Lucide/Tabler style, 1.5–2px stroke) via
+   `icon('saat'|'sure'|'kum')` — the registry is `ICON_PATHS` in `core.js`. In a text
+   channel (`textContent`, `escapeHtml`) an icon cannot be injected, so the emoji is
+   dropped, not replaced. Two exceptions: ⚠️ on a safety note, and the emoji section
+   markers inside AI prompt strings — those go to the model, not the screen.
 7. Do not reach for a modal first — prefer inline / progressive disclosure.
 8. No ghost cards: a 1px border and a ≥16px shadow never appear on the same element.
 9. Fonts: no Inter, no Roboto, no Arial, no system-default stack.

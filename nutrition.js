@@ -564,8 +564,10 @@ const NUT_TEMPLATES = {
   // ⚠️ Capa PROTEIN YOGUN olmali. Kefir (6 g/bardak) capa yapilinca motor
   // hedefi tutturmak icin "4 bardak kefir" yaziyordu — teknik olarak dogru,
   // pratikte sacma. Capa g/porsiyon degeri yuksek olandan secilir.
+  // ⚠️ EK BOS BIRAKILMAZ (20 Agu 2026). Yag capasi kirpilinca geriye
+  // "yogurt + muz" kaliyordu: iki kalem, ogun gibi durmuyor.
   atistirma: [
-    { protein: 'Süzme yoğurt', carb: 'Muz', yag: 'Badem', ek: [] },
+    { protein: 'Süzme yoğurt', carb: 'Muz', yag: 'Badem', ek: ['Bal'] },
     { protein: 'Protein tozu', carb: 'Elma', yag: 'Fındık', ek: ['Süt'] },
   ],
 };
@@ -720,11 +722,21 @@ function nutBalanceDay(meals, t, kg) {
   const adimi = (u) => (/adet|dilim|kase|bardak|kutu|kaşık|ölçek|olcek|avuç|yarım|yarim/i.test(String(u)) ? 1 : 0.5);
 
   const toplamP = () => meals.reduce((a, m) => a + m.protein, 0);
+  // SERT TAVAN — guvenlik siniri, asla asilmaz.
   const proteinTavan = kg > 0
     ? Math.max(t.protein, Math.round(kg * NUT_LIMITS.proteinMaxPerKg))
     : Math.round(t.protein * 1.25);
+  // ⚠️ YUMUSAK BANT (20 Agu 2026). Kirpma adimlari hedefe degil TAVANA
+  // bakiyordu; sonuc her profilde ayniydi: plan tavana YAPISIYORDU
+  // (2.3-2.5 g/kg) ve kullaniciya "hedef 126 g" yazip 174 g veren bir gun
+  // gosteriliyordu. Tavan asilmadigi icin motor bunu sorun saymiyordu.
+  // Artik kirpma hedefin %10 ustunu amaclar; tavan yalnizca kirmizi cizgi.
+  // Tabak kurallari (ana ogunde capa kalir, ogun 8 g altina inmez, son
+  // protein kaynagi silinmez, tabak 3 kalemin altina inmez) bandin ONUNDE
+  // gelir — bant tutmuyorsa motor zorlamaz, gercek degeri yazar.
+  const proteinBant = Math.min(proteinTavan, Math.round(t.protein * 1.10));
   for (let tur = 0; tur < 20; tur++) {
-    if (toplamP() <= proteinTavan) break;
+    if (toplamP() <= proteinBant) break;
     // Capanin inebilecegi taban ogun kurulurken belirlendi (ana ogun mu,
     // ekler proteini karsiliyor mu). Denge adimi bunu EZEMEZ.
     const dip = (m) => (m.dipP == null ? 0 : m.dipP);
@@ -746,11 +758,19 @@ function nutBalanceDay(meals, t, kg) {
   // SON protein kaynagi asla cikarilmaz.
   const ekleriKirp = () => {
     for (let tur = 0; tur < 12; tur++) {
-      if (toplamP() <= proteinTavan) break;
+      if (toplamP() <= proteinBant) break;
+      const sert = toplamP() > proteinTavan;
       let hedefOgun = null, hedefEk = null;
       for (const m of meals.slice().sort((a, b) => b.protein - a.protein)) {
         const proteinliler = (m.items || []).filter(x => x.adet > 0 && x.p >= 4);
         if (proteinliler.length <= 1) continue;           // son kaynak kalsin
+        // ⚠️ TABAK 3 KALEMIN ALTINA INMEZ (20 Agu 2026). Kirpma makro
+        // matematigini duzeltirken ortaya "2 kase yogurt + 1 muz" gibi
+        // ogunler cikiyordu: sayilar tutuyor ama tabak yemek gibi durmuyor.
+        // ⚠️ AMA SERT TAVAN BU KURALIN USTUNDEDIR. Hafif profilde (45-55 kg)
+        // sabit ekler tek baslarina 2.5 g/kg'i asabiliyor; orada guvenlik
+        // siniri tabak estetiginden once gelir.
+        if (!sert && (m.items || []).filter(x => x.adet > 0).length <= 3) continue;
         const ek = proteinliler.filter(x => x.rol === 'ek').sort((a, b) => b.p - a.p)[0];
         if (ek) { hedefOgun = m; hedefEk = ek; break; }
       }
@@ -765,18 +785,31 @@ function nutBalanceDay(meals, t, kg) {
       // profilde (45 kg) 5 ogunun her birine tam capa koymak tavani
       // yapisal olarak asiyor. Gercek sinir: ogun 8 g proteinin altina
       // DUSMESIN. Ana ogun capasi bu adimda da korunur.
-      let kucultuldu = false;
-      for (const m of meals.slice().sort((a, b) => b.protein - a.protein)) {
-        if (m.ana) continue;
-        const c = capa(m, 'p');
-        if (!c || c.adet <= 0) continue;
-        const adim = adimi(c.u);
-        const yeni = c.adet - adim <= 0 ? 0 : nutRound(c.adet - adim, c.u);
-        if (m.protein - (c.adet - yeni) * c.p < 8) continue;   // ogun proteinsiz kalmasin
-        c.adet = yeni;
-        m.items = m.items.filter(x => x.adet > 0);
-        yenile(m); kucultuldu = true; break;
-      }
+      // ⚠️ IKI GECIS (20 Agu 2026). Once TABAK KURALLARINA saygili dene;
+      // hicbir aday bulunamazsa ve SERT TAVAN hala asiliyorsa, kurallari
+      // gevseterek ikinci gecisi yap. Tek gecisli "sert ise kurallari bos
+      // ver" hali, kirpilecek baska yer VARKEN bile ara ogunun protein
+      // kaynagini siliyordu — "1 simit + 1 elma" oradan cikiyordu.
+      const kucult = (kurallara) => {
+        for (const m of meals.slice().sort((a, b) => b.protein - a.protein)) {
+          if (m.ana) continue;
+          const c = capa(m, 'p');
+          if (!c || c.adet <= 0) continue;
+          const adim = adimi(c.u);
+          const yeni = c.adet - adim <= 0 ? 0 : nutRound(c.adet - adim, c.u);
+          if (m.protein - (c.adet - yeni) * c.p < 8) continue;   // ogun proteinsiz kalmasin
+          if (yeni === 0 && kurallara) {
+            const kalan = (m.items || []).filter(x => x.adet > 0 && x !== c);
+            if (kalan.length < 3) continue;                      // tabak 3 kalemin altina inmez
+            if (!kalan.some(x => x.p >= 10)) continue;           // gercek protein kaynagi kalsin
+          }
+          c.adet = yeni;
+          m.items = m.items.filter(x => x.adet > 0);
+          yenile(m); return true;
+        }
+        return false;
+      };
+      const kucultuldu = kucult(true) || (sert && kucult(false));
       if (!kucultuldu) break;
     }
   };
@@ -792,6 +825,12 @@ function nutBalanceDay(meals, t, kg) {
   // sismez.
   const toplamK = () => meals.reduce((a, m) => a + m.kcal, 0);
   const TAVAN = { c: 3, y: 3 };
+  // ⚠️ SIRALAMA: KALORI once, protein bandi sonra (20 Agu 2026).
+  // Yumusak bant doldurma adimlarini da kilitleyince gun %11 eksik
+  // kaliyordu — 16 yasinda, gunde 6 gun antrenmanda asil risk AZ YEMEK.
+  // Kural: gun kalorisi hedefin %95'inin altindayken protein kapisi SERT
+  // TAVAN'dir; kalori banda girdikten sonra yumusak bant devreye doner.
+  const pKapi = () => (toplamK() < t.kcal * 0.95 ? proteinTavan : proteinBant);
   for (let tur = 0; tur < 40; tur++) {
     const acik = t.kcal - toplamK();
     if (acik <= t.kcal * 0.05) break;
@@ -810,7 +849,7 @@ function nutBalanceDay(meals, t, kg) {
         // kaynaklari protein tasir (bulgur 5 g, pilav 4 g/porsiyon); kalori
         // acigini karbonhidratla kapatirken protein geri sisiyordu ve
         // kirpma adiminin isini bozuyordu. Asacaksa yag kaldiracina gec.
-        if (toplamP() + adimi(c.u) * c.p > proteinTavan) continue;
+        if (toplamP() + adimi(c.u) * c.p > pKapi()) continue;
         c.adet = nutRound(c.adet + adimi(c.u), c.u);
         yenile(m); yapildi = true; break;
       }
@@ -856,23 +895,65 @@ function nutBalanceDay(meals, t, kg) {
   // yaninda 250 kcal'lik ogun, ogun basi protein bandini da bozar.
   // Bu adim, toplami tavanin altinda tutarak hedefinin %20'sinden fazla
   // gerisinde kalan ogunleri doldurur.
-  for (let tur = 0; tur < 40; tur++) {
+  for (let tur = 0; tur < 60; tur++) {
     const tavan = t.kcal * 1.05;
     const geri = meals.filter(m => m.hedef && m.kcal < m.hedef.kcal * 0.8)
       .sort((a, b) => (a.kcal / a.hedef.kcal) - (b.kcal / b.hedef.kcal))[0];
     if (!geri) break;
     const yagDolu2 = meals.reduce((a, m) => a + m.fat, 0) >= t.fat;
     let yapildi = false;
-    for (const rol of (yagDolu2 ? ['c'] : ['c', 'y'])) {
-      const c = capa(geri, rol);
-      if (!c || c.adet >= TAVAN[rol]) continue;
+    // ⚠️ EK DE BIR KALDIRACTIR (20 Agu 2026). Capalar tavana dayaninca adim
+    // duruyordu ve kahvalti hedefinin %47'sinde kaliyordu. Ekler (peynir,
+    // zeytin, ayran) 1 porsiyonda sabitti; 2'ye cikmalari hem gercekci hem
+    // de tabagi buyutmenin en dogal yolu. Tavan 2 — "3 dilim peynir" degil.
+    // ⚠️ YAG KAPISI OGUN BAZLI (20 Agu 2026). "Gun yagi doldu" kurali
+    // dogruydu ama fazla genisti: protein kirpma adimi yag TASIYAN ekleri
+    // (peynir, ayran) cikardigi icin o ogun hem kalorisiz hem yagsiz
+    // kaliyor, gun yagi baska ogunlerde dolu oldugu icin de kapanmiyordu.
+    // Bu ogunun KENDI yag hedefi altindaysa yag capasi acilir.
+    const ogunYagAcik = geri.hedef && geri.fat < (geri.hedef.fat || 0) * 0.8;
+    const roller = (yagDolu2 && !ogunYagAcik) ? ['c'] : ['c', 'y'];
+    const adaylar = roller.map(r => capa(geri, r))
+      .concat((geri.items || []).filter(x => x.rol === 'ek' && x.adet > 0 && x.adet < 2));
+    // ⚠️ COK GERIDE KALAN OGUNDE KARBONHIDRAT TAVANI 4 (20 Agu 2026).
+    // Kahvalti hedefinin %57'sinde kaliyordu: capa tavana dayanmis, yag
+    // capasi gun yagi dolu diye kapali, ekler 25 kcal'lik kaldiraclar.
+    // "4 dilim ekmek" kahvaltida gercekci; gun tavani zaten ustte duruyor.
+    const cokGeri = geri.kcal < geri.hedef.kcal * 0.7;
+    for (const c of adaylar) {
+      if (!c) continue;
+      const tav = (c.rol === 'c' && cokGeri) ? 4 : TAVAN[c.rol];
+      if (c.rol !== 'ek' && c.adet >= tav) continue;
       const artis = adimi(c.u) * c.k;
       if (toplamK() + artis > tavan) continue;
-      if (toplamP() + adimi(c.u) * c.p > proteinTavan) continue;
+      // ⚠️ BU ADIMDA CAPA KAPISI SERT TAVAN (20 Agu 2026). Yumusak bant
+      // burada dagilimi kilitliyordu: hafif profilde gun proteini zaten
+      // bandin ustunde oldugu icin kahvaltiya bir dilim ekmek bile
+      // eklenemiyor, ogun hedefinin %57'sinde kaliyordu. Bu adim gun
+      // toplamini +%5 tavaninin ustune cikaramaz; kilitlenmesi gereken
+      // yer burasi degil. Ek kaldiraci protein tasidigi icin banda bagli.
+      const kapi = c.rol === 'ek' ? proteinBant : proteinTavan;
+      if (toplamP() + adimi(c.u) * c.p > kapi) continue;
       c.adet = nutRound(c.adet + adimi(c.u), c.u);
       yenile(geri); yapildi = true; break;
     }
-    if (!yapildi) break;
+    // ⚠️ Gun tavani doluysa sorun EKSIK degil DAGILIMDIR: hedefinin en
+    // ustundeki ogunden bir adim al, geri kalan ogune ver. Toplam sabit
+    // kalir, dagilim duzelir. Protein capasina dokunulmaz.
+    if (!yapildi) {
+      const fazla = meals.slice()
+        .filter(m => m.hedef && m !== geri && m.kcal > m.hedef.kcal)
+        .sort((a, b) => (b.kcal / b.hedef.kcal) - (a.kcal / a.hedef.kcal))[0];
+      if (!fazla) break;
+      const ver = ['c', 'y'].map(r => capa(fazla, r))
+        .find(c => c && c.adet > (c.rol === 'c' ? (adimi(c.u) === 1 ? 1 : 0.5) : 0));
+      if (!ver) break;
+      const yeniAdet = ver.adet - adimi(ver.u);
+      const dipV = ver.rol === 'c' ? (adimi(ver.u) === 1 ? 1 : 0.5) : 0;
+      ver.adet = yeniAdet <= dipV ? dipV : nutRound(yeniAdet, ver.u);
+      yenile(fazla);
+      continue;
+    }
   }
   // ⚠️ DORDUNCU ADIM: YAG TAMAMLAMA (18 Agu 2026).
   // Kalori bandi tutunca dongu duruyor, ama protein kirpma adimi protein
@@ -911,7 +992,7 @@ function nutBalanceDay(meals, t, kg) {
         .find(m => {
           const c = capa(m, rol);
           if (!c || c.adet >= 4) return false;
-          return toplamP() + adimi(c.u) * c.p <= proteinTavan;
+          return toplamP() + adimi(c.u) * c.p <= pKapi();
         });
       if (!aday) continue;
       const c = capa(aday, rol);
@@ -1109,6 +1190,7 @@ function renderNutrition() {
     '</details>' +
 
     '<div class="nut-sample-head">Örnek gün · ' + ogunler.length + ' öğün ' +
+    '<button class="nut-mini" onclick="nutOrnekPlana()">Plana aktar</button>' +
     '<button class="nut-mini" onclick="nutNextTemplate()">Başka öner</button></div>' +
     '<div class="nut-meals">' + ogunHtml + '</div>' +
     // ⚠️ SAPMA GIZLENMEZ: sablon tabanli bir plan hedefi tam tutturamaz.
@@ -1167,6 +1249,144 @@ function renderNutrition() {
 // hedefin %15 altinda kalan tek bir gun bile varsa PLANIN TAMAMI reddedilir
 // ve HIC kaydedilmez — sebebi kullaniciya yazilir. Bu kapi promptun degil
 // kodun icinde oldugu icin modelin ne dedigine bagli degildir.
+
+// ============================================================================
+// PROGRAM -> GUNLUK (20 Agu 2026)
+//
+// 🔴 SORUN: uc ayri plan yuzeyi vardi ve ikisi OLU idi.
+//   1) kural motorunun "ornek gun"u   — yalniz GOSTERILIYORDU
+//   2) AI'in yazdigi haftalik program — yalniz GOSTERILIYORDU
+//   3) "plan" listesi                 — 'yedim' ile gunluge kcal+makro YAZAN
+//                                       tek yer
+// Yani Aidan aylardir dogru bir program uretiyordu ve kullanici ayni yemekleri
+// gunluge ELLE giriyordu. Bu adim 1 ve 2'yi 3'e baglar: program tiklanabilir
+// bir listeye donusur, kalori sayma tek dokunusa iner.
+//
+// ⚠️ Aktarilan satirlar `kaynak: 'aidan'` ile isaretlenir. Yeniden aktarimda
+// YALNIZCA onlar silinir — kullanicinin elle ekledigi yemekler korunur.
+// ⚠️ MEAL_SLOTS'ta 'ara' YOK (kahvalti/ogle/aksam/atistirma). Motorun ara
+// ogunu 'atistirma' kovasina duser; yoksa gunlukte hicbir gruba girmez.
+// ============================================================================
+const NUT_PLAN_ADI = 'Aidan programı';
+
+/** Motorun ornek gununu plan satirlarina cevirir. Saf fonksiyon — test edilir. */
+function nutOrnekSatirlari(ogunler) {
+  const out = [];
+  for (const m of (ogunler || [])) {
+    for (const x of (m.items || [])) {
+      if (!(x.adet > 0)) continue;
+      out.push({
+        slot: m.slot === 'ara' ? 'atistirma' : m.slot,
+        name: nutPortion(x.adet, x.u) + ' ' + x.n,
+        kcal: Math.round(x.adet * x.k),
+        protein: Math.round(x.adet * x.p),
+        carb: Math.round(x.adet * x.c),
+        fat: Math.round(x.adet * x.f),
+      });
+    }
+  }
+  return out;
+}
+
+/** AI ogun adi serbest metin — slot'a cevir. */
+function nutSlotKey(ad) {
+  const s = String(ad || '').toLocaleLowerCase('tr');
+  if (s.indexOf('kahvalt') >= 0 || s.indexOf('sabah') >= 0) return 'kahvalti';
+  if (s.indexOf('öğle') >= 0 || s.indexOf('ogle') >= 0 || s.indexOf('öğlen') >= 0) return 'ogle';
+  if (s.indexOf('akşam') >= 0 || s.indexOf('aksam') >= 0) return 'aksam';
+  return 'atistirma';
+}
+
+/**
+ * AI gununu plan satirlarina cevirir. Saf fonksiyon — test edilir.
+ * ⚠️ Satir = OGUN, kalem degil. AI kalemleri serbest metin yazar ve kalem
+ * basina makro YOKTUR; ogun basina kcal/protein vardir. Kalem basina makro
+ * uydurmak, motorun "sayiyi PWA hesaplar" sozlesmesini bozardi.
+ */
+function nutAiSatirlari(gun) {
+  return ((gun && gun.ogunler) || []).map(o => {
+    const kalem = (o.kalemler || []).join(', ');
+    const ad = (o.ad || 'Öğün') + (kalem ? ' — ' + kalem : '');
+    return {
+      slot: nutSlotKey(o.ad),
+      name: ad.length > 90 ? ad.slice(0, 89) + '…' : ad,
+      kcal: Math.round(Number(o.kcal) || 0) || null,
+      protein: Math.round(Number(o.protein) || 0) || null,
+      carb: null, fat: null,
+    };
+  });
+}
+
+function nutPlanBul() {
+  ensureDiet();
+  const d = data.diet;
+  d.plans = d.plans || [];
+  let p = d.plans.find(x => x.name === NUT_PLAN_ADI);
+  if (!p) {
+    p = { id: Date.now(), name: NUT_PLAN_ADI, weekly: false, meals: emptyPlanMeals() };
+    d.plans.push(p);
+  }
+  d.activePlanId = p.id;
+  return p;
+}
+
+/** Bir kovayi Aidan satirlariyla tazeler; elle eklenenlere DOKUNMAZ. */
+function nutPlanaYaz(p, kova, satirlar) {
+  p.meals[kova] = (p.meals[kova] || []).filter(x => x.kaynak !== 'aidan');
+  let i = 0;
+  for (const s of satirlar) {
+    p.meals[kova].push(Object.assign({ id: Date.now() + (i++), kaynak: 'aidan' }, s));
+  }
+}
+
+function nutOrnekPlana() {
+  const prof = nutProfile();
+  if (!prof) { showToast('Önce boy ve kilonu gir', 'info'); return; }
+  const n = ensureNutrition();
+  const tip = nutDayType(new Date().getDay(), (typeof data !== 'undefined' ? data.program : null));
+  const t = nutTargets(prof, tip, n.hedef);
+  if (!t) return;
+  const satirlar = nutOrnekSatirlari(nutBuildDay(t, prof.weight, n.sablon));
+  if (!satirlar.length) { showToast('Aktarılacak öğün yok', 'info'); return; }
+  const p = nutPlanBul();
+  const kova = p.weekly ? dayKeyOf(dietKey()) : 'all';
+  const oncesi = JSON.stringify(p.meals[kova] || []);
+  nutPlanaYaz(p, kova, satirlar);
+  save(); renderDiet();
+  const geri = () => { const q = nutPlanBul(); q.meals[kova] = JSON.parse(oncesi); save(); renderDiet(); };
+  const mesaj = satirlar.length + ' kalem plana aktarıldı — “yedim” işaretle, günlüğe yazılsın';
+  if (typeof showUndoToast === 'function') showUndoToast(mesaj, geri);
+  else showToast(mesaj, 'success');
+}
+
+function nutAiPlana() {
+  const n = ensureNutrition();
+  const ai = n && n.ai;
+  if (!ai || !Array.isArray(ai.gunler) || !ai.gunler.length) {
+    showToast('Önce Aidan\'a program yazdır', 'info'); return;
+  }
+  const p = nutPlanBul();
+  const oncesi = JSON.stringify(p.meals);
+  const oncekiWeekly = p.weekly;
+  p.weekly = true;   // AI plani 7 gunluk; haftalik kova olmadan gunler karisir
+  let toplam = 0;
+  for (const g of ai.gunler) {
+    const kova = _DAY_KEYS[Number(g.dow)];
+    if (!kova) continue;
+    const satirlar = nutAiSatirlari(g);
+    nutPlanaYaz(p, kova, satirlar);
+    toplam += satirlar.length;
+  }
+  save(); renderDiet();
+  const geri = () => {
+    const q = nutPlanBul(); q.meals = JSON.parse(oncesi); q.weekly = oncekiWeekly;
+    save(); renderDiet();
+  };
+  const mesaj = toplam + ' öğün haftalık plana aktarıldı — “yedim” işaretle, günlüğe yazılsın';
+  if (typeof showUndoToast === 'function') showUndoToast(mesaj, geri);
+  else showToast(mesaj, 'success');
+}
+
 // ============================================================================
 
 const NUT_AI_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/diet-plan';
@@ -1324,7 +1544,8 @@ function nutAiHtml(n) {
 
   let h = '<div class="nut-ai">' +
     '<div class="nut-sample-head">Sana özel program' +
-    (ai ? '<button class="nut-mini" onclick="nutAiClear()">Sil</button>' : '') +
+    (ai ? '<button class="nut-mini" onclick="nutAiPlana()">Plana aktar</button>' +
+          '<button class="nut-mini" onclick="nutAiClear()">Sil</button>' : '') +
     '</div>' +
     '<textarea id="nutAiReq" class="nut-ai-req" rows="2" maxlength="' + NUT_AI_REQ_MAX + '" ' +
     'placeholder="Sevmediklerin, bütçen, okul saatlerin, yemek yapabilme durumun…">' +
@@ -1370,4 +1591,204 @@ function nutAiHtml(n) {
   }
 
   return h + '</div>';
+}
+
+// ============================================================================
+// DIYET KARNESI (ui.js'ten tasindi, 20 Agu 2026)
+// Yalniz Diyet sekmesinden acilir; o sekme bu dosyayi zaten bekliyor.
+// hcWeightTrend / hcEnergyCheck ui.js'te (statik) — burada guvenle cagrilir.
+// ============================================================================
+let _dietKarnePeriod = 'week'; // 'week' | 'month'
+const DKRN_WD = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+
+function dietKarneStats(period) {
+  ensureDiet();
+  const days = data.diet.days || {};
+  const span = period === 'month' ? 30 : 7;
+  const t = today();
+  const isos = [];
+  for (let i = span - 1; i >= 0; i--) isos.push(shiftDateStr(t, -i));
+  const goal = data.diet.kcalGoal || 2000;
+  const wGoal = data.diet.waterGoalL || 2.5;
+  let loggedDays = 0, kcalSum = 0, kcalDays = 0;
+  let pSum = 0, cSum = 0, fSum = 0, macroDays = 0;
+  let waterSum = 0, waterDays = 0, underGoal = 0, overGoal = 0;
+  // ⚠️ 20 Agu 2026 — "hedefin ALTINDA kalmak" basari degil (bkz. asagidaki
+  // not). Bant sayaclari: hedefin ±%10'u TUTTURMAK, %90 alti EKSIK.
+  let bantta = 0, eksik = 0, fazla = 0;
+  const pGoal = data.diet.proteinGoal || 0;
+  let proteinDays = 0, proteinHit = 0;
+  // Hangi ogun en cok atlaniyor? Kayit tutulan gunlerde bakilir — hic kayit
+  // olmayan gun "ogun atlandi" demek degil, "gun loglanmadi" demektir.
+  const slotMiss = { kahvalti: 0, ogle: 0, aksam: 0, atistirma: 0 };
+  const daily = [];
+  isos.forEach(iso => {
+    const day = days[iso];
+    const meals = (day && day.meals) ? day.meals : [];
+    const logged = meals.length > 0;
+    const kcal = meals.reduce((sm, m) => sm + (Number(m.kcal) || 0), 0);
+    let p = 0, c = 0, f = 0;
+    meals.forEach(m => { p += Number(m.protein) || 0; c += Number(m.carb) || 0; f += Number(m.fat) || 0; });
+    const waterL = day ? (Number(day.waterL) || 0) : 0;
+    if (logged) {
+      loggedDays++;
+      if (kcal > 0) {
+        kcalSum += kcal; kcalDays++;
+        if (kcal <= goal) underGoal++; else overGoal++;
+        if (kcal < goal * 0.9) eksik++;
+        else if (kcal > goal * 1.1) fazla++;
+        else bantta++;
+      }
+      if (p || c || f) { pSum += p; cSum += c; fSum += f; macroDays++; }
+      if (p > 0) { proteinDays++; if (pGoal && p >= pGoal * 0.9) proteinHit++; }
+      const varSlot = {};
+      meals.forEach(m => { varSlot[m.slot] = true; });
+      Object.keys(slotMiss).forEach(k => { if (!varSlot[k]) slotMiss[k]++; });
+    }
+    if (waterL > 0) { waterSum += waterL; waterDays++; }
+    daily.push({ iso, kcal, logged });
+  });
+  const weights = (data.diet.weights || []).filter(w => w.kg != null && w.date >= isos[0] && w.date <= t).sort((a, b) => a.date < b.date ? -1 : 1);
+  const wFirst = weights[0] || null, wLast = weights[weights.length - 1] || null;
+  const avgKcalV = kcalDays ? Math.round(kcalSum / kcalDays) : 0;
+  // ⚠️ CAPRAZ OKUMA (20 Agu 2026). Karne simdiye kadar YALNIZ loga bakiyordu:
+  // "ortalama 2100 kcal" diyor ama kilo haftada 0.4 kg artiyorsa o log eksik.
+  // Saglik kocunun zaten kullandigi iki fonksiyon burada da calisir — ayni
+  // sayidan iki farkli hikaye anlatmayalim diye YENIDEN HESAPLANMIYOR.
+  let enerji = null;
+  try {
+    if (typeof hcWeightTrend === 'function' && typeof hcEnergyCheck === 'function') {
+      const tr = hcWeightTrend(data.diet.weights || [], isos[0], t);
+      if (tr && tr.slopeKgPerWeek != null && avgKcalV > 0) {
+        enerji = hcEnergyCheck(avgKcalV, tr.slopeKgPerWeek, data.diet.calc);
+        if (enerji) enerji.slope = Math.round(tr.slopeKgPerWeek * 100) / 100;
+      }
+    }
+  } catch (e) { enerji = null; }
+  const kacan = Object.keys(slotMiss).sort((a, b) => slotMiss[b] - slotMiss[a])[0];
+  return {
+    bantta, eksik, fazla, proteinDays, proteinHit, enerji,
+    kacanSlot: (loggedDays >= 3 && slotMiss[kacan] >= 2) ? kacan : null,
+    kacanGun: slotMiss[kacan] || 0,
+    period, span, isos, daily, goal, wGoal, loggedDays,
+    avgKcal: kcalDays ? Math.round(kcalSum / kcalDays) : 0, kcalDays,
+    avgP: macroDays ? Math.round(pSum / macroDays) : 0,
+    avgC: macroDays ? Math.round(cSum / macroDays) : 0,
+    avgF: macroDays ? Math.round(fSum / macroDays) : 0,
+    proteinGoal: data.diet.proteinGoal || 0, carbGoal: data.diet.carbGoal || 0, fatGoal: data.diet.fatGoal || 0,
+    avgWater: waterDays ? Math.round(waterSum / waterDays * 100) / 100 : 0, waterDays,
+    underGoal, overGoal, weights, weightLast: wLast,
+    weightDiff: (wFirst && wLast && wFirst !== wLast) ? +(wLast.kg - wFirst.kg).toFixed(1) : (wLast ? 0 : null),
+  };
+}
+
+function openDietKarne() { _dietKarnePeriod = 'week'; renderDietKarne(); document.getElementById('dietKarneModal').classList.add('active'); }
+function closeDietKarne() { document.getElementById('dietKarneModal').classList.remove('active'); }
+function setDietKarnePeriod(p) { _dietKarnePeriod = p; renderDietKarne(); }
+
+function renderDietKarne() {
+  const el = document.getElementById('dietKarneBody');
+  if (!el) return;
+  const period = _dietKarnePeriod;
+  const isMonth = period === 'month';
+  const s = dietKarneStats(period);
+  const tabs = `
+    <div class="krn-tabs">
+      <button class="krn-tab ${period === 'week' ? 'active' : ''}" onclick="setDietKarnePeriod('week')">Bu hafta</button>
+      <button class="krn-tab ${isMonth ? 'active' : ''}" onclick="setDietKarnePeriod('month')">Bu ay</button>
+    </div>`;
+  if (s.loggedDays === 0) {
+    el.innerHTML = tabs + `<div class="krn-empty">${isMonth ? 'Son 30 günde' : 'Bu hafta'} henüz öğün kaydı yok. Yemek ekleyince karne dolmaya başlar.</div>`;
+    return;
+  }
+  const maxK = Math.max(s.goal, ...s.daily.map(d => d.kcal), 1);
+  const todayIso = today();
+  const bars = s.daily.map(d => {
+    const h = d.kcal ? Math.max(6, Math.round(d.kcal / maxK * 100)) : 2;
+    const over = d.kcal > s.goal;
+    const isToday = d.iso === todayIso;
+    const cls = (!d.logged ? 'empty' : (over ? 'over' : '')) + (isToday ? ' today' : '');
+    const wd = isMonth ? '' : DKRN_WD[new Date(d.iso + 'T12:00:00').getDay()];
+    const val = (!isMonth && d.kcal) ? Math.round(d.kcal) : '';
+    return `<div class="dkrn-bar-col${isMonth ? ' m' : ''}">
+      ${isMonth ? '' : `<div class="krn-bar-val">${val}</div>`}
+      <div class="dkrn-bar ${cls}" style="height:${h}%;" title="${d.iso}: ${Math.round(d.kcal)} kcal"></div>
+      ${isMonth ? '' : `<div class="krn-bar-day ${isToday ? 'today' : ''}">${wd}</div>`}
+    </div>`;
+  }).join('');
+  // ⚠️ ESKI "%adh hedefte" HESABI YANLIS YONDEYDI (20 Agu 2026): hedefin
+  // ALTINDA kalinan gunleri basari sayiyor ve "istikrarli gidiyorsun"
+  // yaziyordu. Bu uygulamanin kendi kurali bunun tersi — 16 yasinda, buyume
+  // doneminde, haftada 6 gun antrenmanda asil risk AZ YEMEK. Artik basari
+  // BANTTA kalmak (hedefin ±%10'u); hedefin altinda gecen gun uyaridir.
+  const adh = s.kcalDays ? Math.round(s.bantta / s.kcalDays * 100) : 0;
+  const proteinPct = s.proteinDays ? Math.round(s.proteinHit / s.proteinDays * 100) : 0;
+  const SLOT_ADI = { kahvalti: 'kahvaltı', ogle: 'öğle', aksam: 'akşam', atistirma: 'ara öğün' };
+  const macroRows = [
+    ['Protein', s.avgP, s.proteinGoal, 'var(--macro-pro)'],
+    ['Karbonhidrat', s.avgC, s.carbGoal, 'var(--macro-carb)'],
+    ['Yağ', s.avgF, s.fatGoal, 'var(--macro-fat)'],
+  ].map(row => {
+    const name = row[0], val = row[1], gl = row[2], col = row[3];
+    const pct = gl ? Math.min(100, Math.round(val / gl * 100)) : 0;
+    return `<div class="krn-cat-row">
+      <span class="krn-cat-lbl">${name}</span>
+      <span class="krn-cat-track"><span class="krn-cat-fill" style="width:${pct}%; background:${col};"></span></span>
+      <span class="krn-cat-num">${val}g</span>
+    </div>`;
+  }).join('');
+  let weightBlock = '';
+  if (s.weightDiff !== null && s.weightLast) {
+    const dir = s.weightDiff > 0 ? 'wt-up' : (s.weightDiff < 0 ? 'wt-down' : '');
+    const sign = s.weightDiff > 0 ? '+' : '';
+    const spark = s.weights.length >= 2 ? sparkline(s.weights.map(w => w.kg)) : '';
+    weightBlock = `<div class="krn-section-lbl">Kilo</div>
+      <div class="dkrn-weight">
+        <div class="dkrn-weight-spark">${spark}</div>
+        <div class="dkrn-weight-meta">${s.weightLast.kg} kg <span class="${dir}">${sign}${s.weightDiff} kg</span></div>
+      </div>`;
+  }
+  // Sira onemli: once KAYDIN GUVENILIRLIGI, sonra icerik. Eksik logdan
+  // uretilen "az yiyorsun" yorumu yanlis yoldur — once log duzelir.
+  let note;
+  if (s.enerji && s.enerji.verdict === 'eksik-log') {
+    note = `Loglanan kalori (<b>${s.avgKcal}</b>) kilo değişiminle uyuşmuyor — ` +
+      `kilo haftada ${s.enerji.slope > 0 ? '+' : ''}${s.enerji.slope} kg. Bazı öğünler girilmemiş olmalı; ` +
+      `ortalamaları olduğundan düşük kabul et.`;
+  } else if (s.kacanSlot) {
+    note = `En çok <b>${SLOT_ADI[s.kacanSlot]}</b> kaydı eksik (${s.kacanGun} gün). ` +
+      `Programı plana aktarıp “yedim” işaretlemek bunu tek dokunuşa indirir.`;
+  } else if (s.eksik >= Math.max(2, Math.round(s.kcalDays * 0.4))) {
+    note = `<b>${s.eksik}</b> gün hedefin %10'undan fazla altında kaldın. ` +
+      `Bu yaşta ve bu antrenman hacminde asıl risk az yemek — öğün atlamamaya bak.`;
+  } else if (adh >= 70 && s.kcalDays >= 3) {
+    note = `Kayıtlı günlerin <b>%${adh}</b>'inde hedef bandındaydın — istikrarlı gidiyorsun.`;
+  } else if (s.proteinDays >= 3 && proteinPct < 50 && s.proteinGoal) {
+    note = `Protein hedefini kayıtlı günlerin sadece <b>%${proteinPct}</b>'inde tutturmuşsun. ` +
+      `Kaloriden önce protein — her öğüne bir kaynak koy.`;
+  } else if (s.loggedDays >= (isMonth ? 20 : 5)) {
+    note = `<b>${s.loggedDays}</b> gün kayıt tuttun — takip etmek işin yarısı.`;
+  } else {
+    note = `Her kayıt bir farkındalık. <b>${s.loggedDays}</b> gün loglamışsın, devam.`;
+  }
+  el.innerHTML = tabs + `
+    <div class="krn-hero">
+      <div class="krn-big">${s.avgKcal}</div>
+      <div class="krn-big-lbl">ortalama günlük kcal<br><span class="krn-cmp-note">hedef ${s.goal} · ${s.kcalDays} gün kayıt</span></div>
+    </div>
+    <div class="dkrn-chart${isMonth ? ' month' : ''}">${bars}</div>
+    <div class="krn-statline">
+      <span class="krn-pill">${s.loggedDays} gün kayıt</span>
+      ${s.kcalDays ? `<span class="krn-pill" title="hedefin ±%10 bandı">%${adh} bantta</span>` : ''}
+      ${s.eksik ? `<span class="krn-pill warn">${s.eksik} gün eksik</span>` : ''}
+      ${(s.proteinDays && s.proteinGoal) ? `<span class="krn-pill" title="protein hedefinin en az %90'ı">%${proteinPct} protein</span>` : ''}
+      ${s.waterDays ? `<span class="krn-pill">~${fmtL(s.avgWater)} L/gün su</span>` : ''}
+    </div>
+    ${s.kacanSlot ? `<div class="krn-statline"><span class="krn-pill warn">en çok atlanan: ${SLOT_ADI[s.kacanSlot]} · ${s.kacanGun} gün</span></div>` : ''}
+    ${s.enerji ? `<div class="krn-section-lbl">Kayıt güvenilirliği</div>
+      <div class="krn-note ${s.enerji.verdict === 'tutarli' ? '' : 'warn'}">${escapeHtml(s.enerji.note)}</div>` : ''}
+    ${macroRows ? `<div class="krn-section-lbl">Ortalama makro (g/gün)</div><div class="krn-cats">${macroRows}</div>` : ''}
+    ${weightBlock}
+    <div class="krn-note">${note}</div>
+  `;
 }

@@ -283,6 +283,18 @@ describe('ilk yukleme butcesi', () => {
       .filter((f) => fs.existsSync(path.join(ROOT, f)))
       .reduce((a, f) => a + gz(f), 0);
     const kb = Math.round(toplam / 1024);
+    // 20 Agu 2026: 215 -> 216. Sebep uretim degil TEMIZLIK: 79 sabit hex
+    // token'a cevrildi ('#ff5555' -> 'hata') ve durum kutulari escapeHtml'den
+    // geciyor. Karsiliginda olu GECE (v10) :root katmani (1.1 KB) silindi ve
+    // satir ici stiller sinifa tasindi; net fark +1.2 KB gzip.
+    // ⚠️ Bu esik AGIR BAGIMLILIK icin var. Yeni bir kutuphane statik eklenip
+    // esik yukseltilerek gecirilmemeli — o durumda tembel yukleme dogru cevap.
+    //
+    // 20 Agu 2026 (ikinci paket): esik 216 -> 215'e GERI dondu. Diyet karnesi
+    // (10.7 KB kaynak) ui.js'ten nutrition.js'e tasindi; karne yalnizca Diyet
+    // sekmesinden acilabiliyor ve o sekme zaten nutrition.js'i bekliyor, yani
+    // kritik yolda durmasinin karsiligi yoktu. Kazanilan yer yeni ozelliklere
+    // harcandi ve esik yine de dusuruldu — dogru yon bu.
     assert.ok(kb <= 215,
       `ilk yukleme ${kb} KB gzip — butce 215 KB. Yeni agir bagimlilik statik eklendi mi?`);
   });

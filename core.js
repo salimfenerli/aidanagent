@@ -36,6 +36,15 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// Tek renk kaynagi styles.css. SVG sunum ozniteliginde var() guvenilir degil,
+// oraya gercek deger yazilir; inline style'da dogrudan var(--token) gecer.
+function cssVar(name, fallback) {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  } catch (e) { return fallback; }
+}
+
 // Kullanici talimatlari — Ayarlar > Talimatlar. TUM prose ureten AI cagrilarina
 // eklenir; worker sistem promptunun sonuna koyar. ⚠️ Guvenlik kurallarini EZEMEZ
 // (worker tarafinda instructionsBlock icinde acikca yaziyor ve teste bagli).
@@ -1292,6 +1301,15 @@ const DIARY_SLOT_UI = {
   aksam: { ad: 'akşam yemeği', ikon: '<path d="M3 11h18"/><path d="M12 11a9 9 0 0 1 9 9H3a9 9 0 0 1 9-9Z"/><line x1="12" y1="4" x2="12" y2="7"/>' },
   atistirma: { ad: 'atıştırmalık', ikon: '<circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="1"/><circle cx="14" cy="9" r="1"/><circle cx="13" cy="15" r="1"/><circle cx="9" cy="15" r="1"/>' },
 };
+// Renkli emoji tek gorsel dili bozuyordu: bicimi isletim sistemi belirliyor
+// ve monokrom palete disaridan renk siziyordu. HTML uretilen yerde ikon,
+// metin kanalinda (textContent / escapeHtml) sadece kelime kaldi.
+const ICON_PATHS = {
+  saat: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>',
+  sure: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9 2h6"/>',
+  kum: '<path d="M6 2h12M6 22h12"/><path d="M6 2c0 4 6 6 6 10s-6 6-6 10"/><path d="M18 2c0 4-6 6-6 10s6 6 6 10"/>',
+};
+function icon(ad) { return ICON_PATHS[ad] ? dtIcon(ICON_PATHS[ad]) : ''; }
 function dtIcon(d) {
   return `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 }
@@ -2558,9 +2576,9 @@ function renderMacroBars() {
     if (m.protein == null && m.carb == null && m.fat == null) noMacroKcal += Number(m.kcal) || 0;
   });
   const rows = [
-    ['Protein', Math.round(p), d.proteinGoal || 0, '#5aa2ff'],
-    ['Karbonhidrat', Math.round(c), d.carbGoal || 0, '#f5a524'],
-    ['Yağ', Math.round(f), d.fatGoal || 0, '#e0726e'],
+    ['Protein', Math.round(p), d.proteinGoal || 0, 'var(--macro-pro)'],
+    ['Karbonhidrat', Math.round(c), d.carbGoal || 0, 'var(--macro-carb)'],
+    ['Yağ', Math.round(f), d.fatGoal || 0, 'var(--macro-fat)'],
   ];
   const el = document.getElementById('macroBars');
   if (!el) return;
@@ -2614,23 +2632,23 @@ function renderMacroDonut() {
   const total = eatenK > 0 ? eatenK : macroK;
   const other = Math.max(0, total - macroK);
   const segs = [
-    { val: kP, color: '#5aa2ff' },
-    { val: kC, color: '#f5a524' },
-    { val: kF, color: '#e0726e' },
-    { val: other, color: '#3a3d46' },
+    { val: kP, color: 'var(--macro-pro)' },
+    { val: kC, color: 'var(--macro-carb)' },
+    { val: kF, color: 'var(--macro-fat)' },
+    { val: other, color: 'var(--macro-other)' },
   ].filter(x => x.val > 0);
   const pc = v => macroK ? Math.round(v / macroK * 100) : 0;
   const rem = (goal, val) => { const r = (goal || 0) - val; return r >= 0 ? r + 'g kaldı' : (-r) + 'g fazla'; };
   const donut = (typeof donutChart === 'function') ? donutChart(segs, 104) : '';
   const otherRow = other > 0
-    ? `<div class="mdl-row"><span class="mdl-dot" style="background:#3a3d46"></span><span class="mdl-name">Diğer</span><span class="mdl-pct">${other} kcal</span><span class="mdl-rem">lif/makrosuz</span></div>`
+    ? `<div class="mdl-row"><span class="mdl-dot" style="background:var(--macro-other)"></span><span class="mdl-name">Diğer</span><span class="mdl-pct">${other} kcal</span><span class="mdl-rem">lif/makrosuz</span></div>`
     : '';
   host.innerHTML =
     `<div class="macro-donut-svg">${donut}<div class="macro-donut-center"><span class="mdc-num">${total}</span><span class="mdc-lbl">kcal</span></div></div>` +
     `<div class="macro-donut-legend">` +
-      `<div class="mdl-row"><span class="mdl-dot" style="background:#5aa2ff"></span><span class="mdl-name">Protein</span><span class="mdl-pct">%${pc(kP)}</span><span class="mdl-rem">${rem(d.proteinGoal, p)}</span></div>` +
-      `<div class="mdl-row"><span class="mdl-dot" style="background:#f5a524"></span><span class="mdl-name">Karb</span><span class="mdl-pct">%${pc(kC)}</span><span class="mdl-rem">${rem(d.carbGoal, c)}</span></div>` +
-      `<div class="mdl-row"><span class="mdl-dot" style="background:#e0726e"></span><span class="mdl-name">Yağ</span><span class="mdl-pct">%${pc(kF)}</span><span class="mdl-rem">${rem(d.fatGoal, f)}</span></div>` +
+      `<div class="mdl-row"><span class="mdl-dot" style="background:var(--macro-pro)"></span><span class="mdl-name">Protein</span><span class="mdl-pct">%${pc(kP)}</span><span class="mdl-rem">${rem(d.proteinGoal, p)}</span></div>` +
+      `<div class="mdl-row"><span class="mdl-dot" style="background:var(--macro-carb)"></span><span class="mdl-name">Karb</span><span class="mdl-pct">%${pc(kC)}</span><span class="mdl-rem">${rem(d.carbGoal, c)}</span></div>` +
+      `<div class="mdl-row"><span class="mdl-dot" style="background:var(--macro-fat)"></span><span class="mdl-name">Yağ</span><span class="mdl-pct">%${pc(kF)}</span><span class="mdl-rem">${rem(d.fatGoal, f)}</span></div>` +
       otherRow +
     `</div>`;
 }
@@ -2694,7 +2712,7 @@ function lineChart(values, isDown) {
   const line = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
   const area = line + ` L${pts[pts.length-1][0].toFixed(1)},${(h-padY).toFixed(1)} L${pts[0][0].toFixed(1)},${(h-padY).toFixed(1)} Z`;
   const up = values[values.length - 1] >= values[0];
-  const color = up ? '#34c759' : '#ef4444';
+  const color = up ? cssVar('--success', '#5cbf7a') : cssVar('--danger', '#ff4444');
   const fillId = 'lc-fill-' + (up ? 'u' : 'd');
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
     <defs><linearGradient id="${fillId}" x1="0" x2="0" y1="0" y2="1">
@@ -2718,7 +2736,7 @@ function sparkline(values) {
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
   const up = values[values.length - 1] >= values[0];
-  const color = up ? '#34c759' : '#ef4444';
+  const color = up ? cssVar('--success', '#5cbf7a') : cssVar('--danger', '#ff4444');
   return `<svg class="pf-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
 

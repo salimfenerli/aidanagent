@@ -16,7 +16,7 @@ function renderFocusPick() {
     ((t.due && t.due <= td) ? 50 : 0) + (t.reminderTime ? 10 : 0);
   active.sort((a, b) => score(b) - score(a));
   if (!active.length) {
-    el.innerHTML = '<div class="focuspick-empty">Bitmemiş görev yok <br>Serbest çalışmak için kapat, ▶️ Başla\'ya bas.</div>';
+    el.innerHTML = '<div class="focuspick-empty">Bitmemiş görev yok <br>Serbest çalışmak için kapat, Başla\'ya bas.</div>';
     return;
   }
   const catE = { odev: '', ders: '', ev: '', kisisel: '' };
@@ -44,7 +44,7 @@ function bindFocusTask(id) {
   }
   updateActiveTaskBanner();
   closeFocusPick();
-  showToast('Odak görevin hazır — ▶️ Başla', 'success', 2500);
+  showToast('Odak görevin hazır — Başla', 'success', 2500);
 }
 
 // ============ FİLTRE ============
@@ -279,7 +279,7 @@ function suggestTask(energy = _currentEnergy) {
   const buckets = [
     { reason: 'Bugünün 3\'ünden', tasks: pool.filter(t => t.mitDate === todayStr) },
     { reason: 'Acil görevin var', tasks: pool.filter(t => t.priority === 'urgent' && t.mitDate !== todayStr) },
-    { reason: '⏰ Bunu geçirme — son gün bugün', tasks: pool.filter(t => t.due === todayStr && t.priority !== 'urgent' && t.mitDate !== todayStr) },
+    { reason: 'Bunu geçirme — son gün bugün', tasks: pool.filter(t => t.due === todayStr && t.priority !== 'urgent' && t.mitDate !== todayStr) },
     { reason: 'Bu zaten gecikti', tasks: pool.filter(t => t.due && t.due < todayStr && t.mitDate !== todayStr && t.priority !== 'urgent') },
     { reason: 'Kısa bir şey: bunu yap', tasks: pool.filter(t => t.estimateMin && t.estimateMin <= 15 && !t.mitDate && t.priority !== 'urgent' && (!t.due || t.due > todayStr)) },
     { reason: 'Rastgele bir şey', tasks: pool.filter(t => !t.mitDate && t.priority !== 'urgent' && (!t.due || t.due > todayStr)) }
@@ -328,7 +328,7 @@ function suggestTask(energy = _currentEnergy) {
     const cat = { odev: 'Ödev', ders: 'Özel Ders', ev: 'Ev', kisisel: 'Kişisel' };
     if (cat[selected.category]) meta.push(cat[selected.category]);
   }
-  if (selected.estimateMin) meta.push(`⏱️ ${selected.estimateMin} dk`);
+  if (selected.estimateMin) meta.push(`${selected.estimateMin} dk`);
   if (selected.due === todayStr) meta.push('Bugün son gün');
   else if (selected.due && selected.due < todayStr) meta.push('Gecikti');
 
@@ -415,7 +415,7 @@ async function aiSuggestTask() {
       const cat = { odev: 'Ödev', ders: 'Özel Ders', ev: 'Ev', kisisel: 'Kişisel' };
       if (cat[selected.category]) meta.push(cat[selected.category]);
     }
-    if (selected.estimateMin) meta.push(`⏱️ ${selected.estimateMin} dk`);
+    if (selected.estimateMin) meta.push(`${selected.estimateMin} dk`);
     if (selected.due === todayStr) meta.push('Bugün son gün');
     else if (selected.due && selected.due < todayStr) meta.push('Gecikti');
     document.getElementById('suggestMeta').innerHTML = meta.map(m => `<span class="badge">${escapeHtml(m)}</span>`).join('');
@@ -513,10 +513,10 @@ function renderTaskItem(t) {
         ${t.notes ? `<div class="task-notes">${escapeHtml(t.notes)}</div>` : ''}
         ${(!t.done && (t.postponeCount || 0) >= 3 && !t.nudgeDismissed) ? `<div class="postpone-nudge" onclick="postponeNudge(${t.id})">${t.postponeCount} kez ertelendi · dokun, kolaylaştıralım </div>` : ''}
         <div class="task-meta">
-          ${t.priority === 'urgent' ? '<span class="badge" style="background:#ff5555;color:white;">ACİL</span>' : ''}
+          ${t.priority === 'urgent' ? '<span class="badge danger">ACİL</span>' : ''}
           ${t.category ? `<span class="badge">${({odev:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>',ders:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>',ev:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',kisisel:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'})[t.category]||''}${({odev:'Ödev',ders:'Özel Ders',ev:'Ev',kisisel:'Kişisel'})[t.category] || t.category}</span>` : ''}
           ${due ? `<span class="badge ${due.cls}">${due.text}</span>` : ''}
-          ${t.estimateMin ? `<span class="badge">⏱️ ${t.estimateMin}dk</span>` : ''}
+          ${t.estimateMin ? `<span class="badge">${icon('sure')} ${t.estimateMin}dk</span>` : ''}
           ${t.actualMin ? (() => {
             if (t.estimateMin) {
               const d = t.actualMin - t.estimateMin;
@@ -526,8 +526,8 @@ function renderTaskItem(t) {
             return `<span class="badge">✓ ${t.actualMin}dk sürdü</span>`;
           })() : ''}
           ${t.repeat ? `<span class="badge">${({daily:'Günlük',weekly:'Haftalık',weekdays:'Hafta içi',weekends:'Hafta sonu'})[t.repeat] || t.repeat}</span>` : ''}
-          ${t.reminderTime ? `<span class="badge" style="background:rgba(224,138,99,0.15);color:var(--accent);border-color:rgba(224,138,99,0.3);">${t.reminderTime}</span>` : ''}
-          ${showAge ? `<span class="badge" style="background:rgba(210,153,34,0.12);color:var(--warning);border-color:rgba(210,153,34,0.3);" title="Bu görev ${age} gündür duruyor — bitirebilir misin yoksa silmeli mi?"> ${age}g</span>` : ''}
+          ${t.reminderTime ? `<span class="badge accent">${t.reminderTime}</span>` : ''}
+          ${showAge ? `<span class="badge warn" title="Bu görev ${age} gündür duruyor — bitirebilir misin yoksa silmeli mi?"> ${age}g</span>` : ''}
           ${t.seriesId ? (() => { const sp = seriesProgress(t.seriesId); return `<span class="badge series-badge" title="${escapeHtml(t.seriesName||'Seri')}" onclick="event.stopPropagation(); showSeries('${t.seriesId}')">${escapeHtml((t.seriesName||'Seri').slice(0,18))} ${sp.done}/${sp.total}</span>`; })() : ''}
         </div>
         ${t.subtasks && t.subtasks.length ? `
@@ -578,7 +578,7 @@ function renderTasks() {
     if (sonra.length > 0) {
       html += `
         <details style="margin-top: 14px;">
-          <summary style="cursor:pointer; padding: 10px 14px; background: var(--bg-elev); border-radius: 8px; border: 1px solid var(--border-soft); color: var(--text-muted); font-size: 0.88em; user-select: none;">
+          <summary class="tsk-fold">
             Sonraki günler (${sonra.length})
           </summary>
           <div style="margin-top: 6px;">
@@ -596,7 +596,7 @@ function renderTasks() {
     if (archived.length > 0) {
       html += `
         <details style="margin-top: 14px;">
-          <summary style="cursor:pointer; padding: 10px 14px; background: var(--bg-elev); border-radius: 8px; border: 1px solid var(--border-soft); color: var(--text-muted); font-size: 0.88em; user-select: none;">
+          <summary class="tsk-fold">
             Arşiv · 7+ gün önce bitenler (${archived.length})
           </summary>
           <div style="margin-top: 6px;">
@@ -810,7 +810,7 @@ function renderWeeklyInsight() {
       <span class="wi-stat"><b>${doneLast.length}</b> görev bitti</span>
       ${mitDoneLast ? `<span class="wi-stat"><b>${mitDoneLast}</b> MIT</span>` : ''}
       ${topCat ? `<span class="wi-stat">${catLabels[topCat[0]] || topCat[0]} (${topCat[1]})</span>` : ''}
-      ${overdueCount ? `<span class="wi-stat" style="color:var(--warning,#e5a117);">${overdueCount} gecikmiş bekliyor</span>` : ''}
+      ${overdueCount ? `<span class="wi-stat" style="color:var(--warning);">${overdueCount} gecikmiş bekliyor</span>` : ''}
     </div>
     <div class="wi-note">${note}${compare}</div>
   `;
@@ -1009,143 +1009,21 @@ function bestHourBlock() {
   const bh = bestHourInfo();
   if (!bh.ready) {
     const need = 6 - (bh.total || 0);
-    return `<div class="krn-besthour building">⏰ En verimli saatin: <b>${need} görev daha</b> bitince ortaya çıkar (veri birikiyor).</div>`;
+    return `<div class="krn-besthour building">${icon('saat')} En verimli saatin: <b>${need} görev daha</b> bitince ortaya çıkar (veri birikiyor).</div>`;
   }
   return `<div class="krn-besthour">
-    <div class="krn-besthour-icon">⏰</div>
+    <div class="krn-besthour-icon">${icon('saat')}</div>
     <div class="krn-besthour-txt">En çok <b>${bh.label}</b> arası (${bh.part}) iş bitiriyorsun.<br>
       <span class="krn-besthour-sub">Zor görevleri bu saate koymayı dene.</span></div>
   </div>`;
 }
 
 // ============ DİYET KARNESİ (haftalık / aylık özet) ============
-let _dietKarnePeriod = 'week'; // 'week' | 'month'
-const DKRN_WD = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
-
-function dietKarneStats(period) {
-  ensureDiet();
-  const days = data.diet.days || {};
-  const span = period === 'month' ? 30 : 7;
-  const t = today();
-  const isos = [];
-  for (let i = span - 1; i >= 0; i--) isos.push(shiftDateStr(t, -i));
-  const goal = data.diet.kcalGoal || 2000;
-  const wGoal = data.diet.waterGoalL || 2.5;
-  let loggedDays = 0, kcalSum = 0, kcalDays = 0;
-  let pSum = 0, cSum = 0, fSum = 0, macroDays = 0;
-  let waterSum = 0, waterDays = 0, underGoal = 0, overGoal = 0;
-  const daily = [];
-  isos.forEach(iso => {
-    const day = days[iso];
-    const meals = (day && day.meals) ? day.meals : [];
-    const logged = meals.length > 0;
-    const kcal = meals.reduce((sm, m) => sm + (Number(m.kcal) || 0), 0);
-    let p = 0, c = 0, f = 0;
-    meals.forEach(m => { p += Number(m.protein) || 0; c += Number(m.carb) || 0; f += Number(m.fat) || 0; });
-    const waterL = day ? (Number(day.waterL) || 0) : 0;
-    if (logged) {
-      loggedDays++;
-      if (kcal > 0) { kcalSum += kcal; kcalDays++; if (kcal <= goal) underGoal++; else overGoal++; }
-      if (p || c || f) { pSum += p; cSum += c; fSum += f; macroDays++; }
-    }
-    if (waterL > 0) { waterSum += waterL; waterDays++; }
-    daily.push({ iso, kcal, logged });
-  });
-  const weights = (data.diet.weights || []).filter(w => w.kg != null && w.date >= isos[0] && w.date <= t).sort((a, b) => a.date < b.date ? -1 : 1);
-  const wFirst = weights[0] || null, wLast = weights[weights.length - 1] || null;
-  return {
-    period, span, isos, daily, goal, wGoal, loggedDays,
-    avgKcal: kcalDays ? Math.round(kcalSum / kcalDays) : 0, kcalDays,
-    avgP: macroDays ? Math.round(pSum / macroDays) : 0,
-    avgC: macroDays ? Math.round(cSum / macroDays) : 0,
-    avgF: macroDays ? Math.round(fSum / macroDays) : 0,
-    proteinGoal: data.diet.proteinGoal || 0, carbGoal: data.diet.carbGoal || 0, fatGoal: data.diet.fatGoal || 0,
-    avgWater: waterDays ? Math.round(waterSum / waterDays * 100) / 100 : 0, waterDays,
-    underGoal, overGoal, weights, weightLast: wLast,
-    weightDiff: (wFirst && wLast && wFirst !== wLast) ? +(wLast.kg - wFirst.kg).toFixed(1) : (wLast ? 0 : null),
-  };
-}
-
-function openDietKarne() { _dietKarnePeriod = 'week'; renderDietKarne(); document.getElementById('dietKarneModal').classList.add('active'); }
-function closeDietKarne() { document.getElementById('dietKarneModal').classList.remove('active'); }
-function setDietKarnePeriod(p) { _dietKarnePeriod = p; renderDietKarne(); }
-
-function renderDietKarne() {
-  const el = document.getElementById('dietKarneBody');
-  if (!el) return;
-  const period = _dietKarnePeriod;
-  const isMonth = period === 'month';
-  const s = dietKarneStats(period);
-  const tabs = `
-    <div class="krn-tabs">
-      <button class="krn-tab ${period === 'week' ? 'active' : ''}" onclick="setDietKarnePeriod('week')">Bu hafta</button>
-      <button class="krn-tab ${isMonth ? 'active' : ''}" onclick="setDietKarnePeriod('month')">Bu ay</button>
-    </div>`;
-  if (s.loggedDays === 0) {
-    el.innerHTML = tabs + `<div class="krn-empty">${isMonth ? 'Son 30 günde' : 'Bu hafta'} henüz öğün kaydı yok. Yemek ekleyince karne dolmaya başlar.</div>`;
-    return;
-  }
-  const maxK = Math.max(s.goal, ...s.daily.map(d => d.kcal), 1);
-  const todayIso = today();
-  const bars = s.daily.map(d => {
-    const h = d.kcal ? Math.max(6, Math.round(d.kcal / maxK * 100)) : 2;
-    const over = d.kcal > s.goal;
-    const isToday = d.iso === todayIso;
-    const cls = (!d.logged ? 'empty' : (over ? 'over' : '')) + (isToday ? ' today' : '');
-    const wd = isMonth ? '' : DKRN_WD[new Date(d.iso + 'T12:00:00').getDay()];
-    const val = (!isMonth && d.kcal) ? Math.round(d.kcal) : '';
-    return `<div class="dkrn-bar-col${isMonth ? ' m' : ''}">
-      ${isMonth ? '' : `<div class="krn-bar-val">${val}</div>`}
-      <div class="dkrn-bar ${cls}" style="height:${h}%;" title="${d.iso}: ${Math.round(d.kcal)} kcal"></div>
-      ${isMonth ? '' : `<div class="krn-bar-day ${isToday ? 'today' : ''}">${wd}</div>`}
-    </div>`;
-  }).join('');
-  const adh = s.kcalDays ? Math.round(s.underGoal / s.kcalDays * 100) : 0;
-  const macroRows = [
-    ['Protein', s.avgP, s.proteinGoal, '#5aa2ff'],
-    ['Karbonhidrat', s.avgC, s.carbGoal, '#f5a524'],
-    ['Yağ', s.avgF, s.fatGoal, '#e0726e'],
-  ].map(row => {
-    const name = row[0], val = row[1], gl = row[2], col = row[3];
-    const pct = gl ? Math.min(100, Math.round(val / gl * 100)) : 0;
-    return `<div class="krn-cat-row">
-      <span class="krn-cat-lbl">${name}</span>
-      <span class="krn-cat-track"><span class="krn-cat-fill" style="width:${pct}%; background:${col};"></span></span>
-      <span class="krn-cat-num">${val}g</span>
-    </div>`;
-  }).join('');
-  let weightBlock = '';
-  if (s.weightDiff !== null && s.weightLast) {
-    const dir = s.weightDiff > 0 ? 'wt-up' : (s.weightDiff < 0 ? 'wt-down' : '');
-    const sign = s.weightDiff > 0 ? '+' : '';
-    const spark = s.weights.length >= 2 ? sparkline(s.weights.map(w => w.kg)) : '';
-    weightBlock = `<div class="krn-section-lbl">Kilo</div>
-      <div class="dkrn-weight">
-        <div class="dkrn-weight-spark">${spark}</div>
-        <div class="dkrn-weight-meta">${s.weightLast.kg} kg <span class="${dir}">${sign}${s.weightDiff} kg</span></div>
-      </div>`;
-  }
-  let note;
-  if (adh >= 70 && s.kcalDays >= 3) note = `Kayıtlı günlerin <b>%${adh}</b>'inde kalori hedefinin altında kaldın — istikrarlı gidiyorsun.`;
-  else if (s.weightDiff !== null && s.weightDiff < 0) note = `Bu dönem <b>${Math.abs(s.weightDiff)} kg</b> verdin. Trend lehine.`;
-  else if (s.loggedDays >= (isMonth ? 20 : 5)) note = `<b>${s.loggedDays}</b> gün kayıt tuttun — takip etmek işin yarısı.`;
-  else note = `Her kayıt bir farkındalık. <b>${s.loggedDays}</b> gün loglamışsın, devam.`;
-  el.innerHTML = tabs + `
-    <div class="krn-hero">
-      <div class="krn-big">${s.avgKcal}</div>
-      <div class="krn-big-lbl">ortalama günlük kcal<br><span class="krn-cmp-note">hedef ${s.goal} · ${s.kcalDays} gün kayıt</span></div>
-    </div>
-    <div class="dkrn-chart${isMonth ? ' month' : ''}">${bars}</div>
-    <div class="krn-statline">
-      <span class="krn-pill">${s.loggedDays} gün kayıt</span>
-      ${s.kcalDays ? `<span class="krn-pill">%${adh} hedefte</span>` : ''}
-      ${s.waterDays ? `<span class="krn-pill">~${fmtL(s.avgWater)} L/gün su</span>` : ''}
-    </div>
-    ${macroRows ? `<div class="krn-section-lbl">Ortalama makro (g/gün)</div><div class="krn-cats">${macroRows}</div>` : ''}
-    ${weightBlock}
-    <div class="krn-note">${note}</div>
-  `;
-}
+// ⚠️ DIYET KARNESI 20 Agu 2026'da nutrition.js'e TASINDI.
+// Sebep iki katli: (1) diyet aray'uzu diyet modulunde durmali, (2) ilk
+// yukleme butcesi. Karne yalnizca Diyet sekmesinden acilabiliyor ve o sekme
+// zaten program.js + nutrition.js'i BEKLIYOR (tasks.js showTab) — yani
+// kritik yolda tasinmasinin hicbir karsiligi yoktu.
 
 function renderEveningSummary() {
   const box = document.getElementById('eveningSummary');
@@ -1187,7 +1065,7 @@ function renderEveningSummary() {
   if (pomo > 0) statsParts.push(`<span><b>${pomo}</b> seans</span>`);
   if (totalActualMin > 0) {
     const h = Math.floor(totalActualMin / 60), m = totalActualMin % 60;
-    statsParts.push(`<span>⏱️ <b>${h > 0 ? h + 'sa ' : ''}${m}dk</b> odaklanma</span>`);
+    statsParts.push(`<span>${icon('sure')} <b>${h > 0 ? h + 'sa ' : ''}${m}dk</b> odaklanma</span>`);
   }
   document.getElementById('eveningStats').innerHTML = statsParts.join('');
 
@@ -1237,8 +1115,8 @@ function renderCapacity() {
   let hint;
   if (pct >= 105) hint = 'Fazla yüklendin. Bir kısmını "Ertele" ile yarına atmayı düşün.';
   else if (pct >= 80) hint = 'Dolu bir gün. Önce MIT 3\'ünü bitir, diğerleri bonus.';
-  else if (pct >= 40) hint = '🟢 Dengeli gün. Tek tek halledersin.';
-  else if (totalMin === 0 && noEstimate > 0) hint = 'ℹ️ Tahmin yok — görevlere "dk" yaz, doluluk gözüksün.';
+  else if (pct >= 40) hint = 'Dengeli gün. Tek tek halledersin.';
+  else if (totalMin === 0 && noEstimate > 0) hint = 'Tahmin yok — görevlere "dk" yaz, doluluk gözüksün.';
   else hint = 'Hafif gün. Bonus iş alabilirsin ya da dinlen.';
   if (noEstimate > 0 && totalMin > 0) hint += ` (${noEstimate} görev tahminsiz)`;
   document.getElementById('capacityHint').textContent = hint;
@@ -1316,7 +1194,7 @@ function renderMit() {
       const extras = [];
       const dl = t.due ? dueLabel(t.due) : '';
       if (dl && dl.text) extras.push(dl.text);
-      if (t.priority === 'urgent') extras.push('🔴 acil');
+      if (t.priority === 'urgent') extras.push('acil');
       if (t.estimateMin) extras.push(`${t.estimateMin}dk`);
       const tail = extras.length ? `<span class="mit-sug-meta">${extras.join(' · ')}</span>` : '';
       return `
@@ -1483,7 +1361,7 @@ function updateTimerDisplay() {
   ring.classList.toggle('paused', !running && timerSec < totalSec);
   document.getElementById('timerStatus').textContent =
     !running && timerSec === totalSec ? 'Hazır' :
-    !running ? '⏸️ Durakta' :
+    !running ? 'Durakta' :
     isBreak ? 'Mola zamanı' : 'Çalışma zamanı';
   if (subEl) subEl.textContent = isBreak ? 'mola' : (running ? 'odak' : 'dakika');
   const pct = ((totalSec - timerSec) / totalSec) * 100;
@@ -1616,7 +1494,7 @@ function confettiBurst(originEl) {
     const rect = originEl.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
-    const colors = ['#3fb950', '#6366f1', '#d29922', '#c084fc', '#58a6ff', '#f85149'];
+    const colors = ['var(--success)', 'var(--info)', 'var(--warning)', 'var(--macro-carb)', 'var(--macro-pro)', 'var(--danger)'];
     const burst = document.createElement('div');
     burst.className = 'confetti-burst';
     burst.style.left = cx + 'px';
@@ -2067,32 +1945,35 @@ function welcomeToggleSignup() {
   if (open) document.getElementById('wCode').focus();
 }
 
-function welcomeStatus(msg, color) {
+// Durum mesajlarinda cagri yeri RENK BILMEZ, ANLAM bildirir; renk tek yerde.
+const SB_TONE = { hata: 'var(--danger)', uyari: 'var(--warning)', ok: 'var(--success)', bilgi: 'var(--info)', sus: 'var(--text-muted)' };
+function sbTone(t) { return SB_TONE[t] || t || 'var(--border)'; }
+function welcomeStatus(msg, tone) {
   const el = document.getElementById('wStatus');
-  if (el) { el.textContent = msg; el.style.color = color || 'var(--text-muted)'; }
+  if (el) { el.textContent = msg; el.style.color = sbTone(tone); }
 }
 
 async function welcomeLogin() {
-  if (!window._supa && !(await supaReady())) { welcomeStatus('Bağlantı kurulamadı, sayfayı yenile.', '#ff5555'); return; }
+  if (!window._supa && !(await supaReady())) { welcomeStatus('Bağlantı kurulamadı, sayfayı yenile.', 'hata'); return; }
   const email = document.getElementById('wEmail').value.trim();
   const password = document.getElementById('wPassword').value;
-  if (!email || !password) { welcomeStatus('Email ve şifre gerekli.', '#ffb86c'); return; }
-  welcomeStatus('⏳ Giriş yapılıyor…', '#8be9fd');
+  if (!email || !password) { welcomeStatus('Email ve şifre gerekli.', 'uyari'); return; }
+  welcomeStatus('Giriş yapılıyor…', 'bilgi');
   const { error } = await window._supa.auth.signInWithPassword({ email, password });
-  if (error) welcomeStatus('' + error.message, '#ff5555');
-  else welcomeStatus('Giriş başarılı', '#50fa7b');
+  if (error) welcomeStatus('' + error.message, 'hata');
+  else welcomeStatus('Giriş başarılı', 'ok');
   // onAuthStateChange handler hideWelcome çağırır
 }
 
 async function welcomeSignup() {
-  if (!window._supa && !(await supaReady())) { welcomeStatus('Bağlantı kurulamadı.', '#ff5555'); return; }
+  if (!window._supa && !(await supaReady())) { welcomeStatus('Bağlantı kurulamadı.', 'hata'); return; }
   const email = document.getElementById('wEmail').value.trim();
   const password = document.getElementById('wPassword').value;
   const code = (document.getElementById('wCode').value || '').trim().toUpperCase();
-  if (!email || !email.includes('@')) { welcomeStatus('Geçerli email gir.', '#ffb86c'); return; }
-  if (password.length < 8) { welcomeStatus('Şifre en az 8 karakter olmalı.', '#ffb86c'); return; }
-  if (!code) { welcomeStatus('Davet kodu gerekli (AIDAN-XXXXXXXX).', '#ffb86c'); return; }
-  welcomeStatus('⏳ Davet kodu doğrulanıyor…', '#8be9fd');
+  if (!email || !email.includes('@')) { welcomeStatus('Geçerli email gir.', 'uyari'); return; }
+  if (password.length < 8) { welcomeStatus('Şifre en az 8 karakter olmalı.', 'uyari'); return; }
+  if (!code) { welcomeStatus('Davet kodu gerekli (AIDAN-XXXXXXXX).', 'uyari'); return; }
+  welcomeStatus('Davet kodu doğrulanıyor…', 'bilgi');
   try {
     const r = await fetch(SIGNUP_ENDPOINT, {
       method: 'POST',
@@ -2100,12 +1981,12 @@ async function welcomeSignup() {
       body: JSON.stringify({ email, password, code }),
     });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) { welcomeStatus('' + (j.error || `signup ${r.status}`), '#ff5555'); return; }
-    welcomeStatus('Hesap oluştu, giriş yapılıyor…', '#50fa7b');
+    if (!r.ok) { welcomeStatus('' + (j.error || `signup ${r.status}`), 'hata'); return; }
+    welcomeStatus('Hesap oluştu, giriş yapılıyor…', 'ok');
     const { error } = await window._supa.auth.signInWithPassword({ email, password });
-    if (error) welcomeStatus('Kayıt OK ama giriş başarısız: ' + error.message, '#ffb86c');
+    if (error) welcomeStatus('Kayıt OK ama giriş başarısız: ' + error.message, 'uyari');
   } catch (e) {
-    welcomeStatus('' + e.message, '#ff5555');
+    welcomeStatus('' + e.message, 'hata');
   }
 }
 
@@ -2403,7 +2284,7 @@ function tickNow() {
         const diff = (h * 60 + m) - nowMin;
         if (diff >= 0 && diff <= 120) {
           const txt = diff < 60 ? diff + ' dk' : Math.floor(diff / 60) + 'sa ' + (diff % 60) + 'dk';
-          nn.innerHTML = '⏰ ' + txt + ' sonra: ' + escapeHtml((_nextReminder.text || '').slice(0, 24)) +
+          nn.innerHTML = icon('saat') + ' ' + txt + ' sonra: ' + escapeHtml((_nextReminder.text || '').slice(0, 24)) +
             ' <span style="opacity:.7">(' + _nextReminder.reminderTime + ')</span>';
           nn.classList.toggle('urgent', diff <= 15);
           show = true;
@@ -2496,7 +2377,7 @@ function renderMuteState() {
     const until = new Date(data.settings.muteUntil);
     const hhmm = String(until.getHours()).padStart(2,'0') + ':' + String(until.getMinutes()).padStart(2,'0');
     el.innerHTML = `
-      <div style="color:var(--warning,#e5a117);">Şu an susmuş — ${hhmm}'e kadar</div>
+      <div style="color:var(--warning);">Şu an susmuş — ${hhmm}'e kadar</div>
       <button class="small" style="margin-top:6px;" onclick="muteUnset()">Aç</button>
     `;
   } else {
@@ -2709,14 +2590,14 @@ function addFixedReminder() {
   const time = document.getElementById('fixedRemTime').value;
   const days = document.getElementById('fixedRemDays').value;
   if (!label) { showToast('Bir isim yaz — örn. "İlacını al" ', 'warning', 3000); return; }
-  if (!time) { showToast('Saat seç ⏰', 'warning', 3000); return; }
+  if (!time) { showToast('Saat seç', 'warning', 3000); return; }
   data.reminders = data.reminders || [];
   data.reminders.push({ id: Date.now(), label, time, days, enabled: true, lastFired: null });
   document.getElementById('fixedRemLabel').value = '';
   document.getElementById('fixedRemTime').value = '';
   save();
   renderFixedReminders();
-  showToast(`⏰ ${time} — "${label}" kuruldu`, 'success', 3000);
+  showToast(`${time} — "${label}" kuruldu`, 'success', 3000);
 }
 
 function toggleFixedReminder(id) {
@@ -3232,7 +3113,7 @@ function renderCountdowns() {
       <div class="countdown-card ${cls}">
         <div class="countdown-days">${bigNum}<span class="countdown-days-suffix">${suffix}</span></div>
         <div class="countdown-info">
-          <div class="countdown-label-row">⏳ ${escapeHtml(c.label || 'Tarih')}</div>
+          <div class="countdown-label-row">${icon('kum')} ${escapeHtml(c.label || 'Tarih')}</div>
           <div class="countdown-date">${formatTrDate(c.date)}</div>
         </div>
       </div>
@@ -3268,7 +3149,7 @@ function addCountdown() {
   const label = document.getElementById('countdownLabel').value.trim();
   const date = document.getElementById('countdownDate').value;
   if (!label) { showToast('Bir isim yaz — örn. "Tarih sınavı" ', 'warning', 3000); return; }
-  if (!date) { showToast('Tarih seç ⏳', 'warning', 3000); return; }
+  if (!date) { showToast('Tarih seç', 'warning', 3000); return; }
   data.countdowns = data.countdowns || [];
   data.countdowns.push({ id: Date.now(), label, date });
   document.getElementById('countdownLabel').value = '';
@@ -3276,7 +3157,7 @@ function addCountdown() {
   save();
   renderCountdowns();
   renderCountdownManage();
-  showToast(`⏳ "${label}" eklendi`, 'success', 2500);
+  showToast(`"${label}" eklendi`, 'success', 2500);
 }
 
 function deleteCountdown(id) {
@@ -3735,9 +3616,9 @@ let _pushTimer = null;
 let _pulling = false;
 let _pushing = false;
 
-function showSupaStatus(msg, color) {
+function showSupaStatus(msg, tone) {
   const el = document.getElementById('supaStatus');
-  if (el) el.innerHTML = `<div style="background:${color};color:#1e1e2e;padding:10px;border-radius:8px;font-size:0.9em;white-space:pre-wrap;">${msg}</div>`;
+  if (el) el.innerHTML = `<div class="sb-note" style="border-color:${sbTone(tone)};">${escapeHtml(msg)}</div>`;
 }
 
 function renderAuthBox() {
@@ -3745,21 +3626,21 @@ function renderAuthBox() {
   if (!window._supa) { el.innerHTML = ''; return; }
   if (window._user) {
     el.innerHTML = `
-      <div style="background:#50fa7b;color:#1e1e2e;padding:12px;border-radius:8px;">
+      <div class="sb-note" style="border-color:var(--success);">
         Giriş yapıldı: <b>${window._user.email}</b><br>
         <button class="small danger" style="margin-top:8px;" onclick="logoutUser()">Çıkış yap</button>
-        <button class="small" style="margin-top:8px;background:#bd93f9;color:white;" onclick="manualPull()">Şimdi senkronize et</button>
+        <button class="small" style="margin-top:8px;" onclick="manualPull()">Şimdi senkronize et</button>
       </div>
     `;
   } else {
     el.innerHTML = `
-      <div style="background:#2a2a3e;padding:12px;border-radius:8px;">
+      <div class="sb-panel">
         <b>Email + Şifre:</b><br>
-        <input type="email" id="loginEmail" placeholder="email@adres.com" style="width:100%;max-width:300px;margin:6px 0;display:block;">
-        <input type="password" id="loginPassword" placeholder="şifre (en az 8 karakter)" style="width:100%;max-width:300px;margin:6px 0;display:block;">
+        <input type="email" id="loginEmail" placeholder="email@adres.com" class="sb-in">
+        <input type="password" id="loginPassword" placeholder="şifre (en az 8 karakter)" class="sb-in">
         <div id="inviteRow" style="display:none;">
-          <input type="text" id="inviteCode" placeholder="Davet kodu (AIDAN-XXXX)" style="width:100%;max-width:300px;margin:6px 0;display:block;text-transform:uppercase;font-variant-numeric:tabular-nums;letter-spacing:0.04em;">
-          <div style="font-size:0.78em;color:#aaa;margin-top:2px;">Davet kodu olmayanın kaydı kabul edilmez.</div>
+          <input type="text" id="inviteCode" placeholder="Davet kodu (AIDAN-XXXX)" class="sb-in" style="text-transform:uppercase;letter-spacing:0.04em;">
+          <div style="font-size:0.78em;color:var(--text-muted);margin-top:2px;">Davet kodu olmayanın kaydı kabul edilmez.</div>
         </div>
         <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
           <button class="small secondary" onclick="signInUser()">Giriş Yap</button>
@@ -3827,7 +3708,7 @@ async function refreshInviteList() {
     list.innerHTML = j.codes.map(c => {
       const used = !!c.used_by;
       const created = new Date(c.created_at).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' });
-      const usedLine = used ? `<div class="countdown-row-meta">✓ kullanıldı · ${new Date(c.used_at).toLocaleDateString('tr-TR')}</div>` : '<div class="countdown-row-meta">🟢 kullanılmadı</div>';
+      const usedLine = used ? `<div class="countdown-row-meta">✓ kullanıldı · ${new Date(c.used_at).toLocaleDateString('tr-TR')}</div>` : '<div class="countdown-row-meta">kullanılmadı</div>';
       const noteLine = c.note ? `<div class="countdown-row-meta">${escapeHtml(c.note)}</div>` : '';
       return `
         <div class="countdown-row" style="opacity:${used ? 0.6 : 1};">
@@ -3875,15 +3756,15 @@ function copyInviteCode(code) {
 }
 
 async function signUpUser() {
-  if (!window._supa && !(await supaReady())) { showSupaStatus('Önce Supabase\'e bağlan.', '#ffb86c'); return; }
+  if (!window._supa && !(await supaReady())) { showSupaStatus('Önce Supabase\'e bağlan.', 'uyari'); return; }
   const email = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
   const code = (document.getElementById('inviteCode')?.value || '').trim().toUpperCase();
-  if (!email || !email.includes('@')) { showSupaStatus('Geçerli email gir.', '#ffb86c'); return; }
-  if (password.length < 8) { showSupaStatus('Şifre en az 8 karakter olmalı.', '#ffb86c'); return; }
-  if (!code) { showSupaStatus('Davet kodu gerekli (AIDAN-XXXXXXXX).', '#ffb86c'); return; }
+  if (!email || !email.includes('@')) { showSupaStatus('Geçerli email gir.', 'uyari'); return; }
+  if (password.length < 8) { showSupaStatus('Şifre en az 8 karakter olmalı.', 'uyari'); return; }
+  if (!code) { showSupaStatus('Davet kodu gerekli (AIDAN-XXXXXXXX).', 'uyari'); return; }
 
-  showSupaStatus('⏳ Davet kodu doğrulanıyor, hesap oluşturuluyor...', '#8be9fd');
+  showSupaStatus('Davet kodu doğrulanıyor, hesap oluşturuluyor...', 'bilgi');
   try {
     const r = await fetch(SIGNUP_ENDPOINT, {
       method: 'POST',
@@ -3892,34 +3773,34 @@ async function signUpUser() {
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
-      showSupaStatus('' + (j.error || `signup ${r.status}`), '#ff5555');
+      showSupaStatus('' + (j.error || `signup ${r.status}`), 'hata');
       return;
     }
     // Confirm-email kapalıysa session geldi — direkt login. Açıksa email doğrula mesajı.
     if (j.session) {
-      showSupaStatus('Hesap oluştu — giriş yapılıyor…', '#50fa7b');
+      showSupaStatus('Hesap oluştu — giriş yapılıyor…', 'ok');
       const { error } = await window._supa.auth.signInWithPassword({ email, password });
-      if (error) showSupaStatus('Kayıt OK ama otomatik giriş başarısız: ' + error.message, '#ffb86c');
+      if (error) showSupaStatus('Kayıt OK ama otomatik giriş başarısız: ' + error.message, 'uyari');
     } else {
-      showSupaStatus('Hesap oluştu. Email doğrulaması gerekiyorsa kutuna bak. Yoksa "Giriş Yap" bas.', '#50fa7b');
+      showSupaStatus('Hesap oluştu. Email doğrulaması gerekiyorsa kutuna bak. Yoksa "Giriş Yap" bas.', 'ok');
     }
   } catch (e) {
-    showSupaStatus('' + e.message, '#ff5555');
+    showSupaStatus('' + e.message, 'hata');
   }
 }
 
 async function signInUser() {
-  if (!window._supa && !(await supaReady())) { showSupaStatus('Önce Supabase\'e bağlan.', '#ffb86c'); return; }
+  if (!window._supa && !(await supaReady())) { showSupaStatus('Önce Supabase\'e bağlan.', 'uyari'); return; }
   const email = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
-  if (!email || !password) { showSupaStatus('Email ve şifre gerekli.', '#ffb86c'); return; }
+  if (!email || !password) { showSupaStatus('Email ve şifre gerekli.', 'uyari'); return; }
 
-  showSupaStatus('⏳ Giriş yapılıyor...', '#8be9fd');
+  showSupaStatus('Giriş yapılıyor...', 'bilgi');
   const {error} = await window._supa.auth.signInWithPassword({email, password});
   if (error) {
-    showSupaStatus('Hata: ' + error.message + '\n\nHesabın yok mu? "Hesap Oluştur" bas.', '#ff5555');
+    showSupaStatus('Hata: ' + error.message + '\n\nHesabın yok mu? "Hesap Oluştur" bas.', 'hata');
   } else {
-    showSupaStatus('Giriş başarılı!', '#50fa7b');
+    showSupaStatus('Giriş başarılı!', 'ok');
   }
 }
 
@@ -3930,9 +3811,9 @@ function connectSupabase() {
   url = url.replace(/\/rest\/v1\/?$/, ''); // /rest/v1 kaldır
   url = url.replace(/\/auth\/v1\/?$/, ''); // /auth/v1 kaldır
   url = url.replace(/\/+$/, ''); // sondaki / kaldır
-  if (!url || !key) { showSupaStatus('URL ve key gerekli.', '#ffb86c'); return; }
+  if (!url || !key) { showSupaStatus('URL ve key gerekli.', 'uyari'); return; }
   if (!url.startsWith('https://') || !url.includes('.supabase.co')) {
-    showSupaStatus('URL https://xxxxx.supabase.co formatında olmalı.', '#ffb86c');
+    showSupaStatus('URL https://xxxxx.supabase.co formatında olmalı.', 'uyari');
     return;
   }
   // Temizlenmiş halini geri yaz
@@ -3953,7 +3834,7 @@ function disconnectSupabase() {
   window._supa = null;
   window._user = null;
   renderAuthBox();
-  showSupaStatus('Bağlantı kesildi.', '#6272a4');
+  showSupaStatus('Bağlantı kesildi.', 'sus');
 }
 
 // ⚠️ 9 Agu 2026: supabase.js artik <script> etiketiyle GELMIYOR (50 KB gzip
@@ -3971,19 +3852,19 @@ async function _initSupabaseAsync() {
   try {
     await loadModule('supabase');
   } catch (e) {
-    showSupaStatus('Supabase kütüphanesi yüklenemedi (internet?).', '#ff5555');
+    showSupaStatus('Supabase kütüphanesi yüklenemedi (internet?).', 'hata');
     return;
   }
-  if (!window.supabase) { showSupaStatus('Supabase kütüphanesi yüklenemedi (internet?).', '#ff5555'); return; }
+  if (!window.supabase) { showSupaStatus('Supabase kütüphanesi yüklenemedi (internet?).', 'hata'); return; }
 
   try {
     window._supa = window.supabase.createClient(url, key);
   } catch(e) {
-    showSupaStatus('Bağlantı hatası: ' + e.message, '#ff5555');
+    showSupaStatus('Bağlantı hatası: ' + e.message, 'hata');
     return;
   }
 
-  showSupaStatus('Supabase\'e bağlandı. Email ile giriş yap.', '#50fa7b');
+  showSupaStatus('Supabase\'e bağlandı. Email ile giriş yap.', 'ok');
 
   window._supa.auth.onAuthStateChange((event, session) => {
     if (session && session.user) {
@@ -4023,7 +3904,7 @@ async function supaReady() {
 async function logoutUser() {
   if (!window._supa) return;
   await window._supa.auth.signOut();
-  showSupaStatus('Çıkış yapıldı. Veriler bilgisayarında durmaya devam ediyor.', '#6272a4');
+  showSupaStatus('Çıkış yapıldı. Veriler bilgisayarında durmaya devam ediyor.', 'sus');
 }
 
 let _loginInitUserId = null, _syncChannel = null;
@@ -4034,7 +3915,7 @@ async function onLoginSuccess() {
   //  kanali zaten abone oldugu icin 'after subscribe()' hatasi atiyordu.)
   if (_loginInitUserId === (window._user && window._user.id)) return;
   _loginInitUserId = window._user.id;
-  showSupaStatus('Giriş başarılı: ' + window._user.email + '\n⏳ Veriler eşitleniyor...', '#50fa7b');
+  showSupaStatus('Giriş başarılı: ' + window._user.email + '\nVeriler eşitleniyor...', 'ok');
   await pullFromCloud();
   subscribeToCloud();
   // Yeni user'a 5 adımlı tur — bir kez gösterilir
@@ -4104,7 +3985,7 @@ async function pullFromCloud() {
       .maybeSingle();
 
     if (error) {
-      showSupaStatus('Çekme hatası: ' + error.message + '\n(Tablo yok mu? SQL\'i çalıştırdın mı?)', '#ff5555');
+      showSupaStatus('Çekme hatası: ' + error.message + '\n(Tablo yok mu? SQL\'i çalıştırdın mı?)', 'hata');
       _pulling = false;
       return;
     }
@@ -4117,8 +3998,8 @@ async function pullFromCloud() {
 
       // 1) Bulut en son bıraktığımız hâlde → yerelde bekleyen varsa onu yolla
       if (!remoteChanged) {
-        if (dirty) { await pushToCloudNow(); showSupaStatus('Bu cihazdaki değişiklikler buluta yazıldı.', '#50fa7b'); }
-        else showSupaStatus('Zaten güncel.', '#50fa7b');
+        if (dirty) { await pushToCloudNow(); showSupaStatus('Bu cihazdaki değişiklikler buluta yazıldı.', 'ok'); }
+        else showSupaStatus('Zaten güncel.', 'ok');
         _pulling = false;
         return;
       }
@@ -4135,7 +4016,7 @@ async function pullFromCloud() {
         );
         if (keepLocal) {
           await pushToCloudNow();
-          showSupaStatus('Bu cihazdaki veri korundu ve buluta yazıldı.', '#50fa7b');
+          showSupaStatus('Bu cihazdaki veri korundu ve buluta yazıldı.', 'ok');
           _pulling = false;
           return;
         }
@@ -4161,14 +4042,14 @@ async function pullFromCloud() {
             document.getElementById('pomoCount').textContent = data.pomoToday.count;
       setSyncRev(row.updated_at || '');
       clearLocalDirty();
-      showSupaStatus('Buluttan veri çekildi.', '#50fa7b');
+      showSupaStatus('Buluttan veri çekildi.', 'ok');
     } else {
       // Bulutta veri yok — yereli yükle
       await pushToCloudNow();
-      showSupaStatus('İlk veri buluta yüklendi. Artık eşitleniyor.', '#50fa7b');
+      showSupaStatus('İlk veri buluta yüklendi. Artık eşitleniyor.', 'ok');
     }
   } catch(e) {
-    showSupaStatus('' + e.message, '#ff5555');
+    showSupaStatus('' + e.message, 'hata');
   }
   _pulling = false;
 }
@@ -4246,14 +4127,14 @@ function subscribeToCloud() {
       if (document.getElementById('plan').classList.contains('active')) renderDayPlan();
             setSyncRev(rtRev);
       clearLocalDirty();
-      showSupaStatus('Diğer cihazdan güncelleme alındı.', '#bd93f9');
+      showSupaStatus('Diğer cihazdan güncelleme alındı.', 'bilgi');
       if (wasDirty) showToast('Başka cihazdan güncelleme geldi. Bu cihazdaki bekleyen değişiklik yedeklendi — Ayarlar → Yedekleme\'den geri alabilirsin.', 'info', 7000);
     })
     .subscribe();
 }
 
 async function manualPull() {
-  showSupaStatus('⏳ Veriler çekiliyor...', '#8be9fd');
+  showSupaStatus('Veriler çekiliyor...', 'bilgi');
   await pullFromCloud();
 }
 
@@ -4286,7 +4167,7 @@ function showSeries(seriesId) {
         <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask(${t.id}); showSeries('${seriesId}')" style="width:18px;height:18px;">
         <div style="flex:1;">
           <div style="${t.done ? 'text-decoration:line-through; opacity:0.5;' : ''} font-size:0.92em;">${escapeHtml(t.text)}</div>
-          <div style="font-size:0.75em; color:${isOverdue ? 'var(--danger)' : 'var(--text-muted)'}; margin-top:2px;">${isOverdue ? 'Geçti · ' : ''}${dueStr}${t.estimateMin ? ' · ⏱️ ' + t.estimateMin + 'dk' : ''}</div>
+          <div style="font-size:0.75em; color:${isOverdue ? 'var(--danger)' : 'var(--text-muted)'}; margin-top:2px;">${isOverdue ? 'Geçti · ' : ''}${dueStr}${t.estimateMin ? ' · ' + t.estimateMin + 'dk' : ''}</div>
         </div>
       </div>
     `;
@@ -4557,7 +4438,7 @@ function updateActiveTaskBanner() {
   const sessionMin = focusStartTime ? Math.floor((Date.now() - focusStartTime) / 60000) : 0;
   const totalMin = (t.actualMin || 0) + sessionMin;
   const left = (t.estimateMin && t.estimateMin > totalMin) ? ` · ${t.estimateMin - totalMin}dk hedef` : '';
-  document.getElementById('activeTaskElapsed').textContent = `⏱ ${totalMin}dk${left}`;
+  document.getElementById('activeTaskElapsed').textContent = `${totalMin}dk${left}`;
 }
 
 function completeFocusTask() {

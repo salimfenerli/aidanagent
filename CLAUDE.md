@@ -30,6 +30,51 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 20 Ağustos 2026 — 🍽 DİYET: MOTOR HEDEFİ TUTTURUYOR + PROGRAM GÜNLÜĞE BAĞLANDI (v7-166)
+
+Salim: "diyet kalori sayma kısmını geliştirelim, beslenme programı da yazabilsin." Denetimde çıkan şey şuydu: **motor zaten program yazıyordu — ama kimse onu kullanamıyordu.**
+
+**🔴 EN ÖNEMLİ BULGU — ÜÇ PLAN YÜZEYİ VARDI, İKİSİ ÖLÜYDÜ.**
+1. Kural motorunun "örnek gün"ü — yalnız gösteriliyordu
+2. AI'ın yazdığı haftalık program — yalnız gösteriliyordu
+3. "plan" listesi — 'yedim' ile günlüğe kcal+makro **yazan tek yer**
+
+`nutrition.js` günlüğe **tek satır yazmıyordu**. Yani Aidan doğru bir program üretiyor, Salim aynı yemekleri elle günlüğe giriyordu. Artık `nutOrnekPlana()` / `nutAiPlana()` programı plan listesine aktarıyor: kalori sayma tek dokunuşa iniyor. Aktarılan satırlar `kaynak:'aidan'` ile işaretli — yeniden aktarımda **yalnız onlar** siliniyor, elle eklenenler duruyor. ⚠️ `MEAL_SLOTS`'ta `'ara'` YOK; motorun ara öğünü `'atistirma'` kovasına çevriliyor, yoksa günlükte hiçbir gruba girmeden kayboluyordu.
+
+**🔴 MOTOR TAVANA YAPIŞIYORDU.** Kırpma adımları hedefe değil **sert tavana** (2.5 g/kg) bakıyordu: 40 profilin tamamı 2.3-2.5 g/kg çıkıyor, kullanıcıya "hedef 126 g" yazıp **174 g** veren bir gün gösteriliyordu. Arayüz bunun için özür bile diliyordu. Artık iki ayrı sınır var: **yumuşak bant** (hedef+%10, kırpma buna çalışır) ve **sert tavan** (güvenlik, asla aşılmaz). Sonuç: **1.83-2.50 g/kg**, hedef aralığında.
+
+**⚠️ SIRALAMA: KALORİ > PROTEİN BANDI.** Bant doldurma adımlarını da kilitleyince gün %11 eksik kaldı. Kural: gün kalorisi hedefin %95'inin altındayken protein kapısı **sert tavan**, kalori banda girince yumuşak bant. 16 yaşında ve 6 gün antrenmanda asıl risk az yemek.
+
+**Tabak kuralları.** "2 kase yoğurt + 1 muz" ve "2 simit + 1 elma" gibi öğünler çıkıyordu — sayılar tutuyor, tabak yemek gibi durmuyor. Artık: öğün 3 kalemin altına inmez · her öğünde protein KAYNAĞI kalır (8 g eşiği yetmiyordu, simit tek başına geçiyordu) · `atistirma` şablonuna ek verildi. **Tek istisna sert tavan** — 50 kg + dövüş + kas hedefinde sabit ekler tek başına 2.5 g/kg'ı aşıyor, orada güvenlik tabak estetiğinden önce gelir (2/40 profil, teste yazıldı).
+
+**40 profil taraması teste bağlandı** (`18-nutrition`). Bu motorun tekrar eden hatası "70 kg'da düzelt, 50 kg'da kır"dı; artık 5 kilo × 4 gün tipi × 2 hedef birden taranıyor: kalori ±%8 · sert tavan · protein tabanı · her öğünde protein kaynağı · saçma porsiyon yok.
+
+**⚠️ ESKİ TESTLER PROFİLE BAĞLIYDI.** 3 kırmızı testin ikisi "4 öğün üretiliyor" diyordu; motor **kalori eşiğine** göre 5 öğün açıyor (>3000 kcal) ve antrenman bilimi güncellemesi hedefi 3034'e çıkarınca test kırmızıya döndü — motorda bozulan bir şey yoktu. Sözleşme artık `nutMealCount(t.kcal)`.
+
+**Karne artık ters yönü ödüllendirmiyor.** "%X hedefte" hesabı **hedefin ALTINDA** kalınan günleri sayıyor ve "istikrarlı gidiyorsun" yazıyordu — uygulamanın kendi kuralının tam tersi. Artık başarı **bantta** kalmak (±%10); ayrıca: protein hedefini kaç gün tutturdun · **en çok atlanan öğün** · **kayıt güvenilirliği** (`hcWeightTrend` + `hcEnergyCheck` ile çapraz okuma — log ile kilo değişimi uyuşmuyorsa "az yiyorsun" yorumu yapılmıyor, önce log düzeltiliyor).
+
+**🔧 İLK YÜKLEME 216 → 214 KB, eşik 215'e GERİ ÇEKİLDİ.** Diyet karnesi (10.7 KB kaynak) `ui.js`'ten `nutrition.js`'e taşındı: karne yalnız Diyet sekmesinden açılıyor ve o sekme zaten `nutrition.js`'i bekliyor (`tasks.js` showTab) — kritik yolda durmasının hiçbir karşılığı yoktu. Yeni özellikler eklenirken bütçe **düştü**.
+
+Test: 855/855 yeşil (önceki seansta 3 kırmızı vardı, ikisi bu pakette kapandı).
+
+### 🔴 20 Ağustos 2026 — 🎨 TEK GÖRSEL DİL (v7-165)
+
+Salim: "uygulamayı ilerletelim, başka ne yapılabilir." Denetimde en büyük tutarsızlık **yeni özellik eksikliği değil, aynı üründe iki farklı görsel dil**di. Palet üç kez değişti (v10 GECE, v11 MONOKROM) ama **renklerin bir kısmı CSS'te değil JS dizelerinin içindeydi** — `:root`'u değiştirmek onlara hiç dokunmadı.
+
+**🔴 EN ÖNEMLİ BULGU — 79 sabit hex JS'te yaşıyordu.** Auth/senkron ekranı hâlâ **Dracula paletiyle** (`#ff5555` `#50fa7b` `#ffb86c` `#8be9fd` `#bd93f9`) konuşuyordu; konfeti 2024'ten kalma GitHub setindeydi; makro grafiğinin karbonhidrat rengi **15 Ağustos'ta emekli edilen amber `#f5a524`**'ti; hatırlatıcı rozeti **v10 terracotta'sının rgba hali**ydi (`rgba(224,138,99,...)`) — accent aylardır gri. Hepsi token'a çevrildi; `25-gorsel-dil.test.js` ham hex'i ve emekli paletleri build'de düşürüyor.
+
+**Çağrı yeri artık renk bilmiyor, ANLAM bildiriyor.** `showSupaStatus(msg, '#ff5555')` → `showSupaStatus(msg, 'hata')`; eşleme tek yerde (`SB_TONE`). Aynı fonksiyon **ham `innerHTML`** yazıyordu ve içine Supabase'in hata mesajı giriyordu → `escapeHtml`'e alındı. Dolu yeşil/mor bloklar gitti: `.sb-note` / `.sb-panel` sistemin kendi yüzeyi + **tam** 1px kenar (yan şerit Impeccable'da yasak — ilk denemede tam da o teste takıldı).
+
+**🔴 ÖLÜ PALET KATMANI SİLİNDİ.** 6 `:root` vardı, sonuncusu kazanıyordu; **v10 GECE bloğu (1.1 KB) v11'in yeniden tanımladığı 35 token'ın aynısıydı** — her kullanıcıya iniyor, hiçbir şeyi boyamıyordu. Silindi, tek istisnası Onest ailesiydi, o v11'in içine taşındı. Artık 5 blok.
+
+**Emoji → ikon.** DESIGN.md'nin 6. yasağı ("No emoji in the UI") kâğıtta vardı, kodda 30+ yerde ihlal ediliyordu. HTML üretilen yerde `icon('saat'|'sure'|'kum')` (`ICON_PATHS`, core.js — mevcut `dtIcon` sözleşmesi); `textContent`/`escapeHtml` kanalında ikon enjekte edilemez, orada emoji **kaldırıldı**. ⚠️ güvenlik notu ve AI prompt'larındaki bölüm işaretçileri bilerek dışarıda (modele gidiyor, ekrana değil).
+
+**⚠️ İLK YÜKLEME BÜTÇESİ 215 → 216 KB.** Token isimleri hex'ten uzun (`'#ff5555'` 9 bayt → `'hata'` 6 ama `var(--danger)` 15); escapeHtml + `sbTone` + ikon kaydı da yeni kod. Ölü palet silinerek ve satır içi stiller sınıfa taşınarak (`.badge.danger/.warn/.accent`, `.tsk-fold`, `.sb-in`) geri kazanıldı; **net +1.2 KB gzip**. Eşiğin gerekçesi teste yazıldı: bu eşik **ağır bağımlılık** içindir, yeni bir kütüphane statik eklenip eşik yükseltilerek geçirilmemeli.
+
+**🔧 LOKALDE TEST ÇALIŞMIYORDU — ama CI'da değil, ayrımı not et.** `program.js`, `nutrition.js` ve `aidan-worker/worker.js` **diskte LF** olmuştu; `07-hygiene` ve `20-ai-diet` "CRLF olmalı" diyor → `npm test` Salim'in makinesinde kırmızı. **CI etkilenmiyor**: `.gitattributes`'ta `text eol=crlf` var, Linux checkout dosyayı CRLF açıyor. Üçü de CRLF'e çevrildi — `git diff` BOŞ, yani depo içeriği değişmedi, yalnız çalışma kopyası normalleşti. ⚠️ Ders: EOL testi kırmızıysa önce `git diff --stat` bak; boşsa sorun depoda değil, diskte — düzeltme commit üretmez.
+
+**⚠️ HÂLÂ KIRMIZI — beslenme motoru (Salim'in kararı bekliyor).** `18-nutrition`: `nutBuildDay` artık **5 öğün** üretiyor (test 4 bekliyor), günün kalorisi hedeften ±%12'nin dışında ve protein eşit dağılmıyor. 18 Ağustos'taki üçüncü çapa / öğün sayısı değişikliğinden kalma. **Motor mu doğru, test mi eski** — karar verilmeden düzeltilmedi, çünkü ikisi de plana dokunuyor.
+
 ### 🔴 15 Ağustos 2026 — 🎨 GECE PALETİ / AMBER EMEKLİ (v7-156)
 
 Salim: "jenerik duruyor, daha profesyonel duran." Şikayet renk değil **karakter** üzerineydi — koyu + amber her dev tool'da, her kripto panelinde var; Stitch de o kalıbın içinden üretmişti. Üç yön sunuldu (Kağıt / Enstrüman / Gece), **Gece** seçildi: koyu kalsın, amber gitsin.
