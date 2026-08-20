@@ -35,7 +35,8 @@ function motor() {
   const src = fs.readFileSync(path.join(ROOT, 'program.js'), 'utf8') +
     '\n;globalThis.__SABIT = { PROGRAM_GOALS, PROGRAM_EXERCISES, PROGRAM_LIMITS,' +
     ' PLYO_LIMITS, PROGRAM_TEMPO, PROGRAM_TEMPO_TIER, PROGRAM_RPE, PROGRAM_BW_LOAD,' +
-    ' PROGRAM_BW_TEST, PROGRAM_REP_FLOOR };';
+    ' PROGRAM_BW_TEST, PROGRAM_REP_FLOOR, PROGRAM_SPLITS, PROGRAM_IKINCIL,' +
+    ' PROGRAM_MUSCLES, PROGRAM_ORTA_ARTIS };';
   vm.runInContext(src, ctx);
   return Object.assign(ctx, ctx.__SABIT);
 }
@@ -305,5 +306,298 @@ describe('5 — cikti sozlesmesi (Ad | Set x Tekrar | Tempo | Dinlenme | RPE)', 
     const b = M.buildProgram(KICKBOKS, []);
     const oz = (p) => tumHareketler(p).map((e) => [e.id, e.tempo, e.rpe, e.rest].join('|')).join(';');
     assert.strictEqual(oz(a), oz(b), 'motor deterministik degil');
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('6 — gun yerlesimi ve antagonist denge (18 Agu 2026 denetimi)', () => {
+  // Denetimde iki gercek hata bulundu:
+  //   1) 300 yapilandirmanin 120'sinde (%40) iki AGIR BACAK gunu arka arkaya
+  //      dusuyordu — motor yalniz dovuse komsulugu kontrol ediyordu
+  //   2) Zaman butcesi son slotu kesince kesilen hep CEKIS oluyordu;
+  //      hafta toplami itis 20 / cekis 10'a kadar bozuluyordu
+  const AYARLAR = [];
+  for (const goal of Object.keys(M.PROGRAM_GOALS)) {
+    for (const sd of [3, 4, 5]) {
+      for (const sessionMin of [45, 60, 90]) {
+        for (const fightDays of [[], [2, 4], [1, 3, 5], [0, 3]]) {
+          AYARLAR.push({ goal, strengthDays: sd, sessionMin, places: ['gym'], fightDays, avoid: [] });
+        }
+      }
+    }
+  }
+  const komsu = (a, b) => (a + 1) % 7 === b || (b + 1) % 7 === a;
+  const kalip = (id) => (M.PROGRAM_EXERCISES.find((x) => x.id === id) || {}).pattern;
+  const ITIS = ['push_h', 'push_v'], CEKIS = ['pull_h', 'pull_v'];
+  const setTop = (p, grup) => (p.days || []).reduce((a, d) => a +
+    (d.exercises || []).reduce((b, e) =>
+      b + ((!e.explosive && grup.indexOf(kalip(e.id)) >= 0) ? (e.sets || 0) : 0), 0), 0);
+
+  test('REGRESYON: iki agir bacak gunu ARKA ARKAYA gelmiyor', () => {
+    for (const cfg of AYARLAR) {
+      const p = M.buildProgram(cfg, []);
+      const bacak = (p.days || []).filter((d) => d.agirBacak).map((d) => d.dow);
+      for (const a of bacak) {
+        for (const b of bacak) {
+          if (a === b) continue;
+          assert.ok(!komsu(a, b),
+            cfg.goal + '/' + cfg.strengthDays + 'gün/dövüş[' + cfg.fightDays.join(',') +
+            ']: bacak günleri ' + bacak.join(',') + ' — arka arkaya');
+        }
+      }
+    }
+  });
+
+  test('ayni gune iki sablon yerlesmiyor', () => {
+    for (const cfg of AYARLAR) {
+      const p = M.buildProgram(cfg, []);
+      const gunler = (p.days || []).filter((d) => d.type === 'strength').map((d) => d.dow);
+      assert.strictEqual(new Set(gunler).size, gunler.length,
+        cfg.goal + '/' + cfg.strengthDays + 'gün: aynı güne iki antrenman');
+    }
+  });
+
+  test('dovus gunune guc antrenmani konmuyor', () => {
+    for (const cfg of AYARLAR) {
+      const p = M.buildProgram(cfg, []);
+      for (const d of (p.days || [])) {
+        if (d.type !== 'strength') continue;
+        assert.ok(cfg.fightDays.indexOf(d.dow) < 0,
+          cfg.goal + ': ' + d.dow + '. güne hem dövüş hem ağırlık');
+      }
+    }
+  });
+
+  test('bacak-bacak komsulugu cozulemezse motor SUSMUYOR', () => {
+    // Cozulemeyen durum kalabilir (cok az bos gun); o zaman yazmali.
+    let uyarili = 0, cakisan = 0;
+    for (const cfg of AYARLAR) {
+      const p = M.buildProgram(cfg, []);
+      const bacak = (p.days || []).filter((d) => d.agirBacak).map((d) => d.dow);
+      let ard = false;
+      for (const a of bacak) for (const b of bacak) if (a !== b && komsu(a, b)) ard = true;
+      if (!ard) continue;
+      cakisan++;
+      if ((p.notes || []).some((n) => /arka arkaya/i.test(n))) uyarili++;
+    }
+    assert.strictEqual(cakisan, uyarili, cakisan + ' çakışmanın ' + uyarili + '\'i uyarılmış');
+  });
+
+  test('REGRESYON: cekis hacmi itisin %75\'inin altina inmiyor', () => {
+    // ⚠️ Yon onemli: eksik olan CEKIS. Itis fazlaligi omuz ekleminin en
+    // bilinen risk kalibi; bench-agirlikli programlarin klasik sorunu.
+    for (const cfg of AYARLAR) {
+      const p = M.buildProgram(cfg, []);
+      const itis = setTop(p, ITIS), cekis = setTop(p, CEKIS);
+      if (!itis) continue;
+      assert.ok(cekis >= itis * 0.75,
+        cfg.goal + '/' + cfg.strengthDays + 'gün/' + cfg.sessionMin + 'dk: itiş ' + itis +
+        ' çekiş ' + cekis + ' (' + (cekis / itis).toFixed(2) + '×)');
+    }
+  });
+
+  test('iki ust sablon ayni kalipla BASLAMIYOR', () => {
+    // Ikisi de itisle baslayinca butce kesintisi hep cekise denk geliyordu.
+    const ust = M.PROGRAM_SPLITS.upperlower.filter((x) => !x.agirBacak);
+    assert.strictEqual(ust.length, 2);
+    assert.notStrictEqual(ust[0].patterns[0], ust[1].patterns[0],
+      'her iki üst gün de ' + ust[0].patterns[0] + ' ile başlıyor');
+    assert.ok(ITIS.indexOf(ust[0].patterns[0]) >= 0 || CEKIS.indexOf(ust[0].patterns[0]) >= 0);
+  });
+
+  test('denge duzeltmesi hareket sayisini ve kas tavanini bozmuyor', () => {
+    for (const cfg of AYARLAR) {
+      const p = M.buildProgram(cfg, []);
+      const sets = M.programWeeklySets(p);
+      for (const m of Object.keys(sets)) {
+        assert.ok(sets[m] <= M.PROGRAM_LIMITS.maxSetsPerMuscleWeek,
+          cfg.goal + ': ' + m + ' ' + sets[m] + ' set — tavan aşıldı');
+      }
+      for (const d of (p.days || [])) {
+        assert.ok((d.exercises || []).length <= M.PROGRAM_LIMITS.maxExercisesPerSession + 3,
+          cfg.goal + ': ' + (d.exercises || []).length + ' hareket');
+      }
+    }
+  });
+
+  test('cekis seti eklendiyse SEBEBIYLE birlikte yaziliyor', () => {
+    let bulundu = false;
+    for (const cfg of AYARLAR) {
+      const p = M.buildProgram(cfg, []);
+      const n = (p.notes || []).find((x) => /Çekiş hacmi/i.test(x));
+      if (!n) continue;
+      bulundu = true;
+      assert.match(n, /omuz/i, 'çekiş notu sebebini yazmıyor');
+    }
+    assert.ok(bulundu, 'hiçbir yapılandırmada çekiş dengelemesi tetiklenmedi');
+  });
+
+  test('gun yerlesimi deterministik', () => {
+    for (const cfg of AYARLAR.slice(0, 12)) {
+      const a = M.buildProgram(cfg, []).days.map((d) => d.dow + ':' + d.name).join('|');
+      const b = M.buildProgram(cfg, []).days.map((d) => d.dow + ':' + d.name).join('|');
+      assert.strictEqual(a, b, cfg.goal + ': gün yerleşimi deterministik değil');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('7 — hafta ici dalgalanma ve ikincil kas payi (18 Agu 2026)', () => {
+  // Dokumanda "bilinen sinir" olarak duran iki madde kapatildi:
+  //   5) Periyodizasyon yok — hafta ici agir/orta/hafif dalgalanma yok
+  //  4b) Ikincil kas payi sayilmiyor — hip thrust arka bacagi da yukler
+  const AYARLAR = [];
+  for (const goal of Object.keys(M.PROGRAM_GOALS)) {
+    for (const sd of [3, 4, 5]) {
+      for (const sessionMin of [45, 60, 90]) {
+        AYARLAR.push({ goal, strengthDays: sd, sessionMin, places: ['gym'], fightDays: [2, 4], avoid: [] });
+      }
+    }
+  }
+  const lib = (id) => M.PROGRAM_EXERCISES.find((x) => x.id === id) || {};
+  const anaKaldiris = (p) => tumHareketler(p).filter((e) => !e.explosive && !e.sure && e.tier === 1);
+
+  test('SOZLESME: ayni kalip haftada 2 kez geliyorsa ikisi de AGIR olamaz', () => {
+    for (const cfg of AYARLAR) {
+      const p = M.buildProgram(cfg, []);
+      const kalipta = {};
+      for (const e of anaKaldiris(p)) {
+        const k = lib(e.id).pattern;
+        (kalipta[k] = kalipta[k] || []).push(e);
+      }
+      for (const k of Object.keys(kalipta)) {
+        const agir = kalipta[k].filter((e) => e.yuk === 'agir').length;
+        assert.ok(agir <= 1,
+          cfg.goal + '/' + cfg.strengthDays + 'gün: ' + k + ' kalıbında ' + agir + ' ağır gün');
+      }
+    }
+  });
+
+  test('her kademe-1 hareketi agir ya da orta olarak ETIKETLI', () => {
+    for (const cfg of AYARLAR) {
+      const p = M.buildProgram(cfg, []);
+      for (const e of anaKaldiris(p)) {
+        assert.ok(e.yuk === 'agir' || e.yuk === 'orta', e.tr + ': yük etiketi yok');
+      }
+    }
+  });
+
+  test('ORTA gun: tekrar YUKSEK, efor DUSUK', () => {
+    let bulundu = false;
+    for (const cfg of AYARLAR) {
+      const p = M.buildProgram(cfg, []);
+      const kalipta = {};
+      for (const e of anaKaldiris(p)) {
+        const k = lib(e.id).pattern;
+        (kalipta[k] = kalipta[k] || []).push(e);
+      }
+      for (const k of Object.keys(kalipta)) {
+        const agir = kalipta[k].find((e) => e.yuk === 'agir');
+        const orta = kalipta[k].find((e) => e.yuk === 'orta');
+        if (!agir || !orta) continue;
+        bulundu = true;
+        assert.ok(orta.repMin > agir.repMin,
+          cfg.goal + '/' + k + ': orta gün tekrarı ağırdan yüksek değil');
+        const rpeAgir = Math.max.apply(null, String(agir.rpe).split('-').map(Number));
+        const rpeOrta = Math.max.apply(null, String(orta.rpe).split('-').map(Number));
+        assert.ok(rpeOrta <= rpeAgir, cfg.goal + '/' + k + ': orta günün eforu daha yüksek');
+        assert.ok(orta.rest <= agir.rest, cfg.goal + '/' + k + ': orta günde dinlenme kısalmamış');
+      }
+    }
+    assert.ok(bulundu, 'hiçbir yapılandırmada ağır/orta çifti oluşmadı');
+  });
+
+  test('AGIR gun transfer puani yuksek harekete gidiyor', () => {
+    // Gun sirasina gore secince motor hip thrust'i agir, RDL'yi orta
+    // yapiyordu — transferi yuksek hareket hafif gune dusuyordu.
+    for (const cfg of AYARLAR) {
+      const p = M.buildProgram(cfg, []);
+      const kalipta = {};
+      for (const e of anaKaldiris(p)) {
+        const k = lib(e.id).pattern;
+        (kalipta[k] = kalipta[k] || []).push(e);
+      }
+      for (const k of Object.keys(kalipta)) {
+        if (kalipta[k].length < 2) continue;
+        const agir = kalipta[k].find((e) => e.yuk === 'agir');
+        if (!agir) continue;
+        const enYuksek = Math.max.apply(null, kalipta[k].map((e) => lib(e.id).pri || 2));
+        assert.strictEqual(lib(agir.id).pri || 2, enYuksek,
+          cfg.goal + '/' + k + ': ağır gün ' + agir.tr + ' (pri ' + (lib(agir.id).pri || 2) +
+          '), en yüksek pri ' + enYuksek);
+      }
+    }
+  });
+
+  test('dinlenme suresi 30 sn adimina yuvarlanmis ("2.25 dk" yok)', () => {
+    for (const cfg of AYARLAR) {
+      const p = M.buildProgram(cfg, []);
+      for (const e of tumHareketler(p)) {
+        if (!e.rest) continue;
+        assert.strictEqual(e.rest % 15, 0, e.tr + ': dinlenme ' + e.rest + ' sn');
+      }
+    }
+  });
+
+  test('patlayici is dalgalandirilmiyor — olcu hiz', () => {
+    for (const cfg of AYARLAR) {
+      const p = M.buildProgram(cfg, []);
+      for (const e of tumHareketler(p)) {
+        if (!e.explosive) continue;
+        assert.ok(!e.yuk, e.tr + ': patlayıcı işe ağır/orta etiketi konmuş');
+      }
+    }
+  });
+
+  test('dalgalanma bir kez uygulaniyor — hafta ilerleyince aralik buyumuyor', () => {
+    let p = M.buildProgram(AYARLAR[0], []);
+    const ilk = anaKaldiris(p).map((e) => e.id + ':' + e.repMin + '-' + e.repMax).join('|');
+    for (let i = 0; i < 6; i++) p = M.advanceProgram(p, [], '2026-08-18');
+    const sonra = anaKaldiris(p).map((e) => e.id + ':' + e.repMin + '-' + e.repMax).join('|');
+    assert.strictEqual(ilk, sonra, 'tekrar aralığı her hafta kayıyor');
+  });
+
+  test('dalgalanma varsa motor SEBEBIYLE birlikte yaziyor', () => {
+    const p = M.buildProgram(KICKBOKS, []);
+    const varMi = tumHareketler(p).some((e) => e.yuk === 'orta');
+    if (!varMi) return;
+    assert.ok((p.notes || []).some((n) => /ORTA gün/i.test(n)), 'dalgalanma notu yok');
+  });
+
+  test('IKINCIL PAY: dolayli calisma yarim set sayiliyor', () => {
+    const p = M.buildProgram(KICKBOKS, []);
+    const dogrudan = M.programWeeklySets(p);
+    const toplam = M.programWeeklySetsTotal(p);
+    let fark = false;
+    for (const m of Object.keys(toplam)) {
+      assert.ok(toplam[m] >= (dogrudan[m] || 0) - 0.01,
+        m + ': toplam (' + toplam[m] + ') doğrudan setten (' + dogrudan[m] + ') küçük');
+      if (toplam[m] > (dogrudan[m] || 0) + 0.01) fark = true;
+    }
+    assert.ok(fark, 'hiçbir kasta ikincil pay hesaplanmamış');
+  });
+
+  test('ikincil tablodaki her id kutuphanede var ve kendini saymiyor', () => {
+    for (const id of Object.keys(M.PROGRAM_IKINCIL)) {
+      const e = M.PROGRAM_EXERCISES.find((x) => x.id === id);
+      assert.ok(e, 'PROGRAM_IKINCIL\'de olmayan hareket: ' + id);
+      for (const kas of Object.keys(M.PROGRAM_IKINCIL[id])) {
+        assert.notStrictEqual(kas, e.muscle, id + ': birincil kasını ikincil olarak da sayıyor');
+        assert.ok(M.PROGRAM_MUSCLES[kas], id + ': bilinmeyen kas ' + kas);
+        const o = M.PROGRAM_IKINCIL[id][kas];
+        assert.ok(o > 0 && o <= 0.5, id + '/' + kas + ': oran ' + o);
+      }
+    }
+  });
+
+  test('16 YAS TAVANI dogrudan set uzerinden isliyor (ikincil ezmiyor)', () => {
+    for (const cfg of AYARLAR) {
+      const p = M.buildProgram(cfg, []);
+      const dogrudan = M.programWeeklySets(p);
+      for (const m of Object.keys(dogrudan)) {
+        assert.ok(dogrudan[m] <= M.PROGRAM_LIMITS.maxSetsPerMuscleWeek,
+          cfg.goal + ': ' + m + ' ' + dogrudan[m] + ' doğrudan set');
+      }
+    }
   });
 });

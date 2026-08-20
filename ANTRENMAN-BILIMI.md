@@ -205,6 +205,36 @@ Sıçramada "bir tekrar daha yaptın, kilo ekleyelim" yanlıştır. İlerleme da
 
 ---
 
+## 6.5 Hafta içi dalgalanma 🟢
+
+Dokümanda "bilinen sınır" olarak duruyordu: *"Periyodizasyon yok. Hafta içi dalgalanma (ağır/orta/hafif gün) modellenmiyor."* Kapatıldı.
+
+### Sorun 2×/hafta frekansın yan ürünüydü
+
+Motor aynı ana kaldırışı haftada iki kez veriyordu (doğru), ama **ikisini de 3-5 tekrar / RPE 8'de** veriyordu. Aynı kalıbı haftada iki kez maksimum yükte çalışmak toparlanma kapasitesini aşar: ikinci seansta üretilen güç düşer, teknik bozulur, kazanç birinci seansın altına iner.
+
+**Frekansı artırmanın şartı, seans şiddetini dağıtmaktır.**
+
+| | Tekrar | RPE | Dinlenme | İşi |
+|---|---|---|---|---|
+| **AĞIR** gün | kademe aralığı (3-5) | 7-8 | tam (3 dk) | Sinir sistemi |
+| **ORTA** gün | +3 / +4 (6-9) | 7 | ×0.7 (2 dk) | Hacim ve teknik |
+
+Ağırlık da yeniden hesaplanır — aynı kiloyu 3-5 yerine 6-9 tekrar yapmak "orta gün" değil **başarısız ağır gün**. Vücut ağırlığı hareketlerinde ek yük de yeni tekrara göre iner (barfiks +12.5 → +5 kg).
+
+### Ağır gün en iyi harekete gider, ilk güne değil 🟢
+
+Aynı kalıbın iki farklı hareketi olabilir: `hinge` = hip thrust + RDL. Gün sırasına göre seçince motor **hip thrust'ı ağır, RDL'yi orta** yapıyordu — transferi yüksek hareket hafif güne düşüyordu. Sıra artık transfer puanına (`pri`) göre: RDL ağır, hip thrust orta.
+
+### Kapsam sınırları
+
+- Yalnız **kademe 1**'e uygulanır. Yardımcı ve izolasyon zaten orta-yüksek tekrarda; onları da dalgalandırmak uyaranı dağıtmaz, seyreltir.
+- **Patlayıcı iş dışarıda** — ölçüsü hız, dalgalandırılmaz.
+- **Bir kez uygulanır.** `advanceProgram` tekrar çağırmaz; yoksa aralık her hafta 3 tekrar büyür. Teste bağlı.
+- Orta günün dinlenmesi ağır günü **asla geçemez** (kısa dinlenmeli hedeflerde sabit taban bunu ters çeviriyordu).
+
+---
+
 ## 7. Deload 🟢
 
 İki tetikleyici, aynı hafifletmeyi uygular (set × 0.6):
@@ -451,12 +481,44 @@ Hepsi motorda zorlanıyor, her biri ayrı teste bağlı:
 | Seviye 2 hareketler | Teknik haftalarından sonra | 🟡 |
 | Haftalık set tavanı | 20 | 🟡 |
 | Ağır gün tavanı | Güç + dövüş ≤ 6 | 🟡 |
-| Bacak günü yerleşimi | Dövüşün ertesi/öncesi güne konmaz | 🟢 |
+| Bacak günü yerleşimi | Dövüşün ertesi/öncesi güne konmaz **ve iki bacak günü arka arkaya gelmez** | 🟢 |
 | Dinlenme | Haftada en az 1 tam gün | 🟢 |
 | Ağrıyan bölge | O kası çalıştıran hareket havuzdan tamamen elenir | 🟢 |
 | Boyun çalışması | Haftada 2 gün (izometrik) | 🟡 |
 
 **Boyun neden 1'den 2'ye çıktı:** boyun kası da diğerleri gibi frekansa cevap verir ve izometrik işin toparlanma maliyeti neredeyse sıfırdır. Dövüş sporunda amaç kafa hızlanmasını — dolayısıyla konküzyon riskini — azaltmak; tek seans koruyucu eşik için zayıf kalıyordu.
+
+### Gün yerleşimi: ceza tablosu 🟢
+
+⚠️ **18 Ağu 2026 denetiminde bulunan en ağır hata.** Eski kod ağır bacak gününü yerleştirirken yalnız **dövüşe** komşuluğu kontrol ediyordu; iki bacak gününün **birbirine** komşuluğunu hiç kontrol etmiyordu. 300 yapılandırmanın **120'sinde (%40)** Pazar ve Pazartesi arka arkaya ağır bacak günü çıkıyordu — Pazar 4 set squat, ertesi gün 3 set daha.
+
+Artık her gün için ceza hesaplanıyor, en düşük cezalı gün seçiliyor:
+
+| Ceza | Durum |
+|---|---|
+| 200 | Aynı güne iki ağır yük |
+| **90** | **İki ağır bacak günü arka arkaya** ← eklenen kural |
+| 70 | Ağır bacak günü dövüşe komşu ← eski tek kural |
+| 20 | İki üst gün arka arkaya (hafif — üst vücut daha hızlı toparlar) |
+| 4 | Üst gün bacak gününe komşu (sorun değil, hafif tercih) |
+
+Sonuç: **%40 → %0.** Beraberlikte hafta sırası kazanır, seçim deterministik kalır. Çözülemeyen durumda (çok az boş gün) motor susmuyor, ayrı bir not düşüyor.
+
+### Antagonist denge: çekiş ≥ itiş × 0.8 🟢
+
+İkinci bulunan hata. Şablonlar 2 itiş + 2 çekiş kurulmuştu ama **her iki üst gün de itişle başlıyordu** ve zaman bütçesi son slotu kestiğinde kesilen hep çekiş oluyordu. 45 dk'lık programda hafta toplamı **itiş 20 / çekiş 10** çıkıyordu.
+
+⚠️ **Yön önemli: eksik olan çekiş.** İtiş fazlalığı omuz ekleminin en bilinen risk kalıbıdır — ön omuz ve göğüs kısalır, skapula kontrolü zayıflar. Bench-ağırlıklı programların klasik sorunu. Dövüş sporcusunda ayrıca klinçte ve savunmada çekiş kuvveti doğrudan iş görür.
+
+Üç katmanlı düzeltme:
+
+1. **Üst B artık çekişle başlıyor** (`pull_h` ilk slot). Tek günde 3 hareket varsa denge zaten kurulamaz (2-1 olur) — denge **günler arasında** kurulur: A itiş ağırlıklı, B çekiş ağırlıklı.
+2. **Seans içi kapı:** bir günde itiş setleri çekişi 2'den fazla geçerse en az değerli itiş hareketi çekişle değiştirilir. Ölçü hareket sayısı değil **set** — güçte kademe 1'e 5 set veriliyor, "2 itiş 1 çekiş" günü 10'a 5 set demek. Değişiklik dengeyi gerçekten iyileştirmiyorsa yapılmaz.
+3. **Haftalık kural:** çekiş toplamı itişin %80'ine çekilir.
+
+Üçüncüsü neden gerekliydi: **itiş iki kasa bölünüyor** (göğüs + omuz) ve her biri kendi bandını ayrı ayrı dolduruyor; **çekiş tek etikette** (sırt) toplanıyor ve tek band alıyor. Şablon slotları 1-1 dengeli olsa bile hafta toplamında itiş öne geçiyor. Kural sert değil — kas tavanı (20) ve hareket başı 6 set sınırı bu adımı ezer.
+
+Sonuç: **114/300 → 4/300**, kalan 4'ü de ters yönde (çekiş 1.38× — koruyucu taraf).
 
 **Not:** plyometrik ve olimpik türev hareketler bu yaş için uygundur — gençlik direnç antrenmanı pozisyon bildirileri bunu destekler. Sınır hareketin kendisi değil, **teknik önce, hacim sonra** sırasıdır.
 
@@ -631,8 +693,8 @@ Dürüstlük bölümü. Bunlar eksiklik olarak biliniyor:
 2. **Dövüş gününün yoğunluğu bilinmiyor.** Teknik günü ile spar günü aynı yük değil; ikisi de 40 temas sayılıyor.
 3. ~~**Efor derecesi (RIR/RPE) yok.**~~ **Çözüldü (18 Ağu 2026)** — bkz. bölüm 9.7. Hacim hâlâ set sayısıyla ölçülüyor, ama artık her sette hedef RPE yazıyor.
 4. **Bacak günü çakışması çözülmüyor, sadece uyarılıyor.** Dövüş günleri sıkışıksa motor "o gün bacağı hafif tut" diyor ama kendisi düzeltmiyor.
-4b. **İkincil kas payı sayılmıyor.** Hip thrust arka bacağı da çalıştırır ama hacim muhasebesinde yalnız `glutes` sayılır. Bu yüzden motor bazen "arka bacak bandın altında" diyor — teknik olarak doğru, pratikte olduğundan kötü görünüyor.
-5. **Periyodizasyon yok.** Hafta içi dalgalanma (ağır/orta/hafif gün) ve makro döngü (hazırlık → yarışma) modellenmiyor.
+4b. ~~**İkincil kas payı sayılmıyor.**~~ **Çözüldü (18 Ağu 2026).** Doğrudan çalışan kas 1 set, dolaylı çalışan **0.5 set** (`PROGRAM_IKINCIL`). ⚠️ Bu sayım yalnız **durum raporunda** kullanılır — band zorlaması ve 16 yaş set tavanı doğrudan sette kalır. Sebebi: hacim önerilerinin dayandığı çalışmalar doğrudan set sayar; tavanı dolaylı setle şişirmek güvenlik kuralını gevşetmek olur. Kart artık iki sayı gösteriyor: `Arka bacak 8 +2`.
+5. **Periyodizasyon kısmen var.** Hafta içi dalgalanma (ağır/orta) eklendi — bkz. bölüm 6.5. **Makro döngü hâlâ yok:** hazırlık → yarışma bloklaması, maç tarihine göre yüklenme ve tapering modellenmiyor.
 6. **Hareket tekniği denetlenmiyor.** Motor kaç kilo kaldırdığını bilir, nasıl kaldırdığını bilmez.
 
 Bu yüzden karta sabit not düşülür: **başlangıç noktasıdır, kişiye özel antrenörlük değildir.**
@@ -648,6 +710,8 @@ Bu yüzden karta sabit not düşülür: **başlangıç noktasıdır, kişiye öz
 | 9 Ağu 2026 | Kalite paketi: kademe sistemi, hacim bandı, ısınma, kondisyon |
 | 10 Ağu 2026 | Hareket ailesi, dövüş→bacak hacmi mahsubu, planlı deload |
 | 10 Ağu 2026 | Bulunan 2 bug: deload kalıcı hacim kaybı yapıyordu, ardışık deload olabiliyordu |
+| 18 Ağu 2026 | **Hafta içi dalgalanma (undulating):** aynı kalıp 2× geliyorsa ikincisi ORTA gün — tekrar +3/+4, RPE −1, dinlenme ×0.7, ağırlık yeniden hesap; ağır gün transfer puanı yüksek harekete gider. **İkincil kas payı:** dolaylı çalışma 0.5 set (yalnız raporda, tavan doğrudan sette kalır) |
+| 18 Ağu 2026 | **Denetim bulguları:** iki ağır bacak günü arka arkaya düşüyordu (%40 → %0, gün yerleşimi ceza tablosuyla); çekiş hacmi itişin gerisinde kalıyordu (114/300 → 4/300; Üst B çekişle başlıyor + seans içi kapı + haftalık %80 kuralı) |
 | 18 Ağu 2026 | **Mikro besin + takviye katmanı:** ~90 besin için porsiyon başına ca/fe/d/lif verisi; kapsam raporu (kapsam <%70 → yorum yok, takviye yok); takviye yalnızca gerçek açıkta ve üst sınır kapısıyla; demirde hiç takviye yok (kan değeri olmadan); performans takviyeleri kanıt seviyesiyle bilgi olarak |
 | 18 Ağu 2026 | **Beslenme denetimi:** yağ çapası (yağ %30 eksik kalıyordu); çapalar için üç geçişlik sabit nokta (protein sistematik %20-48 fazlaydı); 3000 kcal üstünde 5. öğün; karbonhidratın antrenman etrafına kayması; fazlayı geri alma adımı; protein tavanı 2.5 g/kg'a göre kırpma; mikro besin katmanı (kalsiyum, demir, D vit, lif); sapma raporu |
 | 18 Ağu 2026 | **Koçluk katmanı:** tempo (kademe + hareket bazlı), RPE (hafta bağımlı, tavan 9), vücut ağırlığı kalibrasyonu (Epley, 1RM denemesi yok), soğuma/mobilite bloğu, tablo çıktısı (Ad · Set×Tekrar · Tempo · Dinlenme · RPE · Yük); Hevy'ye tempo/RPE notu ve gerçek superset |

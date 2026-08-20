@@ -7405,6 +7405,9 @@ function hevyBuildExercises(gun, tplIds, restSec) {
       parca.push('Ana kaldırış — önce 2 ısınma seti yap, sayıya katma.');
     }
     // Tempo ve RPE: Hevy'de alan yok, nota yaziliyor.
+    if (e.yuk === 'agir') parca.push('AĞIR gün — haftanın yüksek yüklü seansı.');
+    else if (e.yuk === 'orta') parca.push('ORTA gün — aynı kalıbın ikinci seansı. Ağırlık ' +
+      'kasten düşük, tekrar yüksek. Burada zorlarsan ağır güne yorgun gelirsin.');
     if (e.tempo) parca.push('Tempo ' + e.tempo + ' (iniş-bekle-kalkış-bekle; X = maksimum hız niyeti).');
     if (e.rpe) parca.push('RPE ' + e.rpe + ' — yetmezliğe GITME, tankta tekrar kalsın.');
     if (e.bwNot) parca.push(e.bwNot);

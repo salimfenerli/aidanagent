@@ -4291,6 +4291,27 @@
   background: color-mix(in srgb, var(--info, #6fa8e8) 14%, transparent);
   color: var(--info, #6fa8e8);
 }
+/* Hafta ici dalgalanma: agir / orta gun rozeti */
+.pe-yuk {
+  display: inline-block; margin-right: 6px;
+  padding: 1px 6px; border-radius: 5px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
+  border: 1px solid transparent;
+}
+.pe-yuk-agir {
+  border-color: color-mix(in srgb, var(--accent, #e2e2e2) 45%, transparent);
+  background: color-mix(in srgb, var(--accent, #e2e2e2) 14%, transparent);
+  color: var(--accent, #e2e2e2);
+}
+.pe-yuk-orta {
+  border-color: var(--border, #2a2c35);
+  color: var(--text-muted, #a9abb3);
+}
+/* Hacim rozetinde ikincil (dolayli) pay */
+.prog-vol i {
+  margin-left: 3px; font-style: normal; font-size: 0.85em;
+  color: var(--text-muted, #a9abb3); opacity: 0.75;
+}
 /* Kurulum: vucut agirligi max tekrar girdileri */
 .prog-nums { display: flex; gap: 10px; flex-wrap: wrap; }
 .prog-num { display: flex; flex-direction: column; gap: 4px; font-size: 0.82em; color: var(--text-muted); }

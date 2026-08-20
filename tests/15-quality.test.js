@@ -37,7 +37,8 @@ function motor() {
   vm.createContext(ctx);
   const src = fs.readFileSync(path.join(ROOT, 'program.js'), 'utf8') +
     '\n;globalThis.__SABIT = { PROGRAM_GOALS, PROGRAM_EXERCISES, PROGRAM_LIMITS,' +
-    ' PROGRAM_TIER1, PROGRAM_TIER2, PROGRAM_UNI, PROGRAM_FAMILY, PROGRAM_REP_FLOOR };';
+    ' PROGRAM_TIER1, PROGRAM_TIER2, PROGRAM_UNI, PROGRAM_FAMILY, PROGRAM_REP_FLOOR,' +
+    ' PROGRAM_ORTA_ARTIS, PROGRAM_IKINCIL };';
   vm.runInContext(src, ctx);
   return Object.assign(ctx, ctx.__SABIT);
 }
@@ -95,28 +96,49 @@ describe('1 — kademe sistemi (ana kaldiris / yardimci / izolasyon)', () => {
     // 3 tekrar yazmak kademe araligina uysa da bilimsel olarak yanlisti.
     // Sozlesme: aralik kademenin araligidir YA DA hareketin tabaniyla YUKARI
     // kayar — asla asagi inmez, ve genisligi korunur.
+    // ⚠️ 18 Agu 2026 — ucuncu kaynak: HAFTA ICI DALGALANMA. Ayni kalip
+    // haftada ikinci kez geldiginde ORTA gun olur ve aralik +3/+4 kayar.
+    // Sozlesme: aralik ya kademenin araligidir, ya hareketin tabaniyla
+    // yukari kaymistir, ya da orta gun kaymasidir — baska sebep yok.
     const p = M.buildProgram(KICKBOKS, []);
     const T = M.PROGRAM_GOALS.atletik.tiers;
+    const ART = M.PROGRAM_ORTA_ARTIS;
     for (const e of normal(p)) {
       if (e.muscle === 'neck') continue;
       const [a, b] = T[e.tier];
       const taban = M.PROGRAM_REP_FLOOR[e.id] || 0;
-      const beklenenMin = Math.max(a, taban);
+      const orta = e.yuk === 'orta' ? ART.min : 0;
+      const beklenenMin = Math.max(a, taban) + orta;
       assert.strictEqual(e.repMin, beklenenMin,
-        e.tr + ' (kademe ' + e.tier + '): repMin ' + e.repMin + ', beklenen ' + beklenenMin);
-      assert.ok(e.repMax >= Math.max(b, beklenenMin + 2),
+        e.tr + ' (kademe ' + e.tier + ', ' + (e.yuk || 'tek') + '): repMin ' +
+        e.repMin + ', beklenen ' + beklenenMin);
+      assert.ok(e.repMax >= Math.max(b, Math.max(a, taban) + 2) + (orta ? ART.max : 0),
         e.tr + ': repMax ' + e.repMax + ' — aralik daraltilmis');
       assert.ok(e.repMin >= a, e.tr + ': taban kademe araliginin ALTINA indi');
     }
   });
 
-  test('kademe 1 ile kademe 3 GERCEKTEN farkli tekrar aliyor', () => {
+  test('AGIR gunde kademe 1 ile kademe 3 GERCEKTEN farkli tekrar aliyor', () => {
+    // ⚠️ Karsilastirma AGIR gun uzerinden. Orta gunun ana kaldirisi 8-11'e
+    // cikabilir ve izolasyonla ust uste binebilir — bu hata degil, hafta ici
+    // dalgalanmanin ta kendisi. Kademe ayriminin kanit noktasi agir gundur.
     const p = M.buildProgram(KICKBOKS, []);
-    const t1 = normal(p).filter((e) => e.tier === 1);
+    const t1 = normal(p).filter((e) => e.tier === 1 && e.yuk !== 'orta');
     const t3 = normal(p).filter((e) => e.tier === 3 && e.muscle !== 'neck');
     assert.ok(t1.length && t3.length, 'her iki kademeden hareket yok');
     assert.ok(Math.max.apply(null, t1.map((e) => e.repMax)) < Math.min.apply(null, t3.map((e) => e.repMin)),
       'ana kaldiris ve izolasyon tekrar araliklari cakisiyor');
+  });
+
+  test('ORTA gun agir gunden GERCEKTEN hafif', () => {
+    const p = M.buildProgram(KICKBOKS, []);
+    const orta = normal(p).filter((e) => e.yuk === 'orta');
+    assert.ok(orta.length, 'hicbir hareket orta gune dusmemis');
+    for (const e of orta) {
+      assert.ok(e.repMin >= 6, e.tr + ': orta gun repMin ' + e.repMin);
+      const rpe = Math.max.apply(null, String(e.rpe).split('-').map(Number));
+      assert.ok(rpe <= 7, e.tr + ': orta gunde RPE ' + e.rpe);
+    }
   });
 });
 
