@@ -21,9 +21,21 @@ const NUT_LIMITS = {
   proteinPerMealMax: 0.40,  // ustu ayni ogunde ek fayda vermiyor
   fatMinPerKg: 0.8,         // hormonal saglik tabani — ALTINA INILMEZ
   fatPct: 0.27,             // kcal'in yuzdesi (taban kuralini gecerse o kazanir)
+  fatMinPct: 0.20,          // ACSM/AND/DC: kronik olarak enerjinin %20 altina inilmez
   gainSurplus: 350,         // yagsiz kazanim; buyuk fazla yag olarak birikir
   waterMlPerKg: 35,
-  waterPerSession: 600,     // ml, antrenman basina ek
+  waterPerSession: 600,     // ml, agirlik seansi basina ek
+  waterPerFight: 1000,      // ml, dovus seansi — ter hizi belirgin yuksek
+  // ⚠️ ENERJI MEVCUDIYETI (20 Agu 2026). Eski "guvenlik tabani BMR" kurali
+  // bilimsel olarak taban DEGILDI: 70 kg / 60 kg yagsiz kutle / 600 kcal
+  // seansta BMR tabani EA ~21 kcal/kg FFM'e denk geliyor — IOC REDs
+  // konsensusunun "bozulma" bolgesinin derinleri. Erkek ergende REDs'in
+  // uyari sinyali (amenore gibi) yok; buyume geriligi ve uyku bozuklugu
+  // ile ortaya cikiyor. Taban artik EA temelli.
+  eaKritik: 30,             // kcal/kg yagsiz kutle — ALTI bozulma bolgesi
+  eaSaglikli: 45,           // kcal/kg FFM — optimal bant
+  ffmOran: 0.85,            // yagsiz kutle bilinmiyorsa muhafazakar tahmin
+  seansKcal: 500,           // seans basi tahmini harcama (EA hesabi icin)
 };
 
 /**
@@ -155,7 +167,7 @@ const NUT_MICRO_DATA = {
  */
 const NUT_MICRO = [
   {
-    id: 'kalsiyum', alan: 'ca', birim: 'mg', hedefSayi: 1300, ustSinir: 2500,
+    id: 'kalsiyum', alan: 'ca', birim: 'mg', hedefSayi: 1300, ustSinir: 3000,
     ad: 'Kalsiyum', hedef: '1300 mg',
     neden: 'Zirve kemik kütlesinin yaklaşık %90\'ı 18 yaşına kadar kuruluyor. ' +
       'Bu pencere kapandıktan sonra geri alınamaz; darbeli bir sporda ayrıca korumadır.',
@@ -184,7 +196,7 @@ const NUT_MICRO = [
     ipucu: 'Takviye kararı kan değerine bakan hekimin işi — motor takviye önermez.',
   },
   {
-    id: 'lif', alan: 'lif', birim: 'g', hedefSayi: 30, ustSinir: null,
+    id: 'lif', alan: 'lif', birim: 'g', hedefSayi: 38, ustSinir: null,
     ad: 'Lif', hedef: '30-38 g',
     neden: 'Yüksek kalorili bir planda lif kolayca düşer; sindirim ve tokluk bozulur.',
     kaynak: ['Çoban salata', 'Mercimek çorbası', 'Nohut', 'Kuru fasulye', 'Yulaf ezmesi',
@@ -360,7 +372,14 @@ function nutMicroCheck(meals) {
 // Gun tipine gore fiziksel aktivite katsayisi (PAL).
 // Tek bir "aktivite seviyesi" sormak yerine PROGRAMDAN turetiliyor —
 // antrenman gunu ile dinlenme gunu ayni kalori DEGILDIR.
-const NUT_PAL = { rest: 1.4, strength: 1.6, fight: 1.75, both: 1.9 };
+// ⚠️ 20 Agu 2026 — DINLENME GUNU 1.4'TEN 1.55'E. FAO/WHO/UNU'nun ERGEN
+// tablosunda 16-17 yas erkek icin en dusuk kategori bile 1.55; 1.40 o
+// raporda YETISKIN "sedanter"in alt ucu ve ergende karsiligi yok. Okula
+// yuruyen bir 16 yasindaki icin gunde ~285 kcal sistematik eksik demekti —
+// motorun kendi beyan ettigi "bu profilde asil risk AZ YEMEK" ilkesiyle en
+// cok celisen sabit buydu. Agirlik gunu de sporcu ergen bandinin (1.75-2.05)
+// altindaydi, 1.7'ye cikti. fight/both zaten bandin icinde, dokunulmadi.
+const NUT_PAL = { rest: 1.55, strength: 1.7, fight: 1.75, both: 1.9 };
 
 const NUT_DAY_LABEL = {
   rest: 'Dinlenme günü', strength: 'Ağırlık günü',
@@ -409,8 +428,17 @@ function nutTargets(profil, dayType, hedef) {
   const kas = hedef === 'kas';
   let kcal = tdee + (kas ? NUT_LIMITS.gainSurplus : 0);
 
-  // 🔒 GUVENLIK TABANI: hedef hicbir kosulda BMR'nin altina inemez.
-  kcal = Math.max(kcal, bmr);
+  // 🔒 GUVENLIK TABANI: ENERJI MEVCUDIYETI (eski hali "BMR alti olamaz"di).
+  // EA = (alim - antrenman harcamasi) / yagsiz kutle. Kritik esik 30 kcal/kg
+  // FFM; hedef hicbir kosulda bunun altina inemez. Yagsiz kutle olcumu yoksa
+  // muhafazakar tahmin kullanilir (kg x 0.85) — tahmin YUKARI degil ASAGI
+  // sapsin diye oran dusuk tutuldu.
+  const seans = dayType === 'both' ? 2 : (dayType === 'rest' ? 0 : 1);
+  const ffm = Math.round(kg * NUT_LIMITS.ffmOran);
+  const antrenmanKcal = seans * NUT_LIMITS.seansKcal;
+  const eaTaban = Math.round(NUT_LIMITS.eaKritik * ffm + antrenmanKcal);
+  const eaSaglikli = Math.round(NUT_LIMITS.eaSaglikli * ffm + antrenmanKcal);
+  kcal = Math.max(kcal, eaTaban);
 
   const proteinG = Math.min(
     Math.round(kg * (kas ? NUT_LIMITS.proteinPerKgGain : NUT_LIMITS.proteinPerKg)),
@@ -421,12 +449,22 @@ function nutTargets(profil, dayType, hedef) {
     Math.round(kcal * NUT_LIMITS.fatPct / 9));
   const carbG = Math.max(0, Math.round((kcal - proteinG * 4 - fatG * 9) / 4));
 
-  const seans = dayType === 'both' ? 2 : (dayType === 'rest' ? 0 : 1);
-  const suMl = Math.round(kg * NUT_LIMITS.waterMlPerKg + seans * NUT_LIMITS.waterPerSession);
+  // ⚠️ Su eki SEANS TIPINE gore (20 Agu 2026). Tek "600 ml" sabiti dovus
+  // seansi icin dusuktu: ACSM egzersiz SIRASINDA 0.4-0.8 L/saat diyor,
+  // ergen sporcu derlemesi buyuk ergenlerde saatte 1 L'ye kadar. Kesin
+  // sayi ancak TARTI ile bulunur; bu bir baslangic tahmini.
+  const suEk = dayType === 'both'
+    ? NUT_LIMITS.waterPerSession + NUT_LIMITS.waterPerFight
+    : (dayType === 'fight' ? NUT_LIMITS.waterPerFight
+      : (dayType === 'strength' ? NUT_LIMITS.waterPerSession : 0));
+  const suMl = Math.round(kg * NUT_LIMITS.waterMlPerKg + suEk);
 
   return {
     dayType, hedef: kas ? 'kas' : 'koru',
     bmr, pal, tdee, kcal,
+    ffm, eaTaban, eaSaglikli,
+    // Planin kendi EA'si — 30-45 arasi "dikkat", 30 alti kirmizi cizgi.
+    ea: ffm > 0 ? Math.round((kcal - antrenmanKcal) / ffm) : null,
     protein: proteinG, carb: carbG, fat: fatG,
     carbPerKg: Math.round((carbG / kg) * 10) / 10,
     proteinPerKg: Math.round((proteinG / kg) * 10) / 10,
@@ -451,6 +489,16 @@ function nutTargets(profil, dayType, hedef) {
  * dusuldukten sonra KALAN yagdir. Boylece antrenman etrafindaki ogunlerde yag
  * dogal olarak duser (mide rahat olsun), uzak ogunlerde yukselir.
  */
+// ⚠️ 20 Agu 2026 — ARA OGUN PAYI DENENDI VE GERI ALINDI. Olcum: 191 ornek
+// ogunun 31'i kendi payinin %130 ustundeydi ve neredeyse hepsi ara/atistirma
+// idi — sablonun TABANI (simit + yogurt + elma + fistik ezmesi ~600 kcal)
+// ogune verilen %12 payin (364 kcal) ustunde. Ara ogun paylari 0.15-0.16'ya
+// cikarilinca dagilim duzeldi (>%130 olan 31 -> 18) AMA 45 kg gibi hafif
+// profillerde ana ogunler kendi paylarini tasiyamaz oldu ve gun %12 eksik
+// kaldi (24-beslenme-kalite kirmizi). Sabit bir oran tablosu iki ucu ayni
+// anda tutamiyor; hafif profilde ana ogun, agir profilde ara ogun sikisiyor.
+// Oranlar 18 Agu haliyle birakildi, dagilim sapmasi BILINEN sinir olarak
+// yazildi. Cozum oran degil SABLON HAVUZU (hafif ara ogun secenegi) olmali.
 const NUT_MEAL_RATIO = {
   4: {
     rest:  { kahvalti: [0.25, 0.25], ogle: [0.30, 0.30], aksam: [0.30, 0.30], atistirma: [0.15, 0.15] },
@@ -913,8 +961,13 @@ function nutBalanceDay(meals, t, kg) {
     // Bu ogunun KENDI yag hedefi altindaysa yag capasi acilir.
     const ogunYagAcik = geri.hedef && geri.fat < (geri.hedef.fat || 0) * 0.8;
     const roller = (yagDolu2 && !ogunYagAcik) ? ['c'] : ['c', 'y'];
+    // ⚠️ 20 Agu 2026: PAL duzeltmesi hedefleri ~%6 yukseltince sablonlar
+    // kendi paylarina yetismekte zorlandi. Cok geride kalan ogunde ek tavani
+    // 2 yerine 3 ("3 dilim peynir" degil, "3 porsiyon salata/ayran" gibi
+    // dusun — ekler kucuk kalemler). Normal geride kalanda tavan 2.
+    const ekTavan = geri.kcal < geri.hedef.kcal * 0.7 ? 3 : 2;
     const adaylar = roller.map(r => capa(geri, r))
-      .concat((geri.items || []).filter(x => x.rol === 'ek' && x.adet > 0 && x.adet < 2));
+      .concat((geri.items || []).filter(x => x.rol === 'ek' && x.adet > 0 && x.adet < ekTavan));
     // ⚠️ COK GERIDE KALAN OGUNDE KARBONHIDRAT TAVANI 4 (20 Agu 2026).
     // Kahvalti hedefinin %57'sinde kaliyordu: capa tavana dayanmis, yag
     // capasi gun yagi dolu diye kapali, ekler 25 kcal'lik kaldiraclar.
@@ -1035,7 +1088,12 @@ function nutDaySummary(meals, t, kg) {
     },
     proteinPerKg: kg > 0 ? Math.round((gercek.protein / kg) * 10) / 10 : null,
     proteinTavanAsildi: kg > 0 && gercek.protein > kg * NUT_LIMITS.proteinMaxPerKg,
-    yagTabanAltinda: kg > 0 && gercek.fat < kg * NUT_LIMITS.fatMinPerKg,
+    // ⚠️ 20 Agu 2026: alarm esigi g/kg TEK BASINA yetmiyordu. 70 kg'da
+    // 0.8 g/kg = 56 g = 3400 kcal'lik planin %14.8'i; DRI'nin 4-18 yas
+    // AMDR tabani %25, ACSM'in kronik siniri %20. Yani 60 g yag yiyen bir
+    // gun (=%16) alarm vermiyordu. Iki kuraldan BUYUK olani kazanir.
+    yagTabanAltinda: kg > 0 && gercek.fat < Math.max(
+      kg * NUT_LIMITS.fatMinPerKg, (t.kcal * NUT_LIMITS.fatMinPct) / 9),
   };
 }
 
@@ -1409,7 +1467,7 @@ function nutAiFacts() {
   const hedefler = nutWeek(prof, n.hedef, prog).filter(g => g.hedef).map(g => ({
     dow: g.dow, tip: g.tip, etiket: NUT_DAY_LABEL[g.tip] || '',
     kcal: g.hedef.kcal, protein: g.hedef.protein, carb: g.hedef.carb,
-    fat: g.hedef.fat, bmr: g.hedef.bmr, suL: g.hedef.waterL,
+    fat: g.hedef.fat, bmr: g.hedef.bmr, taban: g.hedef.eaTaban, suL: g.hedef.waterL,
   }));
   if (!hedefler.length) return null;
   return {
@@ -1451,8 +1509,14 @@ function nutAiValidate(plan, hedefler) {
     // ⚠️ Iki ayri kapi. BMR tabani mutlak (bazal metabolizmanin altinda gun
     // olamaz); %15 tabani ise gizli acik yakalar — hedef 3000'ken 2400 yazmak
     // teknik olarak "az" degil, kalori acigidir.
-    if (kcal < h.bmr) {
-      out.red.push(nutDowLabel(dow) + ': ' + kcal + ' kcal — bazal metabolizmanın (' + h.bmr + ') altında.');
+    // ⚠️ 20 Agu 2026: kapi BMR degil ENERJI MEVCUDIYETI tabani. BMR alti
+    // olmayan bir gun de EA olarak bozulma bolgesinde olabilir — antrenman
+    // harcamasi dusuldukten sonra geriye kalan sey onemli. Eski hesap
+    // gunde 600-1000 kcal'lik antrenman yukunu hic gormuyordu.
+    const taban = h.taban || h.bmr;
+    if (kcal < taban) {
+      out.red.push(nutDowLabel(dow) + ': ' + kcal + ' kcal — antrenman yükü ' +
+        'düşüldüğünde güvenli enerji tabanının (' + taban + ') altında.');
       return;
     }
     if (kcal < Math.round(h.kcal * NUT_AI_FLOOR)) {

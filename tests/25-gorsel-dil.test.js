@@ -127,3 +127,59 @@ describe('tek gorsel dil — ikon ve metin', () => {
     assert.ok(/sbTone\(/.test(govde), 'cagri yeri renk degil ton bildirmeli');
   });
 });
+
+// ---------------------------------------------------------------------------
+// 20 Agu 2026 — MARKA YUZEYI. Uygulamanin ICI monokroma gecti ama DISI
+// (ana ekran ikonu, acilis ekrani, durum cubugu) eski Dracula paletinde
+// kalmisti: ikon bir 🧠 EMOJI'si + mor/pembe gradyandi, tema rengi manifest
+// ile HTML arasinda bile tutmuyordu.
+describe('marka yuzeyi', () => {
+  const manifest = JSON.parse(oku('manifest.webmanifest'));
+  const html = oku('asistan.html');
+  const css = oku('styles.css');
+
+  const sonRoot = () => {
+    const i = css.lastIndexOf(':root {');
+    return css.slice(i, css.indexOf('}', i));
+  };
+
+  test('tema rengi TEK: manifest = HTML = --bg', () => {
+    const bg = (sonRoot().match(/--bg:\s*(#[0-9a-f]{6})/i) || [])[1];
+    const meta = (html.match(/<meta name="theme-color" content="(#[0-9a-f]{6})"/i) || [])[1];
+    assert.ok(bg, '--bg okunamadi');
+    assert.strictEqual(meta, bg, 'HTML tema rengi paletle ayni degil');
+    assert.strictEqual(manifest.theme_color, bg, 'manifest theme_color paletle ayni degil');
+    assert.strictEqual(manifest.background_color, bg, 'acilis ekrani rengi paletle ayni degil');
+  });
+
+  test('ikonlarda emoji, metin ve gradyan yok', () => {
+    for (const f of ['icon.svg', 'icon-maskable.svg']) {
+      const svg = oku(f);
+      assert.ok(!/<text[\s>]/.test(svg), f + ': ikonda metin var (font her cihazda yok)');
+      assert.ok(!/Gradient|gradient/.test(svg), f + ': gradyan yasak');
+      assert.ok(!/[\uD800-\uDBFF][\uDC00-\uDFFF]/.test(svg), f + ': emoji var');
+    }
+  });
+
+  test('ikon renkleri paletten', () => {
+    const svg = oku('icon.svg');
+    const izinli = ['#131313', '#333333', '#e2e2e2'];
+    for (const m of svg.matchAll(/#[0-9a-fA-F]{6}/g)) {
+      assert.ok(izinli.indexOf(m[0].toLowerCase()) >= 0, 'palet disi ikon rengi: ' + m[0]);
+    }
+  });
+
+  test('PNG ikonlar 1024x1024 (manifest oyle diyor)', () => {
+    // PNG'ler SVG'den uretiliyor; olcu manifest'te ilan edilenle ayni olmali.
+    // ⚠️ mtime karsilastirmasi denendi ve BIRAKILDI: taze checkout'ta tum
+    // dosyalar ayni ana damgalaniyor, test ortama gore kirmizi/yesil oluyordu.
+    for (const f of ['icon.png', 'icon-maskable.png']) {
+      const b = fs.readFileSync(path.join(ROOT, f));
+      assert.strictEqual(b.slice(1, 4).toString(), 'PNG', f + ' PNG degil');
+      assert.strictEqual(b.readUInt32BE(16), 1024, f + ' genislik 1024 degil');
+      assert.strictEqual(b.readUInt32BE(20), 1024, f + ' yukseklik 1024 degil');
+    }
+    const ilan = manifest.icons.filter((x) => /png$/.test(x.src));
+    assert.ok(ilan.every((x) => x.sizes === '1024x1024'), 'manifest olcusu uyusmuyor');
+  });
+});

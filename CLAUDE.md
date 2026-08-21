@@ -30,6 +30,28 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 20 Ağustos 2026 — 🔬 BESLENME BİLİM DENETİMİ + MARKA YÜZEYİ (v7-167)
+
+Salim: "beslenme planlaması bilime uygun mu." Motorun **her sayısal varsayımı** kaynağıyla karşılaştırıldı (FAO/WHO/UNU 2004, ACSM/AND/DC 2016, ISSN pozisyon bildirileri, IOC REDs 2023, NIH ODS, NASEM DRI). 7 hata bulundu, hepsi kapatıldı; sabitler artık teste bağlı.
+
+**🔴 1 — DİNLENME GÜNÜ PAL 1.40 → 1.55.** En büyük hata buydu. FAO'nun **ergen** tablosunda 16-17 yaş erkek için en düşük kategori bile 1.55; 1.40 o raporda **yetişkin sedanterin alt ucu** ve ergende karşılığı yok. 70 kg'da günde **~285 kcal sistematik eksik** — motorun kendi ilkesiyle ("asıl risk AZ YEMEK") en çok çelişen sabit. Ağırlık günü de sporcu ergen bandının (1.75-2.05) altındaydı: 1.6 → **1.7**. `fight` 1.75 ve `both` 1.9 bandın içinde, dokunulmadı. **70 kg antrenman günü hedefi 3034 → 3223 kcal.**
+
+**🔴 2 — "GÜVENLİK TABANI = BMR" BİLİMSEL OLARAK TABAN DEĞİL.** Sporcuda eşik BMR değil **enerji mevcudiyeti**: `EA = (alım − antrenman harcaması) / yağsız kütle`. 70 kg / 60 kg FFM / 600 kcal seansta BMR tabanı **EA ≈ 21 kcal/kg FFM**'e denk geliyordu — IOC REDs'in "bozulma bölgesi" dediği yerin (30) çok altı. Erkek ergende REDs'in uyarı sinyali yok (amenore gibi bir şey yok); büyüme geriliği ve uyku bozukluğuyla çıkıyor, yani **koddan başka yakalayan bir şey yok**. Taban artık `30 × FFM + antrenman harcaması`; yağsız kütle ölçümü yoksa muhafazakâr tahmin (kg × 0.85). **AI plan kapısı da BMR yerine bu tabana bağlandı** — eski kapı günde 600-1000 kcal'lik antrenman yükünü hiç görmüyordu.
+
+**🔴 3 — YAĞ ALARMI g/kg TEK BAŞINA YETMİYORDU.** 70 kg'da 0.8 g/kg = 56 g = 3400 kcal'lik planın **%14.8'i**; DRI'nin 4-18 yaş AMDR tabanı %25, ACSM'in kronik sınırı %20. Enerjinin %16'sı yağ olan bir gün alarm vermiyordu. Artık iki kuraldan büyüğü kazanıyor.
+
+**🔴 4 — SCHOFIELD YAŞ BANTLARI YANLIŞ EŞLEŞMİŞ.** `17.686W + 658.2` Schofield'in **10-18** bandıdır, kodun yazdığı gibi "15-17" değil; `22.706W + 504.3` ise **3-10**. Eskiden 10-14 yaşa 3-10 denklemi uygulanıyordu (13 yaş / 60 kg'da **+148 kcal, %8.6 fazla**). Kadın <15 için yazılan `17.686W + 349.0` ise **yayınlanmış hiçbir denkleme karşılık gelmiyordu** — erkek katsayısı + uydurma sabit. ⚠️ Düzeltme `ui.js` VE `aidan-worker/worker.js`'e birlikte uygulandı (paylaşılan çekirdek kuralı).
+
+**🔴 5-7 — Lif 30 → 38 g** (AI 14-18 erkek için 38; 30 g **9-13 yaş** değeri ve motor 27 g'da bile "yeterli" diyordu) · **Kalsiyum ÜST SINIR 2500 → 3000 mg** (2500 yetişkin değeri; takviye kapısını gereksiz erken kapatıyordu) · **Su seans tipine ayrıldı** (dövüş 1000 ml, ağırlık 600 ml — ACSM egzersiz sırasında 0.4-0.8 L/saat, ergen derlemesi büyük ergenlerde 1 L'ye kadar).
+
+**Denetimin ONAYLADIKLARI** (değiştirilmedi): Schofield 10-18 katsayısı · 18 altında Mifflin yerine Schofield (ergen sporcuda test edilen 8 denklemden kabul edilebilir tek denklem) · protein 1.8/2.0 g/kg ve öğün başı 0.25-0.40 · **proteinin öğünlere EŞİT dağıtılması** (ISSN #6 birebir; öğün büyüklüğüne orantılı dağıtım daha kötü olurdu) · antrenman günü karbonhidrat kaydırma · Ca 1300 / Fe 11 / D 600 · Fe ÜS 45, D ÜS 4000 · **kan değeri olmadan asla demir takviyesi** (denetim "motorun en iyi kuralı" dedi) · kreatin duruşu · mikro besinlerin kapsam yüzdesiyle verilmesi · kilo verme dalının hiç olmaması.
+
+**⚠️ TARTIŞILIR AMA DEĞİŞTİRİLMEDİ:** `proteinMaxPerKg: 2.5` "güvenlik sınırı" diye etiketli ama ISSN >3.0 g/kg'ı bile güvenli buluyor — sayı pratik tavan olarak doğru, **gerekçesi** yanlış (azalan getiri noktası, güvenlik eşiği değil). `gainSurplus: 350` literatürün 360-480 bandının biraz altında; PAL düzeltilince sorun kalmadı. Demir 11 mg genel RDA — darbeli spor + büyümede 13-15 tartışılabilir.
+
+**🎨 MARKA YÜZEYİ.** Uygulamanın içi monokroma geçmişti, **dışı** eski paletteydi: `icon.svg` bir **🧠 emojisi** (metin öğesi olarak!) + mor/pembe gradyan + cihazda olmayabilecek fontla "Aidan" yazısıydı — DESIGN.md'nin 2. (gradyan) ve 6. (emoji) yasağının ikisini birden çiğniyordu. Yeni işaret: **odak halkası + merkez** — uygulamanın imzası olan zamanlayıcı halkasının kendisi; monokrom, gradyansız, metinsiz, 16 px'te okunuyor. PNG'ler SVG'den üretiliyor (cairosvg, 1024×1024). Tema rengi **manifest ile HTML arasında bile tutmuyordu** (`#0a0b0f` vs `#0c0d11`, ikisi de emekli mavi-siyah); ikisi de `--bg` (#0a0a0a) oldu ve **testle kilitlendi** — açılış ekranı, durum çubuğu ve zemin artık tek renk.
+
+Test: 866/866 yeşil (6 yeni bilimsel sabit testi + 4 marka yüzeyi testi dahil).
+
 ### 🔴 20 Ağustos 2026 — 🍽 DİYET: MOTOR HEDEFİ TUTTURUYOR + PROGRAM GÜNLÜĞE BAĞLANDI (v7-166)
 
 Salim: "diyet kalori sayma kısmını geliştirelim, beslenme programı da yazabilsin." Denetimde çıkan şey şuydu: **motor zaten program yazıyordu — ama kimse onu kullanamıyordu.**
@@ -1462,10 +1484,11 @@ py aidan-pages-deploy.py
 ⚠️ Netlify ve drag-drop yöntemi artık **GEREKSİZ**. Salim'e söyleme bile, otomatik akıyor.
 
 ## ⏳ Açık işler / backlog
-- Buton-glyph emojilerini (✏️🗑️✂️🎧 vb.) Lucide SVG'ye çevir (Impeccable açık işi — Sonnet subagent'a uygun)
-- `icon.png` mascot hâlâ MOR → amber tonlu yeniden üretim + maskable
 - Multi-user Faz 2 (yeni user onboarding + admin görünümü) — `SUPABASE_SERVICE_KEY` eklenince
-- Aylık karne · en verimli saat analizi (haftalık karne + bestHourInfo zaten var)
+- GÖREV karnesi aylık görünüm + en verimli saat (diyet karnesi 20 Ağu'da haftalık/aylık oldu; görev karnesi hâlâ `_karneWeek: 'this'|'last'`)
+- Fotoğraftan öğün ekleme (tabak → vision → makro). Altyapı hazır: `resizeImageToDataUrl` + worker `visionRun` + `/food-macros`
+- **Beslenme denetiminden kalanlar (20 Ağu):** çinko 11 mg + magnezyum 410 mg `NUT_MICRO`'ya · uyku öncesi 30-40 g kazein kuralı (ISSN #13, `atistirma` şablonunda süzme yoğurt zaten var) · takviye kontaminasyon / üçüncü taraf sertifika notu (IOC) · siklet düşürmede kırmızı bayrak katmanı (su kesme/sauna → tehlikeli, ergende asla) · ter hızı ölçümü (antrenman öncesi/sonrası tartı) · Reale 2020 ergen sporcu RMR denklemi (`11.1×kg + 8.4×cm − 340`) Schofield'e alternatif
+- Öğün payı dağılımı: 191 örnek öğünün ~30'u kendi payının %130 üstünde, ~25'i %80 altında. Gün toplamı ve makrolar doğru; çelişen şey **oran tablosu ile şablon tabanı**. Oranları oynatmak denendi ve GERİ ALINDI (hafif profilde ana öğün sıkışıyor, 45 kg'da gün %12 eksik kaldı) — doğru çözüm ŞABLON HAVUZUNU genişletmek (hafif ara öğün seçeneği)
 
 ## Veri Modeli — Görev objesi
 

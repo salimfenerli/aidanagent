@@ -2621,9 +2621,16 @@ function hcBMR(sex, age, kg, cm) {
   var erkek = sex !== 'female';
   var y = Number(age) || 0, k = Number(kg) || 0, c = Number(cm) || 0;
   if (!(k > 0)) return 0;
+  // Schofield agirlik-tek denklemleri. ⚠️ BANTLAR 20 Agu 2026'DA DUZELTILDI.
+  // 17.686k+658.2 Schofield'in 10-18 bandidir, kodun eski yorumundaki gibi
+  // "15-17" degil; 22.706k+504.3 ise 3-10 bandi. Eskiden 10-14 yasa 3-10
+  // denklemi uygulaniyordu (13 yas / 60 kg'da +148 kcal, %8.6 fazla) ve
+  // kadin <15 icin yazilan 17.686k+349.0 YAYINLANMIS HICBIR denkleme
+  // karsilik gelmiyordu (erkek katsayisi + uydurma sabit).
   if (y > 0 && y < 18) {
-    if (y >= 15) return Math.round(erkek ? 17.686 * k + 658.2 : 13.384 * k + 692.6);
-    return Math.round(erkek ? 22.706 * k + 504.3 : 17.686 * k + 349.0);
+    if (y >= 10) return Math.round(erkek ? 17.686 * k + 658.2 : 13.384 * k + 692.6);
+    if (y >= 3) return Math.round(erkek ? 22.706 * k + 504.3 : 20.315 * k + 485.9);
+    return Math.round(erkek ? 59.512 * k - 30.4 : 58.317 * k - 31.1);
   }
   return Math.round(10 * k + 6.25 * c - 5 * y + (erkek ? 5 : -161));
 }

@@ -39,7 +39,7 @@ function motor() {
   vm.runInContext(core.slice(i, j) + '\n' + slots + '\n' + ui.slice(hb, he), ctx);
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'program.js'), 'utf8'), ctx);
   vm.runInContext(nutSrc +
-    '\n;globalThis.__N = { NUT_LIMITS, NUT_PAL, NUT_TEMPLATES, nutBMR, nutTargets,' +
+    '\n;globalThis.__N = { NUT_LIMITS, NUT_PAL, NUT_TEMPLATES, NUT_MICRO, nutBMR, nutTargets,' +
     ' nutMealSplit, nutDayType, nutCarbTiming, nutBuildDay, nutBuildMeal, nutFood,' +
     ' nutPortion, nutRound, nutWeek, TURK_FOODS, hcBMR };', ctx);
   return Object.assign(ctx, ctx.__N);
@@ -83,7 +83,10 @@ describe('KAPSAM SINIRI — kilo verme YOK', () => {
       .replace(/"(?:[^"\\]|\\.)*"/g, '""');
     assert.ok(!/(tdee|kcal)\s*-\s*\d{2,}/i.test(kod), 'kalori cikarma islemi var');
     assert.ok(!/deficit|surplus\s*<\s*0/i.test(kod), 'acik degiskeni var');
-    assert.ok(/Math\.max\(kcal, bmr\)/.test(kod), 'BMR tabani zorlanmiyor');
+    // ⚠️ 20 Agu 2026: taban BMR degil ENERJI MEVCUDIYETI (IOC REDs).
+    // BMR tabani 70 kg / 600 kcal seansta EA ~21 kcal/kg FFM'e denk
+    // geliyordu — kanitin 'zaten hasar bolgesi' dedigi yerin altinda.
+    assert.ok(/Math\.max\(kcal, eaTaban\)/.test(kod), 'enerji tabani zorlanmiyor');
   });
 
   test('arayüzde üçüncü hedef seçeneği yok', () => {
@@ -597,5 +600,80 @@ describe('program -> plan aktarimi', () => {
       kalemler: Array.from({ length: 12 }, (_, i) => 'uzun yemek adi ' + i) }] };
     const r = M.nutAiSatirlari(g);
     assert.ok(r[0].name.length <= 90, 'ad kirpilmadi: ' + r[0].name.length);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 20 Agu 2026 — BILIMSEL SABITLER. Bu sayilar "makul gorunduğu icin" degil,
+// kaynagi olan degerler oldugu icin boyle. Degistiren, once kaynagi degistirsin.
+describe('bilimsel sabitler', () => {
+  test('PAL: dinlenme gunu FAO ergen tablosunun altina inmiyor', () => {
+    // FAO/WHO/UNU 2004, 16-17 yas erkek: en dusuk kategori 1.55. 1.40 o
+    // raporda YETISKIN sedanterin alt ucu; ergende karsiligi yok. 70 kg'da
+    // aradaki fark gunde ~285 kcal — motorun "asil risk az yemek" ilkesiyle
+    // en cok celisen sabitti.
+    assert.ok(M.NUT_PAL.rest >= 1.55, 'dinlenme PAL ' + M.NUT_PAL.rest + ' < 1.55');
+    assert.ok(M.NUT_PAL.strength >= 1.65, 'agirlik gunu PAL cok dusuk');
+    assert.ok(M.NUT_PAL.rest < M.NUT_PAL.strength, 'dinlenme gunu antrenman gununden agir');
+    assert.ok(M.NUT_PAL.fight <= 2.1 && M.NUT_PAL.both <= 2.2, 'PAL ust banttan tasti');
+  });
+
+  test('Schofield yas bantlari yayinlanmis haliyle', () => {
+    // 10-18 erkek: 17.686W + 658.2 · 3-10 erkek: 22.706W + 504.3
+    // 10-18 kadin: 13.384W + 692.6 · 3-10 kadin: 20.315W + 485.9
+    // ⚠️ Eskiden 10-14 yasa 3-10 denklemi uygulaniyordu (13 yas/60 kg:
+    // +148 kcal, %8.6) ve kadin <15 icin 17.686W+349.0 yaziyordu — bu
+    // katsayi-sabit ikilisi HICBIR yayinlanmis denklemde yok.
+    assert.strictEqual(M.hcBMR('male', 13, 60, 160), Math.round(17.686 * 60 + 658.2));
+    assert.strictEqual(M.hcBMR('male', 16, 70, 178), Math.round(17.686 * 70 + 658.2));
+    assert.strictEqual(M.hcBMR('male', 8, 30, 130), Math.round(22.706 * 30 + 504.3));
+    assert.strictEqual(M.hcBMR('female', 8, 28, 128), Math.round(20.315 * 28 + 485.9));
+    assert.strictEqual(M.hcBMR('female', 16, 55, 165), Math.round(13.384 * 55 + 692.6));
+  });
+
+  test('enerji mevcudiyeti: her profilde EA kritik esigin ustunde', () => {
+    // IOC REDs 2023: <30 kcal/kg yagsiz kutle bozulma bolgesi. Erkek
+    // ergende uyari sinyali (amenore gibi) YOK; buyume geriligi ve uyku
+    // bozuklugu ile cikiyor — yani kod disinda yakalayan bir sey yok.
+    for (const kg of [50, 60, 70, 80, 90]) {
+      for (const tip of ['rest', 'strength', 'fight', 'both']) {
+        const t = M.nutTargets({ sex: 'male', age: 16, height: 178, weight: kg }, tip, 'koru');
+        assert.ok(t.ea >= M.NUT_LIMITS.eaKritik,
+          kg + 'kg/' + tip + ': EA ' + t.ea + ' < ' + M.NUT_LIMITS.eaKritik);
+      }
+    }
+  });
+
+  test('yag alarmi enerji yuzdesine bagli (g/kg tek basina yetmiyor)', () => {
+    // 70 kg / 3400 kcal: 0.8 g/kg = 56 g = %14.8. DRI 4-18 yas AMDR tabani
+    // %25, ACSM kronik siniri %20. Eski kural 60 g yiyen gunu "yeterli"
+    // sayiyordu.
+    const t = M.nutTargets(PROF, 'strength', 'kas');
+    const azYag = [{ kcal: t.kcal, protein: t.protein, carb: t.carb + 60, fat: Math.round(t.kcal * 0.16 / 9) }];
+    const oz = M.nutDaySummary(azYag, t, 70);
+    assert.ok(oz.yagTabanAltinda, 'enerjinin %16\'si yag olan gun alarm vermiyor');
+    const yeterli = [{ kcal: t.kcal, protein: t.protein, carb: t.carb, fat: Math.round(t.kcal * 0.27 / 9) }];
+    assert.ok(!M.nutDaySummary(yeterli, t, 70).yagTabanAltinda, 'saglikli gun alarm veriyor');
+  });
+
+  test('mikro hedefleri 14-18 yas erkek RDA/AI degerleri', () => {
+    const bul = (ad) => M.NUT_MICRO.find((x) => new RegExp(ad, 'i').test(x.ad));
+    // NIH ODS / NASEM: Ca RDA 1300 mg (UL 3000, 9-18) · Fe RDA 11 mg (UL 45)
+    // D vitamini RDA 600 IU (UL 4000) · Lif AI 38 g (14-18 erkek)
+    assert.strictEqual(bul('kalsiyum').hedefSayi, 1300);
+    assert.strictEqual(bul('kalsiyum').ustSinir, 3000, 'Ca UL 2500 YETISKIN degeri');
+    assert.strictEqual(bul('demir').hedefSayi, 11);
+    assert.strictEqual(bul('D vitamin').hedefSayi, 600);
+    assert.strictEqual(bul('lif').hedefSayi, 38, 'lif AI 38 g — 30 g 9-13 yas degeri');
+  });
+
+  test('su: dovus gunu agirlik gununden fazla', () => {
+    const p = { sex: 'male', age: 16, height: 178, weight: 70 };
+    const rest = M.nutTargets(p, 'rest', 'koru').waterL;
+    const guc = M.nutTargets(p, 'strength', 'koru').waterL;
+    const dovus = M.nutTargets(p, 'fight', 'koru').waterL;
+    const ikisi = M.nutTargets(p, 'both', 'koru').waterL;
+    assert.ok(guc > rest && dovus > guc && ikisi > dovus,
+      'su siralamasi bozuk: ' + [rest, guc, dovus, ikisi].join(' / '));
   });
 });

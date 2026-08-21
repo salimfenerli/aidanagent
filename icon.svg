@@ -1,15 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#1e1e2e"/>
-      <stop offset="100%" stop-color="#2d2b55"/>
-    </linearGradient>
-    <linearGradient id="brain" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ff79c6"/>
-      <stop offset="100%" stop-color="#bd93f9"/>
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" rx="100" fill="url(#bg)"/>
-  <text x="50%" y="50%" font-size="320" text-anchor="middle" dominant-baseline="central" font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif">🧠</text>
-  <text x="50%" y="88%" font-size="48" text-anchor="middle" fill="url(#brain)" font-family="-apple-system, Segoe UI, sans-serif" font-weight="bold">Aidan</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Aidan">
+  <!-- v11 MONOKROM. Gradyan yok, emoji yok, metin yok (DESIGN.md yasak 2 ve 6).
+       Isaret: odak halkasi + merkez — uygulamanin imzasi olan zamanlayici
+       halkasinin ta kendisi. 16 px'te bile halka olarak okunuyor. -->
+  <rect width="512" height="512" rx="114" fill="#131313"/>
+  <rect x="3" y="3" width="506" height="506" rx="111" fill="none" stroke="#333333" stroke-width="6"/>
+  <path d="M256 114a142 142 0 1 1-100.4 41.6" fill="none" stroke="#e2e2e2"
+        stroke-width="46" stroke-linecap="round"/>
+  <circle cx="256" cy="256" r="36" fill="#e2e2e2"/>
 </svg>

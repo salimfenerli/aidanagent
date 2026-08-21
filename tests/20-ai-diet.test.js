@@ -71,7 +71,8 @@ for (let d = 0; d < 7; d++) {
   const t = M.nutTargets(PROF, d === 0 ? 'rest' : 'strength', 'koru');
   HED.push({
     dow: d, tip: d === 0 ? 'rest' : 'strength', etiket: '',
-    kcal: t.kcal, protein: t.protein, carb: t.carb, fat: t.fat, bmr: t.bmr, suL: t.waterL,
+    kcal: t.kcal, protein: t.protein, carb: t.carb, fat: t.fat, bmr: t.bmr,
+    taban: t.eaTaban, suL: t.waterL,
   });
 }
 
@@ -101,13 +102,26 @@ describe('🔒 GÜVENLİK KAPISI — hedefin altındaki plan kaydedilmez', () =>
     assert.strictEqual(v.red.length, 0);
   });
 
-  test('BMR\'nin altında kalan gün REDDEDİLİR', () => {
+  test('ENERJİ TABANININ altında kalan gün REDDEDİLİR', () => {
+    // ⚠️ 20 Agu 2026: kapi BMR degil ENERJI MEVCUDIYETI tabani. BMR alti
+    // olmayan bir gun de EA olarak bozulma bolgesinde olabilir — antrenman
+    // harcamasi dusuldukten sonra geriye kalan onemli. IOC REDs: <30 kcal/kg
+    // yagsiz kutle. Eski kapi gunde 600-1000 kcal'lik antrenman yukunu hic
+    // gormuyordu.
     const p = planYap(1);
-    // Pazartesi'yi bazal metabolizmanin da altina indir
-    p.gunler[1].ogunler = [{ ad: 'Tek öğün', kalemler: ['salata'], kcal: HED[1].bmr - 200, protein: 40 }];
+    p.gunler[1].ogunler = [{ ad: 'Tek öğün', kalemler: ['salata'], kcal: HED[1].taban - 200, protein: 40 }];
     const v = M.nutAiValidate(p, HED);
     assert.strictEqual(v.ok, false);
-    assert.ok(/bazal metabolizma/i.test(v.red.join(' ')), 'sebep BMR tabanini soylemeli: ' + v.red.join(' | '));
+    assert.ok(/enerji taban/i.test(v.red.join(' ')),
+      'sebep enerji tabanini soylemeli: ' + v.red.join(' | '));
+  });
+
+  test('⚠️ enerji tabanı BMR\'den YÜKSEK — antrenman günü yükü sayılıyor', () => {
+    // Eski kapinin kacirdigi arali: BMR ustunde ama EA olarak bozulma
+    // bolgesinde olan gun. Antrenman gununde taban BMR'yi asmali.
+    const antrenman = HED[1];
+    assert.ok(antrenman.taban > antrenman.bmr,
+      'antrenman gunu tabani (' + antrenman.taban + ') BMR\'yi (' + antrenman.bmr + ') asmiyor');
   });
 
   test('hedefin %15 altı = gizli kalori açığı, REDDEDİLİR', () => {
