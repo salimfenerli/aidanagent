@@ -17,11 +17,42 @@ const NUT_LIMITS = {
   proteinPerKg: 1.8,        // koru — sporcu araligi 1.6-2.2 g/kg
   proteinPerKgGain: 2.0,    // kas kazanimi
   proteinMaxPerKg: 2.5,     // ustune cikmanin ek faydasi gosterilmemis
+  // ⚠️ 2.5 g/kg bir GUVENLIK esigi DEGIL, azalan getiri noktasidir (ISSN
+  // protein pozisyon bildirisi >3.0 g/kg alimlarin bile guvenli oldugunu
+  // soyluyor). Ayrimi yapmak zorundayiz cunku ikisi CAKISABILIYOR: 45 kg /
+  // 3113 kcal profilinde gunun kalorisini Turk mutfagiyla doldurmak tek
+  // basina ~110 g protein getiriyor (makarna 9 g, pilav 4 g/porsiyon).
+  // 2.5'i mutlak sinir sayarsak gun %15 EKSIK bitiyor — yani gercek riski
+  // (az yemek) onlemek icin gercek olmayan bir riski (fazla protein)
+  // kovaliyoruz. Kalori acigi varken tavan 3.0'a kadar acilir.
+  proteinAbsMaxPerKg: 3.0,
   proteinPerMealMin: 0.25,  // g/kg — ogun basi kas protein sentezi esigi
   proteinPerMealMax: 0.40,  // ustu ayni ogunde ek fayda vermiyor
   fatMinPerKg: 0.8,         // hormonal saglik tabani — ALTINA INILMEZ
   fatPct: 0.27,             // kcal'in yuzdesi (taban kuralini gecerse o kazanir)
+  // ⚠️ YAG ORANI AYARLANABILIR AMA BANT ICINDE (21 Agu 2026). Salim'in
+  // itirazi hakliydi: "genelde 2-2.2 kat protein, 1 kat yag" kalibi yaygin.
+  // O kalip 2400-2600 kcal'de %25 yag verir ve DOGRUDUR — ama 3900 kcal'de
+  // ayni 1 g/kg %16'ya duser. Yani kalip yanlis degil, SABIT g/kg yuksek
+  // kaloride kiriliyor. Karar kullanicinin, sinir bilimin: DRI 4-18 yas
+  // AMDR %25-35; ACSM kronik siniri %20. Ayar %25-32 arasinda serbest.
+  fatPctMin: 0.25,          // DRI ergen AMDR tabani
+  fatPctMax: 0.32,
   fatMinPct: 0.20,          // ACSM/AND/DC: kronik olarak enerjinin %20 altina inilmez
+  // ⚠️ EKLENEN YAG TAVANI (21 Agu 2026). Motor kaloriyi kapatirken yaga
+  // yoneliyordu: protein bandi sikiyken karbonhidrat kaynaklari protein
+  // TASIDIGI icin (bulgur 5 g, pilav 4 g/porsiyon) kapiya takiliyor ve
+  // geriye protein tasimayan tek sey — yag — kaliyordu. Sonuc: 3900 kcal'lik
+  // gunde 134 g yagin 72 GRAMI eklenen yagdi (3 kasik zeytinyagi + 2 kasik
+  // tahin + fistik ezmesi + badem). Enerji payi olarak (%32) AMDR icinde
+  // ama gunde 5 kasik sivi yag PRATIKTE yenmez. Eklenen yag artik gun yag
+  // hedefinin yarisini gecemez; gerisi gidanin kendi yagindan gelir.
+  eklenenYagPay: 0.55,
+  // ⚠️ SAF YAG AYRI SAYILIR. Tahin ve kuruyemis yiyecek gibi durur; sivi yag
+  // durmaz. "Gunde 5 kasik zeytinyagi" sikayetinin kaynagi buydu — toplam
+  // eklenen yag sinirini gecmiyordu ama saf yag olarak dokulunce sacmaydi.
+  // Saf yag = protein YOK, karbonhidrat YOK (zeytinyagi; tahin degil).
+  safYagMax: 3,
   gainSurplus: 350,         // yagsiz kazanim; buyuk fazla yag olarak birikir
   waterMlPerKg: 35,
   waterPerSession: 600,     // ml, agirlik seansi basina ek
@@ -372,6 +403,17 @@ function nutMicroCheck(meals) {
 // Gun tipine gore fiziksel aktivite katsayisi (PAL).
 // Tek bir "aktivite seviyesi" sormak yerine PROGRAMDAN turetiliyor —
 // antrenman gunu ile dinlenme gunu ayni kalori DEGILDIR.
+// ⚠️ 21 Agu 2026 — CIFT ANTRENMAN GUNU 1.9 -> 1.8.
+// Salim: "3900 kalori inanilmaz fazla". Kaba akil kontrolu onu dogruluyor:
+// 68.5 kg'da 3903 kcal = 57 kcal/kg, sporcu bulk araligi ise 44-50.
+// FAO'nun "yogun" bandi (2.0-2.4) GUN BOYU fiziksel is varsayar — tarlada
+// calisan bir ergen. Okulda oturup 90 dakika antrenman yapan biri icin
+// GUNUN TAMAMININ carpani o kadar yuksek degil. 1.8 ile cift antrenman
+// gunu 3716 (54 kcal/kg) — hala ust uc ama savunulabilir.
+// ⚠️ ASIL COZUM TAHMIN DEGIL OLCUM: palKat (asagida) kullanicinin kendi
+// log + tarti verisinden gelen duzeltmeyi uygular. Formul bir baslangic
+// noktasi; iki hafta veri biriktikten sonra sayiyi tarti soyler.
+//
 // ⚠️ 20 Agu 2026 — DINLENME GUNU 1.4'TEN 1.55'E. FAO/WHO/UNU'nun ERGEN
 // tablosunda 16-17 yas erkek icin en dusuk kategori bile 1.55; 1.40 o
 // raporda YETISKIN "sedanter"in alt ucu ve ergende karsiligi yok. Okula
@@ -379,7 +421,7 @@ function nutMicroCheck(meals) {
 // motorun kendi beyan ettigi "bu profilde asil risk AZ YEMEK" ilkesiyle en
 // cok celisen sabit buydu. Agirlik gunu de sporcu ergen bandinin (1.75-2.05)
 // altindaydi, 1.7'ye cikti. fight/both zaten bandin icinde, dokunulmadi.
-const NUT_PAL = { rest: 1.55, strength: 1.7, fight: 1.75, both: 1.9 };
+const NUT_PAL = { rest: 1.55, strength: 1.7, fight: 1.75, both: 1.8 };
 
 const NUT_DAY_LABEL = {
   rest: 'Dinlenme günü', strength: 'Ağırlık günü',
@@ -415,7 +457,12 @@ function nutDayType(dow, program) {
  * Gunluk enerji ve makro hedefi.
  * ⚠️ Kilo verme dali YOK. Hedef yalnizca 'koru' ya da 'kas'.
  */
-function nutTargets(profil, dayType, hedef) {
+/**
+ * ⚠️ 4. parametre yagOran: verilmezse KULLANICI AYARI, o da yoksa varsayilan.
+ * Testler ucuncu parametreye kadar cagiriyor ve ayar okumasi data'ya bakiyor;
+ * harness'ta data.diet.nut bos oldugu icin varsayilan geliyor.
+ */
+function nutTargets(profil, dayType, hedef, yagOran) {
   const kg = Number(profil && profil.weight) || 0;
   const cm = Number(profil && profil.height) || 0;
   const age = Number(profil && profil.age) || 16;
@@ -423,7 +470,8 @@ function nutTargets(profil, dayType, hedef) {
   if (!(kg > 0)) return null;
 
   const bmr = nutBMR(sex, age, kg, cm);
-  const pal = NUT_PAL[dayType] || NUT_PAL.rest;
+  // Tahmin edilen PAL, kullanicinin olculmus duzeltmesiyle carpilir (yoksa 1).
+  const pal = Math.round(((NUT_PAL[dayType] || NUT_PAL.rest) * nutPalKat()) * 100) / 100;
   const tdee = Math.round(bmr * pal);
   const kas = hedef === 'kas';
   let kcal = tdee + (kas ? NUT_LIMITS.gainSurplus : 0);
@@ -444,9 +492,12 @@ function nutTargets(profil, dayType, hedef) {
     Math.round(kg * (kas ? NUT_LIMITS.proteinPerKgGain : NUT_LIMITS.proteinPerKg)),
     Math.round(kg * NUT_LIMITS.proteinMaxPerKg));
   // Yag: yuzde kurali ile taban kuralindan BUYUK olani kazanir.
+  // Yag: yuzde kurali ile g/kg tabanindan BUYUK olani kazanir. Yuzde artik
+  // ayarlanabilir (bant %25-32); taban her kosulda gecerli.
+  const yPct = nutYagOran(yagOran);
   const fatG = Math.max(
     Math.round(kg * NUT_LIMITS.fatMinPerKg),
-    Math.round(kcal * NUT_LIMITS.fatPct / 9));
+    Math.round(kcal * yPct / 9));
   const carbG = Math.max(0, Math.round((kcal - proteinG * 4 - fatG * 9) / 4));
 
   // ⚠️ Su eki SEANS TIPINE gore (20 Agu 2026). Tek "600 ml" sabiti dovus
@@ -461,7 +512,7 @@ function nutTargets(profil, dayType, hedef) {
 
   return {
     dayType, hedef: kas ? 'kas' : 'koru',
-    bmr, pal, tdee, kcal,
+    bmr, pal, tdee, kcal, yagOran: yPct,
     ffm, eaTaban, eaSaglikli,
     // Planin kendi EA'si — 30-45 arasi "dikkat", 30 alti kirmizi cizgi.
     ea: ffm > 0 ? Math.round((kcal - antrenmanKcal) / ffm) : null,
@@ -589,9 +640,23 @@ function nutCarbTiming(dayType) {
 // hatanin (4 bardak kefir) aynisi karbonhidrat tarafinda duruyordu.
 // Yag capasi kucuk ve kalori yogun olmali: 1 kasik zeytinyagi = 14 g yag.
 const NUT_TEMPLATES = {
+  // ⚠️ 21 Agu 2026 — HAVUZ 2'DEN 5'E CIKTI. Eski halinde slot basina iki
+  // sablon vardi ve "Baska oner" ikisi arasinda gidip geliyordu: gunluk
+  // kullanimda ayni yemegi gormek, plani terk ettiren seydir. Ayrica iki
+  // sablonun ikisi de ayni kaloriye oturuyordu; ogun payi kucuk oldugunda
+  // motorun secebilecegi HAFIF bir alternatif yoktu.
+  //
+  // ⚠️ Yag capasi her sablonda VAR (salataya zeytinyagi gercekci), ama
+  // artik serbest degil: gunluk EKLENEN yag hedefin %60'ini gecemiyor ve
+  // ogun basi tavan 2 birim. Capayi sablondan silmek denendi — o zaman da
+  // gunun yag payi %25'in (DRI ergen tabani) altina dusuyordu. Dogru yer
+  // sablon degil TAVAN.
   kahvalti: [
     { protein: 'Yumurta', carb: 'Tam buğday ekmek', yag: 'Tahin', ek: ['Beyaz peynir', 'Zeytin', 'Domates'] },
     { protein: 'Süzme yoğurt', carb: 'Yulaf ezmesi', yag: 'Ceviz', ek: ['Muz', 'Bal'] },
+    { protein: 'Yumurta', carb: 'Bazlama', yag: 'Zeytinyağı', ek: ['Beyaz peynir', 'Domates', 'Salatalık'] },
+    { protein: 'Çökelek', carb: 'Tam buğday ekmek', yag: 'Ceviz', ek: ['Domates', 'Zeytin'] },
+    { protein: 'Süzme yoğurt', carb: 'Simit', yag: 'Fındık', ek: ['Bal', 'Domates'] },
   ],
   // ⚠️ Capa PROTEIN YOGUN olmali — bkz. asagidaki kefir notu. Ilk denemede
   // buraya Kefir ve Sut capa yazilmisti (6 g/bardak) ve motor 90 kg'lik
@@ -600,24 +665,54 @@ const NUT_TEMPLATES = {
   ara: [
     { protein: 'Süzme yoğurt', carb: 'Simit', yag: 'Fıstık ezmesi', ek: ['Elma'] },
     { protein: 'Protein tozu', carb: 'Leblebi', yag: 'Badem', ek: ['Süt', 'Kuru üzüm'] },
+    { protein: 'Ton balığı', carb: 'Tam buğday ekmek', yag: 'Zeytinyağı', ek: ['Domates'] },
+    { protein: 'Süzme yoğurt', carb: 'Yulaf ezmesi', yag: 'Ceviz', ek: ['Kuru üzüm'] },
+    { protein: 'Çökelek', carb: 'Bazlama', yag: 'Ceviz', ek: ['Domates', 'Salatalık'] },
   ],
   ogle: [
     { protein: 'Tavuk göğsü', carb: 'Bulgur pilavı', yag: 'Zeytinyağı', ek: ['Çoban salata', 'Ayran'] },
     { protein: 'Ton balığı', carb: 'Makarna', yag: 'Zeytinyağı', ek: ['Çoban salata'] },
+    { protein: 'İzgara köfte', carb: 'Pilav', yag: 'Zeytinyağı', ek: ['Cacık', 'Çoban salata'] },
+    { protein: 'Tavuk şiş', carb: 'Bulgur pilavı', yag: 'Zeytinyağı', ek: ['Ayran', 'Çoban salata'] },
+    { protein: 'Tavuk döner', carb: 'Pilav', yag: 'Zeytinyağı', ek: ['Cacık', 'Çoban salata'] },
   ],
   aksam: [
     { protein: 'Dana kıyma', carb: 'Pilav', yag: 'Zeytinyağı', ek: ['Çoban salata', 'Yoğurt'] },
     { protein: 'Somon', carb: 'Haşlanmış patates', yag: 'Zeytinyağı', ek: ['Çoban salata'] },
+    { protein: 'Tavuk but', carb: 'Bulgur pilavı', yag: 'Zeytinyağı', ek: ['Cacık', 'Çoban salata'] },
+    { protein: 'Levrek', carb: 'Fırın patates', yag: 'Zeytinyağı', ek: ['Çoban salata'] },
+    { protein: 'Hindi eti', carb: 'Pilav', yag: 'Zeytinyağı', ek: ['Cacık', 'Çoban salata'] },
   ],
   // ⚠️ Capa PROTEIN YOGUN olmali. Kefir (6 g/bardak) capa yapilinca motor
   // hedefi tutturmak icin "4 bardak kefir" yaziyordu — teknik olarak dogru,
   // pratikte sacma. Capa g/porsiyon degeri yuksek olandan secilir.
-  // ⚠️ EK BOS BIRAKILMAZ (20 Agu 2026). Yag capasi kirpilinca geriye
-  // "yogurt + muz" kaliyordu: iki kalem, ogun gibi durmuyor.
+  // ⚠️ EK BOS BIRAKILMAZ: yag capasi kirpilinca geriye "yogurt + muz"
+  // kaliyordu, iki kalem, ogun gibi durmuyordu.
   atistirma: [
     { protein: 'Süzme yoğurt', carb: 'Muz', yag: 'Badem', ek: ['Bal'] },
     { protein: 'Protein tozu', carb: 'Elma', yag: 'Fındık', ek: ['Süt'] },
+    { protein: 'Yoğurt', carb: 'Üzüm', yag: 'Ceviz', ek: ['Bal'] },
+    { protein: 'Süzme yoğurt', carb: 'Armut', yag: 'Badem', ek: ['Kuru üzüm'] },
+    { protein: 'Protein tozu', carb: 'Muz', yag: 'Fıstık ezmesi', ek: ['Süt'] },
   ],
+};
+
+/**
+ * DOLGU KAYNAGI — ogun basina proteinsiz/az proteinli karbonhidrat.
+ * ⚠️ 21 Agu 2026: doldurma adimlarinin protein kapisina takilinca yaga
+ * kacmasinin PANZEHIRI. Bunlar kaloriyi tasir, protein tasimaz; capalar
+ * tavana dayandiginda ogune EKLENIR (adet 0 ile durur, gerekirse buyur).
+ * Slot'a gore secildi: kahvaltiya bal, ana ogune patates, atistirmaya meyve.
+ */
+const NUT_FILL = {
+  // ⚠️ Bal dolgu olarak denendi ve BIRAKILDI: motor "3 kasik bal" yaziyordu
+  // (51 g seker). Dolgu kalori tasimali ama porsiyonu buyudugunde de makul
+  // gorunmeli — meyve ve patates bu testi geciyor, sekerli olanlar gecmiyor.
+  kahvalti: 'Armut',
+  ara: 'Muz',
+  ogle: 'Haşlanmış patates',
+  aksam: 'Haşlanmış patates',
+  atistirma: 'Kuru üzüm',
 };
 
 /**
@@ -736,6 +831,10 @@ function nutBuildMeal(slot, hedefOgun, sablonIdx) {
   for (const e of ekler) kalemler.push(Object.assign({ rol: 'ek' }, e));
   // Yag capasi 0 cikmis olsa bile denge adimi sonradan artirabilsin
   if (yf && yAdet === 0) kalemler.push({ rol: 'y', n: yf.n, u: yf.u, adet: 0, k: yf.k, p: yf.p, c: yf.c, f: yf.f });
+  // Dolgu adayi 0 ile eklenir; denge adimi gerekirse buyutur, gerekmezse
+  // sondaki filtre onu listeden atar.
+  const df = nutFood(NUT_FILL[slot] || '');
+  if (df) kalemler.push({ rol: 'd', n: df.n, u: df.u, adet: 0, k: df.k, p: df.p, c: df.c, f: df.f });
 
   const topla = (alan) => Math.round(kalemler.reduce((a, x) => a + x.adet * x[alan], 0));
   return {
@@ -824,7 +923,6 @@ function nutBalanceDay(meals, t, kg) {
       }
       if (hedefEk) {
         hedefEk.adet = 0;
-        hedefOgun.items = hedefOgun.items.filter(x => x.adet > 0);
         yenile(hedefOgun);
         continue;
       }
@@ -852,12 +950,35 @@ function nutBalanceDay(meals, t, kg) {
             if (!kalan.some(x => x.p >= 10)) continue;           // gercek protein kaynagi kalsin
           }
           c.adet = yeni;
-          m.items = m.items.filter(x => x.adet > 0);
+          // ⚠️ items ORTA YERDE FILTRELENMEZ (21 Agu 2026): adet 0 ile bekleyen
+          // YAG CAPASI da siliniyordu ve sonraki adimlar onu geri buyutemiyordu.
+          // 45 kg profilinde ogle/aksam tabaginda hic yag capasi kalmiyor, gun
+          // yag hedefinin %29 altinda bitiyordu. Filtre zaten en sonda var.
           yenile(m); return true;
         }
         return false;
       };
-      const kucultuldu = kucult(true) || (sert && kucult(false));
+      // ⚠️ SON CARE (21 Agu 2026). Iki gecis de bos donerse ve SERT TAVAN
+      // hala asiliyorsa ana ogun capasi da kuculur. 50 kg / dovus / kas +
+      // protein tozlu ara ogun sablonunda tam bu oluyordu: ana ogun
+      // korumasi yuzunden kirpacak yer kalmiyor ve gun 131 g ile 125 g
+      // tavanin ustunde bitiyordu. Guvenlik siniri her tabak kuralindan
+      // once gelir — ama SIRA sonuncu, yani ancak baska care yokken.
+      const anaKucult = () => {
+        for (const m of meals.slice().sort((a, b) => b.protein - a.protein)) {
+          const c = capa(m, 'p');
+          if (!c || c.adet <= 0) continue;
+          const adim = adimi(c.u);
+          const yeni = c.adet - adim <= 0 ? 0 : nutRound(c.adet - adim, c.u);
+          if (m.ana && yeni === 0) continue;      // ana ogun capasiz kalmaz
+          if (m.protein - (c.adet - yeni) * c.p < 8) continue;
+          c.adet = yeni;
+          // (filtre yok — yukaridaki nota bak)
+          yenile(m); return true;
+        }
+        return false;
+      };
+      const kucultuldu = kucult(true) || (sert && (kucult(false) || anaKucult()));
       if (!kucultuldu) break;
     }
   };
@@ -872,7 +993,21 @@ function nutBalanceDay(meals, t, kg) {
   // kaldiractir: kalori yogun (1 kasik zeytinyagi 119 kcal) ve porsiyonu
   // sismez.
   const toplamK = () => meals.reduce((a, m) => a + m.kcal, 0);
-  const TAVAN = { c: 3, y: 3 };
+  // y tavani 3 -> 2: "3 kasik zeytinyagi" tek ogunde savunulamaz.
+  const TAVAN = { c: 3, y: 2, d: 3 };
+  // Eklenen yag = CAPA olarak konan yag (zeytinyagi, tahin, kuruyemis).
+  // Gidanin kendi yagi (et, peynir, yumurta) bu hesaba GIRMEZ.
+  const eklenenYag = () => meals.reduce((a, m) =>
+    a + (m.items || []).reduce((b, x) => b + (x.rol === 'y' ? x.adet * x.f : 0), 0), 0);
+  const yagSiniri = t.fat * NUT_LIMITS.eklenenYagPay;
+  const safYag = (x) => x.p === 0 && x.c === 0 && x.f > 0;
+  const safYagAdet = () => meals.reduce((a, m) =>
+    a + (m.items || []).reduce((b, x) => b + (safYag(x) ? x.adet : 0), 0), 0);
+  const yagYeriVar = (c) => {
+    if (c.rol !== 'y') return true;
+    if (safYag(c) && safYagAdet() + adimi(c.u) > NUT_LIMITS.safYagMax) return false;
+    return (eklenenYag() + adimi(c.u) * c.f) <= yagSiniri;
+  };
   // ⚠️ SIRALAMA: KALORI once, protein bandi sonra (20 Agu 2026).
   // Yumusak bant doldurma adimlarini da kilitleyince gun %11 eksik
   // kaliyordu — 16 yasinda, gunde 6 gun antrenmanda asil risk AZ YEMEK.
@@ -890,9 +1025,19 @@ function nutBalanceDay(meals, t, kg) {
     for (const m of sirali) {
       // Yag kaldiraci yalniz gun yag hedefi ALTINDAYKEN kullanilir; yoksa
       // acigi yagla kapatmak makro dengesini bozar (karbonhidrat eksik kalir).
-      for (const rol of (yagDolu ? ['c'] : ['c', 'y'])) {
+      // ⚠️ SIRA UC DURUMLU (21 Agu 2026):
+      //   gun yagi hedefin %90 ALTINDA  -> once YAG (yag da bir hedeftir,
+      //     "kalan" degil; dolgu eklenince yag hic buyuyemez oldu ve
+      //     enerji payi %24'e dustu — DRI ergen tabani %25)
+      //   %90-100 arasi               -> once karbonhidrat, sonra dolgu, en son yag
+      //   hedefi doldurduysa          -> yag hic buyumez
+      // Eklenen yag tavani her ucunde de gecerli; yani "once yag" demek
+      // sinirsiz yag demek degil, 5 kasik zeytinyagina donus yok.
+      const yagAcik = meals.reduce((a, m) => a + m.fat, 0) < t.fat;
+      for (const rol of (yagDolu ? ['c', 'd'] : (yagAcik ? ['y', 'c', 'd'] : ['c', 'd', 'y']))) {
         const c = capa(m, rol);
         if (!c || c.adet >= TAVAN[rol]) continue;
+        if (!yagYeriVar(c)) continue;
         // ⚠️ DOLDURMA PROTEIN TAVANINI ASAMAZ (18 Agu 2026). Turk karbonhidrat
         // kaynaklari protein tasir (bulgur 5 g, pilav 4 g/porsiyon); kalori
         // acigini karbonhidratla kapatirken protein geri sisiyordu ve
@@ -914,7 +1059,7 @@ function nutBalanceDay(meals, t, kg) {
   for (let tur = 0; tur < 24; tur++) {
     if (toplamK() <= t.kcal * 1.05) break;
     let yapildi = false;
-    for (const rol of ['c', 'y']) {
+    for (const rol of ['d', 'c', 'y']) {
       const aday = meals.slice()
         .sort((a, b) => ((b.kcal - ((b.hedef && b.hedef.kcal) || b.kcal)) -
                          (a.kcal - ((a.hedef && a.hedef.kcal) || a.kcal))))
@@ -960,7 +1105,7 @@ function nutBalanceDay(meals, t, kg) {
     // kaliyor, gun yagi baska ogunlerde dolu oldugu icin de kapanmiyordu.
     // Bu ogunun KENDI yag hedefi altindaysa yag capasi acilir.
     const ogunYagAcik = geri.hedef && geri.fat < (geri.hedef.fat || 0) * 0.8;
-    const roller = (yagDolu2 && !ogunYagAcik) ? ['c'] : ['c', 'y'];
+    const roller = (yagDolu2 && !ogunYagAcik) ? ['c', 'd'] : ['c', 'd', 'y'];
     // ⚠️ 20 Agu 2026: PAL duzeltmesi hedefleri ~%6 yukseltince sablonlar
     // kendi paylarina yetismekte zorlandi. Cok geride kalan ogunde ek tavani
     // 2 yerine 3 ("3 dilim peynir" degil, "3 porsiyon salata/ayran" gibi
@@ -977,6 +1122,7 @@ function nutBalanceDay(meals, t, kg) {
       if (!c) continue;
       const tav = (c.rol === 'c' && cokGeri) ? 4 : TAVAN[c.rol];
       if (c.rol !== 'ek' && c.adet >= tav) continue;
+      if (!yagYeriVar(c)) continue;
       const artis = adimi(c.u) * c.k;
       if (toplamK() + artis > tavan) continue;
       // ⚠️ BU ADIMDA CAPA KAPISI SERT TAVAN (20 Agu 2026). Yumusak bant
@@ -1014,7 +1160,7 @@ function nutBalanceDay(meals, t, kg) {
   // saglik tabaniyla korunan tek makro — "kalan" muamelesi gormemeli.
   for (let tur = 0; tur < 12; tur++) {
     const yagT = meals.reduce((a, m) => a + m.fat, 0);
-    if (yagT >= t.fat * 0.9) break;
+    if (yagT >= t.fat * 0.95) break;
     // ⚠️ Tavan kontrolu EKLEMEDEN SONRAKI degere gore. Eskiden ekleme
     // oncesi bakiliyordu ve son adim tavani asabiliyordu: 1 kasik
     // zeytinyagi 119 kcal, gunu tek basina %5'ten cikariyordu.
@@ -1022,7 +1168,8 @@ function nutBalanceDay(meals, t, kg) {
       .sort((a, b) => a.fat - b.fat)
       .find(m => {
         const c = capa(m, 'y');
-        return c && c.adet < TAVAN.y && (toplamK() + adimi(c.u) * c.k) <= t.kcal * 1.05;
+        return c && c.adet < TAVAN.y && yagYeriVar(c) &&
+          (toplamK() + adimi(c.u) * c.k) <= t.kcal * 1.05;
       });
     if (!aday) break;
     const c = capa(aday, 'y');
@@ -1040,11 +1187,16 @@ function nutBalanceDay(meals, t, kg) {
   for (let tur = 0; tur < 16; tur++) {
     if (toplamK() >= t.kcal * 0.95) break;
     let yapildi = false;
-    for (const rol of ['y', 'c']) {
-      const aday = meals.slice().sort((a, b) => (a[rol === 'y' ? 'fat' : 'carb'] - b[rol === 'y' ? 'fat' : 'carb']))
+    // ⚠️ Sira degisti (21 Agu 2026): once DOLGU, sonra yag, en son
+    // karbonhidrat capasi. Dolgu proteinsiz oldugu icin protein kapisina
+    // takilmiyor ve yag sinirini de zorlamiyor.
+    for (const rol of ['d', 'y', 'c']) {
+      const alan = rol === 'y' ? 'fat' : 'carb';
+      const aday = meals.slice().sort((a, b) => (a[alan] - b[alan]))
         .find(m => {
           const c = capa(m, rol);
           if (!c || c.adet >= 4) return false;
+          if (!yagYeriVar(c)) return false;
           return toplamP() + adimi(c.u) * c.p <= pKapi();
         });
       if (!aday) continue;
@@ -1054,6 +1206,59 @@ function nutBalanceDay(meals, t, kg) {
     }
     if (!yapildi) break;
   }
+  // ⚠️ SERT TAVAN SON SUPURGESI (21 Agu 2026). Buraya kadarki her adim tabak
+  // kurallarina saygi gosterir; ama guvenlik siniri tabak kurallarindan once
+  // gelir. Bu supurge protein TASIYAN kalemleri kirpar — ana ogun capasi ve
+  // ogun basi 8 g protein korunur.
+  // ⚠️ SIRA ONEMLI: supurge KALORI KURTARMASINDAN ONCE calisir. Tersi
+  // denendi ve gun %26 eksik bitti: kurtarma kaloriyi dolduruyor, supurge
+  // hemen ardindan protein tasiyan karbonhidrati (makarna 23 g/porsiyon)
+  // kirpip ayni kaloriyi geri aliyordu.
+  // ⚠️ Aday secimi protein YOGUNLUGUNA gore: ayni grami en az kaloriyle
+  // goturen kalem kirpilir, boylece gun kalorisi en az zarar gorur.
+  for (let tur = 0; tur < 30; tur++) {
+    if (toplamP() <= proteinTavan) break;
+    let yapildi = false;
+    for (const m of meals.slice().sort((a, b) => b.protein - a.protein)) {
+      const aday = (m.items || []).filter(x => x.adet > 0 && x.p > 0)
+        .filter(x => !(x.rol === 'p' && m.ana))
+        .sort((a, b) => (b.p / (b.k || 1)) - (a.p / (a.k || 1)))[0];
+      if (!aday) continue;
+      const adim = adimi(aday.u);
+      const yeni = aday.adet - adim <= 0 ? 0 : nutRound(aday.adet - adim, aday.u);
+      if (m.protein - (aday.adet - yeni) * aday.p < 8) continue;
+      aday.adet = yeni; yenile(m); yapildi = true; break;
+    }
+    if (!yapildi) break;
+  }
+
+  // ⚠️ KOSE DURUM KURTARMASI. Iki uc profil normal tavanlarla hedefe
+  // ulasamiyor: 45 kg + cift antrenman + kas hedefi 3113 kcal, yani
+  // 69 kcal/kg — kucuk vucut, cok yuksek hedef; butun capalar tavana
+  // dayaniyor. Bu adim yalniz o kose durumda calisir (normalde dongu ilk
+  // kontrolde cikar) ve tavani 4'E cikarir — 4 SINIRDIR, "5 muz" sozlesmesi
+  // teste bagli.
+  for (let tur = 0; tur < 30; tur++) {
+    if (toplamK() >= t.kcal * 0.95) break;
+    let yapildi = false;
+    for (const rol of ['d', 'c']) {
+      const aday = meals.slice()
+        .sort((a, b) => (a.kcal / (a.hedef ? a.hedef.kcal : a.kcal)) -
+                        (b.kcal / (b.hedef ? b.hedef.kcal : b.kcal)))
+        .find(m => {
+          const c = capa(m, rol);
+          // Kalori acigi varken kapi 2.5 degil 3.0 g/kg (yukaridaki nota bak).
+          return c && c.adet < 4 &&
+            toplamP() + adimi(c.u) * c.p <= (kg > 0 ? kg * NUT_LIMITS.proteinAbsMaxPerKg : proteinTavan);
+        });
+      if (!aday) continue;
+      const c = capa(aday, rol);
+      c.adet = nutRound(c.adet + adimi(c.u), c.u);
+      yenile(aday); yapildi = true; break;
+    }
+    if (!yapildi) break;
+  }
+
   // Tum doldurma adimlarindan sonra son bir fazla kontrolu.
   fazlayiKirp();
   // Kullanilmayan yag capasini (adet 0) listeden cikar
@@ -1098,12 +1303,12 @@ function nutDaySummary(meals, t, kg) {
 }
 
 /** Haftanin 7 gunu icin hedef ozeti — gun tipleri programdan gelir. */
-function nutWeek(profil, hedef, program) {
+function nutWeek(profil, hedef, program, yagOran) {
   const out = [];
   for (let dow = 1; dow <= 7; dow++) {
     const d = dow % 7;   // 1..6, sonra 0 (Pazar)
     const tip = nutDayType(d, program);
-    out.push({ dow: d, tip, hedef: nutTargets(profil, tip, hedef) });
+    out.push({ dow: d, tip, hedef: nutTargets(profil, tip, hedef, yagOran) });
   }
   return out;
 }
@@ -1112,9 +1317,75 @@ function nutWeek(profil, hedef, program) {
 function ensureNutrition() {
   ensureDiet();
   if (!data.diet.nut || typeof data.diet.nut !== 'object') {
-    data.diet.nut = { hedef: 'koru', sablon: 0, kurulduAt: null };
+    data.diet.nut = { hedef: 'koru', sablon: 0, kurulduAt: null, yagOran: NUT_LIMITS.fatPct };
   }
   return data.diet.nut;
+}
+
+/**
+ * Secili yag orani. Ayar yoksa varsayilan; disarida kalirsa banda KIRPILIR.
+ * ⚠️ Kirpma sessiz degil: setNutYag zaten banda kirpilmis deger yaziyor,
+ * bu fonksiyon eski/bozuk kayitlara karsi ikinci savunma.
+ */
+/**
+ * PAL DUZELTME KATSAYISI — kullanicinin kendi verisinden.
+ * ⚠️ Motor BMR x PAL ile TAHMIN eder; iki kisi ayni kiloda ayni antrenmani
+ * yapip farkli yakabilir. `hcEnergyCheck` zaten loglanan kaloriyi kilo
+ * egimiyle karsilastirip GERCEK harcamayi cikariyor (karnedeki "kayit
+ * guvenilirligi" bloku bunu gosteriyor). Kullanici onaylayinca o oran
+ * buraya yazilir ve butun hedefler olcume gore kayar.
+ * Bant %85-115: olcum de hatali olabilir (eksik log, seyrek tarti), tek
+ * bir pencere motoru ucurmasin.
+ */
+function nutPalKat(deger) {
+  const v = Number(deger != null ? deger : (data && data.diet && data.diet.nut ? data.diet.nut.palKat : null));
+  if (!isFinite(v) || v <= 0) return 1;
+  return Math.min(1.15, Math.max(0.85, v));
+}
+
+/** Olculen harcama vs motorun tahmini. Yeterli veri yoksa null. */
+function nutKalibrasyon() {
+  try {
+    if (typeof dietKarneStats !== 'function') return null;
+    const s = dietKarneStats('month');
+    if (!s || !s.enerji || s.kcalDays < 10) return null;
+    const olculen = Math.round(Number(s.enerji.impliedBurn));
+    if (!isFinite(olculen) || olculen <= 0) return null;
+    const prof = nutProfile();
+    if (!prof) return null;
+    const n = ensureNutrition();
+    const hafta = nutWeek(prof, n.hedef, (typeof data !== 'undefined' ? data.program : null));
+    const tahmin = Math.round(hafta.reduce((a, g) => a + (g.hedef ? g.hedef.tdee : 0), 0) / (hafta.length || 1));
+    if (!(tahmin > 0)) return null;
+    return {
+      olculen, tahmin, gun: s.kcalDays,
+      kat: Math.round((olculen / tahmin) * 100) / 100,
+      fark: Math.round(((olculen - tahmin) / tahmin) * 100),
+    };
+  } catch (e) { return null; }
+}
+
+function setNutPalKat(k) {
+  const n = ensureNutrition();
+  n.palKat = nutPalKat(k);
+  save();
+  renderNutrition();
+  if (typeof showToast === 'function') {
+    showToast('Hedefler ölçülen harcamana göre ayarlandı', 'success');
+  }
+}
+
+function nutYagOran(deger) {
+  const v = Number(deger != null ? deger : (data && data.diet && data.diet.nut ? data.diet.nut.yagOran : null));
+  if (!isFinite(v) || v <= 0) return NUT_LIMITS.fatPct;
+  return Math.min(NUT_LIMITS.fatPctMax, Math.max(NUT_LIMITS.fatPctMin, v));
+}
+
+function setNutYag(o) {
+  const n = ensureNutrition();
+  n.yagOran = nutYagOran(o);
+  save();
+  renderNutrition();
 }
 
 function nutProfile() {
@@ -1184,6 +1455,22 @@ function renderNutrition() {
   // ⚠️ Mikro besin blogu artik SAYI veriyor — ama her zaman KAPSAMIYLA
   // birlikte. Kismi veriden uretilen bir toplam, kapsami yazilmadan
   // gosterilirse kullanici hayali bir acigi takviyeyle kapatmaya kalkar.
+  // Olculen harcama tahminden %8'den fazla sapiyorsa kalibrasyon teklifi.
+  const kalib = nutKalibrasyon();
+  const katAktif = nutPalKat();
+  const kalibHtml = (kalib && Math.abs(kalib.fark) >= 8)
+    ? '<div class="nut-kalib"><b>Ölçülen harcaman ' + kalib.olculen + ' kcal/gün</b> — ' +
+      'motorun tahmini ' + kalib.tahmin + ' (%' + (kalib.fark > 0 ? '+' : '') + kalib.fark + '). ' +
+      kalib.gun + ' günlük kayıt + kilo eğiminden hesaplandı, formülden değil. ' +
+      '<button class="nut-mini" onclick="setNutPalKat(' + kalib.kat + ')">Hedefleri buna göre ayarla</button>' +
+      (katAktif !== 1 ? '<span class="nut-kalib-on">şu an ×' + katAktif + ' düzeltme uygulanıyor · ' +
+        '<button class="nut-mini" onclick="setNutPalKat(1)">sıfırla</button></span>' : '') +
+      '</div>'
+    : (katAktif !== 1
+      ? '<div class="nut-kalib"><b>Hedeflerin ölçüme göre ×' + katAktif + ' düzeltilmiş.</b> ' +
+        '<button class="nut-mini" onclick="setNutPalKat(1)">sıfırla</button></div>'
+      : '');
+
   const mikroToplam = nutMicroTotals(ogunler);
   const mikro = nutMicroCheck(ogunler);
   const mikroHtml = mikro.map(mi => {
@@ -1238,6 +1525,22 @@ function renderNutrition() {
     '<button class="nut-chip' + (n.hedef === 'koru' ? ' on' : '') + '" onclick="setNutGoal(\'koru\')">Kiloyu koru</button>' +
     '<button class="nut-chip' + (n.hedef === 'kas' ? ' on' : '') + '" onclick="setNutGoal(\'kas\')">Kas kazan</button>' +
     '</div>' +
+
+    // Yag orani — bant ICINDE serbest. Gram karsiligi yaninda yaziyor ki
+    // "yuzde" soyut kalmasin; itiraz zaten gram uzerineydi.
+    '<div class="nut-goal nut-yag">' +
+    '<span class="nut-yag-lbl">yağ oranı</span>' +
+    [0.25, 0.27, 0.30].map(o =>
+      '<button class="nut-chip' + (Math.abs(nutYagOran() - o) < 0.005 ? ' on' : '') +
+      '" onclick="setNutYag(' + o + ')">%' + Math.round(o * 100) +
+      '<i>' + Math.round(t.kcal * o / 9) + ' g</i></button>').join('') +
+    '</div>' +
+    '<div class="nut-sub">Yağ oranı %25-32 arasında serbest — <b>%25</b> 14-18 yaş DRI tabanı, ' +
+    'altına inilmiyor. "1 g/kg yağ" kalıbı 2500 kcal\'de %25 verir ama ' +
+    t.kcal + ' kcal\'de %' + Math.round(prof.weight * 9 / t.kcal * 100) + '\'e düşer; ' +
+    'sabit g/kg yüksek kaloride kırılıyor. Kalan kalori karbonhidrata gidiyor.</div>' +
+
+    kalibHtml +
 
     '<div class="nut-week">' + hafta + '</div>' +
 

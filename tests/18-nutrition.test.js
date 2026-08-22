@@ -39,7 +39,8 @@ function motor() {
   vm.runInContext(core.slice(i, j) + '\n' + slots + '\n' + ui.slice(hb, he), ctx);
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'program.js'), 'utf8'), ctx);
   vm.runInContext(nutSrc +
-    '\n;globalThis.__N = { NUT_LIMITS, NUT_PAL, NUT_TEMPLATES, NUT_MICRO, nutBMR, nutTargets,' +
+    '\n;globalThis.__N = { NUT_LIMITS, NUT_PAL, NUT_TEMPLATES, NUT_MICRO, NUT_FILL, nutBMR, nutTargets,' +
+    ' nutYagOran, nutPalKat,' +
     ' nutMealSplit, nutDayType, nutCarbTiming, nutBuildDay, nutBuildMeal, nutFood,' +
     ' nutPortion, nutRound, nutWeek, TURK_FOODS, hcBMR };', ctx);
   return Object.assign(ctx, ctx.__N);
@@ -675,5 +676,163 @@ describe('bilimsel sabitler', () => {
     const ikisi = M.nutTargets(p, 'both', 'koru').waterL;
     assert.ok(guc > rest && dovus > guc && ikisi > dovus,
       'su siralamasi bozuk: ' + [rest, guc, dovus, ikisi].join(' / '));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 21 Agu 2026 — EKLENEN YAG VE SABLON CESITLILIGI.
+// Cikis noktasi kullanicinin itirazi: "134 gram yag cok ucuk degil mi".
+// Enerji payi olarak (%32) AMDR icindeydi, ama dokum bakildiginda 134 g'in
+// 72 GRAMI eklenen yagdi ve bunun 5 kasigi sivi yagdi. Sebep: protein bandi
+// sikiyken karbonhidrat kaynaklari protein TASIDIGI icin kapiya takiliyor,
+// motor da kaloriyi protein tasimayan tek seyle — yagla — kapatiyordu.
+describe('eklenen yag sinirlari', () => {
+  const hepsi = [];
+  for (const kg of [50, 60, 70, 80, 90]) {
+    for (const tip of ['rest', 'strength', 'fight', 'both']) {
+      for (const h of ['koru', 'kas']) {
+        for (let sb = 0; sb < 5; sb++) {
+          const t = M.nutTargets({ sex: 'male', age: 16, height: 178, weight: kg }, tip, h);
+          hepsi.push({ kg, tip, h, sb, t, gun: M.nutBuildDay(t, kg, sb) });
+        }
+      }
+    }
+  }
+  const olc = (gun) => {
+    let yag = 0, kcal = 0, eklenen = 0, saf = 0;
+    for (const m of gun) {
+      for (const x of m.items) {
+        yag += x.adet * x.f; kcal += x.adet * x.k;
+        if (x.rol === 'y') eklenen += x.adet * x.f;
+        if (x.p === 0 && x.c === 0 && x.f > 0) saf += x.adet;
+      }
+    }
+    return { yag, kcal, eklenen, saf };
+  };
+
+  test('saf yag (zeytinyagi) gunde 3 birimi gecmiyor', () => {
+    // ⚠️ Tahin ve kuruyemis bu sayima GIRMEZ — onlar yiyecek gibi durur.
+    // Kiran sey "5 kasik zeytinyagi"ydi.
+    const kotu = hepsi.filter((x) => olc(x.gun).saf > M.NUT_LIMITS.safYagMax)
+      .map((x) => `${x.kg}kg/${x.tip}/${x.h}#${x.sb}: ${olc(x.gun).saf}`);
+    assert.deepStrictEqual(kotu, []);
+  });
+
+  test('eklenen yag, gun yag hedefinin yarisini fazla asmiyor', () => {
+    const kotu = hepsi.filter((x) => {
+      const o = olc(x.gun);
+      return o.eklenen > x.t.fat * (M.NUT_LIMITS.eklenenYagPay + 0.05);
+    }).map((x) => `${x.kg}kg/${x.tip}/${x.h}#${x.sb}: ${Math.round(olc(x.gun).eklenen)}g / hedef ${x.t.fat}g`);
+    assert.deepStrictEqual(kotu, []);
+  });
+
+  test('yagin enerji payi AMDR ust sinirini (%35) gecmiyor', () => {
+    const kotu = hepsi.filter((x) => {
+      const o = olc(x.gun);
+      return (o.yag * 9) / o.kcal > 0.35;
+    }).map((x) => x.kg + 'kg/' + x.tip);
+    assert.deepStrictEqual(kotu, []);
+  });
+
+  test('dolgu kaynaklari GERCEK besin ve protein tasimiyor', () => {
+    // Dolgu, protein kapisina takilmadan kalori tasimak icin var; protein
+    // tasirsa isini yapamaz ve yag kaldiracina geri donulur.
+    for (const slot of Object.keys(M.NUT_FILL)) {
+      const f = M.nutFood(M.NUT_FILL[slot]);
+      assert.ok(f, slot + ': dolgu besini TURK_FOODS\'ta yok — ' + M.NUT_FILL[slot]);
+      assert.ok(f.p <= 3, slot + ': dolgu ' + f.n + ' ' + f.p + ' g protein tasiyor');
+      assert.ok(f.c >= 15, slot + ': dolgu ' + f.n + ' karbonhidrat tasimiyor');
+    }
+  });
+});
+
+describe('sablon havuzu', () => {
+  test('her slotta en az 5 sablon var (tekrar hissi olmasin)', () => {
+    for (const slot of Object.keys(M.NUT_TEMPLATES)) {
+      assert.ok(M.NUT_TEMPLATES[slot].length >= 5,
+        slot + ': ' + M.NUT_TEMPLATES[slot].length + ' sablon — "Baska oner" ayni seyi doner');
+    }
+  });
+
+  test('sablonlar birbirinin kopyasi degil', () => {
+    for (const slot of Object.keys(M.NUT_TEMPLATES)) {
+      const imza = M.NUT_TEMPLATES[slot].map((t) =>
+        [t.protein, t.carb, t.yag].filter(Boolean).join('|'));
+      assert.strictEqual(new Set(imza).size, imza.length, slot + ': ayni sablon iki kez');
+    }
+  });
+
+  test('⚠️ protein tavani iki kademeli: 2.5 normal, 3.0 kalori acigi varken', () => {
+    // ⚠️ 2.5 g/kg bir GUVENLIK esigi degil, azalan getiri noktasi (ISSN
+    // >3.0'i bile guvenli buluyor). 45 kg / 3113 kcal profilinde gunu Turk
+    // mutfagiyla doldurmak tek basina ~110 g protein getiriyor; 2.5'i mutlak
+    // sinir saymak gunu %15 EKSIK birakiyordu. Gercek risk az yemek.
+    assert.ok(M.NUT_LIMITS.proteinAbsMaxPerKg > M.NUT_LIMITS.proteinMaxPerKg);
+    assert.ok(M.NUT_LIMITS.proteinAbsMaxPerKg <= 3.0, 'mutlak tavan 3.0 g/kg ustune cikmamali');
+    for (const kg of [45, 50, 70, 90]) {
+      for (const sb of [0, 1, 2, 3, 4]) {
+        const t = M.nutTargets({ sex: 'male', age: 16, height: 178, weight: kg }, 'both', 'kas');
+        const gun = M.nutBuildDay(t, kg, sb);
+        const p = gun.reduce((a, m) => a + m.protein, 0);
+        assert.ok(p <= kg * M.NUT_LIMITS.proteinAbsMaxPerKg,
+          kg + 'kg#' + sb + ': protein ' + p + ' > mutlak tavan');
+      }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 21 Agu 2026 — AYARLANABILIR YAG ORANI + OLCULEN HARCAMA.
+// Salim: "genelde 2-2.2 kat protein, 1 kat yag" ve "3900 kalori inanilmaz
+// fazla". Ikisi de kalip olarak dogru, ikisi de bu kaloride kiriliyor:
+// 1 g/kg yag 2500 kcal'de %25, 3900 kcal'de %16. Karar kullanicinin,
+// SINIR bilimin — ayar bandin icinde serbest.
+describe('yag orani ayari', () => {
+  test('bant disi degerler banda kirpiliyor', () => {
+    assert.strictEqual(M.nutYagOran(0.10), M.NUT_LIMITS.fatPctMin, '%10 kabul edildi');
+    assert.strictEqual(M.nutYagOran(0.50), M.NUT_LIMITS.fatPctMax, '%50 kabul edildi');
+    assert.strictEqual(M.nutYagOran(0.27), 0.27);
+    assert.strictEqual(M.nutYagOran(null), M.NUT_LIMITS.fatPct, 'varsayilan bozuldu');
+    assert.strictEqual(M.nutYagOran('abc'), M.NUT_LIMITS.fatPct, 'sayi olmayan girdi');
+  });
+
+  test('bant DRI ergen tabaninin altina inemiyor', () => {
+    // NASEM DRI: 4-18 yas AMDR yag %25-35. ACSM kronik siniri %20.
+    assert.ok(M.NUT_LIMITS.fatPctMin >= 0.25, 'taban DRI ergen bandinin altinda');
+    assert.ok(M.NUT_LIMITS.fatPctMax <= 0.35, 'tavan AMDR ustunde');
+  });
+
+  test('secilen oran hedefe yansiyor, g/kg tabani yine gecerli', () => {
+    const p = { sex: 'male', age: 16, height: 178, weight: 70 };
+    const dusuk = M.nutTargets(p, 'strength', 'kas', 0.25);
+    const yuksek = M.nutTargets(p, 'strength', 'kas', 0.32);
+    assert.ok(yuksek.fat > dusuk.fat, 'oran degisince yag degismiyor');
+    assert.strictEqual(dusuk.fat, Math.round(dusuk.kcal * 0.25 / 9));
+    // Kalan kalori karbonhidrata gidiyor: yag dusunce karb ARTMALI
+    assert.ok(dusuk.carb > yuksek.carb, 'yagdan dusen kalori karbonhidrata gitmemis');
+    // g/kg tabani her kosulda gecerli
+    for (const o of [0.25, 0.27, 0.32]) {
+      const t = M.nutTargets(p, 'rest', 'koru', o);
+      assert.ok(t.fat >= 70 * M.NUT_LIMITS.fatMinPerKg, 'g/kg tabani delinmis');
+    }
+  });
+});
+
+describe('olculen harcama duzeltmesi', () => {
+  test('palKat bandi %85-115', () => {
+    assert.strictEqual(M.nutPalKat(0.5), 0.85);
+    assert.strictEqual(M.nutPalKat(2), 1.15);
+    assert.strictEqual(M.nutPalKat(0.92), 0.92);
+    assert.strictEqual(M.nutPalKat(null), 1, 'veri yokken tahmin degismemeli');
+  });
+
+  test('cift antrenman gunu makul bandda', () => {
+    // ⚠️ Kaba akil kontrolu: sporcu bulk araligi 44-50 kcal/kg. 1.9 PAL ile
+    // 68.5 kg'da 3903 kcal = 57 kcal/kg cikiyordu; FAO'nun "yogun" bandi
+    // GUN BOYU fiziksel is varsayar, 90 dakika antrenman degil.
+    const t = M.nutTargets({ sex: 'male', age: 16, height: 184, weight: 68.5 }, 'both', 'kas');
+    const kcalPerKg = t.kcal / 68.5;
+    assert.ok(kcalPerKg <= 55, 'cift antrenman gunu ' + Math.round(kcalPerKg) + ' kcal/kg — cok yuksek');
+    assert.ok(kcalPerKg >= 45, 'cift antrenman gunu ' + Math.round(kcalPerKg) + ' kcal/kg — cok dusuk');
   });
 });

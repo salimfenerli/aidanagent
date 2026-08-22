@@ -30,6 +30,52 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 21 Ağustos 2026 — ⚖️ YAĞ ORANI AYARI + ÖLÇÜLEN HARCAMA (v7-169)
+
+Salim iki itiraz daha getirdi ve **ikisi de kalıp olarak doğruydu**: "genelde 2-2.2 kat protein, 1 kat yağ, karb kaloriye göre" ve "3900 kalori inanılmaz fazla".
+
+**🔴 1 — "1 g/kg YAĞ" KALIBI YANLIŞ DEĞİL, YÜKSEK KALORİDE KIRILIYOR.** Aynı kural 2500 kcal'de %25 yağ verir (DRI tabanı, doğru); 3900 kcal'de **%16'ya** düşer — 14-18 yaş AMDR'nin (%25-35) ve ACSM'in kronik sınırının (%20) altı. Yani sorun kalıpta değil, **sabit g/kg'ın kaloriyle ölçeklenmemesinde**. Karşılığı da hesaplandı: onun scripti 68.5 kg'da **670 g karbonhidrat** demek (15 porsiyon pilav) — yağdan kaçarken hacim iki katına çıkıyor.
+
+**Çözüm ayar, sabit değil.** Yağ oranı artık kullanıcı seçimi: **%25 · %27 · %30**, gram karşılığı chip'in üstünde yazıyor (itiraz zaten gram üzerineydi, yüzde soyut kalıyordu). Bant `fatPctMin 0.25` - `fatPctMax 0.32` ile **kodda kilitli** — ayar bandın İÇİNDE serbest, dışına çıkamaz; `nutYagOran()` bozuk/eski kayıtları da banda kırpıyor. `fatMinPerKg 0.8` tabanı her koşulda geçerli.
+
+**🔴 2 — 3900 KABA AKIL KONTROLÜNDEN GEÇMİYORDU.** 68.5 kg'da 3903 kcal = **57 kcal/kg**; sporcu bulk aralığı 44-50. Sebep 20 Ağustos'ta denetim sonrası yükselttiğim `both: 1.9`'du. FAO'nun "yoğun" bandı (2.0-2.4) **gün boyu fiziksel iş** varsayar — tarlada çalışan bir ergen; okulda oturup 90 dakika antrenman yapan biri için günün TAMAMININ çarpanı o kadar yüksek değil. `both: 1.9 → 1.8` (3716 kcal, 54 kcal/kg — hâlâ üst uç ama savunulabilir). Test bu bandı kilitliyor: çift antrenman günü 45-55 kcal/kg dışına çıkarsa kırmızı.
+
+**🔴 3 — ASIL ÇÖZÜM TAHMİN DEĞİL ÖLÇÜM: `palKat`.** İki kişi aynı kiloda aynı antrenmanı yapıp farklı yakar; `BMR × PAL` bir başlangıç noktası. `hcEnergyCheck` zaten loglanan kaloriyi kilo eğimiyle karşılaştırıp **gerçek harcamayı** çıkarıyordu (karnedeki "kayıt güvenilirliği" bloğu) ama o sayı hiçbir yere bağlanmıyordu. Artık `nutKalibrasyon()` ölçülen ile tahmini karşılaştırıyor; sapma ≥%8 ise beslenme sekmesinde **"Hedefleri buna göre ayarla"** düğmesi çıkıyor ve `palKat` kaydediliyor. Bant %85-115 (tek pencere motoru uçurmasın), sıfırlama tek tık. En az 10 günlük kalori kaydı + regresyona yetecek tartı şartı var; veri yoksa hiç görünmüyor.
+
+**Neden onay şart:** ölçüm de yanlış olabilir (eksik log porsiyonu düşük gösterir, seyrek tartı eğimi bozar). Motor sayıyı **gösteriyor**, uygulamayı kullanıcı onaylıyor.
+
+Test: 878/878 yeşil (5 yeni: bant kırpma · DRI tabanı · oranın hedefe yansıması ve karbonhidrata geçiş · palKat bandı · çift antrenman kcal/kg kontrolü). İlk yükleme 215 KB.
+
+### 🔴 21 Ağustos 2026 — 🫒 EKLENEN YAĞ TAVANI + ŞABLON HAVUZU (v7-168)
+
+Salim örnek günü okudu ve **"134 gram yağ çok uçuk değil mi"** dedi. Sayı savunulabilirdi (%32 enerji, DRI'nin 14-18 yaş bandı %25-35) ama **dökümü savunulamazdı**: 134 g'ın **72 GRAMI eklenen yağdı** — 3 kaşık zeytinyağı + 2 kaşık tahin + fıstık ezmesi + badem. Günde 5 kaşık sıvı yağ yenmez.
+
+**🔴 SEBEP BİR ÖNCEKİ PAKETİN YAN ETKİSİYDİ.** Protein bandı sıkılınca motor kaloriyi karbonhidratla dolduramaz oldu — Türk karbonhidrat kaynakları protein TAŞIYOR (bulgur 5 g, pilav 4 g, makarna 9 g/porsiyon) ve protein kapısına takılıyorlar. Geriye protein taşımayan tek şey kaldı: **yağ**. Motor "en kolay kaloriyi" seçti, "en yenebilir kaloriyi" değil.
+
+**Çözüm üç parçalı:**
+1. **DOLGU KALEMİ (yeni `rol: 'd'`).** Her öğüne slot'una uygun, proteinsiz/az proteinli bir karbonhidrat 0 adetle eklenir (kahvaltı armut · ara muz · ana öğün haşlanmış patates · atıştırma kuru üzüm); denge adımı gerekirse büyütür, gerekmezse son filtre atar. Doldurma sırası artık **karbonhidrat → dolgu → yağ**. ⚠️ Bal dolgu olarak denendi ve bırakıldı: motor "3 kaşık bal" yazıyordu (51 g şeker). Dolgu porsiyonu büyüdüğünde de makul görünmeli — meyve ve patates bu testi geçiyor, şekerli olanlar geçmiyor.
+2. **İKİ KADEMELİ YAĞ SINIRI.** Eklenen yağ (çapa olarak konan yağ; gıdanın kendi yağı değil) gün hedefinin **%55'ini** geçemez. Ayrıca **saf yağ** — protein YOK, karbonhidrat YOK, yani zeytinyağı; tahin değil — günde **3 birim**. Tek bir toplam sınır yetmiyordu: toplamı tutup 5 kaşık zeytinyağı yazmak mümkündü.
+3. **ŞABLON HAVUZU 2 → 5.** "Başka öner" iki şablon arasında gidip geliyordu; günlük kullanımda aynı yemeği görmek planı terk ettiren şey. Yağlı protein çapalarına (kıyma, köfte) zeytinyağı eklemek de bu yağ yığılmasının bir parçasıydı — ama çapayı şablondan silmek denendi ve gün yağ payı %25'in (DRI ergen tabanı) altına düştü. **Doğru yer şablon değil TAVAN.**
+
+**🔴 EN SİNSİ BULGU — `items` ORTA YERDE FİLTRELENİYORDU.** Kırpma adımları `m.items = m.items.filter(x => x.adet > 0)` çağırıyordu; bu, **0 adetle bekleyen yağ çapasını da siliyordu** ve sonraki adımların onu geri büyütmesi imkânsız hale geliyordu. 45 kg profilinde öğle/akşam tabağında hiç yağ çapası kalmıyor, gün yağ hedefinin %29 altında bitiyordu. Filtre zaten en sonda var; ortadakiler kaldırıldı. **Tek satırlık bu düzeltme öğün dağılımını da düzeltti:** kendi payının %130 üstünde kalan öğün 31'den 7'ye, %80 altında kalan 22'den 4'e indi.
+
+**⚠️ PROTEİN TAVANI ARTIK İKİ KADEMELİ.** 45 kg + çift antrenman + kas hedefi = 3113 kcal (69 kcal/kg); bu kaloriyi Türk mutfağıyla doldurmak tek başına ~110 g protein getiriyor. 2.5 g/kg'ı mutlak sınır saymak günü **%15 eksik** bırakıyordu — yani gerçek riski (az yemek) önlemek için gerçek olmayan bir riski (fazla protein) kovalıyorduk. ISSN protein bildirisi >3.0 g/kg alımların bile güvenli olduğunu söylüyor. Artık: normalde 2.5, **kalori açığı varken 3.0**.
+
+**Ölçüm (40 profil × 5 şablon = 200 plan, 955 öğün):**
+
+| | önce | sonra |
+|---|---|---|
+| kalori bandı dışı | 2 | **0** |
+| öğün payı >%130 | 31 | **7** |
+| öğün payı <%80 | 22 | **4** |
+| 3 kalemden az öğün | 26 | **9** |
+| yağ payı >%35 | 0 | 0 |
+| en çok saf yağ | 5 kaşık | **3 kaşık** |
+
+Salim'in profilinde (68.5 kg, çift antrenman, kas): yağ **134 g → 99-114 g** (%23-27), saf yağ **5 → 3 kaşık**, 5 şablonun hepsi hedefin ±%5'inde.
+
+Test: 873/873 yeşil (7 yeni test: saf yağ tavanı · eklenen yağ payı · AMDR üst sınırı · dolgu sözleşmesi · şablon sayısı · şablon tekrarı · iki kademeli protein tavanı).
+
 ### 🔴 20 Ağustos 2026 — 🔬 BESLENME BİLİM DENETİMİ + MARKA YÜZEYİ (v7-167)
 
 Salim: "beslenme planlaması bilime uygun mu." Motorun **her sayısal varsayımı** kaynağıyla karşılaştırıldı (FAO/WHO/UNU 2004, ACSM/AND/DC 2016, ISSN pozisyon bildirileri, IOC REDs 2023, NIH ODS, NASEM DRI). 7 hata bulundu, hepsi kapatıldı; sabitler artık teste bağlı.

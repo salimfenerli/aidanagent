@@ -5097,6 +5097,17 @@
   .krn-pill.warn { background: var(--warning-soft); color: var(--warning); border-color: var(--warning-soft); }
   .krn-note.warn { background: var(--warning-soft); border-color: var(--warning); }
   .krn-note.warn b { color: var(--warning); }
+  /* Beslenme: yag orani secimi + olculen harcama kalibrasyonu */
+  .nut-yag { align-items: center; gap: 8px; }
+  .nut-yag-lbl { color: var(--text-muted); font-size: 0.82em; }
+  .nut-yag .nut-chip { display: inline-flex; align-items: baseline; gap: 6px; }
+  .nut-yag .nut-chip i { font-style: normal; font-size: 0.82em; opacity: 0.7; font-variant-numeric: tabular-nums; }
+  .nut-kalib {
+    background: var(--surface-mid); border: 1px solid var(--border);
+    border-radius: 10px; padding: 11px 13px; margin: 12px 0;
+    font-size: 0.85em; line-height: 1.55; color: var(--text);
+  }
+  .nut-kalib-on { display: block; margin-top: 6px; color: var(--text-muted); font-size: 0.92em; }
   .tsk-fold {
     cursor: pointer; padding: 10px 14px; background: var(--bg-elev);
     border-radius: 8px; border: 1px solid var(--border-soft);
