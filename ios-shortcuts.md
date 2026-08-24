@@ -150,3 +150,146 @@ analizi ilk günden anlamlı olsun (regresyon için en az 4 tartım + 2 hafta ge
 3. "Tartımı Aidan'a gönder" seç
 
 Tartıdan iner inmez tek dokunuşla yollarsın — otomasyonun 09:00'ı beklemeden.
+
+---
+
+# 🫀 Uyku ve sağlık verisi — Fitbit Air → Aidan
+
+Amaç: her sabah uyku süren, adımın, dinlenme nabzın ve HRV'n Aidan'a düşecek.
+Uyku borcu motoru zaten yazılı — veri akmaya başladığı gün elle giriş biter.
+
+Zincir şu:
+
+```
+Fitbit Air → Google Health → Apple Sağlık → [Kısayol] → Aidan
+             └──── ikisini de sen kuracaksın ────┘   └─ uç hazır ─┘
+```
+
+> **Neden Fitbit'in kendi API'sini kullanmıyoruz:** Fitbit Web API Eylül 2026'da
+> kapanıyor. Yerine gelen Google Health API yıllık güvenlik denetimi (CASA, 500–4.500 $)
+> istiyor — tek kişilik projeye kapalı. Apple Sağlık köprüsü kalıcı çözüm, geçici yama değil.
+
+---
+
+## 🔧 Adım 0: Köprüyü aç (cihaz geldiğinde, 10 dk)
+
+1. App Store'dan **Google Health** uygulamasını kur — sürüm **5.05 veya üstü** olmalı
+   (çift yönlü Apple Sağlık senkronu 3 Ağustos 2026'da bu sürümle geldi; eskisinde
+   veri Apple Sağlık'a **hiç** düşmez ve hattın geri kalanı sessizce boş çalışır)
+2. Fitbit Air'ı **birleştirdiğin asıl Google hesabıyla** eşleştir
+   — ⚠️ ilk eşleştirdiğin hesap kalıcı adres olur, sonradan değiştirmek veri taşımak demek
+3. Google Health → Ayarlar → **Apple Sağlık** → yazma iznini aç: `Uyku`, `Adım`,
+   `Dinlenme Nabzı`, `Kalp Atış Hızı Değişkenliği`, `Aktif Enerji`
+4. iPhone → **Ayarlar** → **Sağlık** → **Veri Erişimi ve Aygıtlar** → **Google Health**
+   → yukarıdaki beş izin **açık** mı, gözünle doğrula
+
+Gizli anahtar tartıyla aynı: Cloudflare → `aidan-pusher` → Settings → Variables →
+`WEBHOOK_SECRET`. Zaten Kısayol'un içinde varsa yeniden kopyalamana gerek yok.
+
+---
+
+## ⚙️ Kısayolu genişlet
+
+Yeni bir kısayol **açma** — mevcut "Tartımı Aidan'a gönder"in içine ekle ve adını
+**"Sabah verimi Aidan'a gönder"** yap. Tek otomasyon, tek bildirim, sabaha tek adım.
+
+### A) Uyku (yatış + kalkış saati)
+
+Uyku örneğinin "değeri" bir sayı değil, kategoridir — o yüzden süreyi değil
+**saatleri** yolluyoruz. Uç yatış→kalkış farkını kendi hesaplıyor.
+
+1. **Sağlık Örneklerini Bul** → Tür: `Uyku Analizi` · Sırala: `Başlangıç Tarihi`
+   · Sıra: `En Yeni Önce` · Limit: `1`
+2. **Sağlık Örneği Ayrıntılarını Al** → Ayrıntı: **`Başlangıç Tarihi`**
+3. **Tarihi Biçimlendir** → Saat Biçimi: **Özel** → `HH:mm` → **Değişkene Ayarla**: `yatis`
+4. Aynı örnek için **Sağlık Örneği Ayrıntılarını Al** → **`Bitiş Tarihi`**
+   → **Tarihi Biçimlendir** `HH:mm` → **Değişkene Ayarla**: `kalkis`
+
+> Fitbit'in bildirdiği "uyunan süre" saat farkından kısadır (uyanık kalınan dakikalar
+> düşülür). Kısayol'dan doğrudan süreyi çekebilirsen `hours` alanı olarak yolla —
+> uç ona öncelik verir, saatlerden türetmez.
+
+### B) Adım ve aktif kalori (gün toplamı)
+
+Bunlar gün içinde parça parça kaydedilir, tek örnek almak yanlış olur.
+
+1. **Sağlık Örneklerini Bul** → Tür: `Adım` · Tarih aralığı: **bugün**
+2. **Sağlık Örneği Ayrıntılarını Al** → `Değer`
+3. **İstatistik Hesapla** → **Toplam** → **Değişkene Ayarla**: `adim`
+4. Aynısını `Aktif Enerji` için tekrarla → **Değişkene Ayarla**: `kalori`
+
+### C) Dinlenme nabzı ve HRV (günde tek ölçüm)
+
+1. **Sağlık Örneklerini Bul** → Tür: `Dinlenme Nabzı` · En Yeni Önce · Limit `1`
+   → **Ayrıntı: Değer** → **Değişkene Ayarla**: `nabiz`
+2. Aynısını `Kalp Atış Hızı Değişkenliği` için → **Değişkene Ayarla**: `hrv`
+
+### D) Aidan'a yolla
+
+**URL'nin İçeriğini Al** ekle:
+
+- URL: `https://aidan-pusher.fenerlisalim04.workers.dev/health`
+- **Yöntem**: `POST`
+- **Başlıklar** → `X-Aidan-Secret` = Cloudflare'den aldığın anahtar
+- **İstek Gövdesi**: `JSON` → alanlar:
+
+  | Alan adı | Değer |
+  |---|---|
+  | `bedtime` | değişken **yatis** |
+  | `wake` | değişken **kalkis** |
+  | `steps` | değişken **adim** |
+  | `kcalOut` | değişken **kalori** |
+  | `rhr` | değişken **nabiz** |
+  | `hrv` | değişken **hrv** |
+
+  > Değer kutusuna dokununca çıkan listeden değişkeni seç — elle yazma.
+  > `date` alanını **yollamıyoruz**: uç TR saatine göre bugünü kullanır, kısayol
+  > 09:00'da çalıştığı için bu zaten uyandığın gündür.
+
+Sonuna **Bildirim Göster** → içerik: **URL'nin İçeriği**.
+
+### Test et
+
+```
+{"ok":true,"saved":1,"sleep":1,"health":1,"summary":"2026-08-23: 7.5 saat uyku · 9120 adim · 58 bpm"}
+```
+
+`"ok":true` görüyorsan tamam. Aidan → uyku kartında görünür, uyku borcu aynı gün hesaplanır.
+
+---
+
+## 📊 Uç ne kabul ediyor
+
+| Alan | Aralık | Not |
+|---|---|---|
+| `bedtime` / `wake` | `HH:MM` ya da tam ISO damgası | ikisi de olursa süre türetilir |
+| `hours` | 0.5 – 16 | verilirse saatlerden **türetmeyi ezer** |
+| `steps` | 0 – 100.000 | gün toplamı |
+| `rhr` | 30 – 130 | dinlenme nabzı |
+| `hrv` | 3 – 300 | SDNN, ms |
+| `kcalOut` | 0 – 10.000 | aktif enerji |
+
+Aralık dışı değer **sessizce düşer**, kayda girmez. Metin ve virgüllü ondalık
+(`"6,8"`) kabul edilir — Kısayol her şeyi metin yollar.
+
+Toplu geçmiş yüklemek için: `{"items":[{...},{...}]}` — tek istekte 400 güne kadar.
+
+---
+
+## 🆘 Çalışmıyor mu?
+
+| Belirti | Sebep | Çözüm |
+|---|---|---|
+| Bildirimde `Not found` | Anahtar yanlış | `X-Aidan-Secret` değerini Cloudflare'den tekrar kopyala |
+| `"ok":false, "gecerli olcum yok"` | Sağlık'ta veri yok | Google Health sürümü 5.05+ mı, yazma izinleri açık mı (Adım 0) |
+| Uyku gelmiyor, adım geliyor | Uyku izni kapalı | Ayarlar → Sağlık → Veri Erişimi → Google Health → `Uyku` aç |
+| Adım sayısı çok düşük | `İstatistik Hesapla` adımı yok | Toplam almadan tek örnek gidiyor demektir |
+| `hours` saçma çıkıyor | Yanlış uyku örneği | En Yeni Önce · Limit 1 ayarını kontrol et; gündüz şekerlemesi seçilmiş olabilir |
+
+---
+
+## 🔒 Güvenlik notu
+
+Bu uç **sadece** uyku ve günlük sağlık metriklerine yazar. Görev, diyet, tartı ya da
+borsa verine dokunamaz — anahtar sızsa bile yapılabilecek tek şey sahte uyku kaydı
+eklemek olur. Kısayolu **link ile paylaşma**, anahtarı içeriyor.

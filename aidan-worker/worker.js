@@ -7895,6 +7895,142 @@ function srvUpsertBody(diet, entry) {
   return ex;
 }
 
+/* ===================================================================
+   SAGLIK VERISI — Apple Saglik -> iOS Kisayol -> POST /health
+   Fitbit Air verisi buraya dogrudan gelmez: Google Health uygulamasi
+   (v5.05+) Apple Saglik'a yazar, Kisayol oradan okuyup POST eder.
+   FITBIT WEB API'YE BAGLANMA — Eylul 2026'da kapaniyor; yerine gelen
+   Google Health API restricted scope (yillik CASA denetimi + OAuth
+   dogrulamasi) istiyor, tek kisilik projeye kapali kapi.
+   Uc SADECE data.sleep + data.health'e yazar; tarti /body'de kalir,
+   gorev/diyet/borsa verisine dokunamaz (secret sizsa zarar tavani bu).
+   =================================================================== */
+
+// Kisayol saati "23:40" ya da tam ISO damgasi olarak yollayabilir — ikisi de kabul.
+function srvClock(v) {
+  if (v == null || v === '') return null;
+  const m = /(\d{1,2}):(\d{2})/.exec(String(v));
+  if (!m) return null;
+  if (+m[1] > 23 || +m[2] > 59) return null;
+  return String(+m[1]).padStart(2, '0') + ':' + m[2];
+}
+
+// Yatis->kalkis farki — core.js sleepHours() ile ayni kural (gece yarisi gecisi, 16s tavani).
+function srvSleepHours(bedtime, wake) {
+  if (!bedtime || !wake) return null;
+  const b = /^(\d{2}):(\d{2})$/.exec(bedtime), w = /^(\d{2}):(\d{2})$/.exec(wake);
+  if (!b || !w) return null;
+  let diff = (+w[1] * 60 + +w[2]) - (+b[1] * 60 + +b[2]);
+  if (diff <= 0) diff += 1440;
+  if (diff > 16 * 60) return null;
+  return Math.round((diff / 60) * 100) / 100;
+}
+
+// data.sleep = [{date,bedtime,wake,hours,quality}] — core.js logSleep() ile ayni sekil,
+// ayni sira (yeni->eski) ve ayni 60 kayit tavani. quality elle girilir, buradan gelmez:
+// mevcut kaydin quality'si KORUNUR, ustune null yazilmaz.
+function srvUpsertSleep(data, entry) {
+  if (!entry || !entry.date) return null;
+  const bedtime = srvClock(entry.bedtime);
+  const wake = srvClock(entry.wake);
+  // Fitbit'in "uyunan sure"si yatis->kalkis farkindan kisadir (uyanik dakikalar dusulur).
+  // Kisayol hours yolladiysa ONA guven; yollamadiysa saatlerden turet.
+  let hours = srvBodyNum(entry.hours, 0.5, 16, 2);
+  if (hours == null) hours = srvSleepHours(bedtime, wake);
+  if (hours == null && !bedtime && !wake) return null;
+  data.sleep = data.sleep || [];
+  let ex = null;
+  for (const s of data.sleep) { if (s && s.date === entry.date) { ex = s; break; } }
+  if (!ex) { ex = { date: entry.date, bedtime: null, wake: null, hours: null, quality: null }; data.sleep.push(ex); }
+  if (bedtime) ex.bedtime = bedtime;
+  if (wake) ex.wake = wake;
+  if (hours != null) ex.hours = hours;
+  ex.src = entry.src || 'health';
+  data.sleep = data.sleep.filter(s => s && s.date).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 60);
+  return ex;
+}
+
+// data.health = [{date,steps,rhr,hrv,kcalOut}] — yeni dizi, gunde tek kayit.
+// Sinirlar insan araligi: disinda kalan deger sessizce duser, sacma veri kayda girmez.
+function srvUpsertHealth(data, entry) {
+  if (!entry || !entry.date) return null;
+  const steps = srvBodyNum(entry.steps, 0, 100000, 0);
+  const rhr = srvBodyNum(entry.rhr, 30, 130, 0);
+  const hrv = srvBodyNum(entry.hrv, 3, 300, 1);
+  const kcalOut = srvBodyNum(entry.kcalOut, 0, 10000, 0);
+  if (steps == null && rhr == null && hrv == null && kcalOut == null) return null;
+  data.health = data.health || [];
+  let ex = null;
+  for (const h of data.health) { if (h && h.date === entry.date) { ex = h; break; } }
+  if (!ex) { ex = { date: entry.date }; data.health.push(ex); }
+  if (steps != null) ex.steps = steps;
+  if (rhr != null) ex.rhr = rhr;
+  if (hrv != null) ex.hrv = hrv;
+  if (kcalOut != null) ex.kcalOut = kcalOut;
+  ex.src = entry.src || 'health';
+  data.health = data.health.filter(h => h && h.date).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 120);
+  return ex;
+}
+
+async function handleHealthApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Aidan-Secret',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  const url = new URL(request.url);
+  const given = request.headers.get('X-Aidan-Secret') || url.searchParams.get('secret') || '';
+  // Yanlis secret'ta 404 — /body ile ayni davranis, ucun varligini sizdirma
+  if (!env.WEBHOOK_SECRET || given !== env.WEBHOOK_SECRET) {
+    return new Response('Not found', { status: 404, headers: cors });
+  }
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const raw = Array.isArray(body.items) ? body.items : [body];
+  if (!raw.length || raw.length > 400) return jsonCors({ error: 'bad size' }, 400, cors);
+
+  const session = await fetchAidan(env);
+  const data = session.data;
+
+  let sleepN = 0, healthN = 0, lastSleep = null, lastHealth = null, lastDate = null;
+  for (const it of raw) {
+    if (!it || typeof it !== 'object') continue;
+    // Tarih = UYANDIGIN gun (Apple Saglik uyku orneginin bitis tarihi). Gelmezse bugun.
+    const date = (typeof it.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(it.date.slice(0, 10)))
+      ? it.date.slice(0, 10) : trToday();
+    const s = srvUpsertSleep(data, { ...it, date });
+    if (s) { sleepN++; lastSleep = s; }
+    const h = srvUpsertHealth(data, { ...it, date });
+    if (h) { healthN++; lastHealth = h; }
+    if (s || h) lastDate = date;
+  }
+  if (!sleepN && !healthN) {
+    return jsonCors({ ok: false, saved: 0, error: 'gecerli olcum yok' }, 422, cors);
+  }
+  await saveAidan(env, data, session);
+
+  // Ozet Kisayol bildiriminde gorunur — sessiz basari = fark edilmeyen ariza
+  const bits = [];
+  if (lastSleep && lastSleep.hours != null) bits.push(lastSleep.hours + ' saat uyku');
+  if (lastHealth && lastHealth.steps != null) bits.push(lastHealth.steps + ' adim');
+  if (lastHealth && lastHealth.rhr != null) bits.push(lastHealth.rhr + ' bpm');
+  if (lastHealth && lastHealth.hrv != null) bits.push('HRV ' + lastHealth.hrv);
+  const n = Math.max(sleepN, healthN);
+  const summary = n > 1
+    ? n + ' gun kaydedildi (son: ' + lastDate + ')'
+    : (lastDate || '') + ': ' + (bits.join(' \u00b7 ') || 'kayit guncellendi');
+
+  return jsonCors({
+    ok: true, saved: n, sleep: sleepN, health: healthN,
+    last: { sleep: lastSleep, health: lastHealth }, summary,
+  }, 200, cors);
+}
+
 async function handleBodyApi(request, env) {
   const cors = {
     'Access-Control-Allow-Origin': '*',
@@ -8068,6 +8204,10 @@ export default {
     // ⚖️ Tartı verisi — iOS Kısayol her sabah buraya POST eder
     if (url.pathname === '/body') {
       return handleBodyApi(request, env);
+    }
+    // Uyku + gunluk saglik metrikleri - Apple Saglik'tan Kisayol POST eder
+    if (url.pathname === '/health') {
+      return handleHealthApi(request, env);
     }
     if (url.pathname === '/stock-news') {
       return handleStockNewsApi(request, env);

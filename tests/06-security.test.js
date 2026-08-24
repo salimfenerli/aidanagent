@@ -91,22 +91,28 @@ describe('worker guvenlik sozlesmesi', () => {
   test('Supabase-token uclari yalnizca production origin\'e acik', () => {
     // Bearer token'la calisan uclarda CORS joker (*) OLAMAZ: baska bir site
     // kullanicinin oturumuyla Salim adina istek atabilirdi.
-    // TEK ISTISNA: /body (iOS Kisayol) — origin'i yok, kimligi X-Aidan-Secret
-    // header'i sagliyor, cerez/oturum kullanmiyor. O yuzden orada * mesru.
-    const bodyBaslangic = WK.indexOf('async function handleBodyApi');
-    assert.ok(bodyBaslangic > 0, 'handleBodyApi bulunamadi — testi guncelle');
-    const bodyBitis = WK.indexOf('\nasync function', bodyBaslangic + 10);
-    const bodyBlok = WK.slice(bodyBaslangic, bodyBitis > 0 ? bodyBitis : WK.length);
-    const digerleri = WK.slice(0, bodyBaslangic) + WK.slice(bodyBitis > 0 ? bodyBitis : WK.length);
-
+    // ISTISNA: iOS Kisayol uclari (/body tarti, /health uyku+metrik) — origin'leri
+    // yok, kimligi X-Aidan-Secret header'i sagliyor, cerez/oturum kullanmiyorlar.
+    // Orada * mesru AMA yalnizca secret zorunluluguyla birlikte.
+    // 23 Agu 2026: /health eklenince tek muaf uc yerine LISTE oldu — yeni bir
+    // Kisayol ucu eklersen adini buraya da yaz, yoksa test hakli olarak kirilir.
+    const KISAYOL_UCLARI = ['handleBodyApi', 'handleHealthApi'];
     const joker = /Access-Control-Allow-Origin['"]\s*:\s*['"]\*/;
+
+    let digerleri = WK;
+    for (const ad of KISAYOL_UCLARI) {
+      const bas = WK.indexOf('async function ' + ad);
+      assert.ok(bas > 0, ad + ' bulunamadi — testi guncelle');
+      const bit = WK.indexOf('\nasync function', bas + 10);
+      const blok = WK.slice(bas, bit > 0 ? bit : WK.length);
+      if (joker.test(blok)) {
+        assert.ok(/WEBHOOK_SECRET/.test(blok),
+          ad + ' CORS * ile acik AMA secret kontrolu yok — herkes yazabilir');
+      }
+      digerleri = digerleri.replace(blok, '');
+    }
     assert.ok(!joker.test(digerleri),
       'token ile calisan bir ucta CORS joker (*) ile acilmis');
-    // /body'de joker var ama secret zorunlulugu ile birlikte olmali
-    if (joker.test(bodyBlok)) {
-      assert.ok(/WEBHOOK_SECRET/.test(bodyBlok),
-        '/body ucu CORS * ile acik AMA secret kontrolu yok — herkes tarti yazabilir');
-    }
     // 14 Agu 2026: borsa ayri siteye tasindi, iki origin var. Sabit tek origin
     // yerine ALLOWLIST kullaniliyor. Kritik olan sey degismedi: istegin Origin'i
     // AYNEN YANSITILMAMALI — yansitilsaydi her site kullanicinin oturumuyla bu

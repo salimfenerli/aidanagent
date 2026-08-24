@@ -14,6 +14,8 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 
 **Borsa mimarisi:** `borsa/index.html` → `shared.js` (yardımcılar + veri katmanı) → `stocks.js` (motor, 4474 satır) → `sync.js` (kimlik + çakışma korumalı senkron) → `app.js` (açılış + render sırası). `supabase.js` tembel. İlk yükleme ~105 KB gzip.
 
+**🫀 FİTBİT VERİSİ APPLE SAĞLIK KÖPRÜSÜYLE GELİYOR (23 Ağu 2026 — KALICI KARAR).** Fitbit Web API **Eylül 2026'da kapanıyor**; yerine gelen Google Health API `restricted scope` — yıllık CASA güvenlik denetimi (500–4.500 $) + OAuth doğrulaması istiyor, tek kişilik projeye kapalı kapı. Köprü: **Google Health** uygulaması (**v5.05+**, 3 Ağu 2026) iPhone'da Apple Sağlık'a **çift yönlü** yazıyor → iOS Kısayol → **`POST /health`**. Tartı (`/body`) ile birebir aynı desen: `X-Aidan-Secret`, yanlış anahtarda 404, cevapta `summary`. Uç **sadece** `data.sleep` + `data.health`'e yazar — secret sızsa yapılabilecek tek şey sahte uyku kaydı. Asıl kazanç: `sleepDebt`/`healthPatterns` zaten yazılıydı, elle giriş bekliyordu. Kurulum `ios-shortcuts.md`, regresyon `tests/26-saglik-ucu.test.js`. ⚠️ **Fitbit'in kendi API'sine dönme — bu maddeye tekrar zaman harcama.**
+
 **⚠️ SATIR SONU ARTIK `.gitattributes` İLE SABİT (14 Ağu 2026).** Dosya yoktu; git Windows'ta `autocrlf=true` ile depoya LF yazıp diske CRLF açıyordu. `07-hygiene`'in "core.js CRLF olmalı" testi **lokalde yeşil, Linux CI'da hep kırmızı** oluyordu → **9-14 Ağustos arası HİÇBİR deploy çıkmadı**, canlıda sessizce v7-134 kaldı ve 3 haftalık iş yayınlanmadı. Artık EOL ortama değil dosyaya bağlı; beklenti ile git kuralının örtüştüğü de teste bağlı. ⚠️ `.gitattributes`'ta **sıra önemli** — eğik çizgisiz desen (`sw.js`) her klasörde eşleşir, o yüzden `borsa/**` bloğu en sonda.
 
 **⚠️ `.gitignore`'da EĞİK ÇİZGİSİZ DESEN TEHLİKELİ.** `app.js` satırı `borsa/app.js`'i de yok saydı ve dosya **hiç push edilmedi** — GitHub Desktop'ta "her şey commit edildi" görünüyordu. Kök dizini kastediyorsan `/app.js` yaz. Teste bağlı (borsa dosyalarından biri gitignore'a takılırsa kırmızı).
@@ -1405,11 +1407,12 @@ Günde 288 istek (limit 100K). `Promise.allSettled` — bir iş patlarsa diğerl
 - `POST /diet-plan-image` · `POST /classroom-image` — görsel OCR (diyet programı / Classroom ödevi).
 - `POST /hevy-sync` — Hevy antrenman proxy (⚠️ Hevy Pro şart).
 - `POST /body` — iOS Kısayol tartı girişi. Kimlik **`X-Aidan-Secret` header'ı** (Supabase token DEĞİL — Kısayol token yenileyemez).
+- `POST /health` — (23 Ağu 2026) iOS Kısayol uyku + günlük sağlık metriği girişi (`bedtime`/`wake`/`hours`, `steps`, `rhr`, `hrv`, `kcalOut`). `/body` ile aynı kimlik ve aynı `summary` sözleşmesi; tek kayıt ya da `{items:[…]}`. Sadece `data.sleep` + `data.health`.
 - `GET /calendar.ics?token=` — takvim aboneliği (iOS/Google).
 - `GET /config` — PWA bootstrap (Supabase URL + anon key + VAPID public key). **Auth yok, tasarımca** — üçü de zaten public.
 - `POST /signup` · `POST /invite/create` · `POST /invite/list` — davet kodlu multi-user. `/signup` auth'suz ama **davet kodu + service key doğrulaması** var.
 
-**Auth denetimi (8 Ağu 2026):** 25 endpoint'in 23'ü Supabase token ya da secret istiyor. Auth'suz kalan 2'si (`/config`, `/signup`) tasarım gereği; ikisi de gizli veri döndürmüyor.
+**Auth denetimi (8 Ağu 2026 · 23 Ağu'da güncellendi):** 26 endpoint'in 24'ü Supabase token ya da secret istiyor. Auth'suz kalan 2'si (`/config`, `/signup`) tasarım gereği; ikisi de gizli veri döndürmüyor.
 
 ### Telegram (EMEKLİ — kod silindi, Haz 10 Faz 4)
 Bot/webhook/sesli mesaj akışı worker'dan tamamen kaldırıldı (detay CHANGELOG.md). `aiInterpret` + `TOOL_HANDLERS` + `TOOL_SCHEMAS` DURUYOR — PWA `/ai` endpoint'i kullanıyor, silme.
@@ -1581,6 +1584,8 @@ py aidan-pages-deploy.py
   watchlist: [{symbol, ySymbol, market, name, price, prevClose, changePct, currency,
                alarmAbove, alarmBelow, lastAlertedAbove, lastAlertedBelow, qty, cost, fetchedAt, error}],  // (Haz 6-8) borsa
   portfolioHistory: [{date:'YYYY-MM-DD', byCur:{TRY:{value,cost}}}],  // (Haz 8) portföy değer geçmişi, son 180 gün
+  sleep: [{date:'YYYY-MM-DD', bedtime:'HH:MM', wake:'HH:MM', hours, quality:'bad'|'ok'|'good', src}],  // uyku — elle ya da (23 Ağu) `/health` ucundan; yeni→eski, son 60 gece. `sleepDebt`/`sleepDebtSrv` bunu okur
+  health: [{date:'YYYY-MM-DD', steps, rhr, hrv, kcalOut, src}],  // (23 Ağu 2026) Fitbit Air → Apple Sağlık → Kısayol → `POST /health`; yeni→eski, son 120 gün
   reminders: [{id, label, time:'HH:MM', days:'daily'|'weekdays', enabled, lastFired:'YYYY-MM-DD'}],  // (Haz 10) sabit hatırlatıcılar — Worker 15dk cron push'lar
   screen: { at, hurdlePct, scanned, dropped, dropCounts, rows:[{...,preScore,normScore,cycle}], comment, deepAt },  // (11 Agu 2026) BIST temel tarama — son tarama sonucu, max 12 satır
   diet: {  // (Haz 14) diyet sekmesi + diyet programı
