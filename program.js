@@ -2272,12 +2272,16 @@ function openProgramSetup() {
   };
   renderProgramSetup();
   const m = document.getElementById('programModal');
-  if (m) m.classList.add('open');
+  // ⚠️ Sinif adi 'active' — CSS'te acilma kurali YALNIZ `.modal-overlay.active`.
+  // 30 Agu 2026'ya kadar burada 'open' yaziyordu: modal hic acilmadi ve
+  // 'Program kur' dugmesi sessizce hicbir sey yapmadi. Hata mesaji da yok,
+  // cunku kod basariyla calisiyor — yalnizca gorunmez bir sinif ekliyordu.
+  if (m) m.classList.add('active');
 }
 
 function closeProgramSetup() {
   const m = document.getElementById('programModal');
-  if (m) m.classList.remove('open');
+  if (m) m.classList.remove('active');
 }
 
 // Vucut agirligi max tekrar girdisi (barfiks / sinav / dips)

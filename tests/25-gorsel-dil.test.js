@@ -183,3 +183,41 @@ describe('marka yuzeyi', () => {
     assert.ok(ilan.every((x) => x.sizes === '1024x1024'), 'manifest olcusu uyusmuyor');
   });
 });
+
+// ---------------------------------------------------------------------------
+// 30 Agu 2026 — SESSIZ MODAL HATASI
+// 'Program kur' dugmesi hicbir sey yapmiyordu. Sebep tek kelimeydi: kod
+// `classList.add('open')` yaziyordu, CSS ise yalniz `.modal-overlay.active`
+// taniyor. Modal display:none kaldi, hata da olusmadi — kod "basariyla"
+// gorunmez bir sinif ekliyordu. Ozellik yazildi, testleri yesildi, ve
+// kullanici onu hic acamadi.
+describe('modal acma sinifi CSS ile uyusuyor', () => {
+  const DOSYALAR = ['core.js', 'tasks.js', 'ui.js', 'program.js', 'nutrition.js', 'health.js'];
+
+  test('CSS yalnizca bilinen acma sinifini taniyor', () => {
+    const css = oku('styles.css');
+    const kurallar = [...css.matchAll(/\.modal-overlay\.([a-z-]+)\s*\{/g)].map((m) => m[1]);
+    assert.ok(kurallar.length, 'CSS\'te .modal-overlay acma kurali yok');
+    assert.ok(kurallar.includes('active'), 'beklenen acma sinifi "active" bulunamadi');
+  });
+
+  test('her modal acma cagrisi CSS\'in tanidigi sinifi kullanir', () => {
+    const css = oku('styles.css');
+    const gecerli = new Set([...css.matchAll(/\.modal-overlay\.([a-z-]+)\s*\{/g)].map((m) => m[1]));
+    const hatali = [];
+    for (const f of DOSYALAR) {
+      const src = oku(f);
+      // ⚠️ YORUMLAR SILINIR. Ilk surumde araya giren aciklama satirlari
+      // (kendi duzeltme notumuz!) mesafeyi asiyordu ve test sabotaji
+      // YAKALAMADI — calismayan bir test, testsizlikten kotudur.
+      const src2 = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+      const re = /getElementById\(\s*['"]([A-Za-z]*Modal)['"]\s*\)[\s\S]{0,200}?classList\.add\(\s*['"]([a-z-]+)['"]\s*\)/g;
+      let m;
+      while ((m = re.exec(src2))) {
+        if (!gecerli.has(m[2])) hatali.push(f + ': ' + m[1] + ' -> .' + m[2]);
+      }
+    }
+    assert.deepStrictEqual(hatali, [],
+      'bu modallar CSS\'te karsiligi olmayan bir sinif ekliyor — sessizce acilmazlar');
+  });
+});

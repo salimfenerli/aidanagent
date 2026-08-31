@@ -34,6 +34,26 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 30 Ağustos 2026 — 🚪 "PROGRAM KUR" DÜĞMESİ 22 GÜNDÜR ÇALIŞMIYORDU (v7-171)
+
+Salim "program kur tuşuna tıklayınca çalışmıyor" dedi. Sebep tek kelimeydi:
+
+```js
+if (m) m.classList.add('open');     // ← CSS'te böyle bir kural YOK
+```
+
+CSS yalnızca `.modal-overlay.active { display: flex }` tanıyor. Uygulamadaki **on iki modalın hepsi** `active` kullanıyor; `openProgramSetup` tek başına `open` yazıyordu. Modal `display:none` kaldı, düğme hiçbir şey yapmadı, **hata da oluşmadı** — kod başarıyla çalışıyor, sadece görünmez bir sınıf ekliyordu.
+
+**Ne zamandan beri: `b6331f0`, 9 Ağustos 2026** — antrenman programı üretecinin ilk commit'i. Yani motor **hiç kullanılamadı**. O günden bugüne bu motora yazılanlar: kademe sistemi, temas bütçesi, hafta içi dalgalanma, ikincil kas payı, 878→943 test, bir de tam kapsamlı literatür denetimi. Hepsi çalışmayan bir düğmenin arkasındaydı.
+
+**⚠️ ASIL DERS — TESTLER MOTORU ÖLÇÜYORDU, KAPIYI DEĞİL.** `12-program` 35 testle başlayıp büyüdü, `14-athletic`, `15-quality`, `17-hevy-export` eklendi; hepsi `buildProgram()` çıktısını doğruluyordu. Kullanıcının o çıktıya **ulaşıp ulaşamadığını** ölçen tek bir test yoktu. Deterministik motor + yeşil test + yazılı şartname, ürünün çalıştığı anlamına gelmiyor.
+
+Aynı sınıftan iki hata daha bu oturumda çıktı ve deseni doğruluyor: `plyoW` kütüphanede tanımlıydı ama programa kopyalanmıyordu (birim test geçiyordu, üretilen program eskisi gibiydi), ve `hc*` bloğu "kritik yolda" diye 19 KB'ı ilk yüklemede taşıyordu — oysa yalnızca Diyet sekmesinden çağrılıyordu.
+
+**Kilitlendi:** `25-gorsel-dil` içinde iki test — CSS'in tanıdığı açılma sınıfları çıkarılıyor, sonra **her** `getElementById('...Modal') … classList.add('X')` çağrısındaki `X` o kümede mi diye bakılıyor. ⚠️ Testin ilk sürümü sabotajı **yakalamadı**: araya giren yorum satırları (bu düzeltmenin kendi açıklaması!) regex mesafesini aşıyordu. Artık yorumlar taramadan önce siliniyor ve sabotaj testiyle doğrulandı — çalışmayan bir test, testsizlikten kötüdür.
+
+---
+
 ### 🔴 30 Ağustos 2026 — 📥 SAĞLIK GEÇMİŞİ İÇE AKTARIM (v7-171)
 
 `/health` ucu **günlük akış** için: iOS Kısayolu her sabah tek gün yolluyor. Geçmiş veri için yüzey yoktu — tartı için vardı (`importBodyCsv`), uyku/nabız için yoktu. Toparlanma katmanı kişisel **taban** istiyor ve taban 14 günde oturuyor; elinde geçmiş varsa o süreyi beklemenin anlamı yok.
