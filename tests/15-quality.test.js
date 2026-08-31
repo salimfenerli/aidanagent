@@ -84,9 +84,19 @@ describe('1 — kademe sistemi (ana kaldiris / yardimci / izolasyon)', () => {
     for (const id of ['curl', 'lateral', 'legext', 'fly']) {
       assert.strictEqual(bul(id).tier, 3, id + ' izolasyon olmali');
     }
-    for (const id of ['bulgarian', 'lunge', 'dip', 'pushup']) {
+    // ⚠️ 30 Agu 2026: 'dip' bu listeden CIKTI. Kademe 1 tanimi "agir, iki
+    // tarafli, YUKLENEBILIR" — agirlikli dips ucunu de karsiliyor ve yanlis
+    // siniflandirilmisti. Sonucu goruntuden ibaret degildi: yatay itis
+    // kaliminda TEK kademe-1 hareket bench kaliyordu, yani o slotta secim
+    // diye bir sey yoktu ve tekrar cezalari hic devreye girmiyordu.
+    // Karsiliginda dips'e kendi tekrar tabani konuldu (PROGRAM_REP_FLOOR 6):
+    // agirlikli dips'i 3 tekrara indirmek omuz on kapsulu icin gereksiz risk.
+    for (const id of ['bulgarian', 'lunge', 'pushup']) {
       assert.strictEqual(bul(id).tier, 2, id + ' yardimci bileske olmali');
     }
+    assert.strictEqual(bul('dip').tier, 1, 'agirlikli dips ana kaldiris');
+    assert.ok(M.PROGRAM_EXERCISES.filter((e) => e.pattern === 'push_h' && e.tier === 1).length >= 2,
+      'yatay itis kaliminda tek kademe-1 hareket kalirsa o slotta secim yapilmiyor demektir');
   });
 
   test('REGRESYON: yardimci hareket ana kaldiris araligini ALMAZ', () => {

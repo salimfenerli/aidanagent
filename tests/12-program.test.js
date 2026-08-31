@@ -233,13 +233,16 @@ describe('baslangic agirligi', () => {
   });
 
   test('gecmis veri varsa e1RM tahmininden %90 ile turetilir', () => {
-    const ws = [hevy(3, 'Bench Press (Barbell)', 60, 8)];   // e1RM ≈ 76
+    // ⚠️ 30 Agu 2026: eskiden bench'e bagliydi. Bench kademe 1'den ve pri 3'ten
+    // cikti (dips girdi), yani programa girmesi artik garanti degil. Test
+    // MEKANIZMAYI olcuyor, belirli bir hareketi degil — squat her sablonda var.
+    const ws = [hevy(3, 'Squat (Barbell)', 60, 8)];   // e1RM ≈ 76
     const p = build(G({ strengthDays: 3, goal: 'kas', places: ['gym'] }), ws);
-    const bench = p.days.flatMap((d) => d.exercises).find((e) => e.id === 'bench');
-    assert.ok(bench, 'bench programa girmemis');
-    assert.ok(bench.kg > 0 && bench.kg < 60,
-      'agirlik gecmisteki calisma agirliginin ustunde olmamali, gelen: ' + bench.kg);
-    assert.strictEqual(bench.kg % 2.5, 0, '2.5 kg adimina yuvarlanmali');
+    const ana = p.days.flatMap((d) => d.exercises).find((e) => e.id === 'squat');
+    assert.ok(ana, 'squat programa girmemis');
+    assert.ok(ana.kg > 0 && ana.kg < 60,
+      'agirlik gecmisteki calisma agirliginin ustunde olmamali, gelen: ' + ana.kg);
+    assert.strictEqual(ana.kg % 2.5, 0, '2.5 kg adimina yuvarlanmali');
   });
 
   test('kullaniciya gosterilen metinde 1RM denemesi ONERILMEZ yaziyor', () => {
@@ -276,30 +279,30 @@ describe('baslangic agirligi', () => {
 // ============================================================
 describe('progresyon', () => {
   function hazir() {
-    const ws = [hevy(3, 'Bench Press (Barbell)', 60, 8)];
+    const ws = [hevy(3, 'Squat (Barbell)', 60, 8)];   // bkz. yukaridaki not
     return { p: build(G({ strengthDays: 3, places: ['gym'] }), ws), ws };
   }
 
   test('hedef tekrar araligi ASILDIYSA agirlik artar', () => {
     const { p } = hazir();
-    const bench = p.days.flatMap((d) => d.exercises).find((e) => e.id === 'bench');
+    const bench = p.days.flatMap((d) => d.exercises).find((e) => e.id === 'squat');
     const onceki = bench.kg;
     // repMax'in uzerinde tekrar yapilmis bir hafta
-    const ws = [hevy(2, 'Bench Press (Barbell)', onceki, bench.repMax + 2),
-                hevy(4, 'Bench Press (Barbell)', onceki, bench.repMax + 2)];
+    const ws = [hevy(2, 'Squat (Barbell)', onceki, bench.repMax + 2),
+                hevy(4, 'Squat (Barbell)', onceki, bench.repMax + 2)];
     const y = W.advanceProgram(p, ws, W.today());
-    const yeni = y.days.flatMap((d) => d.exercises).find((e) => e.id === 'bench');
+    const yeni = y.days.flatMap((d) => d.exercises).find((e) => e.id === 'squat');
     assert.ok(yeni.kg > onceki, 'tekrar asildi ama agirlik artmadi');
     assert.strictEqual(y.week, 2);
   });
 
   test('SEANS KACIRILDIYSA program agirlastirilmaz', () => {
     const { p } = hazir();
-    const bench = p.days.flatMap((d) => d.exercises).find((e) => e.id === 'bench');
+    const bench = p.days.flatMap((d) => d.exercises).find((e) => e.id === 'squat');
     const onceki = bench.kg;
-    const ws = [hevy(2, 'Bench Press (Barbell)', onceki, bench.repMax + 5)];  // 3 planli, 1 yapilmis
+    const ws = [hevy(2, 'Squat (Barbell)', onceki, bench.repMax + 5)];  // 3 planli, 1 yapilmis
     const y = W.advanceProgram(p, ws, W.today());
-    const yeni = y.days.flatMap((d) => d.exercises).find((e) => e.id === 'bench');
+    const yeni = y.days.flatMap((d) => d.exercises).find((e) => e.id === 'squat');
     assert.strictEqual(yeni.kg, onceki, 'yetisilemeyen hafta agirlastirilmis');
     assert.ok(y.notes.some((n) => /sabit bırakıldı/.test(n)), 'kullaniciya sebep soylenmemis');
     assert.strictEqual(y.stall, 0, 'kacirilan hafta durgunluk sayilmamali');

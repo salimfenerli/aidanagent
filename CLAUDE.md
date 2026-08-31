@@ -34,6 +34,26 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 30 Ağustos 2026 — 📥 SAĞLIK GEÇMİŞİ İÇE AKTARIM (v7-171)
+
+`/health` ucu **günlük akış** için: iOS Kısayolu her sabah tek gün yolluyor. Geçmiş veri için yüzey yoktu — tartı için vardı (`importBodyCsv`), uyku/nabız için yoktu. Toparlanma katmanı kişisel **taban** istiyor ve taban 14 günde oturuyor; elinde geçmiş varsa o süreyi beklemenin anlamı yok.
+
+**Nerede: `health.js`.** İçe aktarma Diyet sekmesinde, o modül zaten orada tembel yükleniyor — ilk yükleme bütçesine dokunmuyor (200 KB sabit, health.js 25 KB tembel).
+
+**⚠️ SECRET GEREKTİRMEZ, ve bu bilinçli.** Dosya tarayıcıda okunur, doğrudan `localStorage`'a yazılır, ağa çıkmaz. `/health` ucundan farkı bu: orada anahtar var çünkü veri internetten geliyor. Yerel bir dosya için anahtar istemek gereksiz bir sızma yüzeyi olurdu. Test bunu kilitliyor: içe aktarma yolunda `fetch(` ya da `X-Aidan-Secret` geçerse kırmızı.
+
+**⚠️ DOĞRULAMA ARALIKLARI `srvUpsertSleep` / `srvUpsertHealth` İLE BİREBİR.** İki kapı aynı veriye yazıyor; kurallar ayrışırsa aynı günün kaydı **kaynağına göre değişir** ve bunu kimse fark etmez. `28-saglik-import` iki dosyadan sayısal sınırları çıkarıp karşılaştırıyor — kayma olursa test kırmızı.
+
+**İki biçim tanıyor, biçim uzantıdan değil İÇERİKTEN anlaşılıyor:**
+- **CSV** — sütunlar sabit sıraya göre değil **başlık anahtar kelimesine** göre eşleşir. Fitbit/Google/Zepp dışa aktarımları aynı standardı kullanmıyor; bu ders tartı içe aktarımında öğrenilmişti. Tarih sütunu ya da tanınan ölçüm sütunu yoksa **açıkça söyler**, sessizce boş dönmez.
+- **Apple Sağlık `export.xml`** — Google Health 5.05+ Fitbit verisini Apple Sağlık'a yazdığı için kullanıcının elindeki tek gerçek geçmiş kaynağı genelde bu. ⚠️ **DOMParser kullanılmıyor:** dosya 100 MB'ı geçebiliyor ve telefonda o boyutta ağaç kurmak sekmeyi düşürüyor; kayıtlar tek satırlık ve düz olduğu için düzenli ifade hem güvenli hem çok ucuz. Adım ve aktif enerji gün içinde parça parça kaydedildiği için **toplanır**; dinlenme nabzı ve HRV günde tek ölçüm, sonuncusu geçerli. Uyku **uyandığın güne** yazılır ve `Awake` kayıtları sayılmaz.
+
+**Sessiz başarısızlık yok:** okunamayan satır sayılır ve kullanıcıya bildirilir, aralık dışı değerler düşürülür ve kaç gün atlandığı söylenir, aynı güne ait mevcut kayıtlar **birleştirilir** (elle girilen `quality` üzerine null yazılmaz).
+
+Test: `tests/28-saglik-import.test.js` — 14 test.
+
+---
+
 ### 🔴 30 Ağustos 2026 — 🔬 KANIT DENETİMİ: MOTOR DÜZELTMELERİ (v7-171)
 
 Motorun her sayısı ve gerekçesi beş bağımsız literatür denetiminden geçirildi (hacim/frekans · hareket seçimi · plyometrik/dövüş yükü · progresyon/RPE · 16 yaş güvenlik). **Ana sonuç: sayıların çoğu makul, gerekçelerin çoğu değil** — 🟢 etiketlerinin en az altısı hak edilmemiş. Rapor: `claude.ai/code/artifact/295a9c04-2d35-4358-b1d0-2787237d1f61`
@@ -41,6 +61,8 @@ Motorun her sayısı ve gerekçesi beş bağımsız literatür denetiminden geç
 **Bu pakette uygulanan üç düzeltme:**
 
 **1 — Temas bütçesi şiddete göre ağırlıklı (`plyoW`).** Detay: ANTRENMAN-BILIMI.md bölüm 4. Kısaca: `contact` sayıyordu, şiddeti saymıyordu; 60 pogo hop ile 60 derinlik sıçraması aynı bütçeyi yiyordu. ⚠️ Uygularken **entegrasyon açığı** çıktı: `plyoW` kütüphanede tanımlıydı ama `programAddExplosive` seçilen harekete kopyalamıyordu ve temas formülü **üç ayrı yerde elle yazılıydı** — biri güncellendi, ikisi kalmadı. Hesap artık tek kaynaktan (`programContacts`) geliyor. Birim test bunu kaçırdı çünkü fonksiyonu doğrudan çağırıyordu; **üretilen programdan** doğrulayan test eklendi.
+
+**1b — Dips kademe 2 → 1, bench `pri` 3 → 2.** Kademe 1'in tanımı *"ağır, iki taraflı, yüklenebilir"* — ağırlıklı dips üçünü de karşılıyor ve yanlış sınıflandırılmıştı. Sonucu görüntüden ibaret değildi: **yatay itiş kalıbında tek kademe-1 hareket bench kalıyordu**, yani o slotta seçim diye bir şey yoktu ve tekrar cezaları hiç devreye girmiyordu. `pri` bir *transfer* puanı olarak tanımlı; bench sırtı destekli yatay itiştir ve dövüş sporcusunda transferi zayıf — ileri düzey amatör boksörlerde izometrik bench maksimal kuvveti yumruk darbe gücüyle anlamlı ilişkili çıkmadı, balistik ölçümler çıktı (Beattie & Ruddock 2022, JSCR). ⚠️ Dips'e `PROGRAM_REP_FLOOR` 6 kondu: atletik kademe-1 aralığı 3-5 ve ağırlıklı dips'te dip pozisyonu omuz ön kapsülünü son ROM'da yükler; 3 tekrar bunu maksimum yükle birleştirir. Test sözleşmesi güncellendi — `15-quality` artık "yatay itiş kalıbında en az 2 kademe-1 hareket" kuralını kilitliyor, `12-program`'ın progresyon testleri bench yerine squat'a bağlandı (mekanizmayı ölçüyorlar, belirli bir hareketi değil).
 
 **2 — Yorgunluk eşiği %5 → %10.** Ergende ölçüm gürültüsünün altındaydı (CMJ SDC >%7, Thomas 2017). Detay: ANTRENMAN-BILIMI.md bölüm 6.
 

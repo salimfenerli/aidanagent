@@ -401,6 +401,14 @@
         <button class="small" onclick="document.getElementById('bodyCsvInput').click()">Tartı geçmişini yükle (CSV)</button>
         <span class="weight-src" id="weightSrcMeta"></span>
       </div>
+      <!-- Uyku / adım / nabız / HRV geçmişi. /health ucu günlük akış için;
+           bu yüzey GEÇMİŞ için. Ağa çıkmaz, secret istemez — dosya tarayıcıda
+           okunup doğrudan localStorage'a yazılır. -->
+      <div class="weight-import">
+        <input type="file" id="healthFileInput" accept=".csv,.xml,text/csv,text/xml,text/plain" style="display:none;" onchange="importHealthFile(event)">
+        <button class="small" onclick="document.getElementById('healthFileInput').click()">Uyku / nabız geçmişi yükle</button>
+        <span class="weight-src">CSV ya da Apple Sağlık export.xml</span>
+      </div>
     </div>
 
     <!-- Takviyeler (push hatırlatıcı — data.reminders kind:supp) -->

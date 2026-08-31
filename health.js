@@ -1148,3 +1148,266 @@ function closeCoachReport() {
   const m = document.getElementById('coachReportModal');
   if (m) m.classList.remove('active');
 }
+
+
+/* ===================================================================
+   SAGLIK GECMISI ICE AKTARIM (30 Agu 2026)
+
+   NEDEN VAR: /health ucu gunluk akis icin (iOS Kisayolu her sabah tek gun
+   yollar). Gecmis veri icin bir yuzey yoktu — tarti icin vardi (importBodyCsv),
+   uyku/nabiz icin yoktu. Toparlanma katmani kisisel TABAN istiyor ve taban
+   14 gunde oturuyor; elinde gecmis varsa o sureyi beklemenin anlami yok.
+
+   ⚠️ DOGRULAMA ARALIKLARI worker'daki srvUpsertSleep / srvUpsertHealth ile
+   BIREBIR AYNI. Iki farkli kapidan giren veri iki farkli kurala tabi olursa
+   ayni gunun kaydi kaynagina gore degisir. Aralik disi deger SESSIZCE dusmez,
+   sayilir ve kullaniciya bildirilir.
+
+   ⚠️ SECRET GEREKTIRMEZ. Dosya tarayicida okunur, dogrudan localStorage'a
+   yazilir; aga cikmaz. /health ucundan farki bu — orada anahtar var cunku
+   internetten geliyor.
+
+   Iki bicim taniyor:
+     CSV  — sutunlar sabit siraya gore DEGIL, baslik anahtar kelimesine gore
+            eslesir (Fitbit/Google/Zepp disa aktarimlari ayni standardi
+            kullanmiyor; tarti importunda ogrenilen ders).
+     XML  — Apple Saglik disa aktarimi (export.xml). Google Health 5.05+
+            Fitbit verisini Apple Saglik'a yaziyor, yani kullanicinin elindeki
+            tek gercek gecmis kaynagi genelde bu.
+   =================================================================== */
+
+/** Aralik disi / bozuk degeri null yapar — worker'daki srvBodyNum ile ayni. */
+function hlNum(v, min, max, dec) {
+  if (v == null || v === '') return null;
+  var n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
+  if (!isFinite(n) || n < min || n > max) return null;
+  var p = Math.pow(10, dec || 0);
+  return Math.round(n * p) / p;
+}
+
+/** 'HH:MM' saat — ISO damgasi da kabul eder (Kisayol tam damga yollayabiliyor). */
+function hlClock(v) {
+  if (!v) return null;
+  var t = String(v).trim();
+  var m = t.match(/(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  var h = Number(m[1]), mi = Number(m[2]);
+  if (h > 23 || mi > 59) return null;
+  return (h < 10 ? '0' : '') + h + ':' + (mi < 10 ? '0' : '') + mi;
+}
+
+/** Yatis -> kalkis suresi; gece yarisini asan aralik dogru hesaplanir. */
+function hlSleepHours(bed, wake) {
+  if (!bed || !wake) return null;
+  var b = Number(bed.slice(0, 2)) * 60 + Number(bed.slice(3, 5));
+  var w = Number(wake.slice(0, 2)) * 60 + Number(wake.slice(3, 5));
+  var d = w - b; if (d <= 0) d += 1440;
+  var h = Math.round((d / 60) * 100) / 100;
+  return (h >= 0.5 && h <= 16) ? h : null;
+}
+
+/** Cesitli tarih bicimlerini YYYY-MM-DD'ye cevirir. */
+function hlDate(v) {
+  if (!v) return null;
+  var t = String(v).trim();
+  var m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  m = t.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})/);           // 09.08.2026 · 9/8/2026
+  if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+  m = t.match(/^(\d{4})[./](\d{1,2})[./](\d{1,2})/);           // 2026/08/09
+  if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+  return null;
+}
+
+/* --- Istemci tarafi upsert: worker'daki srvUpsert* ile ayni sozlesme --- */
+function hlUpsertSleep(entry) {
+  if (!entry || !entry.date) return null;
+  var bedtime = hlClock(entry.bedtime), wake = hlClock(entry.wake);
+  var hours = hlNum(entry.hours, 0.5, 16, 2);
+  if (hours == null) hours = hlSleepHours(bedtime, wake);
+  if (hours == null && !bedtime && !wake) return null;
+  data.sleep = data.sleep || [];
+  var ex = null;
+  for (var i = 0; i < data.sleep.length; i++) {
+    if (data.sleep[i] && data.sleep[i].date === entry.date) { ex = data.sleep[i]; break; }
+  }
+  if (!ex) { ex = { date: entry.date, bedtime: null, wake: null, hours: null, quality: null }; data.sleep.push(ex); }
+  if (bedtime) ex.bedtime = bedtime;
+  if (wake) ex.wake = wake;
+  if (hours != null) ex.hours = hours;
+  ex.src = entry.src || 'import';
+  data.sleep = data.sleep.filter(function (s) { return s && s.date; })
+    .sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 60);
+  return ex;
+}
+
+function hlUpsertHealth(entry) {
+  if (!entry || !entry.date) return null;
+  var steps = hlNum(entry.steps, 0, 100000, 0);
+  var rhr = hlNum(entry.rhr, 30, 130, 0);
+  var hrv = hlNum(entry.hrv, 3, 300, 1);
+  var kcalOut = hlNum(entry.kcalOut, 0, 10000, 0);
+  if (steps == null && rhr == null && hrv == null && kcalOut == null) return null;
+  data.health = data.health || [];
+  var ex = null;
+  for (var i = 0; i < data.health.length; i++) {
+    if (data.health[i] && data.health[i].date === entry.date) { ex = data.health[i]; break; }
+  }
+  if (!ex) { ex = { date: entry.date }; data.health.push(ex); }
+  if (steps != null) ex.steps = steps;
+  if (rhr != null) ex.rhr = rhr;
+  if (hrv != null) ex.hrv = hrv;
+  if (kcalOut != null) ex.kcalOut = kcalOut;
+  ex.src = entry.src || 'import';
+  data.health = data.health.filter(function (h) { return h && h.date; })
+    .sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 120);
+  return ex;
+}
+
+/* --- CSV: baslik anahtar kelimesine gore sutun eslestirme --- */
+var HL_SUTUN = [
+  ['date',    /tarih|date|day|g[uü]n(?!l[uü]k)/i],
+  ['hours',   /(uyku|sleep).*(saat|hour|dur|s[uü]re)|^(hours?|s[uü]re)$|asleep|total.*sleep/i],
+  ['bedtime', /yat|bed.*time|sleep.*start|start.*time|uyu/i],
+  ['wake',    /kalk|wake|sleep.*end|end.*time|uyan/i],
+  ['steps',   /ad[iı]m|steps?/i],
+  ['rhr',     /dinlen|resting|rhr|istirahat/i],
+  ['hrv',     /hrv|variability|de[gğ]i[sş]kenli/i],
+  ['kcalOut', /kalori|calor|kcal|energy|enerji/i],
+];
+
+function hlParseCsv(text) {
+  var lines = String(text).replace(/^\uFEFF/, '').split(/\r?\n/).filter(function (l) { return l.trim(); });
+  if (lines.length < 2) return { err: 'Dosyada başlık satırı ve en az bir kayıt olmalı.' };
+  var sep = (lines[0].split(';').length > lines[0].split(',').length) ? ';' : ',';
+  var head = csvSplitLine(lines[0], sep);
+  var idx = {};
+  for (var c = 0; c < HL_SUTUN.length; c++) {
+    for (var h = 0; h < head.length; h++) {
+      if (idx[HL_SUTUN[c][0]] == null && HL_SUTUN[c][1].test(head[h])) idx[HL_SUTUN[c][0]] = h;
+    }
+  }
+  if (idx.date == null) return { err: 'Tarih sütunu bulunamadı. Başlık satırında "tarih" ya da "date" geçmeli.' };
+  var alan = ['hours', 'bedtime', 'wake', 'steps', 'rhr', 'hrv', 'kcalOut'];
+  var varMi = false;
+  for (var a = 0; a < alan.length; a++) if (idx[alan[a]] != null) varMi = true;
+  if (!varMi) return { err: 'Uyku, adım, nabız ya da HRV sütunlarından hiçbiri tanınmadı.' };
+
+  var rows = [], atlanan = 0;
+  for (var i = 1; i < lines.length; i++) {
+    var col = csvSplitLine(lines[i], sep);
+    var d = hlDate(col[idx.date]);
+    if (!d) { atlanan++; continue; }
+    var r = { date: d };
+    for (var k = 0; k < alan.length; k++) {
+      if (idx[alan[k]] != null) r[alan[k]] = col[idx[alan[k]]];
+    }
+    rows.push(r);
+  }
+  return { rows: rows, atlanan: atlanan, bicim: 'CSV' };
+}
+
+/* --- Apple Saglik export.xml ---
+   ⚠️ TAM XML AYRISTIRICI KULLANILMIYOR. Dosya 100 MB'i gecebiliyor; DOMParser
+   telefonda o boyutta agac kurmaya calisirken sekmeyi dusuruyor. Kayitlar tek
+   satirlik ve duz yapida oldugu icin duzenli ifade guvenli ve cok daha ucuz. */
+var HL_HK = {
+  StepCount: 'steps',
+  RestingHeartRate: 'rhr',
+  HeartRateVariabilitySDNN: 'hrv',
+  ActiveEnergyBurned: 'kcalOut',
+};
+
+function hlParseAppleXml(text) {
+  var gun = {};
+  var re = /<Record[^>]*type="HK(?:Quantity|Category)TypeIdentifier([A-Za-z]+)"[^>]*startDate="([^"]{10})[^"]*"[^>]*endDate="([^"]{10})[^"]*"[^>]*value="([^"]*)"/g;
+  var m, uyku = 0, olcum = 0;
+  while ((m = re.exec(text))) {
+    var tip = m[1], bas = m[2], bit = m[3], deger = m[4];
+    if (tip === 'SleepAnalysis') {
+      // Deger bir KATEGORI ('AsleepCore', 'InBed'...). Uyanik kayitlarini alma.
+      if (/Awake/i.test(deger)) continue;
+      var g = bit;   // uyandigin gun
+      gun[g] = gun[g] || { date: g };
+      var bd = m[0].match(/startDate="[^"]{11}(\d{2}:\d{2})/);
+      var wk = m[0].match(/endDate="[^"]{11}(\d{2}:\d{2})/);
+      // Gecenin ILK yatisi ve SON kalkisi
+      if (bd && (!gun[g]._bed || bd[1] < gun[g]._bed || gun[g]._bed > '18:00')) gun[g]._bed = bd[1];
+      if (wk && (!gun[g]._wake || wk[1] > gun[g]._wake)) gun[g]._wake = wk[1];
+      uyku++;
+      continue;
+    }
+    var alan = HL_HK[tip];
+    if (!alan) continue;
+    var v = parseFloat(deger);
+    if (!isFinite(v)) continue;
+    gun[bas] = gun[bas] || { date: bas };
+    // Adim ve aktif enerji gun icinde PARCA PARCA kaydedilir -> toplanir.
+    // Dinlenme nabzi ve HRV gunde tek olcum -> sonuncusu gecerli.
+    if (alan === 'steps' || alan === 'kcalOut') gun[bas][alan] = (gun[bas][alan] || 0) + v;
+    else gun[bas][alan] = v;
+    olcum++;
+  }
+  var rows = [];
+  for (var k in gun) {
+    if (!Object.prototype.hasOwnProperty.call(gun, k)) continue;
+    var r = gun[k];
+    if (r._bed) r.bedtime = r._bed;
+    if (r._wake) r.wake = r._wake;
+    delete r._bed; delete r._wake;
+    rows.push(r);
+  }
+  rows.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  if (!rows.length) return { err: 'Apple Sağlık dosyasında uyku, adım, nabız ya da HRV kaydı bulunamadı.' };
+  return { rows: rows, atlanan: 0, bicim: 'Apple Sağlık XML', uyku: uyku, olcum: olcum };
+}
+
+/** Dosya icerigine bakip bicimi secer — uzantiya guvenmez. */
+function hlParse(text) {
+  return /<HealthData|<Record[^>]*HKQuantityTypeIdentifier/.test(text.slice(0, 20000))
+    ? hlParseAppleXml(text)
+    : hlParseCsv(text);
+}
+
+function importHealthFile(e) {
+  var file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  if (file.size > 300 * 1024 * 1024) {
+    showToast('Dosya 300 MB\'tan büyük — Apple Sağlık dışa aktarımını sıkıştırılmış hâlde değil, açılmış export.xml olarak seç.', 'danger', 6000);
+    return;
+  }
+  showToast('Dosya okunuyor…', 'info');
+  var reader = new FileReader();
+  reader.onerror = function () { showToast('Dosya okunamadı.', 'danger'); };
+  reader.onload = function (ev) {
+    var res;
+    try { res = hlParse(String(ev.target.result)); }
+    catch (err) { showToast('Dosya işlenemedi: ' + (err && err.message), 'danger'); return; }
+    if (res.err) { showToast(res.err, 'danger', 6000); return; }
+    if (!res.rows.length) { showToast('Geçerli kayıt bulunamadı.', 'info'); return; }
+
+    var ilk = res.rows[0].date, son = res.rows[res.rows.length - 1].date;
+    var msg = res.bicim + ' olarak okundu.\n' +
+      res.rows.length + ' gün bulundu (' + ilk + ' → ' + son + ').' +
+      (res.atlanan ? '\n' + res.atlanan + ' satır okunamadı, atlanacak.' : '') +
+      '\n\nAidan\'a eklensin mi? (aynı güne ait mevcut kayıtlar birleştirilir, silinmez)';
+    if (!confirm(msg)) return;
+
+    var uyku = 0, saglik = 0, bos = 0;
+    for (var i = 0; i < res.rows.length; i++) {
+      var r = res.rows[i];
+      var s = hlUpsertSleep(r), h = hlUpsertHealth(r);
+      if (s) uyku++;
+      if (h) saglik++;
+      if (!s && !h) bos++;
+    }
+    save();
+    if (typeof renderSleep === 'function') renderSleep();
+    if (typeof renderHealthCoach === 'function') renderHealthCoach();
+    var ozet = uyku + ' uyku · ' + saglik + ' sağlık kaydı eklendi';
+    if (bos) ozet += ' · ' + bos + ' gün aralık dışı olduğu için atlandı';
+    showToast(ozet, 'success', 5000);
+  };
+  reader.readAsText(file);
+}

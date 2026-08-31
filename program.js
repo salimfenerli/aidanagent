@@ -286,10 +286,10 @@ const PROGRAM_EXERCISES = [
 ];
 
 // Ana kaldiris: agir yuklenebilir, iki tarafli, gunun asil uyarani.
-const PROGRAM_TIER1 = new Set(['bench', 'dbbench', 'squat', 'legpress', 'rdl', 'dbrdl',
+const PROGRAM_TIER1 = new Set(['bench', 'dbbench', 'dip', 'squat', 'legpress', 'rdl', 'dbrdl',
   'ohp', 'dbohp', 'bbrow', 'seatedrow', 'pullup', 'chinup', 'latpull', 'hipthrust']);
 // Yardimci bileske: tek tarafli ya da vucut agirligi; orta tekrar.
-const PROGRAM_TIER2 = new Set(['incline', 'dip', 'pushup', 'invrow', 'pikepush', 'gobsquat',
+const PROGRAM_TIER2 = new Set(['incline', 'pushup', 'invrow', 'pikepush', 'gobsquat',
   'bulgarian', 'lunge', 'bwsquat', 'glutebr', 'closepush', 'dbrow', 'stepup']);
 // Tek tarafli is: dovus sporcusunda ayri deger tasir (tekme, denge, asimetri).
 const PROGRAM_UNI = new Set(['bulgarian', 'lunge', 'dbrow', 'bound', 'stepup']);
@@ -316,7 +316,13 @@ function programFamily(e) { return PROGRAM_FAMILY[e.id] || e.id; }
 // NEDEN EKLENDI: aile cezasi yuzunden motor ikinci bacak gununde serbest
 // squat yerine LEG PRESS yaziyordu — "cesitlilik" hareket kalitesinin onune
 // geciyordu. Makine bir squat degildir; cesitlilik ucuz, transfer degil.
-const PROGRAM_PRI3 = new Set(['squat', 'bench', 'ohp', 'rdl', 'bbrow', 'pullup',
+// ⚠️ 30 Agu 2026: 'bench' bu listeden CIKTI, 'dip' girdi. pri bir TRANSFER
+// puani olarak tanimli; bench sirti destekli yatay itistir ve dovus
+// sporcusunda transferi zayif — ileri duzey amator boksorlerde izometrik
+// bench maksimal kuvveti yumruk darbe guculuyle anlamli iliskili cikmadi,
+// balistik olcumler ciktı (Beattie & Ruddock 2022). Dips bilateral,
+// yuklenebilir ve govde kontrolu istiyor.
+const PROGRAM_PRI3 = new Set(['squat', 'dip', 'ohp', 'rdl', 'bbrow', 'pullup',
   'chinup', 'dip', 'hangclean', 'pushpress']);
 const PROGRAM_MAKINE = new Set(['legpress', 'latpull', 'seatedrow', 'legext',
   'legcurl', 'cablefly', 'pushdown', 'neckharn']);
@@ -330,6 +336,11 @@ const PROGRAM_REP_FLOOR = {
   hipthrust: 6, latpull: 6, seatedrow: 6, dbrow: 6, dbrdl: 6, legpress: 5,
   rdl: 5, dbbench: 5, dbohp: 5, glutebr: 8, calfraise: 8, legcurl: 8,
   legext: 8, nordic: 3,
+  // ⚠️ 30 Agu 2026: dips kademe 1'e alindi (asagidaki nota bak) ama
+  // atletik kademe-1 araligi 3-5. Agirlikli dips'te dip pozisyonu
+  // omuz on kapsulunu son ROM'da yukler; 3 tekrar bunu maksimum yukle
+  // birlestirir. 16 yasinda kazanci riskinden kucuk — taban 6.
+  dip: 6,
 };
 
 /**
