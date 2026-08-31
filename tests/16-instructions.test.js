@@ -160,7 +160,8 @@ describe('enjeksiyon kapsamı — prose var, makine yok', () => {
     // 4 borsa cagrisi (analiz/temel/portfoy-teknik/haber) + portfoy yorumu
     // artik borsa/ altinda. Sozlesme AYNI, sadece iki tarafa bolundu — o
     // yuzden borsa tarafi da asagida ayrica kilitleniyor.
-    const src = ['ui.js', 'tasks.js'].map((f) =>
+    // 30 Agu 2026: runHealthCoach() health.js'e tasindi — sayim o dosyayi da kapsar.
+    const src = ['ui.js', 'tasks.js', 'health.js'].map((f) =>
       fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n');
     const n = (src.match(/aiInstructions\(\)/g) || []).length;
     assert.ok(n >= 4, 'sadece ' + n + ' Aidan PWA cagrisi talimat yolluyor');

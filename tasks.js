@@ -32,8 +32,9 @@ async function showTab(name, btn) {
   toggleAppMenu(false);
   // --- Tembel modul: sekme ilk acilista indirilir ---
   if (name === 'diet') {
-    // Diyet sekmesi İKİ modül ister: antrenman programı + beslenme planı.
-    const modlar = ['program', 'nutrition'];
+    // Diyet sekmesi ÜÇ modül ister: antrenman programı + beslenme planı +
+    // sağlık analitiği (hc* çekirdeği, 30 Ağu 2026'da ui.js'ten çıktı).
+    const modlar = ['program', 'nutrition', 'health'];
     const eksik = modlar.filter(m => !moduleLoaded(m));
     if (eksik.length) {
       setModuleLoading(name, true);

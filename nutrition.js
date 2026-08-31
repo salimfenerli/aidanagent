@@ -1963,7 +1963,9 @@ function nutAiHtml(n) {
 // ============================================================================
 // DIYET KARNESI (ui.js'ten tasindi, 20 Agu 2026)
 // Yalniz Diyet sekmesinden acilir; o sekme bu dosyayi zaten bekliyor.
-// hcWeightTrend / hcEnergyCheck ui.js'te (statik) — burada guvenle cagrilir.
+// hcWeightTrend / hcEnergyCheck health.js'te (tembel). Diyet sekmesi ucunu de
+// birlikte bekler (tasks.js), o yuzden render aninda tanimlidir; yine de
+// asagidaki typeof kapisi duruyor — sozlesme degil, emniyet kemeri.
 // ============================================================================
 let _dietKarnePeriod = 'week'; // 'week' | 'month'
 const DKRN_WD = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];

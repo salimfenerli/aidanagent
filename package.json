@@ -5,7 +5,7 @@
   "description": "Aidan - ADHD asistani. Kalici regresyon test suite.",
   "scripts": {
     "test": "node --test --test-concurrency=2 \"tests/*.test.js\"",
-    "check": "node --check core.js && node --check tasks.js && node --check ui.js && node --check program.js && node --check nutrition.js && node --check sw.js && node --check aidan-worker/worker.js && node --check borsa/shared.js && node --check borsa/stocks.js && node --check borsa/sync.js && node --check borsa/app.js && node --check borsa/sw.js"
+    "check": "node --check core.js && node --check tasks.js && node --check ui.js && node --check program.js && node --check nutrition.js && node --check health.js && node --check sw.js && node --check aidan-worker/worker.js && node --check borsa/shared.js && node --check borsa/stocks.js && node --check borsa/sync.js && node --check borsa/app.js && node --check borsa/sw.js"
   },
   "devDependencies": {
     "jsdom": "^25.0.0"

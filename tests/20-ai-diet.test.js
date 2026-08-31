@@ -38,7 +38,8 @@ function motor() {
   const core = fs.readFileSync(path.join(ROOT, 'core.js'), 'utf8');
   const i = core.indexOf('const TURK_FOODS'), j = core.indexOf('\n];', i) + 3;
   const slots = core.match(/const MEAL_SLOTS = \{[^}]*\};/)[0];
-  const ui = fs.readFileSync(path.join(ROOT, 'ui.js'), 'utf8');
+  // 30 Agu 2026: hcBMR ui.js'ten health.js'e tasindi (tembel modul).
+  const ui = fs.readFileSync(path.join(ROOT, 'health.js'), 'utf8');
   const hb = ui.indexOf('function hcBMR('), he = ui.indexOf('\n}', hb) + 3;
 
   const ctx = {

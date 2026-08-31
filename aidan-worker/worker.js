@@ -2180,7 +2180,7 @@ Sana verilen TÜM sayılar uygulama tarafından hesaplandı — hepsi doğru. Se
 GÖREVİN — TÜRKÇE, 5-8 kısa cümle, akıcı paragraf (madde listesi değil):
 1. En dikkat çeken 1-2 örüntü — özellikle uyku ↔ antrenman ↔ beslenme ARASINDAKİ ilişki
 2. İyi giden 1 şey (gerçekten varsa; uydurma)
-3. Önümüzdeki hafta için EN FAZLA 2 somut ve küçük adım
+3. EN FAZLA 2 somut adım — BİRİ ANTRENMAN, BİRİ BESLENME tarafından. Kurallar aşağıda.
 
 VERİYİ NASIL OKUYACAKSIN:
 - "Set dağılımı" ve "İtme/çekme oranı": dengeli aralık 0.8-1.3. Dışındaysa hangi yönün eksik olduğunu söyle.
@@ -2200,7 +2200,28 @@ VERİYİ NASIL OKUYACAKSIN:
     protein ve uykuyu öner.
 - "Yağsız kütle" düşüyorsa yeterli yememe ya da uyku eksikliği sinyalidir. Çözümü DAHA AZ yemek değildir.
 - "tartım kaydı gelmiyor" tespiti varsa otomatik aktarımın durmuş olabileceğini tek cümleyle hatırlat.
+- "TOPARLANMA": 0-100 arası. 67+ iyi, 34-66 orta, 34 altı düşük. Skoru TEKRAR ETME, ne yapılacağını söyle.
+  Düşükse: hacmi/ağırlığı azalt ama antrenmanı tamamen iptal ETTİRME — hafif hareket toparlanmayı hızlandırır.
+  İyiyse: haftanın ağır seansını o güne almayı öner.
+- "TOPARLANMA: henüz hesaplanamıyor" yazıyorsa toparlanma hakkında HİÇBİR ŞEY söyleme, skor uydurma.
+- "YÜK" oranı: 1.5 üstü ani sıçrama → bu hafta hacmi SABİT tut, artırma. 0.8 altı → devamlılık düşmüş,
+  çözüm daha ağır kaldırmak değil sıklığı geri getirmek.
+- "ENERJİ BAKİYESİ" eksideyse çözüm sırası: önce uyku, sonra yemek. Antrenmanı artırmak DEĞİL.
 - Bir sayı verilmemişse o konuda konuşma. Yokluk, kötü olduğu anlamına gelmez.
+
+ANTRENMAN ÖNERİSİ NASIL VERİLİR:
+- Öneri her zaman MEVCUT programın içinden olur: günü kaydır, hacmi ayarla, eksik yöne set ekle.
+  Sıfırdan program yazma, "şu kadar daha ağır kaldır" deme.
+- Toparlanma düşük + yük yüksek → o günü hafiflet ya da ağır günü kaydır
+- Toparlanma iyi + yük normal/düşük → ağır seansı bugüne al
+- İtme/çekme oranı 0.8-1.3 dışındaysa eksik yöne haftada 2-3 set ekle
+- Güç eğilimi durgun/eksi ise ÖNCE uyku ve yeterli yemek — ağırlık artırmayı önerme
+
+BESLENME ÖNERİSİ NASIL VERİLİR:
+- Somut ve küçük: tek öğüne tek ekleme ("antrenman sonrası öğüne 200 g yoğurt")
+- EKLEME öner, çıkarma değil. Kalori düşürme önerisi her koşulda YASAK.
+- "eksik-log" ya da "makro kapsaması düşük" varsa beslenme yorumu yapma — kaydı tamamlamayı öner
+- Antrenman günü / dinlenme günü ayrımı verildiyse önerinin hangi güne ait olduğunu söyle
 
 ✅ İZİN VERİLEN:
 - Veriler arası ilişki kurmak ("az uyuduğun günlerde antrenmana gitmemişsin")
@@ -2768,11 +2789,278 @@ function hcTrainingPatterns(hev, nut, wt, energy, toDate) {
 /* ---------------- FAKT ÜRETİCİ (AI'a giden metin) ----------------
    Sayısal kısmın tamamı burada üretilir → PWA ve Worker BİREBİR aynı metni verir.
    Uyku satırları dışarıdan gelir (her taraf kendi sleepDebt ikizini kullanır).   */
+/* ═══════════════════════════════════════════════════════════════════
+   TOPARLANMA KATMANI — ham veriyi işlenmiş sinyale çevirir (23 Ağu 2026)
+   ───────────────────────────────────────────────────────────────────
+   Bevel/WHOOP tarzı skorların yaptığı tek iş: ham sayıyı KİŞİSEL TABANA
+   göre normalleştirmek. "74 ms HRV" iyi mi kötü mü — cevabı yok.
+   "Senin 30 günlük medyanın 68, bugün 74" — cevabı var.
+
+   Ortalama+SD DEĞİL, medyan+MAD: tek bir hasta gün ya da geç yatılan
+   gece ortalamayı kaydırır, medyanı kaydırmaz. n küçükken fark büyük.
+
+   ⚠️ TABAN OTURMADAN SKOR ÜRETİLMEZ (ready:false). İlk iki haftada
+   uydurma skor göstermek hiç göstermemekten KÖTÜDÜR — kullanıcı ona
+   göre karar verir ve sayı yanlıştır. Aynı ilke: sayıyı biz hesaplarız,
+   AI yorumlar; hesaplanamadıysa AI'a "hesaplanamıyor" diye gider.
+   ═══════════════════════════════════════════════════════════════════ */
+
+// Olcum gurultusu tabanlari (medyanin orani). MAD tek basina yetmiyor:
+// cok duzenli bir insanda MAD kucucuk cikiyor ve 2 ms'lik FIZYOLOJIK GURULTU
+// z = -1.35 gibi gorunuyor — yani hicbir sey olmadigi halde skor dusuyor.
+// Bir sapma en azindan olcum gurultusu kadar buyuk degilse SINYAL DEGILDIR.
+// HRV gece gece %8-10 oynar, dinlenme nabzi %2-3. Taban olcek bunun altina inmez.
+var HC_BASE = { win: 30, minN: 14, noise: { hrv: 0.08, rhr: 0.03, steps: 0.15, kcalOut: 0.15 }, noiseDef: 0.05 };
+
+// Günlük yük ağırlıkları. Değerler KEYFİ ama TUTARLI: dışarı çıkan şey
+// mutlak büyüklük değil kendi 28 günlük ortalamasına ORAN, birim çarpanı
+// oranın içinde sadeleşiyor. Ölçek: 10 ton ≈ 10 birim, 600 aktif kcal
+// ≈ 6 birim, 8000 adım ≈ 2 birim. Kuvvet günü baskın, dinlenme gününü
+// adım + kalori taşır (Hevy'ye girmeyen kickboks/koşu da böyle sayılır).
+var HC_LOAD_W = { vol: 0.001, kcal: 0.01, steps: 0.00025 };
+
+// Toparlanma katsayıları tek yerde — sihirli sayı koda dağılmasın.
+var HC_REC = { base: 50, hrv: 12, rhr: 8, zCap: 2, debtK: 2.5, debtCap: 8, loadK: 20, loadCap: 15, spike: 1.3 };
+
+function hcMedian(a) {
+  if (!a || !a.length) return null;
+  var s = a.slice().sort(function (x, y) { return x - y; });
+  var m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+/* Kişisel taban çizgi: son `win` günün medyanı + MAD, ve son ölçümün
+   bu tabandan kaç MAD saptığı (z). 1.4826 çarpanı MAD'ı normal dağılımda
+   standart sapmayla aynı ölçeğe getirir — z değerleri okunabilir kalsın diye.
+   MAD 0 çıkabilir (tüm değerler aynı); o zaman sıfıra bölmemek için
+   medyanın %2'si taban ölçek olarak kullanılır. */
+function hcBaseline(rows, key, today, win, minN) {
+  win = win || HC_BASE.win;
+  minN = minN || HC_BASE.minN;
+  var from = hcShift(today, -(win - 1));
+  var vals = [], last = null, lastDate = null;
+  (rows || []).forEach(function (r) {
+    if (!r || !r.date || r.date > today || r.date < from) return;
+    var v = r[key];
+    if (v == null || !isFinite(v)) return;
+    vals.push(v);
+    if (!lastDate || r.date > lastDate) { lastDate = r.date; last = v; }
+  });
+  var n = vals.length;
+  if (!n) return { key: key, n: 0, ready: false, median: null, mad: null, last: null, lastDate: null, z: null, dev: null, dir: 0 };
+  var med = hcMedian(vals);
+  var mad = hcMedian(vals.map(function (v) { return Math.abs(v - med); }));
+  var noise = HC_BASE.noise[key] != null ? HC_BASE.noise[key] : HC_BASE.noiseDef;
+  var floor = med > 0 ? Math.abs(med) * noise : 1;
+  var scale = Math.max(mad * 1.4826, floor);
+  var ready = n >= minN;
+  var z = (last != null && ready) ? hcRound((last - med) / scale, 2) : null;
+  return {
+    key: key, n: n, ready: ready,
+    median: hcRound(med, 1), mad: hcRound(mad, 2),
+    last: hcRound(last, 1), lastDate: lastDate,
+    z: z, dev: hcRound(last - med, 1),
+    dir: z == null ? 0 : (z > 0.7 ? 1 : z < -0.7 ? -1 : 0),
+  };
+}
+
+/* Günlük yük ve akut:kronik oranı (ACWR — spor biliminde bilinen ölçü).
+   7 günlük ortalama / 28 günlük ortalama. 1.5 üstü ani sıçrama, 0.8 altı
+   devamlılık kaybı. Kayıtsız gün 0 yük sayılır (dinlenme gerçek bilgidir),
+   o yüzden payda GÜN sayısı — kayıt sayısı değil. */
+function hcLoad(workouts, health, today) {
+  var byDate = {}, any = false;
+  (workouts || []).forEach(function (w) {
+    if (!w || !w.date || w.date > today) return;
+    byDate[w.date] = (byDate[w.date] || 0) + (w.volumeKg || 0) * HC_LOAD_W.vol;
+    any = true;
+  });
+  (health || []).forEach(function (h) {
+    if (!h || !h.date || h.date > today) return;
+    byDate[h.date] = (byDate[h.date] || 0) + (h.kcalOut || 0) * HC_LOAD_W.kcal + (h.steps || 0) * HC_LOAD_W.steps;
+    any = true;
+  });
+  if (!any) return { ready: false, byDate: byDate, today: null, acute: null, chronic: null, ratio: null, band: null, days: 0 };
+
+  var winAvg = function (n) {
+    var sum = 0, seen = 0;
+    for (var i = 0; i < n; i++) {
+      var d = hcShift(today, -i);
+      if (byDate[d] != null) { sum += byDate[d]; seen++; }
+    }
+    return { avg: seen ? sum / n : null, seen: seen };
+  };
+  var a7 = winAvg(7), c28 = winAvg(28);
+  var ready = c28.seen >= HC_BASE.minN;
+  var ratio = (ready && c28.avg > 0) ? hcRound(a7.avg / c28.avg, 2) : null;
+  return {
+    ready: ready, byDate: byDate,
+    today: byDate[today] != null ? hcRound(byDate[today], 1) : null,
+    acute: a7.avg == null ? null : hcRound(a7.avg, 2),
+    chronic: c28.avg == null ? null : hcRound(c28.avg, 2),
+    ratio: ratio, days: c28.seen,
+    band: ratio == null ? null
+      : ratio >= 1.5 ? 'sicrama' : ratio >= HC_REC.spike ? 'yuksek' : ratio >= 0.8 ? 'normal' : 'dusuk',
+  };
+}
+
+/* Toparlanma skoru — 50 tabanından başlar, dört girdi onu iter/çeker:
+     + HRV kendi tabanının üstündeyse
+     + dinlenme nabzı kendi tabanının ALTINDAysa (işaret ters, düşük iyidir)
+     − uyku borcu
+     − akut yük kronik ortalamayı aşıyorsa
+   Girdilerden herhangi birinin tabanı oturmadıysa skor ÜRETİLMEZ.
+   `drivers` skorun NEDEN o değer olduğunu söyler — çıplak sayı işe yaramaz. */
+function hcRecovery(inp) {
+  inp = inp || {};
+  var hrv = inp.hrv, rhr = inp.rhr;
+  var missing = [];
+  if (!hrv || !hrv.ready || hrv.z == null) missing.push('HRV tabanı');
+  if (!rhr || !rhr.ready || rhr.z == null) missing.push('dinlenme nabzı tabanı');
+  if (missing.length) return { ready: false, missing: missing, score: null, band: null, drivers: [], need: HC_BASE.minN };
+
+  var cap = function (z) { return Math.max(-HC_REC.zCap, Math.min(HC_REC.zCap, z)); };
+  var drivers = [];
+  var s = HC_REC.base;
+
+  var zH = cap(hrv.z);
+  s += zH * HC_REC.hrv;
+  if (Math.abs(zH) >= 0.7) {
+    drivers.push('HRV tabanının ' + (zH > 0 ? 'üstünde' : 'altında') + ' (' + hrv.last + ' ms, taban ' + hrv.median + ')');
+  }
+
+  var zR = cap(-rhr.z);
+  s += zR * HC_REC.rhr;
+  if (Math.abs(zR) >= 0.7) {
+    drivers.push('dinlenme nabzı tabanının ' + (zR > 0 ? 'altında' : 'üstünde') + ' (' + rhr.last + ' bpm, taban ' + rhr.median + ')');
+  }
+
+  var debt = (inp.debt && inp.debt.debt != null) ? inp.debt.debt : 0;
+  if (debt > 0) {
+    var dp = Math.min(debt, HC_REC.debtCap) * HC_REC.debtK;
+    s -= dp;
+    if (dp >= 5) drivers.push('uyku borcu ' + hcRound(debt, 1) + ' saat');
+  }
+
+  var ratio = (inp.load && inp.load.ratio != null) ? inp.load.ratio : null;
+  if (ratio != null && ratio > HC_REC.spike) {
+    var lp = Math.min((ratio - HC_REC.spike) * HC_REC.loadK, HC_REC.loadCap);
+    s -= lp;
+    if (lp >= 4) drivers.push('son 7 günün yükü 28 günlük ortalamanın ' + ratio + ' katı');
+  }
+
+  var score = Math.max(0, Math.min(100, Math.round(s)));
+  return {
+    ready: true, missing: [], score: score, drivers: drivers, need: HC_BASE.minN,
+    band: score >= 67 ? 'iyi' : score >= 34 ? 'orta' : 'dusuk',
+  };
+}
+
+/* Enerji bakiyesi — tek günün fotoğrafı değil KÜMÜLATİF hesap.
+   Hedefin üstünde uyku yatırır, kronik ortalamanın üstündeki yük çeker.
+   Uyku borcuyla aynı felsefe: eski günler her gün %10 siliniyor, yani
+   üç hafta önceki kötü gece bugünü hâlâ cezalandırmıyor. 0 = nötr. */
+function hcEnergyBank(sleep, loadByDate, chronicAvg, goalH, today, days) {
+  days = days || 28;
+  goalH = goalH || 8;
+  var byDate = {};
+  (sleep || []).forEach(function (s) { if (s && s.date && s.hours != null) byDate[s.date] = s.hours; });
+  if (!Object.keys(byDate).length) return { ready: false, balance: null, band: null, days: 0 };
+
+  var DECAY = 0.9, K = 6;
+  var B = 0, seen = 0;
+  for (var i = days - 1; i >= 0; i--) {
+    var d = hcShift(today, -i);
+    var h = byDate[d];
+    var ld = loadByDate ? loadByDate[d] : null;
+    if (h == null && ld == null) { B = B * DECAY; continue; }
+    seen++;
+    var inn = h == null ? 0 : Math.max(-2, Math.min(1.5, h - goalH));
+    var out = (ld != null && chronicAvg > 0) ? Math.max(-1, Math.min(1.5, ld / chronicAvg - 1)) : 0;
+    B = Math.max(-100, Math.min(100, B * DECAY + inn * K - out * K));
+  }
+  var bal = Math.round(B);
+  return {
+    ready: seen >= 7, balance: bal, days: seen,
+    band: bal >= 25 ? 'dolu' : bal >= -25 ? 'dengeli' : bal >= -60 ? 'azaliyor' : 'tukenmis',
+  };
+}
+
+/* Toparlanma tarafının otomatik tespitleri — hcAllPatterns bunları
+   uyku/alışkanlık/antrenman kurallarıyla birleştirip ciddiyete göre sıralar. */
+function hcRecoveryPatterns(inp) {
+  inp = inp || {};
+  var out = [];
+  var rec = inp.rec, load = inp.load, bank = inp.bank, rhr = inp.rhr;
+  var today = inp.today;
+
+  // A) SESSİZ ARIZA — /body'deki 10 günlük tartı kuralının ikizi.
+  //    Kısayol durduğunda haftalarca fark edilmiyordu.
+  var lastH = null;
+  (inp.health || []).forEach(function (h) { if (h && h.date && (!lastH || h.date > lastH)) lastH = h.date; });
+  if (!lastH) {
+    out.push({ level: 'warn', text: 'Sağlık verisi hiç gelmemiş — Kısayol kurulu mu?' });
+  } else if (hcDayDiff(lastH, today) >= 5) {
+    out.push({ level: 'warn', text: hcDayDiff(lastH, today) + ' gündür sağlık verisi gelmiyor — otomatik aktarım durmuş olabilir.' });
+  }
+
+  // B) Taban oturmadı: skor yok. Bunu SÖYLEMEK skor uydurmaktan iyidir.
+  if (lastH && rec && !rec.ready) {
+    out.push({ level: 'good', text: 'Toparlanma skoru için taban çizgi oluşuyor (' + rec.need + ' gün veri gerekiyor) — o zamana kadar tek iş takmaya devam etmek.' });
+  }
+
+  var dusuk = !!(rec && rec.ready && rec.band === 'dusuk');
+
+  // C) Toparlanma uçları
+  if (dusuk) {
+    out.push({ level: 'danger', text: 'Toparlanma ' + rec.score + '/100' + (rec.drivers.length ? ' — ' + rec.drivers[0] : '') + '. Hacmi düşür ama hareketi tamamen bırakma.' });
+  } else if (rec && rec.ready && rec.band === 'iyi') {
+    out.push({ level: 'good', text: 'Toparlanma ' + rec.score + '/100 — ağır seansı bugüne almak için uygun gün.' });
+  }
+
+  // D) Yük sıçraması — sakatlık riski en çok burada birikir
+  if (load && load.ready && load.band === 'sicrama') {
+    out.push({ level: 'warn', text: 'Son 7 günün yükü 28 günlük ortalamanın ' + load.ratio + ' katı — ani sıçrama sakatlık riskini artırır, bu hafta hacmi sabit tut.' });
+  } else if (load && load.ready && load.band === 'dusuk') {
+    out.push({ level: 'warn', text: 'Son 7 günün yükü ortalamanın ' + load.ratio + ' katı — devamlılık düşmüş. Ağırlık artırmak değil, sıklığı geri getirmek gerekiyor.' });
+  }
+
+  // E) Nabız tabanın üstünde takılı (C zaten söylediyse tekrarlama)
+  if (!dusuk && rhr && rhr.ready && rhr.z != null && rhr.z >= 1) {
+    out.push({ level: 'warn', text: 'Dinlenme nabzı tabanının üstünde (' + rhr.last + ' bpm, taban ' + rhr.median + ') — az uyku, biriken yorgunluk ya da hastalık başlangıcı.' });
+  }
+
+  // F) Bakiye eriyor
+  if (bank && bank.ready && (bank.band === 'tukenmis' || bank.band === 'azaliyor')) {
+    out.push({
+      level: bank.band === 'tukenmis' ? 'danger' : 'warn',
+      text: 'Enerji bakiyesi ' + bank.balance + ' — girenden fazlası çıkıyor. En hızlı düzeltme bir gece erken yatmak.',
+    });
+  }
+  return out;
+}
+
 function hcBuildFacts(ctx) {
   var L = [];
   var g = ctx.goals || {};
   L.push('HEDEFLER: uyku ' + (g.sleepH || 8) + ' saat/gece · ' + (g.kcal || '-') + ' kcal · protein ' + (g.protein || '-') + ' g · su ' + (g.waterL || '-') + ' L.');
   (ctx.sleepLines || []).forEach(function (x) { if (x) L.push(x); });
+
+  // --- Toparlanma / yuk / enerji (Fitbit hatti) ---
+  var rc = ctx.recovery, ld = ctx.load, bk = ctx.bank;
+  if (rc && rc.ready) {
+    L.push('TOPARLANMA: ' + rc.score + '/100 (' + rc.band + ')' + (rc.drivers.length ? ' — ' + rc.drivers.join('; ') : '') + '.');
+    L.push('NOT: bu skor HRV ve dinlenme nabzının KENDİ 30 günlük tabanından sapmasıyla hesaplandı, mutlak değerle değil. YENİDEN HESAPLAMA, olduğu gibi kullan. Tek günün skoru dalgalanır — üç günlük YÖNÜ yorumla.');
+  } else if (rc) {
+    L.push('TOPARLANMA: henüz hesaplanamıyor — ' + rc.missing.join(' + ') + ' oluşmadı (' + rc.need + ' günlük veri gerekiyor). Bu konuda sayı UYDURMA, hiç konuşma.');
+  }
+  if (ld && ld.ready) {
+    L.push('YÜK: bugün ' + (ld.today != null ? ld.today : '-') + ' birim; son 7 gün ortalaması ' + ld.acute + ', son 28 gün ' + ld.chronic + ', oran ' + ld.ratio + ' (' + ld.band + ').');
+    L.push('NOT: yük birimi kuvvet hacmi + aktif kalori + adımın toplamıdır. Mutlak sayı anlamsız, SADECE oran okunur: 0.8-1.3 normal, 1.5 üstü ani sıçrama, 0.8 altı devamlılık kaybı.');
+  }
+  if (bk && bk.ready) {
+    L.push('ENERJİ BAKİYESİ: ' + bk.balance + ' (' + bk.band + '), ' + bk.days + ' günlük kayıttan. Hedefin üstündeki uyku yatırır, kronik ortalamanın üstündeki yük çeker; eski günler her gün %10 siliniyor. Eksideyse çözüm önce UYKU, sonra yemek — antrenmanı artırmak değil.');
+  }
 
   // --- Antrenman ---
   var hev = ctx.hevy;
@@ -2975,7 +3263,8 @@ function hcAllPatterns(inp) {
   var out = []
     .concat(hcSleepPatterns(inp.sleep, inp.goalH, inp.debt, inp.bandLabel, inp.debtLabel, inp.recoveryNights, inp.badStreak, inp.isTrainDay, inp.today))
     .concat(hcHabitPatterns(inp.workouts, inp.dietDays, inp.isTrainDay, inp.proteinGoal, inp.today))
-    .concat(hcTrainingPatterns(inp.hev, inp.nut, inp.wt, inp.energy, inp.today));
+    .concat(hcTrainingPatterns(inp.hev, inp.nut, inp.wt, inp.energy, inp.today))
+    .concat(hcRecoveryPatterns(inp));
   var rank = { danger: 0, warn: 1, good: 2 };
   return out.sort(function (a, b) { return rank[a.level] - rank[b.level]; });
 }
@@ -3034,12 +3323,22 @@ function buildHealthFactsSrv(data, days) {
   // Enerji kontrolü sadece güvenilir (tam günlerden gelen) ortalamayla yapılır
   var en = hcEnergyCheck(nut && !nut.usingPartial ? nut.kcal : null, wt ? wt.slopeKgPerWeek : null, d.calc);
 
+  // Toparlanma katmani: taban cizgiler -> yuk -> skor -> bakiye (sira bagimli).
+  // ui.js hcInputs() ile ayni sira ve ayni girdiler — iki taraf ayni sayiyi uretsin.
+  var health = data.health || [];
+  var hrvB = hcBaseline(health, 'hrv', t);
+  var rhrB = hcBaseline(health, 'rhr', t);
+  var load = hcLoad(hevyAll, health, t);
+  var rec = hcRecovery({ hrv: hrvB, rhr: rhrB, debt: sd, load: load });
+  var bank = hcEnergyBank(data.sleep || [], load.byDate, load.chronic, goalH, t);
+
   var doneWeek = (data.tasks || []).filter(function (x) { return x.done && x.doneDate && x.doneDate >= trDate(-6); }).length;
 
   return hcBuildFacts({
     goals: { sleepH: goalH, kcal: d.kcalGoal, protein: d.proteinGoal, waterL: d.waterGoalL },
     sleepLines: sleepLines,
     hevy: hev, nutrition: nut, weight: wt, energy: en,
+    recovery: rec, load: load, bank: bank,
     contextLine: 'BAĞLAM: son 7 günde ' + doneWeek + ' görev tamamlandı. Kullanıcı 16 yaşında, ADHD, lise öğrencisi.',
     patterns: hcAllPatterns({
       today: t, goalH: goalH, sleep: data.sleep || [], debt: sd,
@@ -3047,6 +3346,7 @@ function buildHealthFactsSrv(data, days) {
       recoveryNights: sleepRecoveryNightsSrv(sd.debt), badStreak: badSleepStreakSrv(data),
       isTrainDay: isTrainDay, workouts: hevyAll, dietDays: d.days || {}, proteinGoal: d.proteinGoal || 0,
       hev: hev, nut: nut, wt: wt, energy: en,
+      health: health, hrv: hrvB, rhr: rhrB, load: load, rec: rec, bank: bank,
     }).slice(0, 5).map(function (p) { return p.text; }),
   });
 }

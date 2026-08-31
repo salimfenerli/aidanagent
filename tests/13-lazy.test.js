@@ -73,15 +73,16 @@ describe('tembel yukleme sozlesmesi', () => {
     // Diyet render'i modul yuklendikten SONRA cagrilmali
     assert.ok(blok.indexOf('loadModule(') < blok.indexOf('renderProgram()'),
       'renderProgram modul yuklenmeden cagriliyor — "not defined" ile patlar');
-    // Diyet sekmesi IKI modul ister (program + nutrition)
-    assert.ok(/'program', 'nutrition'/.test(blok), 'diyet sekmesi beslenme modulunu yuklemiyor');
+    // Diyet sekmesi UC modul ister (program + nutrition + health)
+    assert.ok(/'program', 'nutrition', 'health'/.test(blok),
+      'diyet sekmesi beslenme ya da saglik modulunu yuklemiyor');
   });
 
-  test('LAZY_MODULES tam olarak program + nutrition + supabase', () => {
+  test('LAZY_MODULES tam olarak program + nutrition + health + supabase', () => {
     const blok = /const LAZY_MODULES = \{([\s\S]*?)\};/.exec(core);
     assert.ok(blok, 'LAZY_MODULES okunamadi');
     const anahtarlar = [...blok[1].matchAll(/(\w+)\s*:/g)].map((m) => m[1]).sort();
-    assert.deepStrictEqual(anahtarlar, ['nutrition', 'program', 'supabase'],
+    assert.deepStrictEqual(anahtarlar, ['health', 'nutrition', 'program', 'supabase'],
       'modul listesi degisti — sw.js/deploy.py/Actions paths da guncellendi mi?');
   });
 });
@@ -295,13 +296,27 @@ describe('ilk yukleme butcesi', () => {
     // sekmesinden acilabiliyor ve o sekme zaten nutrition.js'i bekliyor, yani
     // kritik yolda durmasinin karsiligi yoktu. Kazanilan yer yeni ozelliklere
     // harcandi ve esik yine de dusuruldu — dogru yon bu.
-    assert.ok(kb <= 215,
-      `ilk yukleme ${kb} KB gzip — butce 215 KB. Yeni agir bagimlilik statik eklendi mi?`);
+    //
+    // 23 Agu 2026: esik 215 -> 219. Sebep toparlanma katmani (hcBaseline /
+    // hcLoad / hcRecovery / hcEnergyBank / hcRecoveryPatterns) — 11.9 KB
+    // kaynak, +3.8 KB gzip. Kutuphane DEGIL, kendi kodumuz; ve tembel
+    // yuklenemiyor cunku hcInputs() -> hcAllPatterns() ana ekran kartinda
+    // (ilk 3 tespit) kullaniliyor, yani kritik yolda.
+    //
+    // 30 Agu 2026: BORC ODENDI. hc* blogu (1150 satir) health.js'e tasindi ve
+    // Diyet sekmesinde tembel yukleniyor — eski not "ANA EKRAN kartinda
+    // kullaniliyor, kritik yolda" diyordu ama YANLISTI: healthCoachStrip
+    // DIYET panelinin icinde ve renderHealthCoach() yalniz showTab('diet')
+    // dalindan cagriliyor. Esik 219 -> 201: olcum 200 KB, 1 KB pay birakildi.
+    // ⚠️ Kazanilan 19 KB yeni ozelliklere harcanabilir ama esik BIRLIKTE
+    // yukseltilmez — eski borc boyle birikmisti.
+    assert.ok(kb <= 201,
+      `ilk yukleme ${kb} KB gzip — butce 201 KB. Yeni agir bagimlilik statik eklendi mi?`);
   });
 
   test('tembel moduller butceye DAHIL DEGIL (gercekten ayrildilar)', () => {
     const statik = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1].replace(/^\//, ''));
-    for (const m of ['program.js', 'supabase.js', 'nutrition.js']) {
+    for (const m of ['program.js', 'supabase.js', 'nutrition.js', 'health.js']) {
       assert.ok(!statik.includes(m), m + ' hala statik');
     }
     assert.ok(gz('program.js') + gz('supabase.js') + gz('nutrition.js') > 80 * 1024,

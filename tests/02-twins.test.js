@@ -1,7 +1,8 @@
 /**
  * 02 — IKIZ KOD NOBETI
  *
- * ui.js (PWA) ve aidan-worker/worker.js (cron) ayni saglik analitigi cekirdegini
+ * health.js (PWA, tembel modul) ve aidan-worker/worker.js (cron) ayni saglik
+ * analitigi cekirdegini
  * BIREBIR ayni tasimak zorunda. Elle kopyalandigi icin gecmiste kaydi: uyku
  * kurallari sadece PWA'daydi, ayni veriden iki farkli "OTOMATIK TESPITLER"
  * cikiyordu. Bu test kaymayi deploy'dan ONCE yakalar.
@@ -12,7 +13,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const { readText, extractDecl, normalize } = require('./helpers/src');
 
-const UI = readText('ui.js');
+const UI = readText('health.js');
 const WK = readText('aidan-worker/worker.js');
 
 // ui.js ve worker.js icinde birebir ayni olmasi gereken bildirimler
@@ -22,6 +23,9 @@ const PAYLASILAN = [
   'hcHevyStats', 'hcNutritionStats', 'hcRegress', 'hcComposition',
   'hcWeightTrend', 'hcEnergyCheck', 'hcTrainingPatterns', 'hcBuildFacts',
   'hcSleepLines', 'hcSleepPatterns', 'hcHabitPatterns', 'hcAllPatterns',
+  // 23 Agu 2026 — toparlanma katmani (Fitbit hatti)
+  'HC_BASE', 'HC_LOAD_W', 'HC_REC', 'hcMedian', 'hcBaseline',
+  'hcLoad', 'hcRecovery', 'hcEnergyBank', 'hcRecoveryPatterns',
 ];
 
 describe('ikiz kod: ui.js <-> worker.js', () => {

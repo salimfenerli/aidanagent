@@ -33,7 +33,8 @@ function motor() {
   };
   // ⚠️ nutBMR artik paylasilan cekirdegi (hcBMR) cagiriyor — testin de
   // yuklemesi gerekir. Tek BMR kaynagi sozlesmesi asagida ayrica kilitli.
-  const ui = fs.readFileSync(path.join(ROOT, 'ui.js'), 'utf8');
+  // 30 Agu 2026: paylasilan cekirdek ui.js'ten health.js'e tasindi (tembel modul).
+  const ui = fs.readFileSync(path.join(ROOT, 'health.js'), 'utf8');
   const hb = ui.indexOf('function hcBMR('), he = ui.indexOf('\n}', hb) + 3;
   vm.createContext(ctx);
   vm.runInContext(core.slice(i, j) + '\n' + slots + '\n' + ui.slice(hb, he), ctx);
@@ -128,9 +129,9 @@ describe('BMR — yaşa göre denklem', () => {
     assert.ok(!/17\.686|13\.384|22\.706|6\.25 \* /.test(nutSrc),
       'nutrition.js kendi BMR formulunu iceriyor — cekirdekten sapar');
     assert.ok(/hcBMR\(/.test(nutSrc), 'paylasilan cekirdek cagrilmiyor');
-    const ui = fs.readFileSync(path.join(ROOT, 'ui.js'), 'utf8');
+    const ui = fs.readFileSync(path.join(ROOT, 'health.js'), 'utf8');
     const wk = fs.readFileSync(path.join(ROOT, 'aidan-worker', 'worker.js'), 'utf8');
-    for (const [ad, src] of [['ui.js', ui], ['worker.js', wk]]) {
+    for (const [ad, src] of [['health.js', ui], ['worker.js', wk]]) {
       assert.ok(/function hcBMR\(/.test(src), ad + ': hcBMR yok');
       assert.ok(/var bmr = hcBMR\(/.test(src), ad + ': hcEnergyCheck hala kendi formulunu kullaniyor');
     }

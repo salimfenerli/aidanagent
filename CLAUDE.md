@@ -9,10 +9,12 @@ Tek repo, tek `git push`; iki ayrı deploy adımı. Ortak olan tek şey **Worker
 
 **Aidan mimarisi:** `asistan.html` tek dosya DEĞİL — **3 modül statik + 3 modül TEMBEL** yüklenir.
 Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → `tasks.js` (sekme/gün planı/quick-capture/journal/dump) → `ui.js` (görev render/timer/ayarlar/auth/takvim/chat).
-**Tembel (`core.js` → `loadModule`):** `supabase.js` (init'te, çizimi beklemeden) · `program.js` + `nutrition.js` (diyet sekmesi).
+**Tembel (`core.js` → `loadModule`):** `supabase.js` (init'te, çizimi beklemeden) · `program.js` + `nutrition.js` + `health.js` (diyet sekmesi — üçü birlikte beklenir).
 ⚠️ `stocks.js` ve `tasks.js` arasındaki eski karışıklık 9 Ağu'da çözüldü — görev fonksiyonları `tasks.js`'te, paylaşılan yardımcılar `core.js`'te.
 
 **Borsa mimarisi:** `borsa/index.html` → `shared.js` (yardımcılar + veri katmanı) → `stocks.js` (motor, 4474 satır) → `sync.js` (kimlik + çakışma korumalı senkron) → `app.js` (açılış + render sırası). `supabase.js` tembel. İlk yükleme ~105 KB gzip.
+
+**📊 TOPARLANMA KATMANI (23 Ağu 2026, v7-170) — ham veri → işlenmiş sinyal.** Bevel/WHOOP tarzı skorların tek işi ham sayıyı **kişisel tabana** göre normalleştirmek; "74 ms HRV" tek başına anlamsız, "senin 30 günlük medyanın 68" anlamlı. Paylaşılan çekirdeğe 5 saf fonksiyon girdi (ui.js ↔ worker.js birebir): `hcBaseline` (medyan+MAD — ortalama+SD **değil**, tek hasta gün tabanı kaydırmasın) · `hcLoad` (akut:kronik = 7g/28g, ACWR; kayıtsız gün 0 yük, payda **gün** sayısı) · `hcRecovery` (50 tabanı ± HRV/RHR z-sapması − uyku borcu − yük fazlası, 0-100) · `hcEnergyBank` (kümülatif bakiye, günde %10 erime) · `hcRecoveryPatterns`. ⚠️ **TABAN OTURMADAN SKOR ÜRETİLMEZ** (`ready:false`, 14 gün): ilk iki haftada uydurma skor göstermek hiç göstermemekten kötüdür, AI'a da "hesaplanamıyor + UYDURMA" diye gider. Dinlenme nabzında **işaret ters** — düşük nabız iyi toparlanmadır. `/health-coach` prompt'u genişledi: artık **biri antrenman biri beslenme** olmak üzere 2 öneri veriyor, öneri mevcut programın içinden (gün kaydır / hacim ayarla), sıfırdan program yazmıyor. 16 yaş kilitleri (kalori düşürme yasağı, aşırı antrenman teşviki yasağı) **dokunulmadı**, teste bağlandı. Regresyon `tests/27-toparlanma.test.js` (33 test). ⚠️ İlk yükleme bütçesi 215 → **219 KB** çıktı (+3.8 KB gzip); bu katman bir daha büyürse doğru cevap eşiği yükseltmek değil `hc*` bloğunu tembel bir `health.js`'e taşımaktır.
 
 **🫀 FİTBİT VERİSİ APPLE SAĞLIK KÖPRÜSÜYLE GELİYOR (23 Ağu 2026 — KALICI KARAR).** Fitbit Web API **Eylül 2026'da kapanıyor**; yerine gelen Google Health API `restricted scope` — yıllık CASA güvenlik denetimi (500–4.500 $) + OAuth doğrulaması istiyor, tek kişilik projeye kapalı kapı. Köprü: **Google Health** uygulaması (**v5.05+**, 3 Ağu 2026) iPhone'da Apple Sağlık'a **çift yönlü** yazıyor → iOS Kısayol → **`POST /health`**. Tartı (`/body`) ile birebir aynı desen: `X-Aidan-Secret`, yanlış anahtarda 404, cevapta `summary`. Uç **sadece** `data.sleep` + `data.health`'e yazar — secret sızsa yapılabilecek tek şey sahte uyku kaydı. Asıl kazanç: `sleepDebt`/`healthPatterns` zaten yazılıydı, elle giriş bekliyordu. Kurulum `ios-shortcuts.md`, regresyon `tests/26-saglik-ucu.test.js`. ⚠️ **Fitbit'in kendi API'sine dönme — bu maddeye tekrar zaman harcama.**
 
@@ -31,6 +33,64 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Görev/Plan:** otomatik gün planı + blok bildirimleri (v7-109), planlama zekası — geçmişten öğrenen `planHistory`/`planProfile` + otomatik toparlama (v7-110), haftalık sabit program (`fixedSchedule`).
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
+
+### 🔴 30 Ağustos 2026 — 🔬 KANIT DENETİMİ: MOTOR DÜZELTMELERİ (v7-171)
+
+Motorun her sayısı ve gerekçesi beş bağımsız literatür denetiminden geçirildi (hacim/frekans · hareket seçimi · plyometrik/dövüş yükü · progresyon/RPE · 16 yaş güvenlik). **Ana sonuç: sayıların çoğu makul, gerekçelerin çoğu değil** — 🟢 etiketlerinin en az altısı hak edilmemiş. Rapor: `claude.ai/code/artifact/295a9c04-2d35-4358-b1d0-2787237d1f61`
+
+**Bu pakette uygulanan üç düzeltme:**
+
+**1 — Temas bütçesi şiddete göre ağırlıklı (`plyoW`).** Detay: ANTRENMAN-BILIMI.md bölüm 4. Kısaca: `contact` sayıyordu, şiddeti saymıyordu; 60 pogo hop ile 60 derinlik sıçraması aynı bütçeyi yiyordu. ⚠️ Uygularken **entegrasyon açığı** çıktı: `plyoW` kütüphanede tanımlıydı ama `programAddExplosive` seçilen harekete kopyalamıyordu ve temas formülü **üç ayrı yerde elle yazılıydı** — biri güncellendi, ikisi kalmadı. Hesap artık tek kaynaktan (`programContacts`) geliyor. Birim test bunu kaçırdı çünkü fonksiyonu doğrudan çağırıyordu; **üretilen programdan** doğrulayan test eklendi.
+
+**2 — Yorgunluk eşiği %5 → %10.** Ergende ölçüm gürültüsünün altındaydı (CMJ SDC >%7, Thomas 2017). Detay: ANTRENMAN-BILIMI.md bölüm 6.
+
+**3 — Boyun izometriği `metric: 'reps'` → `'sn'`.** İzometrik tutuş tekrarla ölçülmez. Render zaten `sure: true` ile "sn" yazıyordu; düzeltilen kayıttaki çelişkili alan.
+
+**İki denetim bulgusu KODDA YANLIŞ ALARM çıktı — tekrar araştırılmasın:**
+- *"Boyun her üst gününe giriyor, haftada 4 kez olabilir"* → **Hayır.** `if (kondu >= 2) break` ile zaten 2 günle sınırlı.
+- *"`e1RM × 0.90` çalışma ağırlığı olarak yazılıyor olabilir"* → **Hayır.** `programStartWeight` önce Epley tersiyle hedef tekrara karşılık gelen ağırlığı buluyor, %90 ondan sonra geliyor. Doğru sıra.
+
+**Literatürde karşılığı OLMAYAN, kalıcı 🔴 kalması gereken sayılar** (arandı, bulunamadı): kickboks seansındaki yere temas sayısı · dövüş işini direnç setine çeviren katsayı (`FIGHT_LEG_SETS`) · 16 yaşındakilerde RIR/RPE doğrulaması · haftalık itiş:çekiş set oranı eşiği (0.8 folklor; gerçek kanıt dış/iç rotasyon oranında) · derinlik sıçraması için "1.5× vücut ağırlığı squat" ön koşulu.
+
+**Henüz uygulanmayan, sırada bekleyen bulgular:** fraksiyonel set sayımının (0.5) band ve 16 yaş tavanı zorlamasına taşınması (denetimin en yüksek öncelikli teknik bulgusu — şu an tavan fiilen bağlamıyor) · `pri` çarpanının ölçeklenmesi ve hedefe bağlanması · dips'in kademe 1'e alınması · şartname etiketlerinin revizyonu · büyüme hızı takibi · haftalık saat sayacı · sakatlık/konküzyon kilidi.
+
+---
+
+### 🔴 30 Ağustos 2026 — 📱 SAFE-AREA + DOKUNMA ODAĞI (v7-171)
+
+Salim iki somut arayüz şikayeti getirdi, ikisinin de kökü tek satırlık eksikti.
+
+**1 — "Ekrana tam oturmuyor, Face ID yerini kapatıyor".** `asistan.html`'de `viewport-fit=cover` var — yani içerik **bilerek** çentiğin altına uzanıyor. Karşılığında `env(safe-area-inset-top)` ile o payı geri vermek gerekir; dosyada safe-area **yalnız alt navigasyonun `padding-bottom`'unda** kullanılıyordu, üst hiç yoktu. Sonuç: body 22 px üstten başlıyor, Dynamic Island ~50 px yer kaplıyor, üst bar adanın altında kalıyor. Eklenenler: `body` padding-top, sticky üst barlara `top: env(...)`, yan çekmeceye padding, ve **çentik şeridi** — `body::before` eskiden `display:none` idi, artık opak bir bant: sayfa kayarken içerik adanın arkasından geçerken görünmüyor. Alt tarafta `body { padding-bottom: 84px }` sabitti, o da `calc(84px + env(safe-area-inset-bottom))` oldu.
+
+**2 — "Alt sekmeye tıklayınca kocaman beyaz çıkıyor".** `button:focus-visible { outline: 2px solid var(--accent) }` + `outline-offset: 2px`. Accent **#e2e2e2** — neredeyse beyaz. iOS'ta dokunma sonrası odak **üzerinde kalır**, dolayısıyla basılan sekmenin etrafında beyaz bir çerçeve asılı kalıyor. `dt-bnav` için 24 Ağustos'ta bir istisna yazılmıştı ama yalnız o bileşen için; aynı şey her butonda oluyordu. Çözüm: `@media (hover: none) and (pointer: coarse)` altında odak kutusu çizilmiyor. ⚠️ **Odak göstergesi kaldırılmadı** — fare/klavyeli her ortamda outline aynen duruyor; susturulan yer yalnız dokunmatik, orada klavye odağı diye bir kavram yok ve göstergenin tek etkisi beyaz kare.
+
+**3 — `min-height: 100vh` → `100dvh`.** iOS'ta `100vh` adres çubuğu **dahil** yükseklik verir; çubuk kayarken sayfa gerçek ekrandan uzun kalır, altta boş şerit ve gereksiz kaydırma olur. "Ekrana tam oturmuyor" hissinin ikinci kaynağı buydu. Desteklemeyen tarayıcıda satır geçersiz sayılır ve `100vh` yürürlükte kalır.
+
+**🔍 SİSTEMATİK ARAYÜZ TARAMASI — üç kategori ölçüldü, ikisi temiz çıktı.**
+
+**Kontrast: temiz.** Aktif monokrom temada her metin/zemin çifti WCAG AA'yı geçiyor — en zayıf halka `--text-faint` (#8e9192) bile zeminde **6.24** (eşik 4.5). Burada yapılacak bir şey yok.
+
+**Yatay taşma: tek yer, kasıtlı.** `.pd-ex` (program hareket satırı) `min-width: 470px` — telefon ekranından geniş. Ama `.pd-list { overflow-x: auto }` ile kendi kabında kayıyor, sayfa gövdesi taşmıyor. Altı sütunlu bir tabloyu telefonda yatay kaydırarak okumak yine de iyi bir deneyim değil; **açık iş:** dar ekranda satırı iki katmana bölmek (ad + set×tekrar üstte, tempo/dinlenme/RPE altta küçük şeritte).
+
+**iOS otomatik zoom: gerçek sorun, düzeltildi.** iOS Safari, `font-size` **16px'in altındaki** bir alana odaklanınca sayfayı kendiliğinden yakınlaştırır ve düzen kayar. **15 ayrı kuralda 13-15px vardı** (sohbet kutusu 15px, uyku saati 13.1px, portföy içe aktarma 13.4px…). Yani her metin girişinde ekran zıplıyordu — "ekrana tam oturmuyor" şikayetinin üçüncü kaynağı bu. Dokunmatik cihazlarda `16px !important` ile davranış kaynağında kesildi; onay kutusu / radyo / kaydırıcı dışarıda bırakıldı.
+
+**Dokunma hedefleri: beş buton büyütüldü.** `.cal-nav` 32px · `.plan-pick-add` 30px · `.cl-imp-del` 34px · `.dt-row-del` 26px · `.chat-thumb button` 22px — Apple HIG minimumu 44px. Görünüm değişmedi: `::after` ile görünmez 44×44 dokunma alanı eklendi, görsel büyütmek düzeni bozardı. ⚠️ Taramada çıkan diğer "küçük" öğelerin çoğu butonun kendisi değil **içindeki ikon** (`.icon` 15-21px) — onlar zaten yeterince büyük butonların içinde, yanlış pozitif.
+
+**📦 AYNI PAKETTE: `hc*` ÇEKİRDEĞİ `health.js`'E TAŞINDI — BORÇ ÖDENDİ.** 23 Ağustos'ta `13-lazy` şunu yazmıştı: *"bu katman bir daha büyürse doğru cevap eşiği yine yükseltmek DEĞİL, hc* bloğunun tamamını tembel bir health.js'e taşımaktır."* Bugün safe-area düzeltmesi eklenince eşik aşıldı ve borç ödendi.
+
+⚠️ **Eski gerekçe yanlıştı.** CLAUDE.md ve test yorumu *"hcInputs() → hcAllPatterns() ANA EKRAN kartında kullanılıyor, yani kritik yolda"* diyordu. Değil: `healthCoachStrip` **Diyet panelinin içinde** ve `renderHealthCoach()` yalnız `tasks.js`'teki `showTab('diet')` dalından çağrılıyor — `program.js`/`nutrition.js` ile tam aynı yerden. Bu blok hiçbir zaman ilk çizimde gerekmiyordu; 19 KB gzip yedi diye orada durdu.
+
+**Sonuç: ilk yükleme 220 → 200 KB gzip.** Eşik 219 → **201** (1 KB pay). `health.js` 21 KB gzip, Diyet sekmesinde iniyor.
+
+⚠️ **`nutrition.js` bu çekirdeğe BAĞLI** — `hcBMR`, `hcEnergyCheck`, `hcWeightTrend` çağırıyor. Diyet sekmesi üç modülü de `Promise.all` ile bekleyip sonra render ettiği için render anında tanımlılar; ayrıca `nutrition.js`'teki `typeof` kapıları duruyor (sözleşme değil, emniyet kemeri).
+
+⚠️ **İKİZLİK ARTIK `health.js` ↔ `worker.js`.** Paylaşılan çekirdeği düzenlerken iki dosyaya da yaz — `tests/02-twins.test.js` artık `ui.js`'i değil `health.js`'i karşılaştırıyor. Aynı sebeple `18-nutrition`, `20-ai-diet`, `24-beslenme-kalite`, `25-görsel-dil`, `27-toparlanma` ve `16-instructions` de `health.js`'e bakacak şekilde güncellendi.
+
+**Yeni modül eklerken 5 yer kuralı işledi:** `LAZY_MODULES` · `sw.js ASSETS` · `aidan-pages-deploy.py INCLUDE` · `.github/workflows/deploy.yml paths` · `.gitattributes` (CRLF) — artı `package.json` check betiği.
+
+Test: **937/937 yeşil.**
+
+---
 
 ### 🔴 21 Ağustos 2026 — ⚖️ YAĞ ORANI AYARI + ÖLÇÜLEN HARCAMA (v7-169)
 

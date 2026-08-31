@@ -29,6 +29,7 @@ tasks.js        text eol=crlf
 ui.js           text eol=crlf
 program.js      text eol=crlf
 nutrition.js    text eol=crlf
+health.js       text eol=crlf
 sw.js           text eol=crlf
 asistan.html    text eol=crlf
 CLAUDE.md       text eol=crlf

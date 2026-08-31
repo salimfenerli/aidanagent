@@ -136,6 +136,14 @@ Bir kickboksçu için ikisi de gerekli ama aynı şey değil. Motorun eski `guc`
 
 ### Patlayıcı iş hacimle değil TEMAS ile yönetilir 🟢
 
+**⚠️ 30 Ağu 2026 — TEMAS ARTIK ŞİDDETE GÖRE AĞIRLIKLI 🟡.** Eski hâli yalnızca *sayıyordu*: `contact` bir hareketin tekrar başına kaç kez yere değdiğiydi (pogo 1, makas sıçrama 2). Sonuç, bu bölümün kendi gerekçesiyle çelişiyordu — *"5 derinlik sıçraması ile 5 leg extension aynı set değildir"* diyen motor, 60 pogo hop ile 60 derinlik sıçramasını aynı bütçeden düşüyordu.
+
+Artık her harekette `plyoW` (şiddet ağırlığı) var: ayak bileği sıçraması 0.5 · dikey/kutu/uzun/makas sıçrama 1 · tek bacak bound 1.5 · derinlik sıçraması 2 · patlayıcı şınav 0.5. Dayanak dikey yer tepki kuvveti — çocuk/ergen verisinde koşu ~1.7-1.9 BW, alçak sıçrama ~3.0-3.5 BW, yüksek sıçrama ~3.3-3.8 BW ([Brailey ve ark. 2026](https://www.frontiersin.org/journals/endocrinology/articles/10.3389/fendo.2026.1748455/full)).
+
+🔴 **Ağırlıklar tahmin.** Literatür bir "temas eşdeğeri" katsayısı vermiyor; sayılar vGRF sıralamasından türetildi. Sıra doğru, mutlak değerler değil.
+
+⚠️ Hesap tek kaynaktan (`programContacts`) gelir. Aynı formül önce üç ayrı yerde elle yazılıydı ve ağırlık eklenince ikisi güncellenmeden kaldı — kütüphanede ağırlık duruyor, bütçe eski şekilde sayıyordu. Entegrasyon testi bunu kilitler.
+
 3 tekrarlık derinlik sıçraması ile 3 tekrarlık leg extension aynı "set" değil — biri sinir sistemi işi, diğeri hipertrofi uyaranı. Bu yüzden patlayıcı iş kas başına set sayımından **tamamen çıkarıldı** ve ayrı bir bütçeye bağlandı: yere temas sayısı.
 
 | Sınır | Değer | Kanıt |
@@ -196,6 +204,10 @@ Ağırlık, Hevy'deki tahmini 1RM'den **Epley formülünün tersiyle** hedef tek
 Geçmiş veri yoksa `kg: null` kalır — **uydurulmaz.** Kart "ilk hafta kendine göre ayarla" der.
 
 ### Patlayıcı iş: çıktı ile ölçülür, ağırlıkla DEĞİL 🟢
+
+**⚠️ 30 Ağu 2026 — YORGUNLUK EŞİĞİ %5 → %10.** Ölçülen çıktıdaki %5 düşüş yorgunluk sinyali sayılıyordu. **Bu eşik ergende ölçüm gürültüsünün altındaydı:** saptanabilir en küçük değişim CMJ yüksekliğinde **>%7**, tek bacak sıçrama mesafesinde >%8 ([Thomas ve ark. 2017](https://doi.org/10.3390/sports5010015)); kuvvet platformunda bile tek CMJ'nin varyasyon katsayısı ~%5 ([Cormack ve ark. 2008](https://www.innervations.com/resources/Reliability%20of%20measures%20obtained%20during%20single%20and%20repeated%20countermovement%20jumps%20-%20Cormack%20et%20al%20IJSPP%202008.pdf)), telefon uygulamasında %8.2 ([Rago ve ark. 2018](https://www.mdpi.com/2075-4663/6/3/91)).
+
+Gürültünün içinde kalan bir uyarı her hafta yanar ve **görmezden gelinmeyi öğretir** — bu, uyarı olmamasından kötüdür.
 
 Sıçramada "bir tekrar daha yaptın, kilo ekleyelim" yanlıştır. İlerleme daha yüksek/uzak sıçramaktır; ölçüsü cm/m.
 

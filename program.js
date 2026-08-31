@@ -51,7 +51,14 @@ const PLYO_LIMITS = {
   maxPowerPerSession: 2,      // seans basina en fazla 2 patlayici hareket
   teachWeeks: 2,              // ilk 2 hafta TEKNIK: dusuk tekrar, yuk/yukseklik yok
   advancedFromWeek: 9,        // sok yuklemesi (derinlik sicramasi) bundan once ACILMAZ
-  dropPctDeload: 5,           // olculen cikti %5 duserse yorgunluk sinyali
+  // ⚠️ 30 Agu 2026: 5 -> 10. %5 ERGENDE OLCUM GURULTUSUNUN ALTINDAYDI —
+  // saptanabilir en kucuk degisim CMJ yuksekliginde >%7, tek bacak sicrama
+  // mesafesinde >%8 (Thomas 2017); kuvvet platformunda bile tek CMJ'nin
+  // varyasyon katsayisi ~%5 (Cormack 2008), telefon uygulamasinda daha
+  // kotu (%8.2, Rago 2018). Esik gurultunun icinde kalinca uyari her
+  // hafta yaniyor ve gormezden gelinmeyi ogretiyor — bu, uyari
+  // olmamasindan kotudur.
+  dropPctDeload: 10,          // olculen cikti %10 duserse yorgunluk sinyali
 };
 
 // Hedefe gore tekrar araligi / hacim / dinlenme / artis adimi
@@ -257,23 +264,23 @@ const PROGRAM_EXERCISES = [
 
   // --- Ust govde patlayiciligi ---
   { id: 'mbchest',   tr: 'Sağlık Topu Göğüs Atışı',     en: 'Medicine Ball Chest Pass',       muscle: 'chest',     pattern: 'power', compound: true, places: ['gym', 'home'], explosive: true, contact: 0, metric: 'm',  pRep: [4, 6], level: 1 },
-  { id: 'plyopush',  tr: 'Patlayıcı Şınav',             en: 'Plyometric Push Up',             muscle: 'chest',     pattern: 'power', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 1, metric: 'reps', pRep: [3, 5], level: 2 },
+  { id: 'plyopush',  tr: 'Patlayıcı Şınav',             en: 'Plyometric Push Up',             muscle: 'chest',     pattern: 'power', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 1, plyoW: 0.5, metric: 'reps', pRep: [3, 5], level: 2 },
   { id: 'pushpress', tr: 'Push Press',                  en: 'Push Press (Barbell)',           muscle: 'shoulders', pattern: 'power', compound: true, places: ['gym'], explosive: true, contact: 0, metric: 'kg', pRep: [3, 5], level: 2 },
   { id: 'hangclean', tr: 'Hang Power Clean',            en: 'Hang Power Clean',               muscle: 'back',      pattern: 'power', compound: true, places: ['gym'], explosive: true, contact: 0, metric: 'kg', pRep: [3, 5], level: 2 },
   { id: 'kbswing',   tr: 'Kettlebell Swing',            en: 'Kettlebell Swing',               muscle: 'glutes',    pattern: 'power', compound: true, places: ['gym', 'home'], explosive: true, contact: 0, metric: 'kg', pRep: [8, 12], level: 1 },
 
   // --- Alt govde plyometrik (TEMAS URETIR) ---
-  { id: 'pogo',      tr: 'Ayak Bileği Sıçraması',       en: 'Pogo Hops',                      muscle: 'calves', pattern: 'plyo', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 1, metric: 'reps', pRep: [10, 15], level: 1 },
-  { id: 'cmj',       tr: 'Dikey Sıçrama',               en: 'Countermovement Jump',           muscle: 'quads',  pattern: 'plyo', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 1, metric: 'cm', pRep: [3, 5],   level: 1 },
-  { id: 'boxjump',   tr: 'Kutu Sıçraması',              en: 'Box Jump',                       muscle: 'quads',  pattern: 'plyo', compound: true, places: ['gym', 'home'],       explosive: true, contact: 1, metric: 'cm', pRep: [3, 5],   level: 1 },
-  { id: 'broadjump', tr: 'Uzun Atlama',                 en: 'Broad Jump',                     muscle: 'quads',  pattern: 'plyo', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 1, metric: 'm',  pRep: [3, 5],   level: 1 },
-  { id: 'splitjump', tr: 'Makas Sıçrama',               en: 'Split Squat Jump',               muscle: 'quads',  pattern: 'plyo', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 2, metric: 'reps', pRep: [4, 6],  level: 2 },
-  { id: 'bound',     tr: 'Tek Bacak Sıçrama (Bound)',   en: 'Single Leg Bound',               muscle: 'hams',   pattern: 'plyo', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 2, metric: 'm',  pRep: [3, 5],   level: 2 },
-  { id: 'depthjump', tr: 'Derinlik Sıçraması',          en: 'Depth Jump',                     muscle: 'quads',  pattern: 'plyo', compound: true, places: ['gym'],               explosive: true, contact: 1, metric: 'cm', pRep: [3, 5],   level: 3 },
+  { id: 'pogo',      tr: 'Ayak Bileği Sıçraması',       en: 'Pogo Hops',                      muscle: 'calves', pattern: 'plyo', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 1, plyoW: 0.5, metric: 'reps', pRep: [10, 15], level: 1 },
+  { id: 'cmj',       tr: 'Dikey Sıçrama',               en: 'Countermovement Jump',           muscle: 'quads',  pattern: 'plyo', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 1, plyoW: 1, metric: 'cm', pRep: [3, 5],   level: 1 },
+  { id: 'boxjump',   tr: 'Kutu Sıçraması',              en: 'Box Jump',                       muscle: 'quads',  pattern: 'plyo', compound: true, places: ['gym', 'home'],       explosive: true, contact: 1, plyoW: 1, metric: 'cm', pRep: [3, 5],   level: 1 },
+  { id: 'broadjump', tr: 'Uzun Atlama',                 en: 'Broad Jump',                     muscle: 'quads',  pattern: 'plyo', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 1, plyoW: 1, metric: 'm',  pRep: [3, 5],   level: 1 },
+  { id: 'splitjump', tr: 'Makas Sıçrama',               en: 'Split Squat Jump',               muscle: 'quads',  pattern: 'plyo', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 2, plyoW: 1, metric: 'reps', pRep: [4, 6],  level: 2 },
+  { id: 'bound',     tr: 'Tek Bacak Sıçrama (Bound)',   en: 'Single Leg Bound',               muscle: 'hams',   pattern: 'plyo', compound: true, places: ['gym', 'home', 'bw'], explosive: true, contact: 2, plyoW: 1.5, metric: 'm',  pRep: [3, 5],   level: 2 },
+  { id: 'depthjump', tr: 'Derinlik Sıçraması',          en: 'Depth Jump',                     muscle: 'quads',  pattern: 'plyo', compound: true, places: ['gym'],               explosive: true, contact: 1, plyoW: 2, metric: 'cm', pRep: [3, 5],   level: 3 },
 
   // --- Boyun: dovus sporunda kafa hizlanmasini azaltir ---
   // Otomatik programda YALNIZ izometrik. Harness/koprü level 2, teknik ister.
-  { id: 'neckiso',   tr: 'Boyun İzometrik (4 yön)',     en: 'Neck Isometric Hold',            muscle: 'neck', pattern: 'neck', compound: false, places: ['gym', 'home', 'bw'], sure: true, metric: 'reps', level: 1 },
+  { id: 'neckiso',   tr: 'Boyun İzometrik (4 yön)',     en: 'Neck Isometric Hold',            muscle: 'neck', pattern: 'neck', compound: false, places: ['gym', 'home', 'bw'], sure: true, metric: 'sn', level: 1 },
   { id: 'neckharn',  tr: 'Boyun Harness',               en: 'Neck Harness Extension',         muscle: 'neck', pattern: 'neck', compound: false, places: ['gym'], metric: 'kg', level: 2 },
   { id: 'farmer',    tr: 'Farmer Carry',                en: "Farmers Walk",                   muscle: 'core', pattern: 'carry', compound: true, places: ['gym', 'home'], sure: true, metric: 'kg', level: 1 },
 ];
@@ -1565,10 +1572,30 @@ function programExplosivePool(places, avoidMuscles, week) {
 }
 
 /** Tek hareket ornedinin haftalik temas katkisi (set x tekrar x temas). */
+/**
+ * TEMAS BUTCESI SIDDETE GORE AGIRLIKLI (30 Agu 2026).
+ *
+ * ⚠️ ESKI HALI SADECE SAYIYORDU. `contact` bir hareketin tekrar basina kac kez
+ * yere degdigiydi (pogo 1, makas sicrama 2). Sonuc: 60 pogo hop ile 60 DERINLIK
+ * SICRAMASI ayni butceyi yiyordu — halbuki motorun kendi gerekcesi "5 derinlik
+ * sicramasi ile 5 leg extension ayni set degildir" diyerek tam bunun tersini
+ * savunuyor. Olcu birimi temas olunca da siddet farki kayboluyordu.
+ *
+ * `plyoW` = siddet agirligi. Dayanak dikey yer tepki kuvveti: cocuk/ergen
+ * verisinde kosu ~1.7-1.9 BW, alcak sicrama ~3.0-3.5 BW, yuksek sicrama
+ * ~3.3-3.8 BW (Brailey 2026). Alcak genlikli ayak bilegi isi bu bandin
+ * altinda, sok yuklemesi ustunde.
+ *
+ * 🔴 AGIRLIKLAR TAHMIN. Literatur bir "temas esdegeri" katsayisi vermiyor;
+ * sayilar vGRF siralamasindan turetildi ve muhafazakar secildi. Sira
+ * dogru, mutlak degerler degil.
+ */
 function programContacts(e) {
   const c = Number(e.contact) || 0;
   if (!c) return 0;
-  return (Number(e.sets) || 0) * (Number(e.repMax) || Number(e.repMin) || 0) * c;
+  const w = Number(e.plyoW) || 1;
+  const tek = Number(e.repMax) || Number(e.repMin) || 0;
+  return (Number(e.sets) || 0) * tek * c * w;
 }
 
 /**
@@ -1636,7 +1663,9 @@ function programAddExplosive(p) {
       const sets = teknik ? 2 : 3;
       const [rMin, rMax] = aday.pRep || [3, 5];
       const reps = teknik ? rMin : rMax;
-      const temas = (Number(aday.contact) || 0) * sets * reps;
+      // ⚠️ Hesap programContacts()'ten gelir — formul iki yerde durursa
+      // siddet agirligi gibi bir ekleme birini gunceller, otekini unutur.
+      const temas = programContacts({ sets, repMax: reps, contact: aday.contact, plyoW: aday.plyoW });
 
       // Butce yetmiyorsa TEMAS URETEN hareketi atla, temassiz alternatif ara.
       if (temas > kalanTemas) {
@@ -1645,7 +1674,7 @@ function programAddExplosive(p) {
         if (!alt) continue;
         aday = alt;
       }
-      const gercekTemas = (Number(aday.contact) || 0) * sets * reps;
+      const gercekTemas = programContacts({ sets, repMax: reps, contact: aday.contact, plyoW: aday.plyoW });
       kalanTemas -= gercekTemas;
       kullanilan.add(aday.id);
       secilenler.push({
@@ -1653,6 +1682,7 @@ function programAddExplosive(p) {
         sets, repMin: teknik ? rMin : rMin, repMax: reps,
         kg: aday.metric === 'kg' ? null : undefined,
         explosive: true, pattern: aday.pattern, contact: Number(aday.contact) || 0,
+        plyoW: Number(aday.plyoW) || 1,
         // Patlayici iste dinlenme TAM olmali: amac yorulmak degil, her
         // tekrarda maksimum hiz uretmek. Kisa dinlenme bunu imkansiz kilar.
         // 180 sn = notta ve Hevy'de yazan "2-3 dk" ile ayni deger.
@@ -1679,7 +1709,7 @@ function programAddExplosive(p) {
       g.exercises.push({
         id: boyun.id, tr: boyun.tr, en: boyun.en, muscle: 'neck',
         sets: 3, repMin: 15, repMax: 25, kg: null, sure: !!boyun.sure,
-        rest: 60, metric: boyun.metric || 'reps', order: 2,
+        rest: 60, metric: boyun.metric || 'sn', order: 2,   // izometrik tutus: saniye
       });
       kondu++;
     }

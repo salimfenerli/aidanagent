@@ -17,7 +17,7 @@ const ROOT = path.join(__dirname, '..');
 const oku = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
 // Renk uretenler. borsa/ ayri site, ayri kural seti (21-borsa) — disarida.
-const UI = ['core.js', 'ui.js', 'tasks.js', 'program.js', 'nutrition.js'];
+const UI = ['core.js', 'ui.js', 'tasks.js', 'program.js', 'nutrition.js', 'health.js'];
 
 // cssVar() fallback'leri: SVG sunum ozniteliginde var() guvenilir degil,
 // oraya gercek deger yazilmali. Tek istisna bu ve token'la ayni olmali.

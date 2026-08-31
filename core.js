@@ -8,7 +8,7 @@
 // supabase: init'te iner ama <script> etiketi DEGIL — 50 KB gzip'i kritik
 // yoldan cikarir. Ilk cizim beklemez; auth birkac yuz ms sonra oturur.
 const LAZY_MODULES = { program: '/program.js',
-  nutrition: '/nutrition.js', supabase: '/supabase.js' };
+  nutrition: '/nutrition.js', health: '/health.js', supabase: '/supabase.js' };
 const _moduleLoads = {};
 function moduleLoaded(name) { return !!(_moduleLoads[name] && _moduleLoads[name]._done); }
 function loadModule(name) {

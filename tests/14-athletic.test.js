@@ -370,3 +370,83 @@ describe('Impeccable — atletik UI', () => {
     assert.strictEqual(raw.indexOf(Buffer.from('\r\n')), -1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 30 Agu 2026 — KANIT DENETIMI DUZELTMELERI
+// Bagimsiz literatur denetiminde cikan uc bulgu; ucu de burada kilitleniyor.
+describe('denetim duzeltmeleri (30 Agu 2026)', () => {
+  test('temas butcesi SIDDETE gore agirlikli — derinlik sicramasi pogo kadar ucuz degil', () => {
+    // Eski hali sadece sayiyordu: 60 pogo hop ile 60 derinlik sicramasi ayni
+    // butceyi yiyordu. Motorun kendi gerekcesi ("5 derinlik sicramasi ile
+    // 5 leg extension ayni set degildir") tam bunun tersini savunuyor.
+    const lib = M.PROGRAM_EXERCISES || EV('PROGRAM_EXERCISES');
+    const bul = (id) => lib.find((e) => e.id === id);
+    const depth = bul('depthjump'), pogo = bul('pogo');
+    assert.ok(depth && pogo, 'hareketler bulunamadi');
+    assert.ok((depth.plyoW || 1) > (pogo.plyoW || 1),
+      'derinlik sicramasi ayak bilegi sicramasindan daha agir sayilmali');
+
+    const ayniIs = { sets: 3, repMin: 10, repMax: 10, contact: 1 };
+    const dj = M.programContacts(Object.assign({}, ayniIs, { plyoW: depth.plyoW }));
+    const pg = M.programContacts(Object.assign({}, ayniIs, { plyoW: pogo.plyoW }));
+    assert.ok(dj > pg, 'ayni set x tekrarda derinlik sicramasi daha cok butce yemeli');
+  });
+
+  test('yere temassiz patlayici is butceden DUSMEZ', () => {
+    // Saglik topu atisi patlayici ama yere temas degil. contact: 0 kalmali,
+    // yoksa agirlik carpani onu da butceye sokar.
+    const lib = M.PROGRAM_EXERCISES || EV('PROGRAM_EXERCISES');
+    for (const id of ['mbrot', 'mbslam', 'mbchest', 'kbswing', 'pushpress', 'hangclean']) {
+      const e = lib.find((x) => x.id === id);
+      assert.ok(e, id + ' yok');
+      assert.strictEqual(M.programContacts(Object.assign({ sets: 3, repMin: 5, repMax: 5 }, e)), 0,
+        id + ' temas butcesinden dusuyor — yere temas etmiyor');
+    }
+  });
+
+  test('URETILEN programda siddet agirligi tasiniyor (entegrasyon)', () => {
+    // ⚠️ Bu test, birim testin kacirdigi hatayi yakalar: `plyoW` kutuphanede
+    // tanimliydi ama programAddExplosive secilen harekete kopyalamiyordu, ve
+    // temas formulu uc ayri yerde elle yaziliydi. Sonuc: agirlik kutuphanede
+    // duruyor, butce eski sekilde sayiyordu. Artik hesap programContacts()
+    // tek kaynagindan gelir ve alan programa tasinir.
+    const p = M.buildProgram(Object.assign({}, KICKBOKS, { sessionMin: 90 }), []);
+    const patlayici = patlayicilar(p).filter((e) => (Number(e.contact) || 0) > 0);
+    assert.ok(patlayici.length, 'yere temasli patlayici hareket uretilmedi');
+    for (const e of patlayici) {
+      assert.ok(typeof e.plyoW === 'number', e.tr + ': plyoW programa tasinmamis');
+    }
+    const lib = M.PROGRAM_EXERCISES;
+    for (const e of patlayici) {
+      const kutuphane = lib.find((x) => x.id === e.id);
+      assert.strictEqual(e.plyoW, Number(kutuphane.plyoW) || 1,
+        e.tr + ': programdaki agirlik kutuphaneyle uyusmuyor');
+    }
+  });
+
+  test('yorgunluk esigi ergen olcum gurultusunun USTUNDE', () => {
+    // Ergen sporcularda saptanabilir en kucuk degisim CMJ yuksekliginde >%7
+    // (Thomas 2017); tek CMJ'nin varyasyon katsayisi kuvvet platformunda ~%5
+    // (Cormack 2008), telefon uygulamasinda %8.2 (Rago 2018). 5 esigi
+    // gurultunun icindeydi ve uyariyi anlamsizlastiriyordu.
+    const L = M.PLYO_LIMITS || EV('PLYO_LIMITS');
+    assert.ok(L.dropPctDeload >= 10,
+      'esik ' + L.dropPctDeload + ' — ergen olcum gurultusunun (SDC >%7) altinda');
+  });
+
+  test('boyun izometrigi SANIYE birimiyle yaziliyor', () => {
+    // Izometrik tutus tekrarla olculmez. Render zaten `sure: true` ile "sn"
+    // yaziyordu ama kayittaki metric alani 'reps' diyordu — celiski.
+    const lib = M.PROGRAM_EXERCISES || EV('PROGRAM_EXERCISES');
+    const n = lib.find((e) => e.id === 'neckiso');
+    assert.ok(n, 'neckiso yok');
+    assert.strictEqual(n.sure, true);
+    assert.strictEqual(n.metric, 'sn', 'izometrik tutus tekrar degil saniyedir');
+  });
+
+  test('boyun haftada en fazla 2 gune konur', () => {
+    const p = M.buildProgram(Object.assign({}, KICKBOKS, { strengthDays: 5, sessionMin: 90 }), []);
+    const gun = (p.days || []).filter((d) => (d.exercises || []).some((e) => e.muscle === 'neck')).length;
+    assert.ok(gun <= 2, 'boyun ' + gun + ' gune kondu — yayinlanmis protokoller 2-3/hafta');
+  });
+});

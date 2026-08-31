@@ -72,7 +72,10 @@ describe('baslatma dumani', () => {
       'ensureChat', 'chatPush', 'ensureNotes', 'noteAutoTitle',
       'ensureSleep', 'logSleep', 'sleepDebt', 'badSleepStreak',
       'escapeHtml', 'chatFormat', 'renderChatMessages',
-      'hcBuildFacts', 'hcHevyStats', 'hcNutritionStats', 'hcWeightTrend',
+      // ⚠️ 30 Agu 2026: hc* fonksiyonlari BILEREK bu listede degil. Saglik
+      // analitigi health.js'e tasindi ve Diyet sekmesi acilinca tembel
+      // yukleniyor; ilk cizimde tanimli OLMAMALARI dogru davranis.
+      // Yuklendikten sonraki sozlesme 13-lazy'de kilitli.
     ];
     const eksik = gerekli.filter((f) => typeof w[f] !== 'function');
     assert.deepStrictEqual(eksik, [], 'eksik global fonksiyon');

@@ -10,6 +10,7 @@ on:
       - 'ui.js'
       - 'program.js'
       - 'nutrition.js'
+      - 'health.js'
       - 'supabase.js'
       - 'html5-qrcode.min.js'
       - 'styles.css'

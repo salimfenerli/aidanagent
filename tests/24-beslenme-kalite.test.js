@@ -19,7 +19,9 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const { loadApp } = require('./helpers/load.js');
 
-const app = loadApp({ scripts: ['core.js', 'tasks.js', 'ui.js', 'program.js', 'nutrition.js'] });
+// 30 Agu 2026: nutrition.js hcBMR / hcEnergyCheck / hcWeightTrend cagiriyor;
+// o cekirdek ui.js'ten health.js'e tasindi, testin de yuklemesi gerekiyor.
+const app = loadApp({ scripts: ['core.js', 'tasks.js', 'ui.js', 'program.js', 'nutrition.js', 'health.js'] });
 const E = (kod) => app.evalIn(kod);
 const J = (kod) => JSON.parse(E('JSON.stringify(' + kod + ')'));
 
