@@ -39,9 +39,9 @@ function bugununOgunleri() {
 }
 
 describe('Temel besin veritabani — gram karsiligi', () => {
-  test('410 besinin HEPSINDE g alani var ve pozitif', () => {
+  test('447 besinin HEPSINDE g alani var ve pozitif', () => {
     const f = seedFoods();
-    assert.strictEqual(f.length, 410, 'besin sayisi degismis');
+    assert.strictEqual(f.length, 447, 'besin sayisi degismis');
     const eksik = f.filter(x => !(Number(x.g) > 0));
     assert.strictEqual(eksik.length, 0, 'g alani olmayan: ' + eksik.slice(0, 5).map(x => x.n).join(', '));
   });
@@ -71,6 +71,54 @@ describe('Temel besin veritabani — gram karsiligi', () => {
       if (f.k >= 20) {
         assert.ok(per100 >= 5, `${f.n}: ${per100.toFixed(1)} kcal/100g — g cok buyuk`);
       }
+    }
+  });
+
+  /**
+   * LIGHT SOZLESMESI (Eyl 2026): light/yagsiz varyant eklerken en kolay
+   * yapilan hata makrolari elle yazip ana urunle celismesi. Bir "light"
+   * urun ana urunden AZ kalorili ve AZ yagli olmak zorunda; degilse
+   * kullaniciya yanlis bir tercih sunuyoruz demektir.
+   */
+  test('light/yagsiz varyant ana urunden dusuk kalorili ve dusuk yagli', () => {
+    const f = seedFoods();
+    const bul = (n) => f.find(x => x.n === n);
+    const ciftler = [
+      ['Süt (yağsız)', 'Süt'], ['Süt (yarım yağlı)', 'Süt'],
+      ['Yoğurt (yağsız)', 'Yoğurt'], ['Ayran (light)', 'Ayran'],
+      ['Beyaz peynir (light)', 'Beyaz peynir'],
+      ['Kaşar peyniri (light)', 'Kaşar peyniri'],
+      ['Labne (light)', 'Labne'], ['Krem peynir (light)', 'Krem peynir'],
+      ['Light dondurma', 'Dondurma'],
+    ];
+    for (const [lightAd, anaAd] of ciftler) {
+      const l = bul(lightAd), a = bul(anaAd);
+      assert.ok(l, lightAd + ' yok'); assert.ok(a, anaAd + ' yok');
+      const lk = l.k / l.g, ak = a.k / a.g;      // 100 g basina normalize
+      const lf = l.f / l.g, af = a.f / a.g;
+      assert.ok(lk < ak, `${lightAd}: ${(lk*100).toFixed(0)} kcal/100g, ${anaAd} ${(ak*100).toFixed(0)} — light daha kalorili`);
+      assert.ok(lf < af, `${lightAd}: yag ${(lf*100).toFixed(1)} g/100g, ${anaAd} ${(af*100).toFixed(1)} — light daha yagli`);
+    }
+  });
+
+  /**
+   * Yumurta akinin g'si 12'ydi (kategori kalori yogunlugundan turetilmisti)
+   * — gercek bir yumurta akinin agirligi ~33 g. Gram kipi bu sayiyla
+   * "3 yumurta aki = 36 g" gosteriyordu. Ak + sari = tam yumurta kontrolu
+   * bu tur olcek kaymasini yakalar.
+   */
+  test('yumurta ak + sari = tam yumurta (olcek kaymasi kontrolu)', () => {
+    const f = seedFoods();
+    const ak = f.find(x => x.n === 'Yumurta akı');
+    const sari = f.find(x => x.n === 'Yumurta sarısı');
+    const tam = f.find(x => x.n === 'Yumurta');
+    for (const alan of ['g', 'k', 'p', 'f']) {
+      const toplam = ak[alan] + sari[alan];
+      const fark = Math.abs(toplam - tam[alan]);
+      // Tolerans: %15 ya da 1 birim. Makrolar tam sayiya yuvarlandigi icin
+      // 3.6 + 2.7 = 6.3 -> 4 + 3 = 7 gibi bir birimlik sapma normaldir.
+      assert.ok(fark / tam[alan] <= 0.15 || fark <= 1,
+        `${alan}: ak ${ak[alan]} + sari ${sari[alan]} = ${toplam}, tam yumurta ${tam[alan]}`);
     }
   });
 });

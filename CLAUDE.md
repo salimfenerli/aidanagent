@@ -571,7 +571,7 @@ Salim: "bana diyet de yazabilsin." Yeni **7. modül `nutrition.js`** (tembel yü
 
 **⚠️ Öğün başı protein tavanı KIRPMA kuralı DEĞİL.** İlk yazımda 0.40 g/kg tavanıyla kırpılıyordu → 4 × tavan < günlük hedef oluyor ve plan sessizce eksik protein veriyordu. Artık eşit bölünüyor, bant bilgi olarak gösteriliyor.
 
-**Örnek gün — 410 besinlik Türk veritabanından.** Her öğün: protein çapası + karbonhidrat çapası + sabit ekler; çapalar hedefe göre ölçekleniyor.
+**Örnek gün — 447 besinlik Türk veritabanından.** Her öğün: protein çapası + karbonhidrat çapası + sabit ekler; çapalar hedefe göre ölçekleniyor.
 
 **🔧 Motoru gerçek çıktıyla denetlerken bulunan 4 hata:**
 - **Protein %50 aşıyordu** (126 g hedefe 168 g): "en az 1 porsiyon" kuralı — tavuk göğsü tek başına 47 g. Alt sınır 0.5 porsiyona indi + gün sonu denge geçişi eklendi.
@@ -579,6 +579,12 @@ Salim: "bana diyet de yazabilsin." Yeni **7. modül `nutrition.js`** (tembel yü
 - **"1.5 adet yumurta":** `adet`/`dilim`/`kase` birimli besinler artık tam sayıya yuvarlanıyor — azaltma geçişinde de.
 - **"1 5 adet Zeytin":** birim zaten sayı içeriyorsa bir daha sayı yazılmıyor (`nutPortion`).
 - Ayrıca protein dengelemesi kaloriyi düşürüyordu (3034 → 2692) → karbonhidrat çapasıyla geri dolduran ikinci geçiş eklendi. Şimdi 2935/3034.
+
+**🥛 Diyet / light ürünler (1 Eyl 2026, v7-172).** Veritabanı 410 → 447. Eklenenler: süt ürünlerinin yağsız/light karşılıkları, ayrılmış yumurta (ak + sarı), hazır protein ürünleri (izolat, kazein, protein süt/puding/yoğurt), yağsız şarküteri, düşük kalorili karbonhidrat + şekersiz içecekler.
+- **`Yumurta akı` `g: 12` → `33` (VERİ HATASI DÜZELTİLDİ).** 15 Ağu'da 410 besine `g` alanı **kategori bazlı kcal/g yoğunluğundan türetilmişti**; yumurta akı 0.5 kcal/g ile kategorisinin çok altında kaldığı için ölçek 3 kat kaydı — gram kipi "3 yumurta akı = 36 g" gösteriyordu. ⚠️ **Aynı türetme hatası düşük kalori yoğunluklu diğer besinlerde de olabilir**; 22-gram testindeki `kcal/100g ≤ 900` sınırı bu yönü YAKALAMIYOR (yalnız g'nin çok küçük olduğunu yakalıyor, yanlış ama makul olanı değil).
+- **Light varyant sözleşmesi (teste bağlı):** bir "(light)" / "(yağsız)" ürün ana ürününden **100 g başına hem düşük kalorili hem düşük yağlı** olmak zorunda. Elle yazılan makro ana ürünle çelişirse test kırmızı.
+- **Ak + sarı = tam yumurta** kontrolü de teste bağlı (tolerans %15 ya da 1 birim — makrolar tam sayıya yuvarlandığı için 3.6+2.7=6.3 → 4+3=7 sapması normal).
+- Light süt ürünleri `NUT_MICRO_DATA`'ya da eklendi: **yağ düşer, kalsiyum düşmez.** Tabloda olmayan besin kapsamı düşürüp motoru gereksiz susturuyordu (`kapsam < %70` → yorum yok).
 
 **AI çağrısı YOK** — motor kural tabanlı ve deterministik, `fetch` yasağı teste bağlı.
 **Yeni veri alanı:** `data.diet.nut = { hedef, sablon, kurulduAt }`. Yeni sekme/endpoint YOK.

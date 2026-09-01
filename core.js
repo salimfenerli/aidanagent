@@ -2057,7 +2057,7 @@ const TURK_FOODS = [
   { n: 'Krep', u: 'adet', g: 38, k: 130, p: 4, c: 18, f: 5 },
   { n: 'Pankek', u: 'adet', g: 26, k: 90, p: 3, c: 15, f: 2 },
   { n: 'Waffle', u: 'adet', g: 65, k: 220, p: 5, c: 30, f: 9 },
-  { n: 'Yumurta akı', u: 'adet', g: 12, k: 17, p: 4, c: 0, f: 0 },
+  { n: 'Yumurta akı', u: 'adet', g: 33, k: 17, p: 4, c: 0, f: 0 },
   { n: 'Chia puding', u: 'kase', g: 133, k: 200, p: 6, c: 22, f: 9 },
   { n: 'Müsli', u: 'kase', g: 120, k: 210, p: 6, c: 38, f: 5 },
   { n: 'Kahvaltı tabağı', u: 'porsiyon', g: 281, k: 450, p: 18, c: 30, f: 28 },
@@ -2295,6 +2295,50 @@ const TURK_FOODS = [
   { n: 'Zeytinli poğaça', u: 'adet', g: 86, k: 250, p: 5, c: 30, f: 12 },
   { n: 'Çikolatalı kek', u: 'dilim', g: 52, k: 280, p: 4, c: 38, f: 13 },
   { n: 'Yumurtalı sandviç', u: 'adet', g: 221, k: 320, p: 15, c: 34, f: 13 },
+  // --- Diyet / light / yüksek proteinli ürünler ---
+  // Süt ürünlerinin light karşılıkları: aynı kalsiyum, düşük yağ.
+  { n: 'Süt (yağsız)', u: 'bardak', g: 200, k: 68, p: 7, c: 10, f: 0 },
+  { n: 'Süt (yarım yağlı)', u: 'bardak', g: 200, k: 92, p: 7, c: 10, f: 3 },
+  { n: 'Yoğurt (yağsız)', u: 'kase', g: 200, k: 112, p: 11, c: 13, f: 0 },
+  { n: 'Yunan yoğurdu (yağsız)', u: 'kase', g: 200, k: 118, p: 20, c: 7, f: 0 },
+  { n: 'Protein yoğurt', u: 'kase', g: 200, k: 130, p: 20, c: 8, f: 2 },
+  { n: 'Ayran (light)', u: 'bardak', g: 200, k: 60, p: 6, c: 6, f: 1 },
+  { n: 'Kefir (light)', u: 'bardak', g: 200, k: 80, p: 7, c: 9, f: 1 },
+  { n: 'Beyaz peynir (light)', u: 'dilim', g: 30, k: 48, p: 6, c: 1, f: 2 },
+  { n: 'Kaşar peyniri (light)', u: 'dilim', g: 30, k: 78, p: 8, c: 1, f: 5 },
+  { n: 'Labne (light)', u: 'kaşık', g: 20, k: 35, p: 3, c: 1, f: 2 },
+  { n: 'Krem peynir (light)', u: 'kaşık', g: 20, k: 32, p: 2, c: 1, f: 2 },
+  { n: 'Cottage peyniri', u: 'porsiyon', g: 100, k: 98, p: 11, c: 3, f: 4 },
+  // Yumurtanın ayrılmış hâlleri — ak neredeyse saf protein, sarı yağ + D vitamini.
+  { n: 'Yumurta sarısı', u: 'adet', g: 17, k: 55, p: 3, c: 1, f: 5 },
+  { n: 'Sıvı yumurta akı', u: 'bardak', g: 200, k: 104, p: 22, c: 2, f: 0 },
+  // Takviye / hazır protein
+  { n: 'Whey protein (izolat)', u: 'ölçek', g: 30, k: 112, p: 26, c: 1, f: 1 },
+  { n: 'Kazein tozu', u: 'ölçek', g: 30, k: 110, p: 24, c: 3, f: 1 },
+  { n: 'Protein süt', u: 'şişe', g: 250, k: 150, p: 25, c: 10, f: 2 },
+  { n: 'Protein puding', u: 'kutu', g: 200, k: 160, p: 20, c: 15, f: 2 },
+  // Yağsız et / şarküteri
+  { n: 'Hindi füme', u: 'dilim', g: 20, k: 22, p: 4, c: 1, f: 0 },
+  { n: 'Tavuk göğsü füme', u: 'dilim', g: 20, k: 24, p: 4, c: 0, f: 1 },
+  { n: 'Ton balığı (yağda)', u: 'kutu', g: 80, k: 190, p: 18, c: 0, f: 13 },
+  // Düşük kalorili karbonhidrat / atıştırma
+  { n: 'Diyet galeta', u: 'adet', g: 10, k: 37, p: 1, c: 7, f: 0 },
+  { n: 'Pirinç patlağı galeta', u: 'adet', g: 9, k: 35, p: 1, c: 7, f: 0 },
+  { n: 'Mısır patlağı (yağsız)', u: 'avuç', g: 20, k: 78, p: 2, c: 16, f: 1 },
+  { n: 'Şirataki makarna', u: 'porsiyon', g: 200, k: 20, p: 0, c: 4, f: 0 },
+  { n: 'Light dondurma', u: 'top', g: 60, k: 65, p: 2, c: 12, f: 1 },
+  { n: 'Bitter çikolata (%85)', u: 'kare', g: 10, k: 60, p: 1, c: 3, f: 5 },
+  { n: 'Şekersiz reçel', u: 'kaşık', g: 20, k: 20, p: 0, c: 5, f: 0 },
+  { n: 'Light mayonez', u: 'kaşık', g: 15, k: 35, p: 0, c: 2, f: 3 },
+  { n: 'Ketçap', u: 'kaşık', g: 15, k: 17, p: 0, c: 4, f: 0 },
+  { n: 'Hardal', u: 'kaşık', g: 15, k: 10, p: 1, c: 1, f: 0 },
+  // Şekersiz içecekler — sıfıra yakın, günlük sayımda görünür olsun diye var.
+  { n: 'Gazoz (light)', u: 'kutu', g: 330, k: 3, p: 0, c: 0, f: 0 },
+  { n: 'Şekersiz ice tea', u: 'kutu', g: 330, k: 3, p: 0, c: 0, f: 0 },
+  { n: 'Enerji içeceği (şekersiz)', u: 'kutu', g: 250, k: 8, p: 0, c: 2, f: 0 },
+  { n: 'Badem sütü (şekersiz)', u: 'bardak', g: 200, k: 28, p: 1, c: 1, f: 2 },
+  { n: 'Tatlandırıcı', u: 'adet', g: 1, k: 0, p: 0, c: 0, f: 0 },
+  { n: 'Şekersiz sakız', u: 'adet', g: 2, k: 3, p: 0, c: 0, f: 0 },
 ];
 // Türkçe diakritik-duyarsız normalize (kofte→kofte=köfte, doner→döner). Hızlı yazımda eşleşsin.
 function trNorm(str) {
