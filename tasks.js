@@ -32,9 +32,10 @@ async function showTab(name, btn) {
   toggleAppMenu(false);
   // --- Tembel modul: sekme ilk acilista indirilir ---
   if (name === 'diet') {
-    // Diyet sekmesi ÜÇ modül ister: antrenman programı + beslenme planı +
-    // sağlık analitiği (hc* çekirdeği, 30 Ağu 2026'da ui.js'ten çıktı).
-    const modlar = ['program', 'nutrition', 'health'];
+    // Diyet sekmesi DÖRT modül ister: antrenman programı + beslenme planı +
+    // sağlık analitiği (hc* çekirdeği, 30 Ağu 2026'da ui.js'ten çıktı) +
+    // besin veritabanı (foods.js, 2 Eyl 2026'da core.js'ten çıktı).
+    const modlar = ['program', 'nutrition', 'health', 'foods'];
     const eksik = modlar.filter(m => !moduleLoaded(m));
     if (eksik.length) {
       setModuleLoading(name, true);
@@ -62,7 +63,9 @@ async function showTab(name, btn) {
       bd.addEventListener('toggle', () => { if (bd.open) loadBackupList(); });
     }
   }
-  if (name === 'tasks') { renderCountdowns(); renderSchool(); if (typeof renderDailyScore === 'function') renderDailyScore(); }
+  // ⚠️ Okul paneli artık school.js'te (tembel). Modül inmeden cagrilirsa
+  // sessizce indirilip panel dolduruluyor — kritik yol beklemiyor.
+  if (name === 'tasks') { renderCountdowns(); ensureSchoolModule(); if (typeof renderDailyScore === 'function') renderDailyScore(); }
   if (name === 'chat') { renderChatMessages(); setTimeout(() => { const ci = document.getElementById('chatInput'); if (ci) ci.focus(); }, 60); }
   if (name === 'plan') renderDayPlan();
   if (name === 'diet') { _dietDate = null; renderDiet(); renderHealthCoach(); renderProgram(); renderNutrition(); }  // koç şeridi: uyku+spor+beslenme desenleri
@@ -345,6 +348,30 @@ function quickCaptureMic() {
 
 // PWA AI — quick capture metnini Worker /ai'ye yollar, AI akıllı görev(ler) ekler (tarih/kategori/seri çıkarır)
 const AI_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/ai';
+/**
+ * Okul modülünü indirir ve paneli çizer. Zaten indiyse doğrudan çizer.
+ * Hata yutulmuyor ama kullanıcıyı da rahatsız etmiyor: panel kapalı bir
+ * `<details>`, açılmadan fark edilmez; ağ dönünce kendi doluyor.
+ */
+function ensureSchoolModule() {
+  if (typeof renderSchool === 'function') { renderSchool(); return Promise.resolve(); }
+  return loadModule('school')
+    .then(() => { if (typeof renderSchool === 'function') renderSchool(); })
+    .catch(() => {});
+}
+
+// ÖDEV PAKETİ kapısı — motor school.js'te ve TEMBEL iniyor (ilk yükleme
+// bütçesi 185 KB, pay 0.7 KB kalmıştı). Düğme yalnız modülü indirip modalı
+// açar; indirme başarısızsa sessiz kalmaz.
+async function openHomeworkModal() {
+  try {
+    await loadModule('school');
+    openHomework();
+  } catch (e) {
+    showToast('Ödev paketi yüklenemedi: ' + e.message, 'error', 4000);
+  }
+}
+
 async function quickCaptureAI() {
   const inp = document.getElementById('quickCapture');
   const text = inp.value.trim();
@@ -917,10 +944,178 @@ function initBlockActionBridge() {
 }
 
 // AI: görevleri + uyanık pencereyi → saat saat plan (Worker /plan)
+
+// ===== YEREL GÜN PLANLAYICI (6 Eyl 2026) — AI YOK, AĞ YOK =====
+/**
+ * ⚠️ NEDEN VAR: `planMyDay` bulut girişi + ağ + AI istiyordu. Uygulamanın en
+ * çok reklam edilen işi — "günü saat saat bloklara böl, zaman körlüğüne
+ * karşı" — girişsizken, uçakta, worker kotası dolduğunda ya da Gemini
+ * ücretsiz katmanı 429 verdiğinde HİÇ çalışmıyordu. Günlük kullanılacak bir
+ * uygulamada asıl akışın dış servise bağlı olması kabul edilemez.
+ *
+ * Bu planlayıcı deterministik: aynı girdi → aynı plan. AI'ın yerini almıyor,
+ * TABANI oluşturuyor; AI varsa o çalışır, yoksa gün yine planlanır.
+ *
+ * MOTORUN YAPMADIKLARI (bilerek):
+ * - Enerji saatine göre yerleştirme yok. `planProfile()` sabah/öğle/akşam
+ *   tamamlama oranını biliyor ama 14 günlük veriyle bir saat dilimini
+ *   "senin iyi saatin" ilan etmek gürültüyü kural sanmaktır. Profil yalnız
+ *   SÜRE düzeltmesinde kullanılıyor (ölçülen/tahmin oranı).
+ * - Görev bağımlılığı, konu zorluğu, ders çakışması yok.
+ */
+const PLAN_MIN_BLOCK = 15;     // bundan kısa blok bölünme hissi vermiyor
+const PLAN_MAX_BLOCK = 60;     // 60 dk'dan uzun tek blok ADHD'de tutmuyor
+const PLAN_DEFAULT_MIN = 30;   // süresi yazılmamış görev
+const PLAN_BREAK_MIN = 10;     // bloklar arası nefes
+const PLAN_MAX_BLOCKS = 8;     // gün 8 bloktan uzunsa plan değil liste olur
+
+/** Görevi planlanacak süreye çevirir: profil oranı + çok günlük işin bugünkü payı. */
+function planTaskMinutes(t, dateStr, ratio) {
+  let min = t.estimateMin || PLAN_DEFAULT_MIN;
+  if (t.estimateMin && ratio) min = Math.max(10, Math.round((min * ratio) / 5) * 5);
+  // Son tarihe kaç gün varsa işi ona böl — 3 günlük ödevi bugün bitirmeye
+  // çalışmak planı da günü de bozar.
+  if (t.due && t.estimateMin) {
+    const kalan = daysBetweenDates(dateStr, t.due);
+    if (kalan !== null && kalan > 0) {
+      const pay = Math.max(20, Math.round(min / (kalan + 1) / 5) * 5);
+      if (pay < min) min = pay;
+    }
+  }
+  return Math.max(PLAN_MIN_BLOCK, Math.min(PLAN_MAX_BLOCK, Math.round(min / 5) * 5));
+}
+
+/**
+ * Planlanacak görevler, ÖNCELİK SIRASIYLA:
+ *  1. O günün MIT'i          — kullanıcı "bugün bunlar" dedi, tartışma yok
+ *  2. Acil                    — açık işaret
+ *  3. Tarihi geçmiş           — her gün ertelenen iş plana girmezse hiç girmez
+ *  4. O gün teslim            — bugünün gerçek yükü
+ *  5. Yakın tarihli           — sonra gelen
+ * Tarihsiz işler en sona: plan tarihli işin yerini almamalı.
+ */
+function planCandidates(dateStr) {
+  const puan = (t) => {
+    if (t.mitDate === dateStr) return 0;
+    if (t.priority === 'urgent') return 1;
+    if (t.due && t.due < dateStr) return 2;
+    if (t.due === dateStr) return 3;
+    if (t.due) return 4;
+    return 5;
+  };
+  return (data.tasks || [])
+    .filter(t => t && !t.done)
+    .map((t, i) => ({ t, i, p: puan(t) }))
+    .sort((a, b) => (a.p - b.p) || ((a.t.due || '9999') < (b.t.due || '9999') ? -1 : 1) || (a.i - b.i))
+    .map(x => x.t);
+}
+
+/** [from,to] penceresinde sabit blokların BOŞ bıraktığı aralıklar. */
+function planFreeGaps(fromM, toM, fixed) {
+  const dolu = fixed.map(f => ({ s: hmToMin(f.start), e: hmToMin(f.end) }))
+    .filter(x => x.e > fromM && x.s < toM)
+    .sort((a, b) => a.s - b.s);
+  const bosluk = [];
+  let imlec = fromM;
+  for (const d of dolu) {
+    if (d.s > imlec) bosluk.push({ s: imlec, e: Math.min(d.s, toM) });
+    imlec = Math.max(imlec, d.e);
+  }
+  if (imlec < toM) bosluk.push({ s: imlec, e: toM });
+  return bosluk.filter(g => g.e - g.s >= PLAN_MIN_BLOCK);
+}
+
+/**
+ * Günü planlar ve blok dizisini döndürür (KAYDETMEZ — çağıran karar verir).
+ * @param {string} dateStr  planlanacak gün (bugün ya da yarın)
+ */
+function planLocalBlocks(dateStr) {
+  const w = planWindow();
+  const bugunMu = dateStr === today();
+  // Bugünü planlarken geçmiş saatlere blok koymak plana güveni bitirir:
+  // sabah 8 penceresi olsa da saat 15'te "08:00 matematik" yazmak anlamsız.
+  const simdi = bugunMu ? Math.ceil(hmToMin(nowHM()) / 5) * 5 : -1;
+  const fromM = Math.max(hmToMin(w.from), simdi);
+  const toM = hmToMin(w.to);
+  const fixed = fixedBlocksForDate(dateStr);
+  if (toM - fromM < PLAN_MIN_BLOCK) return { blocks: fixed, sebep: 'pencere-dolu' };
+
+  const ratio = (planProfile() || {}).ratio || null;
+  const adaylar = planCandidates(dateStr);
+  if (!adaylar.length) return { blocks: fixed, sebep: 'gorev-yok' };
+
+  const gaps = planFreeGaps(fromM, toM, fixed);
+  const yeni = [];
+  let ai = 0, sayac = 0;
+  for (const g of gaps) {
+    let imlec = g.s;
+    while (ai < adaylar.length && sayac < PLAN_MAX_BLOCKS) {
+      const t = adaylar[ai];
+      const istenen = planTaskMinutes(t, dateStr, ratio);
+      const kalan = g.e - imlec;
+      if (kalan < PLAN_MIN_BLOCK) break;
+      const sure = Math.min(istenen, kalan);
+      yeni.push({
+        id: Date.now() + 700000 + sayac,
+        label: String(t.text || 'Görev').slice(0, 100),
+        start: minToHM(imlec), end: minToHM(imlec + sure),
+        kind: 'task', taskId: t.id, done: false,
+      });
+      imlec += sure + PLAN_BREAK_MIN;
+      ai++; sayac++;
+      // Blok penceresi doldu: kalan görevler yarına kalır. "Sığmayan işi
+      // sıkıştırmak" plan değil temenni olur.
+      if (imlec >= g.e) break;
+    }
+    if (sayac >= PLAN_MAX_BLOCKS) break;
+  }
+  const hepsi = fixed.concat(yeni).sort((a, b) => hmToMin(a.start) - hmToMin(b.start));
+  return { blocks: hepsi, yerlesen: yeni.length, kalan: Math.max(0, adaylar.length - ai), sebep: yeni.length ? null : 'yer-yok' };
+}
+
+/** Yerel planı uygular. dateStr verilmezse bugün. */
+function planLocalDay(dateStr) {
+  const gun = dateStr || today();
+  if (data.dayPlan && data.dayPlan.date && data.dayPlan.date !== gun) archivePlanDay(data.dayPlan);
+  const r = planLocalBlocks(gun);
+  const mesajlar = {
+    'gorev-yok': 'Planlanacak görev yok — önce görev ekle',
+    'pencere-dolu': 'Uyanık pencerende yer kalmamış — pencereyi uzat ya da yarını planla',
+    'yer-yok': 'Sabit programın pencereyi doldurmuş — plana yer kalmadı',
+  };
+  if (r.sebep) {
+    // Sabit bloklar yine de yazılsın: okul/antrenman görünsün.
+    if (r.blocks.length) {
+      const w0 = planWindow();
+      data.dayPlan = { date: gun, blocks: r.blocks, windowFrom: w0.from, windowTo: w0.to };
+      save(); renderDayPlan();
+    }
+    showToast(mesajlar[r.sebep] || 'Plan kurulamadı', 'info', 4000);
+    return r;
+  }
+  const w = planWindow();
+  data.dayPlan = { date: gun, blocks: r.blocks, windowFrom: w.from, windowTo: w.to };
+  save(); renderDayPlan();
+  const yarinMi = gun === tomorrowStr();
+  showToast(
+    `${yarinMi ? 'Yarın' : 'Gün'} planlandı — ${r.yerlesen} blok` +
+    (r.kalan ? ` · ${r.kalan} iş sığmadı` : ''), 'success', 3500);
+  return r;
+}
+
+/** "Yarını planla" düğmesi — akşam ritüelinin son adımı. */
+function planTomorrow() { return planLocalDay(tomorrowStr()); }
+
 async function planMyDay() {
-  if (!window._supa || !window._user) { showToast('AI için bulut girişi gerekli — Ayarlar → giriş yap', 'warning', 4000); return; }
   const open = (data.tasks || []).filter(t => !t.done);
   if (!open.length) { showToast('Planlanacak görev yok — önce görev ekle', 'info', 3500); return; }
+  // ⚠️ GİRİŞ YOKSA GÜN PLANSIZ KALMAZ. Önceden burada uyarı verip çıkıyordu:
+  // uygulamanın en çok reklam edilen işi, dış servise bağlı olduğu için
+  // uçakta / girişsizken / kota dolduğunda HİÇ çalışmıyordu.
+  if (!window._supa || !window._user) {
+    showToast('Bulut girişi yok — gün yerel olarak planlandı', 'info', 3500);
+    return planLocalDay(today());
+  }
   const w = planWindow();
   // AI'ya kompakt, index referanslı liste (sayı uydurmasın diye süreler net)
   const _prof0 = planProfile();
@@ -997,7 +1192,10 @@ async function planMyDay() {
     save(); renderDayPlan();
     showToast(`Günün planlandı — ${all.length} blok${fixed.length ? ` (${fixed.length} sabit)` : ''}`, 'success', 3500);
   } catch (e) {
-    showToast('Planlanamadı: ' + e.message, 'error', 4500);
+    // AI patladi (kota, ag, 429...) — gun yine de planlanir. Hata YUTULMUYOR,
+    // kullaniciya soyleniyor; ama plansiz birakilmiyor.
+    showToast('AI planlayamadı (' + e.message + ') — yerel plan kuruldu', 'warning', 5000);
+    planLocalDay(today());
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -1018,12 +1216,40 @@ function parseQuickInput(raw) {
   // 'sal' kısaltması "salı" için kullanılır ama isim olabilir — ayrı bir liste
   const trDaysShort = { 'sal':2 };
 
-  let due = null, reminderTime = null, category = null, priority = null, estimateMin = null;
+  let due = null, reminderTime = null, category = null, priority = null, estimateMin = null, repeat = null;
+
+  // --- TEKRAR ---
+  // ⚠️ TARİH KURALINDAN ÖNCE ÇALIŞMALI. "her salı kickboks" içindeki gün adı
+  // tarih kuralına da uyuyor; tarih önce çalışınca gün adını siliyor, "her"
+  // kelimesi başlıkta YETİM kalıyor ve tekrar eden görev SESSİZCE tek
+  // seferliğe dönüyordu → "her kickboks" + tek bir salı tarihi.
+  // repeat alanı motorda zaten tam destekli (rozet + gün dönümünde sıfırlama,
+  // ui.js) ve ayrıntılı görev formunda seçilebiliyordu; eksik olan tek şey
+  // HIZLI yolun bunu ifade edememesiydi.
+  const nextDow = (num) => { let diff = ((num - today.getDay()) + 7) % 7; if (diff === 0) diff = 7; return addDays(diff); };
+  let rp = null;
+  if ((rp = text.match(/(^|\s)her\s*g[üu]n(\s|$)/i))) {
+    repeat = 'daily'; text = text.replace(rp[0], ' '); detected.push('her gün');
+  } else if ((rp = text.match(/(^|\s)(her\s+)?hafta\s*i[çc]i(\s|$)/i))) {
+    repeat = 'weekdays'; text = text.replace(rp[0], ' '); detected.push('hafta içi');
+  } else if ((rp = text.match(/(^|\s)her\s+hafta\s*sonu(\s|$)/i))) {
+    // ⚠️ "her hafta sonu"ndan ÖNCE gelemez: yalın "hafta sonu" aşağıda TARİH
+    // olarak yorumlanıyor (bu hafta sonuna kadar), o sözleşme korunuyor.
+    repeat = 'weekends'; text = text.replace(rp[0], ' '); detected.push('her hafta sonu');
+  } else {
+    for (const [name, num] of Object.entries(trDays)) {
+      const re = new RegExp(`(^|\\s)her\\s+${name}(\\s|$)`, 'i');
+      if (re.test(text)) { repeat = 'weekly'; due = nextDow(num); text = text.replace(re, ' '); detected.push('her ' + name); break; }
+    }
+    if (!repeat && (rp = text.match(/(^|\s)her\s*hafta(\s|$)/i))) {
+      repeat = 'weekly'; text = text.replace(rp[0], ' '); detected.push('her hafta');
+    }
+  }
 
   // --- TARİH ---
   if (/(^|\s)bugün(\s|$)/i.test(text)) { due = isoDate(today); text = text.replace(/(^|\s)bugün(\s|$)/i, ' '); detected.push('bugün'); }
   else if (/(^|\s)yarın(\s|$)/i.test(text)) { due = addDays(1); text = text.replace(/(^|\s)yarın(\s|$)/i, ' '); detected.push('yarın'); }
-  else if (/(^|\s)(öbürgün|ertesi gün)(\s|$)/i.test(text)) { due = addDays(2); text = text.replace(/(^|\s)(öbürgün|ertesi gün)(\s|$)/i, ' '); detected.push('öbürgün'); }
+  else if (/(^|\s)(öbür\s*gün|obur\s*gun|ertesi\s*gün)(\s|$)/i.test(text)) { due = addDays(2); text = text.replace(/(^|\s)(öbür\s*gün|obur\s*gun|ertesi\s*gün)(\s|$)/i, ' '); detected.push('öbür gün'); }
   else if (/(^|\s)haftaya(\s|$)/i.test(text)) { due = addDays(7); text = text.replace(/(^|\s)haftaya(\s|$)/i, ' '); detected.push('haftaya'); }
   else if (/(^|\s)hafta\s*sonu(\s|$)/i.test(text)) {
     const wd = today.getDay(); const diff = ((6 - wd + 7) % 7) || 7;
@@ -1050,6 +1276,29 @@ function parseQuickInput(raw) {
         if (diff === 0) diff = 7;
         due = addDays(diff); text = text.replace(re, ' '); detected.push(`${name}`); break;
       }
+    }
+  }
+  if (!due) {
+    // "5 eylül", "12 kasım" — ay ADIYLA tarih. Önceden yalnız DD.MM vardı;
+    // sınav/ödev tarihi konuşurken ay adıyla yazılır ("5 eylül kimya sınavı"
+    // sessizce tarihsiz görev oluyordu).
+    const aylar = { 'ocak': 1, 'şubat': 2, 'subat': 2, 'mart': 3, 'nisan': 4, 'mayıs': 5, 'mayis': 5, 'haziran': 6,
+                    'temmuz': 7, 'ağustos': 8, 'agustos': 8, 'eylül': 9, 'eylul': 9, 'ekim': 10, 'kasım': 11, 'kasim': 11, 'aralık': 12, 'aralik': 12 };
+    for (const [ad, mo] of Object.entries(aylar)) {
+      const am = text.match(new RegExp(`(^|\\s)(\\d{1,2})\\s+${ad}(\\s|$)`, 'i'));
+      if (!am) continue;
+      const gun = parseInt(am[2], 10);
+      if (gun >= 1 && gun <= 31) {
+        const mk = (y) => `${y}-${String(mo).padStart(2, '0')}-${String(gun).padStart(2, '0')}`;
+        // Yıl yazılmadı: gelecek yıla ancak tarih 30 günden FAZLA geride kalırsa
+        // atlanır ("5 ocak" aralıkta yazıldıysa gelecek ocak). Dün/geçen hafta
+        // olan bir tarih 364 gün ileri atılmaz — kaçmış teslim tarihi de girilir.
+        const buYil = mk(today.getFullYear());
+        const gecikme = Math.round((new Date(isoDate(today)) - new Date(buYil)) / 86400000);
+        due = (gecikme > 30) ? mk(today.getFullYear() + 1) : buYil;
+        text = text.replace(am[0], ' '); detected.push(`${gun} ${ad}`);
+      }
+      break;
     }
   }
   if (!due) {
@@ -1149,6 +1398,15 @@ function parseQuickInput(raw) {
   if (priRe.test(text)) {
     priority = 'urgent'; text = text.replace(priRe, ' '); detected.push('acil');
   }
+  // "!" / "!!" — en hızlı aciliyet işareti. Önceden başlıkta AYNEN kalıyordu:
+  // "!! fizik testi" görevi ekranda tam olarak böyle görünüyordu ve öncelik
+  // normal'de kalıyordu, yani işaret hem işe yaramıyor hem kirletiyordu.
+  if (!priority) {
+    const bangRe = /(^|\s)!{1,3}(\s|$)/;          // ayrı yazılmış:  "!! fizik"
+    const bangRe2 = /(^|\s)!{1,3}(?=[^\s!])/;     // bitişik:        "!!fizik"
+    if (bangRe.test(text)) { priority = 'urgent'; text = text.replace(bangRe, ' '); detected.push('acil'); }
+    else if (bangRe2.test(text)) { priority = 'urgent'; text = text.replace(bangRe2, ' '); detected.push('acil'); }
+  }
 
   // --- KATEGORİ (text'ten silmiyoruz — anahtar kelime başlığın anlamını taşıyor) ---
   if (word('sınav|sinav|ders|matematik|fizik|kimya|tarih|edebiyat|coğrafya|cografya|biyoloji|ödev|odev|test|deneme|konu|özet|ozet|çalış|calis|oku|kitap|sayfa').test(text)) {
@@ -1165,7 +1423,7 @@ function parseQuickInput(raw) {
 
   return {
     text: text || raw.trim(),
-    due, reminderTime, category, priority, estimateMin,
+    due, reminderTime, category, priority, estimateMin, repeat,
     detected
   };
 }
@@ -1187,7 +1445,7 @@ function quickCaptureSubmit() {
     due: p.due,
     estimateMin: p.estimateMin,
     actualMin: null,
-    repeat: null,
+    repeat: p.repeat || null,
     reminderTime: p.reminderTime,
     lastReminded: null,
     mitDate: null,
@@ -1229,7 +1487,7 @@ function dumpToTask(when) {
   const p = parseQuickInput(d.text);
   const task = makeTask({
     text: p.text, priority: p.priority || 'normal', category: p.category,
-    due: p.due, estimateMin: p.estimateMin, reminderTime: p.reminderTime
+    due: p.due, estimateMin: p.estimateMin, reminderTime: p.reminderTime, repeat: p.repeat || null
   });
   data.tasks.unshift(task);
   data.dumps = (data.dumps || []).filter(x => x.when !== when);

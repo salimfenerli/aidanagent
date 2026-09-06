@@ -16,7 +16,7 @@ const { JSDOM, VirtualConsole } = require('jsdom');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 // 14 Agu 2026: stocks.js borsa sitesine tasindi (bkz. tests/helpers/borsa.js).
-const SCRIPTS = ['core.js', 'tasks.js', 'ui.js', 'program.js'];
+const SCRIPTS = ['core.js', 'tasks.js', 'ui.js', 'program.js', 'foods.js'];
 
 function read(file) {
   return fs.readFileSync(path.join(ROOT, file), 'utf8');
@@ -100,7 +100,16 @@ function fixture() {
       prs: {},
     },
     coach: { lastRunAt: Date.now() - 86400000, lastText: 'gecen haftanin raporu', reports: [] },
-    dayPlan: { date: iso(0), blocks: [{ from: '16:00', to: '16:45', label: 'Matematik', taskId: 1 }] },
+    // ⚠️ 6 Eyl 2026 — BU BLOK YANLIS ALAN ADLARIYLA YAZILMISTI (from/to, id yok).
+    // renderDayPlan `start`/`end`/`id` okuyor; fixture ile her testte plan
+    // sekmesi "undefinedundefined" ciziyor ve togglePlanBlock(undefined)
+    // uretiyordu. Hicbir test plan sekmesinin CIKTISINA bakmadigi icin
+    // yillarca gorunmedi — fixture gercek veriyi temsil etmiyorsa o alan
+    // fiilen testsizdir.
+    dayPlan: { date: iso(0), blocks: [
+      { id: 9101, start: '16:00', end: '16:45', label: 'Matematik', kind: 'task', taskId: 1, done: false },
+      { id: 9102, start: '19:00', end: '19:30', label: 'Kickboks', kind: 'fixed', taskId: null, done: false },
+    ] },
     pomoToday: { date: iso(0), count: 2 },
     templates: [],
     settings: {},

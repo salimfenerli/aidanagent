@@ -27,6 +27,7 @@ W.Element.prototype.scrollIntoView = function () {};
 after(() => { try { A.close(); } catch (_) {} });
 
 const coreSrc = fs.readFileSync(path.join(ROOT, 'core.js'), 'utf8');
+const foodsSrc = fs.readFileSync(path.join(ROOT, 'foods.js'), 'utf8');
 const cssSrc = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
 
 function seedFoods() {
@@ -39,9 +40,9 @@ function bugununOgunleri() {
 }
 
 describe('Temel besin veritabani — gram karsiligi', () => {
-  test('447 besinin HEPSINDE g alani var ve pozitif', () => {
+  test('470 besinin HEPSINDE g alani var ve pozitif', () => {
     const f = seedFoods();
-    assert.strictEqual(f.length, 447, 'besin sayisi degismis');
+    assert.strictEqual(f.length, 470, 'besin sayisi degismis');
     const eksik = f.filter(x => !(Number(x.g) > 0));
     assert.strictEqual(eksik.length, 0, 'g alani olmayan: ' + eksik.slice(0, 5).map(x => x.n).join(', '));
   });
@@ -219,10 +220,11 @@ describe('Guvenlik + sozlesme', () => {
 
   test('gram kipi bir AG istegi tetiklemez (motor lokal)', () => {
     // Donusum tamamen aritmetik; AI'a sormak hem yavas hem gereksiz maliyet.
-    const i = coreSrc.indexOf('function setPortionMode');
-    const j = coreSrc.indexOf('function showAiPortion');
-    assert.ok(i > 0 && j > i);
-    assert.ok(!/fetch\s*\(/.test(coreSrc.slice(i, j)), 'gram kipinde fetch var');
+    // 2 Eyl 2026: porsiyon editoru core.js'ten foods.js'e tasindi.
+    const i = foodsSrc.indexOf('function setPortionMode');
+    const j = foodsSrc.indexOf('function showAiPortion');
+    assert.ok(i > 0 && j > i, 'porsiyon editoru foods.js\'te bulunamadi');
+    assert.ok(!/fetch\s*\(/.test(foodsSrc.slice(i, j)), 'gram kipinde fetch var');
   });
 });
 

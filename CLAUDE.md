@@ -34,6 +34,95 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 6 Eylül 2026 — 🗓️ GÜN PLANI ARTIK AI'SIZ DA KURULUYOR (v7-177)
+
+Salim: *"uygulama günlük kullanabileceğim bir duruma gelsin."* Günlük döngü kullanıcı gibi gezildi; Görevler sekmesi zaten iyi bir "bugün" ekranı (now-card · günlük skor · Aidan'ın notu · uyku · geri sayım · okul · Bugünün 3'ü · kapasite · akşam özeti + günlük). **Kırık halka Plan sekmesiydi.**
+
+**🔴 UYGULAMANIN EN ÇOK REKLAM EDİLEN İŞİ DIŞ SERVİSE BAĞLIYDI.** `planMyDay` ilk satırında bulut girişi yoksa **uyarı gösterip çıkıyordu**; ağ, worker kotası ya da Gemini 429'u da aynı sonucu veriyordu. Yani *"günü saat saat bloklara böl — zaman körlüğüne karşı"* uçakta, girişsizken ve kota dolduğunda **hiç** çalışmıyordu. Günlük kullanılacak bir uygulamada asıl akışın böyle olması kabul edilemez.
+
+**Yeni: yerel gün planlayıcı (`tasks.js`) — AI yok, ağ yok, deterministik.**
+- **Sıra:** o günün MIT'i → acil → **tarihi geçmiş** → o gün teslim → yakın tarihli → tarihsiz. ⚠️ Gecikmiş iş bilerek üstte: her gün ertelenen iş plana girmezse hiç girmez.
+- **Süre:** `estimateMin` × `planProfile().ratio` (ölçülen/tahmin medyanı), 5 dk'ya yuvarlı, **15-60 dk** bandına kırpılı. 60 dk'dan uzun tek blok ADHD'de tutmuyor; 15 dk'dan kısası bölünme hissi vermiyor.
+- **Çok günlük iş güne bölünüyor** — 3 gün sonra teslim 120 dk'lık ödevi bugün bitirmeye çalışmak planı da günü de bozar (AI yolundaki `todayShare` kuralının aynısı).
+- **Sabit program her zaman kazanır:** `fixedBlocksForDate` boşlukları çıkarılıyor, blok o boşluklara yerleşiyor — üzerine yazma ihtimali yok (AI yolunda bu filtreyle sağlanıyordu, burada yapısal).
+- **Bugünü planlarken geçmiş saate blok konmuyor.** Saat 15'te "08:00 matematik" yazmak plana olan güveni bitirir.
+- Bloklar arası **10 dk nefes**, günde en fazla **8 blok** (fazlası plan değil liste olur), sığmayan iş **sayılıp söyleniyor** — sıkıştırmak plan değil temenni.
+- **⚠️ MOTORUN YAPMADIKLARI (bilerek yazılı):** enerji saatine göre yerleştirme yok. `planProfile()` sabah/öğle/akşam tamamlama oranını biliyor ama 14 günlük veriyle bir saat dilimini "senin iyi saatin" ilan etmek gürültüyü kural sanmaktır; profil yalnız **süre** düzeltmesinde kullanılıyor. Görev bağımlılığı, konu zorluğu, ders çakışması da yok.
+
+**Bağlandığı iki yer:**
+1. `planMyDay` — giriş yoksa **uyarıp çıkmıyor**, yerel plana düşüyor. AI patlarsa (kota/ağ/429) hata **yutulmuyor** (sebep toast'ta yazıyor) ama gün yine planlanıyor.
+2. **"Yarını planla" düğmesi** (Plan sekmesi) — akşam ritüelinin eksik son adımıydı. `dayPlan.date` yarına kurulabiliyordu ama bunu yapan tek şey worker'ın 21:00 cron'uydu; uygulamadan yolu yoktu.
+
+**🔴 TEST FIXTURE'I GERÇEK VERİYİ TEMSİL ETMİYORDU — plan sekmesi FİİLEN TESTSİZDİ.** `tests/helpers/load.js` plan bloğunu `{from,to}` ile yazıyordu; `renderDayPlan` `start`/`end`/`id` okuyor. Yani her testte plan sekmesi **`undefinedundefined`** çiziyor ve `togglePlanBlock(undefined)` üretiyordu. Hiçbir test o sekmenin **çıktısına** bakmadığı için görülmedi. **Ders: fixture gerçek veriyi temsil etmiyorsa o alan testli değildir.** Fixture düzeltildi (id/kind/done dahil, biri `fixed`) ve üretilen bloğun alan sözleşmesi `32-yerel-plan`'da kilitlendi.
+
+**💸 BÜTÇE BORCU DÖRDÜNCÜ TAKSİT.** Planlayıcı ilk yüklemeyi 185.3 KB'ye çıkardı (bütçe 185). Yine eşik yükseltilmedi: **ilk açılış turu** (`ONBOARD_STEPS` + tur fonksiyonları, 104 satır) `onboarding.js`'e taşındı — hayatta **bir kez** görülen bir ekran her açılışta iniyor ve ayrıştırılıyordu. ⚠️ **Kapı `ui.js`'te kaldı:** modülü indirmeden önce ucuz kontrol yapılıyor (`aidan_onboarded` bayrağı + görev var mı), yani **mevcut kullanıcı bu dosyayı hiç indirmiyor**. İlk yükleme **184.3 KB**.
+
+**Ölçüm:** `tests/32-yerel-plan.test.js` **20 test** (sözleşme/kapı 4 · sabit program + pencere 4 · sıra ve süre 6 · uygulama ve sınır 6). **33 dosya toplam 1066 test yeşil.**
+**Cache:** v7-176 → **v7-177**
+
+---
+
+### 🔴 6 Eylül 2026 — 🎒 ÖDEV PAKETİ: HAFTALIK ÖDEV → GÜNLERE DAĞITIM (v7-176)
+
+Salim: *"okuldan haftalık ödev verecekler, bunu günlere planlayacak bir sistemimiz var mı"* — **yarısı vardı, kapısı yoktu.** Aynı oturumdaki dört bulgunun beşincisi.
+
+**Ne vardı:** seri veri modeli (`seriesId/Name/Index/Total`), seri modalı (ilerleme, "yeniden dengele", "seriyi sil"), ve `planSeriesDays` dağıtım fonksiyonu.
+**Ne yoktu:** seriyi KURAN yerel bir yüzey. Tek yerel yol `/tekrar` komutuydu (aralıklı tekrar, sabit 5 aralık). Haftalık ödev için tek yol **AI hızlı yakalama** — bulut girişi + ağ + AI şart. Yani en sık yapılacak okul işi, en kırılgan yola bağlıydı; uçakta ya da girişsizken hiç çalışmıyordu.
+
+**Yeni: `school.js` → Ödev paketi** (Görevler sekmesinde "Ödev paketi" düğmesi). Her satır bir ödev; son tarih seçilir; dağıtım anında önizlenir; "Görevlere ekle" hepsini tek seri olarak yazar ve **tek dokunuşla geri alınır**.
+
+**⚠️ DAĞITIM `planSeriesDays` İLE AYNI DEĞİL — bilinçli.** O fonksiyon parçaları takvime **eşit aralıkla serpiyor** ve günün mevcut yükünü hiç görmüyor. Ödev listesinde asıl soru "kaç gün var" değil **"hangi gün ne kadar boş"**. Yeni motor **LPT (en uzun iş önce) + gerçek gün yükü**: her ödev, o an en az dolu güne konuyor; gün yükü = o güne due, **bitmemiş** görevlerin tahmini süresi (süresiz iş 30 dk sayılır — sıfır saymak görünmez ağırlık üretirdi). Eşitlikte **erken gün** kazanıyor: son güne yığmak, ödevi teslim gecesine bırakmaktır.
+- **Varsayılan yarından başlar.** Bugüne yeni iş eklemek baskı yapar; "Bugüne de koy" ayrı bir kutu.
+- **Satırda tarih varsa dağıtım EZMEZ** — kullanıcı gün söylediyse motor karışmaz (teste bağlı).
+- **Günlük tavan 120 dk** aşılırsa gün **kırmızı gösteriliyor ama engellenmiyor**; bazen hafta gerçekten dolu, orada kullanıcıya yalan söylemek yerine uyarmak doğru.
+- **Tek ödevi N parçaya bölme** (`40 soru` → 4 parça) — süre de bölünüyor. ⚠️ **Parçalar KRONOLOJİK olmalı:** eşit boyutlu parçalar LPT ile dağılınca "(4/4) yarın, (1/4) perşembe" çıkıyordu. `hwFixSeq` sonradan sırayı düzeltiyor; parçalar eşit boyutlu olduğu için yer değiştirmek **gün yükünü değiştirmiyor**.
+- Her satır `parseQuickInput`'tan geçiyor: süre, kategori, öncelik, tarih aynı kurallarla okunuyor (yani bu oturumda eklenen `!`/ay adı/tekrar kuralları burada da geçerli).
+- ⚠️ **`makeTask` id'yi `Date.now()` ile veriyor** — aynı ms'de 6 görev üretince **hepsi aynı id** alırdı ve tamamla/sil yanlış kaydı vururdu. Paket kendi sayacını ekliyor (teste bağlı).
+- **AI YOK, `fetch` YOK** — offline çalışır, teste bağlı.
+
+**💸 BÜTÇE BORCU ÜÇÜNCÜ TAKSİT — eşik yükseltilmedi, borç ödendi.** Ödev paketi eklenince ilk yükleme **185.4 KB** oldu ve bütçe 185. Doğru cevap eşiği yükseltmek değildi: **OKUL bloğunun tamamı** (ders programı, sınavlar, Classroom görsel içe aktarımı — 276 satır / 12.5 KB kaynak) `ui.js`'ten `school.js`'e taşındı. O blok yalnız Görevler sekmesindeki **kapalı** `<details id="schoolSection">` panelinden ve global aramadan görünüyor; kritik yolda hiçbir işi yoktu. Ödev paketiyle aynı dosyada olması tesadüf değil — ikisi de okul alanı.
+**İlk yükleme 185.4 → 182.4 KB** (bütçe 185, pay 2.6 KB). `renderSchool` çağrıları artık `ensureSchoolModule()` üzerinden: modül inmeden çağrılırsa sessizce indirilip panel doluyor (teste bağlı — korumasız çağrı kırmızı).
+
+**🔴 SESSİZ DEPLOY AÇIĞI BULUNDU VE TESTE BAĞLANDI.** `foods.js` GitHub Actions `paths` listesinde **yoktu**: yalnız o dosyanın değiştiği bir commit **hiçbir deploy tetiklemezdi** ve iş sessizce canlıya çıkmazdı — 14 Ağustos'ta üç haftalık deploy'u durduran hatanın aynı sınıfı. Artık `13-lazy` her tembel modülü **dört yerde birden** arıyor: `LAZY_MODULES` · `sw.js` ASSETS · `aidan-pages-deploy.py` · Actions `paths`. Biri eksikse kırmızı.
+
+**Ölçüm:** `tests/31-odev-paketi.test.js` **22 test** (kapı 3 · dağıtım 6 · parçalama 3 · satır çözümleme 3 · görevlere yazma 5 · taşıma sonrası 2). **31 dosya toplam 1045 test yeşil.**
+**Cache:** v7-175 → **v7-176**
+
+---
+
+### 🔴 6 Eylül 2026 — 🧹 FRICTION AVI: HIZLI GİRİŞ + ÖĞÜN MİKTARI + SIK YEDİKLERİN (v7-175)
+
+Salim: *"uygulamayı geliştir friction kaldıralım"* — beş sekme jsdom'da kullanıcı gibi gezildi. Çıkan üç bulgu da **aynı deseni** taşıyor ve 30 Ağustos'taki "program kur" dersinin devamı: **motor vardı, kapı ya yoktu ya da yanlış yere açılıyordu.**
+
+**1 — 🔁 TEKRAR EDEN GÖREV HIZLI GİRİŞTEN İFADE EDİLEMİYORDU, ÜSTELİK BAŞLIĞI BOZUYORDU.**
+`repeat` alanı motorda **tam destekli**: `ui.js` rozeti çiziyor (`Günlük`/`Haftalık`/`Hafta içi`/`Hafta sonu`) ve gün dönümünde görevi otomatik sıfırlıyor; ayrıntılı görev formunda `taskRepeatNew` ile seçilebiliyor. Ama uygulamanın **ana girişi** olan hızlı kutu bunu hiç üretmiyordu — `quickCaptureSubmit` sabit `repeat: null` yazıyordu.
+⚠️ **Asıl zarar sessiz veri bozulmasıydı:** `her salı kickboks` yazınca gün adı TARİH kuralına takılıyor, "salı" siliniyor, **"her" kelimesi başlıkta yetim kalıyordu** → görev `"her kickboks"` adıyla, tek seferlik ve tek bir salı tarihiyle kaydediliyordu. Kullanıcı haftalık bir görev kurduğunu sanıyor, elinde tek seferlik bozuk başlıklı bir kayıt kalıyordu.
+**Çözüm:** `parseQuickInput`'a TEKRAR bloğu — ve **tarih kuralından ÖNCE** çalışıyor (sıra bu hatanın kendisiydi). `her gün` → daily · `hafta içi` → weekdays · `her hafta sonu` → weekends · `her <gün adı>` → weekly + ilk tarih · `her hafta` → weekly.
+⚠️ **Yalın `hafta sonu` hâlâ TARİH** (bu hafta sonuna kadar). "hafta sonu piknik" tek seferlik bir plandır; tekrar kuralı onu yutarsa kullanıcının demediği şey yapılmış olur. Teste bağlı.
+
+**2 — 📅/❗ AY ADI, BOŞLUKLU "ÖBÜR GÜN" VE "!" TANINMIYORDU.** Üçü de başlıkta **aynen** kalıyordu.
+- `5 eylül kimya sınavı` → tarihsiz görev. Artık 12 ay adı tanınıyor. ⚠️ **Yıl kuralı:** yazılmadıysa gelecek yıla ancak tarih **30 günden fazla** geride kalırsa atlanır — "5 ocak" aralıkta yazıldıysa gelecek ocaktır, ama **dün** olan bir tarih 364 gün ileri fırlatılmaz (kaçmış teslim tarihi de girilir).
+- `öbür gün` (boşluklu) yoktu, yalnız `öbürgün`/`ertesi gün` vardı. Türkçede ayrı yazılıyor.
+- `!` / `!!` → `urgent`. Öncelik kelimeleri (`acil`, `hemen`…) zaten siliniyordu; işaret hem işe yaramıyor hem başlığı kirletiyordu.
+
+**3 — 🍽️ ÖĞÜN DÜZENLEME "MİKTAR DÜZENLEME" DEĞİLDİ.** Düzenlemenin en sık sebebi miktar; modalda ise ad + kcal + 3 makro alanı vardı. "1 yumurta"yı 3'e çıkarmak **dört sayıyı elle yeniden hesaplamak** (320→960, 22→66, 4→12, 24→72) **ve** adın sonundaki `×2` ekini elle düzeltmek demekti — yani pratikte kimse yapmıyor, kayıt yanlış kalıyordu.
+Artık ayrı bir **miktar** alanı var (44 px artır/azalt + tabular sayı); ad alanında yalnız **adın kendisi** duruyor, ek kaydederken kuruluyor. `×N` ve `(Ng)` biçimlerinin ikisi de okunuyor, birim etiketi ona göre değişiyor.
+⚠️ **Ölçekleme ekrandaki değerden değil TEK BİRİM tabanından** yapılıyor: 1→3→7→2→1 gidip gelince yuvarlama birikmesin (teste bağlı).
+⚠️ **`input[type=number]` virgüllü değeri GEÇERSİZ sayıp alanı boşaltır.** İlk sürümde 3 → `3,5` yazınca miktar alanı siliniyordu; ekranda **nokta** duruyor, virgül yalnız kayıt adında kullanılıyor. Sabotaj testi var.
+⚠️ **Makrosu bilinmeyen kalemde makro uydurulmuyor** — 2 × null hâlâ null (günlük zaten "—" gösteriyor).
+
+**4 — 🔴 "SIK YEDİKLERİN" ÇİPİ YANLIŞ ÖĞÜNE YAZIYORDU.** `quickAddMeal` slotu kalemin **geçmişinden** alıyordu (`slot: m.slot`). Yani **kahvaltı** için açılan modalda "Tavuk pilav" çipine basınca kayıt **AKŞAM'a** düşüyor, hiçbir uyarı çıkmıyordu. Modal başlığını `Öğle · Dün` yapan 2 Eylül düzeltmesinin tam olarak aynı sınıfı — o oturumda **çip yolu atlanmıştı.**
+Aynı yol arama yolundaki düzeltmelerin **hiçbirini** almamıştı: `id: Date.now()` (aynı ms'de çakışma → geri alma **yanlış** kaydı siler), modalı kapatma (üç çip = üç kez modal aç/kapa), geri alma yok.
+**Çözüm: kayıt üretimi tek kaynaktan.** `quickAddMeal` artık arama yolunun `_quickAddFood`'una devrediyor — doğru slot, `_mealId()`, modal açık kalıyor, geri alma toast'ı çıkıyor. foods.js inmemişse güvenli yedek dal duruyor (o da artık `_mealSlot` kullanıyor).
+**Liste ayrıca slot bazlı sıralanıyor:** seçili öğünde yenmiş kalemler öne geliyor, başlık `kahvaltı · sık yediklerin` oluyor, slot çipi değişince liste yenileniyor. ⚠️ Slot dışı kalemler **atılmıyor**, arkaya düşüyor — yeni bir öğünde liste boş kalsa özellik hiç görünmezdi.
+
+**🔧 SESSİZ EOL AÇIĞI KAPATILDI.** `foods.js` `.gitattributes`'ta **yoktu** — `* text=auto` ile depoya LF yazılıp Windows'a CRLF açılacaktı, yani 14 Ağustos'ta üç haftalık deploy'u durduran tuzağın aynısı yeni dosyada tekrar açılmıştı. `foods.js` `eol=crlf` olarak sabitlendi; `07-hygiene`'in CRLF listesine **`nutrition.js`, `health.js`, `foods.js`** eklendi (üçü de listede yoktu).
+
+**Ölçüm:** `tests/30-friction.test.js` **25 test** (tekrar 7 · tarih/öncelik 5 · miktar 6 · çip yolu 5 + kapı testleri). **30 dosya toplam 1021 test yeşil.** İlk yükleme **184.3 KB** — bütçe 185, yani **0.7 KB pay kaldı**; bir sonraki statik ekleme eşiği yükseltmekle değil borç ödemekle (bir bloğu tembel modüle taşımakla) çözülmeli.
+**Cache:** v7-174 → **v7-175**
+
+---
+
 ### 🔴 30 Ağustos 2026 — 🚪 "PROGRAM KUR" DÜĞMESİ 22 GÜNDÜR ÇALIŞMIYORDU (v7-171)
 
 Salim "program kur tuşuna tıklayınca çalışmıyor" dedi. Sebep tek kelimeydi:
@@ -571,7 +660,7 @@ Salim: "bana diyet de yazabilsin." Yeni **7. modül `nutrition.js`** (tembel yü
 
 **⚠️ Öğün başı protein tavanı KIRPMA kuralı DEĞİL.** İlk yazımda 0.40 g/kg tavanıyla kırpılıyordu → 4 × tavan < günlük hedef oluyor ve plan sessizce eksik protein veriyordu. Artık eşit bölünüyor, bant bilgi olarak gösteriliyor.
 
-**Örnek gün — 447 besinlik Türk veritabanından.** Her öğün: protein çapası + karbonhidrat çapası + sabit ekler; çapalar hedefe göre ölçekleniyor.
+**Örnek gün — 470 besinlik Türk veritabanından.** Her öğün: protein çapası + karbonhidrat çapası + sabit ekler; çapalar hedefe göre ölçekleniyor.
 
 **🔧 Motoru gerçek çıktıyla denetlerken bulunan 4 hata:**
 - **Protein %50 aşıyordu** (126 g hedefe 168 g): "en az 1 porsiyon" kuralı — tavuk göğsü tek başına 47 g. Alt sınır 0.5 porsiyona indi + gün sonu denge geçişi eklendi.
@@ -585,6 +674,26 @@ Salim: "bana diyet de yazabilsin." Yeni **7. modül `nutrition.js`** (tembel yü
 - **Light varyant sözleşmesi (teste bağlı):** bir "(light)" / "(yağsız)" ürün ana ürününden **100 g başına hem düşük kalorili hem düşük yağlı** olmak zorunda. Elle yazılan makro ana ürünle çelişirse test kırmızı.
 - **Ak + sarı = tam yumurta** kontrolü de teste bağlı (tolerans %15 ya da 1 birim — makrolar tam sayıya yuvarlandığı için 3.6+2.7=6.3 → 4+3=7 sapması normal).
 - Light süt ürünleri `NUT_MICRO_DATA`'ya da eklendi: **yağ düşer, kalsiyum düşmez.** Tabloda olmayan besin kapsamı düşürüp motoru gereksiz susturuyordu (`kapsam < %70` → yorum yok).
+**🔎 Besin arama motoru + hızlı ekleme (2 Eyl 2026, v7-173).** Salim: *"beslenme programına ürün eklerken hep bi friction oluyor."* Ölçüldü, **iki ayrı sebep** çıktı ve ikisi de düzeltildi.
+- **Eşleşme sorgunun TAMAMINI arıyordu.** Kural "sorgu dizesi adın içinde geçiyor mu" idi. `yağsız süt` **hiçbir şey** bulmuyordu — ad `Süt (yağsız)`, kelimeler var ama **sıra** yok. Tek harf hatası (`yogrt`) da sonucu sıfırlıyordu. İkisinde de kullanıcı buluttaki AI aramasına düşüyordu: oturum + ağ + birkaç saniye. **Yani en sık yapılan iş en yavaş yoldan gidiyordu.**
+- **Yeni motor (`foods.js`):** kelime bazlı **VE** eşleşmesi (sıra önemsiz) · **4+ harfli** kelimede 1 harf (7+ harfte 2) yazım toleransı · arama-içi **takma adlar** (`a:` alanı, ekranda görünmez) · diyet işaretleyicileri birbirinin yerine geçer (`light` ↔ `yağsız` ↔ `diyet` ↔ `zero` ↔ `şekersiz`).
+- ⚠️ **Tolerans 3 harfte KAPALI.** `bal`/`dal`/`tal` birbirine 1 uzaklıkta; orada tolerans gürültü üretir. Teste bağlı.
+- ⚠️ **Eşleşmeyen sorgu BOŞ döner.** "Bir şey göster" diye alakasızı listelemek kullanıcıya yanlış besini ekletir; hiçbir şey göstermemek daha dürüst. Teste bağlı.
+- Aynı motor **kişisel besinlerde ve geçmişte** de çalışıyor (`customFoodMatches` / `foodMemoryMatches`) — kendi yazdığın adı birebir hatırlamak zorunda değilsin.
+- **Ekleme 4 dokunuştu** (modal → yaz → sonuca dokun → "Öğüne ekle") ve son iki dokunuş arasında porsiyon editörü listeyi kapatıyordu. Artık her sonuç satırında **"+"** var: 1 birimi doğrudan ekler, **modal AÇIK kalır**, arama kutusu temizlenip odaklanır — ikinci kalem sadece yazmakla ekleniyor. Gövdeye dokunmak eski (miktar/gram) akışını açar. Yanlış dokunuş `showUndoToast` ile geri alınabilir; sessiz ekleme "eklemedim sanıp ikinci kez eklemek"le sonuçlanır.
+- `id: Date.now()` çakışıyordu (aynı ms'de iki ekleme) → `_mealId()`. Çakışma **geri al'ın yanlış kaydı silmesi** demekti.
+- **`TURK_FOODS` core.js'ten `foods.js`'e taşındı (YENİ TEMBEL MODÜL).** 470 besin = 8.5 KB gzip ve kritik yoldaydı; tek kullanıcısı Diyet sekmesindeki yemek modalı. İlk yükleme bu iyileştirmelerle **204 KB**'ye çıkıp bütçeyi (201) aşınca doğru cevap eşiği yükseltmek değil borcu ödemekti → **193 KB**, eşik 201 → **195**. Diyet sekmesi artık 4 modül bekliyor: `program + nutrition + health + foods`.
+- ⚠️ **`nutFood()` foods.js yoksa `null` döner ve motor SESSİZCE boş öğün üretir.** 24-beslenme-kalite testi bu yüzden `scripts:` listesine `foods.js` almak zorunda; üretimde dördü `Promise.all` ile birlikte iniyor.
+- Pirinç ailesi tamamlandı: sade `Pirinç` (pişmiş) · basmati · yasemin · esmer · kırmızı · siyah · yabani · arborio · baldo · osmancık · sushi · risotto · `Pirinç (çiğ)` (su bardağı). `Pilav` bunlardan farkı **tereyağlı** olması.
+- "Ara" düğmesi **"Bulutta ara"** oldu: yerel arama zaten yazarken çalışıyor, bulut yalnız marka/paket için. Bulut girişi yokken çıkan mesaj "arama çalışmıyor" gibi okunuyordu.
+**🧪 Uygulamayı kullanıcı gibi deneyerek bulunan friction (2 Eyl 2026, v7-174).** Kod hatası değil **akış** hatası oldukları için birim testleri yakalamıyordu; jsdom üzerinde gerçek dokunuşlarla senaryo koşturunca çıktılar.
+- **Enter DOĞRUDAN BULUTA gidiyordu.** `onkeydown → aiFoodSearch()`. Aradığın şey yerel listede dururken bile ağa çıkıyor, bulut girişi yoksa uyarı veriyordu. "Yaz + Enter" en doğal hareket ve **en yavaş yola bağlıydı**. Artık `foodSearchEnter()`: yerel sonuç varsa **ilk sonucu ekler**, yoksa buluta düşer. Ekrana hiç dokunmadan arka arkaya kalem girilebiliyor.
+- **Sıfır sonuçta TAM BOŞ ekran.** Kullanıcı uygulamanın donduğunu mu besinin olmadığını mı anlayamıyordu, çıkış yolu da görünmüyordu. Artık `"x" burada yok` + **[Bulutta ara] [Elle gir]**. `elleGir()` yazdığını Elle sekmesine **taşıyor** (eskiden sekme değişince siliniyordu).
+- **"Son aramalar" fiilen ölü özellikti.** `pushRecentFood` YALNIZ `aiFoodSearch` içinden çağrılıyordu; yerel arama yaygınlaşınca şerit hiç dolmaz oldu. Üstelik bir çipe basmak `aiFoodSearch()` tetikliyordu — sonuç zaten yerelken ağ bekletiyordu. İkisi de düzeltildi.
+- **Hangi güne yazdığın görünmüyordu.** `dietDay()` seçili günü kullanıyor, yani düne bakarken açılan modal düne yazıyor ama başlık sadece "Kahvaltı" diyordu. Artık `syncFoodModalTitle()` → `Öğle · Dün`. **Slot değişince de güncelleniyor** (eskiden "Kahvaltı" yazarken Öğle'ye ekliyordun, ekledikten sonra fark ediliyordu).
+- **Toastlar yığılıyordu:** 5 kalem = 5 toast üst üste, listeyi kapatıyordu. Her yeni ekleme öncekini kapatır.
+- **Ölçüm:** 14 kalemlik tam bir gün = **33 etkileşim** (14 yazma + 14 Enter + 3 slot + modal aç/kapa), **0 bulunamayan**. Eskiden aynı gün ~60 dokunuş + `yoğurt (yağsız)`/`basmati pirinç`/`tam buğday ekmek` gibi kalemlerde ağ turu demekti.
+- **BÜTÇE BORCU İKİNCİ TAKSİT.** Yemek ekleme modalının **tamamı** (arama, porsiyon editörü, barkod/OFF, kendi besinlerim, tarifler, takviyeler, öğün düzenleme + `trNorm`) core.js'ten `foods.js`'e taşındı: **48.6 KB kaynak / 14 KB gzip**. Çağrı yerlerinin hepsi `renderDiet`/`renderDiary` içinde ya da modalın kendi HTML'inde — ikisi de foods.js inmeden çalışmıyor, yani kritik yolda hiçbir işi yoktu. **İlk yükleme 196 → 182 KB**, eşik 201 → **185** (3 KB pay).
 
 **AI çağrısı YOK** — motor kural tabanlı ve deterministik, `fetch` yasağı teste bağlı.
 **Yeni veri alanı:** `data.diet.nut = { hedef, sablon, kurulduAt }`. Yeni sekme/endpoint YOK.
@@ -1741,6 +1850,7 @@ curl -s "https://aidanapp.pages.dev/sw.js" | head -1  # cache versiyonu
 - **Workers AI lisanslı model:** ilk kullanımda `5016: submit 'agree'` hatası → `visionRun()` bir kez `{prompt:'agree'}` yollar (hesap için kalıcı), sonra asıl istek.
 - **`env.AI.run` cevabı** bazen string değil dizi/obje → `typeof rr === 'string' ? rr : JSON.stringify(rr)`.
 - **Türk sayı formatı:** "2.145,00" → `parseNum()` (virgül=ondalık, nokta=binlik); AI'dan sayıyı görseldeki haliyle STRING iste.
+- **Tembel modüller (2 Eyl 2026 itibarıyla 5):** `program.js` · `nutrition.js` · `health.js` · `supabase.js` · **`foods.js`** (besin DB + arama motoru + **yemek ekleme modalının tamamı** + `trNorm`). Yeni modül eklerken 6 yer: `LAZY_MODULES` · `sw.js ASSETS` · `aidan-pages-deploy.py INCLUDE` · `.github/workflows/deploy.yml paths` · `tests/helpers/load.js SCRIPTS` · `tests/13-lazy` modül listesi.
 - **Satır sonları (25 Tem'de ölçüldü, eski not YANLIŞTI):** yalnız **styles.css = LF**; core.js / ui.js / tasks.js / stocks.js / supabase.js / sw.js / asistan.html / worker.js / CLAUDE.md = **CRLF**. Python replace'te önce `b.count(b'\r\n')` ile doğrula.
 - **Tarih hesapları** hep `'T12:00:00'` öğlen demirli (toISOString UTC kayması bug'ı).
 - **Preview testi:** SW cache taze modülü gizleyebilir → `serviceWorker.getRegistrations()→unregister()` + `caches.delete()` + reload.

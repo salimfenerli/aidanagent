@@ -3168,282 +3168,6 @@ function deleteCountdown(id) {
   showToast('Geri sayım silindi', 'info', 2500);
 }
 
-// ============ OKUL (ders programı + sınavlar) ============
-// data.school = { timetable:{'1'..'5':[dersler]}, exams:[{id,subject,date,topics}] }
-// Ödevler ayrı: mevcut görev sisteminde (Ödev/Özel Ders kategorileri) kalır.
-const SCHOOL_DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma'];
-const SCHOOL_DAYS_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum'];
-
-function ensureSchool() {
-  if (!data.school) data.school = { timetable: {}, exams: [] };
-  if (!data.school.timetable) data.school.timetable = {};
-  if (!data.school.exams) data.school.exams = [];
-  return data.school;
-}
-
-// JS getDay: 0=Paz..6=Cmt. Program anahtarı 1..5 (Pzt..Cuma). Hafta sonu → null.
-function todaySchoolKey() {
-  const d = new Date().getDay();
-  return (d >= 1 && d <= 5) ? String(d) : null;
-}
-
-// ============ 🎓 CLASSROOM GÖRSELİNDEN ÖDEV — AI vision → son tarihli görev ============
-// Okul hesabı OAuth/takvim beslemesine kapalı → görsel köprüsü (borsa portföy-görsel deseni).
-const CLASSROOM_IMAGE_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/classroom-image';
-let _clImportItems = [];
-
-async function handleClassroomPhoto(event) {
-  const files = Array.from(event.target.files || []);
-  event.target.value = '';
-  if (!files.length) return;
-  if (!window._supa || !window._user) { showToast('Önce Ayarlar → bulut girişi yap', 'warning', 4000); return; }
-  openClassroomImport();
-  setClImportStatus('Görsel hazırlanıyor…');
-  try {
-    const { data: sess } = await window._supa.auth.getSession();
-    const token = sess && sess.session && sess.session.access_token;
-    if (!token) throw new Error('oturum yok');
-
-    // Sayfalarca ödev → birden fazla ekran görüntüsü; her birini oku, sonuçları birleştir
-    const all = [];
-    let firstEmpty = null;
-    for (let idx = 0; idx < files.length; idx++) {
-      setClImportStatus(files.length > 1
-        ? `Aidan ödevleri okuyor… (${idx + 1}/${files.length}) — 10-15 sn/görsel, sabret`
-        : 'Aidan ödevleri okuyor… 10-15 sn sürebilir, sabret');
-      const dataUrl = await resizeImageToDataUrl(files[idx]);
-      const r = await fetch(CLASSROOM_IMAGE_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({ image: dataUrl }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || ('hata ' + r.status));
-      const items = Array.isArray(j.items) ? j.items : [];
-      if (!items.length && !firstEmpty) firstEmpty = j;
-      all.push(...items);
-    }
-
-    // Çakışan ödevleri (aynı başlık+tarih) tek satıra indir — görseller üst üste binebilir
-    const merged = mergeClassroomItems(all);
-    if (!merged.length) {
-      let dbg = '';
-      if (firstEmpty && firstEmpty.aiError) dbg = `\n\n(AI hatası: ${firstEmpty.aiError})`;
-      else if (firstEmpty && firstEmpty.raw) dbg = `\n\n(AI cevabı: ${String(firstEmpty.raw).slice(0, 200)})`;
-      setClImportStatus('Görsel(ler)de ödev bulamadım. Ödev/yapılacaklar listesinin net bir görüntüsünü dene.' + dbg, true);
-      return;
-    }
-    _clImportItems = merged;
-    renderClImportList();
-  } catch (e) {
-    setClImportStatus('Okuma başarısız: ' + e.message, true);
-  }
-}
-
-// Çoklu görsel: aynı ödev (başlık+tarih) birden çok görselde çıkarsa tek satıra indir.
-// Aynı başlık farklı tarihle iki kez varsa ikisi de kalır (farklı ödev sayılır).
-function mergeClassroomItems(list) {
-  const seen = new Map();
-  const norm = s => (s || '').trim().toLowerCase();
-  for (const it of list) {
-    const title = (it && it.title || '').trim();
-    if (!title) continue;
-    const due = /^\d{4}-\d{2}-\d{2}$/.test(it.due || '') ? it.due : null;
-    const key = norm(title) + '|' + (due || '');
-    if (!seen.has(key)) { seen.set(key, { title, due, course: (it.course || '').trim() || null }); continue; }
-    const cur = seen.get(key);
-    if (!cur.course && it.course) cur.course = (it.course || '').trim() || null; // eksik ders bilgisini doldur
-  }
-  return Array.from(seen.values());
-}
-
-function setClImportStatus(msg, isError) {
-  const el = document.getElementById('classroomImportStatus');
-  if (!el) return;
-  el.style.display = 'block';
-  el.textContent = msg;
-  el.classList.toggle('error', !!isError);
-}
-
-function openClassroomImport() {
-  _clImportItems = [];
-  document.getElementById('classroomImportList').innerHTML = '';
-  document.getElementById('classroomImportActions').style.display = 'none';
-  document.getElementById('classroomImportModal').classList.add('active');
-}
-
-function closeClassroomImport() {
-  document.getElementById('classroomImportModal').classList.remove('active');
-  _clImportItems = [];
-}
-
-// AI sonuçları düzenlenebilir satır — başlık + son tarih (vision hata yapabilir, kullanıcı düzeltsin)
-function renderClImportList() {
-  setClImportStatus(`${_clImportItems.length} ödev buldum. Kontrol et, düzelt, ekle`);
-  const list = document.getElementById('classroomImportList');
-  list.innerHTML = _clImportItems.map((it, i) => `
-    <div class="cl-import-row">
-      <input class="cl-imp-title" value="${escapeHtml(it.title || '')}" oninput="updateClImport(${i},'title',this.value)" placeholder="Ödev adı">
-      <div class="cl-imp-bot">
-        <label>Son tarih<input class="cl-imp-due" type="date" value="${escapeHtml(it.due || '')}" onchange="updateClImport(${i},'due',this.value)"></label>
-        <input class="cl-imp-course" value="${escapeHtml(it.course || '')}" oninput="updateClImport(${i},'course',this.value)" placeholder="Ders (opsiyonel)">
-        <button class="cl-imp-del" onclick="removeClImport(${i})" title="Çıkar" aria-label="Çıkar">✕</button>
-      </div>
-    </div>
-  `).join('');
-  document.getElementById('classroomImportActions').style.display = 'flex';
-}
-
-function updateClImport(i, field, val) {
-  if (!_clImportItems[i]) return;
-  if (field === 'due') _clImportItems[i].due = /^\d{4}-\d{2}-\d{2}$/.test(val) ? val : null;
-  else _clImportItems[i][field] = val;
-}
-
-function removeClImport(i) {
-  _clImportItems.splice(i, 1);
-  if (!_clImportItems.length) {
-    setClImportStatus('Liste boş. İptal et ya da yeni görsel dene.', true);
-    document.getElementById('classroomImportActions').style.display = 'none';
-    document.getElementById('classroomImportList').innerHTML = '';
-    return;
-  }
-  renderClImportList();
-}
-
-// Onaylanan ödevleri görev olarak ekle — aynı başlık+tarih varsa atla (tekrar görüntüde çift olmasın)
-function confirmClassroomImport() {
-  const norm = s => (s || '').trim().toLowerCase();
-  const active = (data.tasks || []).filter(x => !x.done);
-  let added = 0, dup = 0;
-  for (const it of _clImportItems) {
-    const title = (it.title || '').trim();
-    if (!title) continue;
-    const due = /^\d{4}-\d{2}-\d{2}$/.test(it.due || '') ? it.due : null;
-    const exists = active.some(x => norm(x.text) === norm(title) && (x.due || null) === due);
-    if (exists) { dup++; continue; }
-    const task = makeTask({ text: title, due, category: 'odev', priority: 'normal' });
-    const course = (it.course || '').trim();
-    if (course) task.notes = course;
-    data.tasks.push(task);
-    added++;
-  }
-  save(); renderTasks();
-  closeClassroomImport();
-  if (added) showToast(`${added} ödev görevlere eklendi${dup ? ` · ${dup} zaten vardı` : ''}`, 'success', 3800);
-  else showToast(dup ? `Hepsi zaten görevlerinde (${dup})` : 'Ödev eklenmedi', 'info', 3000);
-}
-
-function renderSchool() {
-  const s = ensureSchool();
-  const key = todaySchoolKey();
-  // Bugünün dersleri
-  const todayEl = document.getElementById('schoolToday');
-  if (todayEl) {
-    const lessons = key ? (s.timetable[key] || []) : [];
-    if (!key) todayEl.innerHTML = '<span class="school-today-empty">Bugün hafta sonu — ders yok.</span>';
-    else if (!lessons.length) todayEl.innerHTML = '<span class="school-today-empty">Bugüne ders girilmemiş — programı düzenle.</span>';
-    else todayEl.innerHTML = '<span class="school-today-lbl">Bugün:</span> ' +
-      lessons.map(l => `<span class="school-chip">${escapeHtml(l)}</span>`).join('');
-  }
-  // Haftalık program grid
-  const gridEl = document.getElementById('schoolGrid');
-  if (gridEl) {
-    gridEl.innerHTML = SCHOOL_DAYS.map((name, i) => {
-      const k = String(i + 1);
-      const lessons = s.timetable[k] || [];
-      const chips = lessons.length
-        ? lessons.map(l => `<span class="school-gchip">${escapeHtml(l)}</span>`).join('')
-        : '<span class="school-gempty">—</span>';
-      return `<div class="school-gcol ${k === key ? 'today' : ''}">
-        <div class="school-gday">${SCHOOL_DAYS_SHORT[i]}</div>
-        <div class="school-gchips">${chips}</div>
-      </div>`;
-    }).join('');
-  }
-  // Sınavlar
-  const examEl = document.getElementById('schoolExams');
-  if (examEl) {
-    const list = (s.exams || []).slice()
-      .map(e => ({ ...e, days: daysUntilCountdown(e.date) }))
-      .filter(e => e.days == null || e.days >= -3)
-      .sort((a, b) => (a.days ?? 999) - (b.days ?? 999));
-    if (!list.length) examEl.innerHTML = '<div class="school-exam-empty">Yaklaşan sınav yok.</div>';
-    else examEl.innerHTML = list.map(e => {
-      let cls = '';
-      if (e.days != null) { if (e.days < 0) cls = 'past'; else if (e.days <= 3) cls = 'urgent'; else if (e.days <= 10) cls = 'warn'; }
-      const dstr = e.days == null ? '' : (e.days < 0 ? 'geçti' : (e.days === 0 ? 'BUGÜN' : `${e.days} gün`));
-      return `<div class="school-exam ${cls}">
-        <div class="school-exam-days">${dstr}</div>
-        <div class="school-exam-info">
-          <div class="school-exam-subj">${escapeHtml(e.subject || 'Sınav')}</div>
-          <div class="school-exam-meta">${formatTrDate(e.date)}${e.topics ? ' · ' + escapeHtml(e.topics) : ''}</div>
-        </div>
-        <button class="del-btn" onclick="deleteExam(${e.id})" title="Sil">✕</button>
-      </div>`;
-    }).join('');
-  }
-  // Rozet: bugünün ders sayısı + yaklaşan sınav (7 gün)
-  const badge = document.getElementById('schoolBadge');
-  if (badge) {
-    const lc = key ? (s.timetable[key] || []).length : 0;
-    const soon = (s.exams || []).filter(e => { const d = daysUntilCountdown(e.date); return d != null && d >= 0 && d <= 7; }).length;
-    const bits = [];
-    if (lc) bits.push(`${lc} ders`);
-    if (soon) bits.push(`${soon} sınav`);
-    badge.textContent = bits.length ? bits.join(' · ') : '';
-  }
-}
-
-function openTimetable() {
-  const s = ensureSchool();
-  for (let i = 1; i <= 5; i++) {
-    const inp = document.getElementById('ttDay' + i);
-    if (inp) inp.value = (s.timetable[String(i)] || []).join(', ');
-  }
-  document.getElementById('timetableModal').classList.add('active');
-}
-function closeTimetable() {
-  document.getElementById('timetableModal').classList.remove('active');
-}
-function saveTimetable() {
-  const s = ensureSchool();
-  for (let i = 1; i <= 5; i++) {
-    const inp = document.getElementById('ttDay' + i);
-    if (!inp) continue;
-    const lessons = inp.value.split(',').map(x => x.trim()).filter(Boolean).slice(0, 12);
-    if (lessons.length) s.timetable[String(i)] = lessons;
-    else delete s.timetable[String(i)];
-  }
-  save();
-  renderSchool();
-  closeTimetable();
-  showToast('Ders programı kaydedildi', 'success', 2500);
-}
-
-function addExam() {
-  const s = ensureSchool();
-  const subj = document.getElementById('examSubject').value.trim();
-  const date = document.getElementById('examDate').value;
-  const topics = document.getElementById('examTopics').value.trim();
-  if (!subj) { showToast('Ders adı yaz — örn. "Matematik"', 'warning', 3000); return; }
-  if (!date) { showToast('Sınav tarihi seç', 'warning', 3000); return; }
-  s.exams.push({ id: Date.now(), subject: subj, date, topics });
-  document.getElementById('examSubject').value = '';
-  document.getElementById('examDate').value = '';
-  document.getElementById('examTopics').value = '';
-  save();
-  renderSchool();
-  showToast(`"${subj}" sınavı eklendi`, 'success', 2500);
-}
-function deleteExam(id) {
-  const s = ensureSchool();
-  s.exams = (s.exams || []).filter(x => x.id !== id);
-  save();
-  renderSchool();
-  showToast('Sınav silindi', 'info', 2000);
-}
-
 // ============ GLOBAL ARAMA ============
 function trLower(s) { return (s == null ? '' : String(s)).toLocaleLowerCase('tr-TR'); }
 
@@ -3502,62 +3226,14 @@ function gsGoSchool() {
   closeSearchModal();
   showTab('tasks', document.querySelector('[data-tab="tasks"]'));
   const ss = document.getElementById('schoolSection');
-  if (ss) { ss.open = true; renderSchool(); setTimeout(() => ss.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80); }
-}
-
-// ============ ONBOARDING (ilk açılış turu) ============
-const ONBOARD_STEPS = [
-  { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>', title: 'Aidan\'a hoş geldin', body: 'Görev, odak, okul, borsa ve diyet — hepsi tek yerde. ADHD beynine göre: sade, parçalı, baskısız.' },
-  { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>', title: 'Bugünün 3\'ü', body: 'Günde en fazla 3 önemli iş seç. Gerisi listede bekler, seni dağıtmaz. Bittikçe üstünü çiz.' },
-  { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>', title: 'Okul & sınavlar', body: 'Görevler sekmesindeki "Okul" panelinde ders programın ve sınav geri sayımların durur. Ödevleri görev olarak eklersin.' },
-  { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>', title: 'Odak modu', body: 'Dağıldığında 25 dk odak sayacı başlat — telefon kilitliyken bile doğru sayar. İlk adımı at, gerisi gelir.' },
-];
-let _obStep = 0;
-
-function maybeShowOnboarding() {
-  try {
-    if (localStorage.getItem('aidan_onboarded')) return;
-    if ((data.tasks || []).length > 0) { localStorage.setItem('aidan_onboarded', '1'); return; }
-  } catch (e) { return; }
-  _obStep = 0;
-  renderOnboard();
-  const m = document.getElementById('onboardModal');
-  if (m) m.classList.add('active');
-}
-
-function renderOnboard() {
-  const last = _obStep === ONBOARD_STEPS.length - 1;
-  const st = ONBOARD_STEPS[_obStep];
-  const body = document.getElementById('onboardBody');
-  if (body) body.innerHTML = `<div class="onboard-icon">${st.icon}</div><div class="onboard-title">${st.title}</div><div class="onboard-text">${st.body}</div>`;
-  const dots = document.getElementById('onboardDots');
-  if (dots) dots.innerHTML = ONBOARD_STEPS.map((_, i) => `<span class="onboard-dot ${i === _obStep ? 'active' : ''}"></span>`).join('');
-  const act = document.getElementById('onboardActions');
-  if (act) {
-    if (!last) act.innerHTML = `<button class="secondary" onclick="finishOnboard(false)">Geç</button><button onclick="obNext()">Devam →</button>`;
-    else act.innerHTML = `<button class="secondary" onclick="finishOnboard(false)">Boş başla</button><button onclick="finishOnboard(true)">Örnek görevlerle başla</button>`;
+  // school.js tembel: panel dolmadan kaydirmak bos kutuya goturur.
+  if (ss) {
+    ss.open = true;
+    Promise.resolve(typeof ensureSchoolModule === 'function' ? ensureSchoolModule() : null)
+      .then(() => setTimeout(() => ss.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80));
   }
 }
-function obNext() { if (_obStep < ONBOARD_STEPS.length - 1) { _obStep++; renderOnboard(); } }
 
-function finishOnboard(addSamples) {
-  try { localStorage.setItem('aidan_onboarded', '1'); } catch (e) {}
-  const m = document.getElementById('onboardModal');
-  if (m) m.classList.remove('active');
-  if (addSamples && typeof makeTask === 'function') {
-    const t1 = makeTask({ text: 'Matematik ödevini bitir', category: 'odev', priority: 'urgent', estimateMin: 30 });
-    t1.mitDate = today();
-    const t2 = makeTask({ text: 'Odayı topla', category: 'ev', estimateMin: 15 });
-    const t3 = makeTask({ text: '10 dakika kitap oku', category: 'kisisel', estimateMin: 10 });
-    data.tasks = data.tasks || [];
-    data.tasks.push(t1, t2, t3);
-    save();
-    renderTasks();
-    showToast('3 örnek görev eklendi — istediğini sil ya da düzenle', 'success', 4000);
-  } else {
-    showToast('Hazırsın — üstteki kutuya ilk görevini yaz', 'info', 3500);
-  }
-}
 
 function testNotif() {
   notify('Test bildirimi', 'Aidan hatırlatma sistemi çalışıyor.', { tag: 'aidan-test' });
@@ -4545,8 +4221,16 @@ document.getElementById('pomoCount').textContent = data.pomoToday.count;
 updateTimerDisplay();
 restoreTimerState();
 renderCountdowns();
-renderSchool();
-maybeShowOnboarding();
+// Okul paneli tembel (school.js) — ilk cizimi bekletmiyor, arkadan iniyor.
+if (typeof ensureSchoolModule === 'function') setTimeout(ensureSchoolModule, 0);
+// ⚠️ Tur onboarding.js'te (tembel). Modulu indirmeden ONCE ucuz kontrol:
+// bayrak varsa ya da zaten gorev varsa dosya HIC inmiyor — mevcut kullanici
+// bu 2.4 KB'i bir daha odemiyor.
+try {
+  if (!localStorage.getItem('aidan_onboarded') && !(data.tasks || []).length) {
+    loadModule('onboarding').then(() => { if (typeof maybeShowOnboarding === 'function') maybeShowOnboarding(); }).catch(() => {});
+  }
+} catch (_) {}
 if (typeof initBlockActionBridge === 'function') initBlockActionBridge();
 // Hevy: uygulama açılışında sessiz senkron (6 saatte bir — kota ve pil dostu)
 setTimeout(() => {

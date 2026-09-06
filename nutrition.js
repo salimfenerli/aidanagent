@@ -222,6 +222,19 @@ const NUT_MICRO_DATA = {
   'Mısır patlağı (yağsız)':{ ca: 2,   fe: 0.5, d: 0,  lif: 3 },
   'Bitter çikolata (%85)': { ca: 7,   fe: 1.1, d: 0,  lif: 1 },
   'Badem sütü (şekersiz)': { ca: 30,  fe: 0.2, d: 0,  lif: 1 },
+  // --- 5 Eyl 2026: SABLON HAVUZUNDAKI ACIKLAR ---
+  // ⚠️ Bu sekizi sablonlarda VARDI ama mikro tablosunda YOKTU. Kapsam testi
+  // yalniz PLANDA CIKAN besinleri kontrol ediyor; slotlar tek indeks uzerinde
+  // yurudugu icin (bkz. nutBuildDay) havuzun bu kismi plana hic dusmuyordu ve
+  // test kazayla geciyordu. Slot cakismasi cozulunce acik gorunur oldu.
+  'Tavuk döner':           { ca: 20,  fe: 1.3, d: 5,  lif: 0.3 },
+  'Hindi eti':             { ca: 20,  fe: 1.5, d: 3,  lif: 0 },
+  'Çökelek':               { ca: 20,  fe: 0.2, d: 1,  lif: 0 },
+  'Bazlama':               { ca: 30,  fe: 0.9, d: 0,  lif: 1.5 },
+  'Cacık':                 { ca: 200, fe: 0.2, d: 2,  lif: 0.5 },
+  'Fırın patates':         { ca: 8,   fe: 0.6, d: 0,  lif: 2 },
+  'Üzüm':                  { ca: 17,  fe: 0.6, d: 0,  lif: 1.5 },
+  'Hurma':                 { ca: 3,   fe: 0.1, d: 0,  lif: 0.5 },
 };
 
 /**
@@ -737,16 +750,38 @@ const NUT_TEMPLATES = {
  * tavana dayandiginda ogune EKLENIR (adet 0 ile durur, gerekirse buyur).
  * Slot'a gore secildi: kahvaltiya bal, ana ogune patates, atistirmaya meyve.
  */
+// ⚠️ 5 Eyl 2026 — HER SLOT ICIN LISTE, TEK BESIN DEGIL. Dolgu ile
+// karbonhidrat capasi AYNI BESIN olabiliyordu: aksam[1] sablonunda capa
+// 'Haşlanmış patates', dolgu da oydu — tabakta 3 porsiyon capa + 1 dolgu =
+// 4 HASLANMIS PATATES. Hem tabak sacma goruntu veriyordu hem de capaya
+// konan TAVAN (3 porsiyon) fiilen deliniyordu. Ilk uygun aday secilir.
 const NUT_FILL = {
   // ⚠️ Bal dolgu olarak denendi ve BIRAKILDI: motor "3 kasik bal" yaziyordu
   // (51 g seker). Dolgu kalori tasimali ama porsiyonu buyudugunde de makul
   // gorunmeli — meyve ve patates bu testi geciyor, sekerli olanlar gecmiyor.
-  kahvalti: 'Armut',
-  ara: 'Muz',
-  ogle: 'Haşlanmış patates',
-  aksam: 'Haşlanmış patates',
-  atistirma: 'Kuru üzüm',
+  kahvalti: ['Armut', 'Elma', 'Muz'],
+  ara: ['Muz', 'Elma', 'Armut'],
+  // ⚠️ Ana ogun yedegi EKMEK degil MEYVE: ekmek dilimi 13 g karbonhidrat
+  // tasiyor ve dolgu kuralinin esigi (>=15 g) altinda kaliyor — dolgu az
+  // kalorili olursa isini yapmiyor, dongu yine yaga kaciyor.
+  ogle: ['Haşlanmış patates', 'Armut', 'Muz'],
+  aksam: ['Haşlanmış patates', 'Armut', 'Muz'],
+  // Hurma dolgu olamaz: 1 adet 5 g karbonhidrat — 3 adetlik tavanla bile
+  // tasidigi kalori (60 kcal) acigi kapatmaya yetmiyor.
+  atistirma: ['Kuru üzüm', 'Muz', 'Elma', 'Armut'],
 };
+
+/**
+ * Iki besin adi AYNI SEYIN varyanti mi? Duz esitlik yetmiyor: "Fırın
+ * patates" capasinin yanina "Haşlanmış patates" dolgusu konunca tabakta
+ * yine 5 porsiyon patates cikiyor. Kelime koku (ilk 5 harf) karsilastirilir.
+ */
+function nutAyniAile(a, b) {
+  const kok = (ad) => String(ad || '').toLocaleLowerCase('tr')
+    .split(/\s+/).filter(w => w.length >= 4).map(w => w.slice(0, 5));
+  const ka = kok(a), kb = kok(b);
+  return ka.some(w => kb.indexOf(w) >= 0);
+}
 
 /**
  * Porsiyon metni. Birim zaten sayi iceriyorsa ("5 adet", "10 adet", "2 yarım")
@@ -773,7 +808,7 @@ function nutFood(ad) {
 }
 
 /** Bir ogunu hedefe gore olcekle. Deterministik: sablon indeksi gunden turetilir. */
-function nutBuildMeal(slot, hedefOgun, sablonIdx) {
+function nutBuildMeal(slot, hedefOgun, sablonIdx, anaTaban) {
   const list = NUT_TEMPLATES[slot] || [];
   if (!list.length) return null;
   const t = list[(Number(sablonIdx) || 0) % list.length];
@@ -810,6 +845,16 @@ function nutBuildMeal(slot, hedefOgun, sablonIdx) {
     // porsiyon" kurali hedefi tek basina %50 asiyordu (126 g hedefe 189 g cikti).
     const gerekP = Math.max(0, hedefOgun.protein - ekP -
       cAdet * cf.p - yAdet * (yf ? yf.p : 0));
+    // ⚠️ ANA OGUNDE TABAN 1 PORSIYON DENENDI VE GERI ALINDI (5 Eyl 2026).
+    // Sikayet gercekti: ogle/aksam tabaginda "yarim porsiyon somon +
+    // 3 patates" cikiyor. Ama taban 1'e cekilince 69 kg profilinde gun
+    // proteini 20 kombinasyonun 11'inde SERT TAVANA (2.5 g/kg) yapisti —
+    // motorun 20 Agu'da bilerek cozdugu hatanin aynisi. Tabak estetigi
+    // ugruna makro dogrulugundan vazgecilmez. Asil kok neden burasi degil:
+    // nutMealSplit proteini bes ogune ESIT boluyor (28 g), ana ogun payi
+    // ara ogunle ayni. Cozum orada, capa tabaninda degil. (anaTaban
+    // parametresi cagri yerinde duruyor; ileride oran tablosu gelirse
+    // kanca hazir.)
     const pTaban = pf.u === 'porsiyon' ? 0.5 : 1;
     pAdet = pf.p > 0 ? nutRound(gerekP / pf.p, pf.u) : 1;
     pAdet = Math.max(pTaban, Math.min(4, pAdet));
@@ -866,7 +911,11 @@ function nutBuildMeal(slot, hedefOgun, sablonIdx) {
   if (yf && yAdet === 0) kalemler.push({ rol: 'y', n: yf.n, u: yf.u, adet: 0, k: yf.k, p: yf.p, c: yf.c, f: yf.f });
   // Dolgu adayi 0 ile eklenir; denge adimi gerekirse buyutur, gerekmezse
   // sondaki filtre onu listeden atar.
-  const df = nutFood(NUT_FILL[slot] || '');
+  // Dolgu adayi capalarla cakismamali (bkz. NUT_FILL notu).
+  const dfAdi = (NUT_FILL[slot] || []).find(ad =>
+    !nutAyniAile(ad, cf.n) && !(yf && nutAyniAile(ad, yf.n)) &&
+    !(t.ek || []).some(e => nutAyniAile(ad, e)));
+  const df = nutFood(dfAdi || '');
   if (df) kalemler.push({ rol: 'd', n: df.n, u: df.u, adet: 0, k: df.k, p: df.p, c: df.c, f: df.f });
 
   const topla = (alan) => Math.round(kalemler.reduce((a, x) => a + x.adet * x[alan], 0));
@@ -1046,10 +1095,35 @@ function nutBalanceDay(meals, t, kg) {
   // kaliyordu — 16 yasinda, gunde 6 gun antrenmanda asil risk AZ YEMEK.
   // Kural: gun kalorisi hedefin %95'inin altindayken protein kapisi SERT
   // TAVAN'dir; kalori banda girdikten sonra yumusak bant devreye doner.
-  const pKapi = () => (toplamK() < t.kcal * 0.95 ? proteinTavan : proteinBant);
+  // ⚠️ 5 Eyl 2026 — BAND MERKEZI, ALT KENARI DEGIL. Doldurma dongusu
+  // hedefin %95'ine ulasinca duruyordu; olcum 20 kombinasyonun 17'sinde
+  // sonucun hedefin ALTINDA bittigini gosterdi (ortalama -%3,4). Kas
+  // kazanimi hedefinde bu, +350 kcal'lik fazlanin ucte birinin
+  // buharlasmasi demek — motorun kendi "asil risk AZ YEMEK" ilkesiyle
+  // celisiyordu. Esik %2'ye cekildi; fazla kacarsa fazlayiKirp geri aliyor.
+  // ⚠️ pKapi esigi BILEREK 0.95'te BIRAKILDI. Once 0.98'e cekildi (dongu
+  // esigiyle ayni olsun diye) ve olcum kotulesti: idx1'de gun proteini
+  // 171 g / 2.48 g/kg ile SERT TAVANA yapisti. Iki esigin FARKLI olmasi
+  // dogru — %95-%98 araligi motorun "acigi proteinsiz kaynakla kapat"
+  // penceresi. O pencerenin ise yaramasi dolgunun capadan FARKLI besin
+  // olmasina bagli (bkz. NUT_FILL); eskiden ayni besin oldugu icin pencere
+  // kilitleniyordu ve gun %95'te takili kaliyordu.
+  // ⚠️ KAPI ADIMIN PROTEININE GORE (5 Eyl 2026). Iki uc de olculdu:
+  //   esik 0.95 -> gun hedefin %2,5 altinda bitiyor (az yeme riski)
+  //   esik 0.98 -> kalori duzeliyor AMA protein 2,48 g/kg ile tavana yapisiyor
+  // Ikisi de yanlis, cunku tek bir esik iki farkli kalemi ayni muameleye
+  // tabi tutuyor. Gercek ayrim SU: %95'ten sonra acigi kapatmak serbest
+  // olmali ama yalnizca PROTEIN TASIMAYAN kalemlerle (meyve, ekmek, zeytin-
+  // yagi). Pilav/bulgur/patates (3-5 g/porsiyon) o pencerede giremez —
+  // proteini sisiren onlardi.
+  const NUT_DUSUK_P = 2;   // g/adim — bunun altindaki kalem "proteinsiz" sayilir
+  const pKapi = (adimP) => {
+    if (toplamK() < t.kcal * 0.95) return proteinTavan;
+    return (adimP <= NUT_DUSUK_P) ? proteinTavan : proteinBant;
+  };
   for (let tur = 0; tur < 40; tur++) {
     const acik = t.kcal - toplamK();
-    if (acik <= t.kcal * 0.05) break;
+    if (acik <= t.kcal * 0.02) break;
     // Hedefinin en gerisinde kalan ogunu doldur — "en dusuk kalorili" degil.
     const sirali = meals.slice().sort((a, b) =>
       ((a.kcal - ((a.hedef && a.hedef.kcal) || a.kcal)) - (b.kcal - ((b.hedef && b.hedef.kcal) || b.kcal))));
@@ -1075,7 +1149,8 @@ function nutBalanceDay(meals, t, kg) {
         // kaynaklari protein tasir (bulgur 5 g, pilav 4 g/porsiyon); kalori
         // acigini karbonhidratla kapatirken protein geri sisiyordu ve
         // kirpma adiminin isini bozuyordu. Asacaksa yag kaldiracina gec.
-        if (toplamP() + adimi(c.u) * c.p > pKapi()) continue;
+        const adimP = adimi(c.u) * c.p;
+        if (toplamP() + adimP > pKapi(adimP)) continue;
         c.adet = nutRound(c.adet + adimi(c.u), c.u);
         yenile(m); yapildi = true; break;
       }
@@ -1299,14 +1374,42 @@ function nutBalanceDay(meals, t, kg) {
   return meals;
 }
 
+/**
+ * ⚠️ SLOTLAR AYNI INDEKSTE YURUMEZ (5 Eyl 2026).
+ * Tek `sablonIdx` bes slota birden uygulaniyordu ve havuzlar ayni sirada
+ * oldugu icin capalar cakisiyordu: idx1'de hem ara hem atistirma
+ * 'Protein tozu' seciyor, gun proteini 2.48 g/kg ile SERT TAVANA yapisiyor
+ * (hedef 2.0 g/kg, sapma +%23). Capasi o gun kullanilmis bir sablon
+ * atlanir; havuz tukenirse ilk aday kullanilir (plan uretilmeden kalmaz).
+ */
 function nutBuildDay(t, kg, sablonIdx) {
   const ogunler = nutMealSplit(t, kg);
-  const meals = ogunler.map(o => {
-    const m = nutBuildMeal(o.slot, o, sablonIdx);
-    if (m) { m.zaman = o.zaman || null; m.hedef = { kcal: o.kcal, protein: o.protein, carb: o.carb, fat: o.fat }; }
+  const kullanilan = new Set();
+  const kur = (anaTaban) => ogunler.map(o => {
+    const havuz = NUT_TEMPLATES[o.slot] || [];
+    let m = null, secilen = null;
+    for (let k = 0; k < Math.max(1, havuz.length); k++) {
+      const idx = ((Number(sablonIdx) || 0) + k) % Math.max(1, havuz.length);
+      const aday = havuz[idx];
+      if (aday && k < havuz.length - 1 && kullanilan.has(aday.protein)) continue;
+      m = nutBuildMeal(o.slot, o, idx, anaTaban);
+      if (m) { secilen = aday; break; }
+    }
+    if (m) {
+      if (secilen) kullanilan.add(secilen.protein);
+      m.zaman = o.zaman || null;
+      m.hedef = { kcal: o.kcal, protein: o.protein, carb: o.carb, fat: o.fat };
+    }
     return m;
   }).filter(Boolean);
-  return nutBalanceDay(meals, t, kg);
+
+  const dene = nutBalanceDay(kur(1), t, kg);
+  // Ana ogun tabani sert tavani asiyorsa (hafif profil) 0.5'e geri dus.
+  const tavan = kg > 0 ? Math.max(t.protein, Math.round(kg * NUT_LIMITS.proteinMaxPerKg)) : Infinity;
+  const toplamP = dene.reduce((a, m) => a + m.protein, 0);
+  if (toplamP <= tavan) return dene;
+  kullanilan.clear();
+  return nutBalanceDay(kur(0.5), t, kg);
 }
 
 /**

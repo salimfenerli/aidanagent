@@ -3027,6 +3027,35 @@
   .meal-add { display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
   .meal-add input, .meal-add select { width:100%; }
   .meal-add-row2 { display:flex; gap:8px; }
+  /* Ogun duzenlemede miktar (6 Eyl 2026): dokunma hedefleri 44px, sayi alani
+     tabular ve buyuk — telefonda tek elle artir/azalt edilebilsin. */
+  .qty-row { display:flex; align-items:center; gap:8px; margin-top:8px; }
+
+  /* Odev paketi (6 Eyl 2026) — haftalik odevi gunlere bolen modal */
+  .hw-form { display:flex; flex-direction:column; gap:8px; }
+  .hw-form textarea { width:100%; resize:vertical; min-height:96px; line-height:1.45; }
+  .hw-row { display:flex; align-items:center; gap:8px; }
+  .hw-row label { flex:0 0 auto; font-size:0.85em; color:var(--text-muted); min-width:96px; }
+  .hw-row input[type="date"], .hw-row input[type="text"] { flex:1; min-width:0; }
+  .hw-row input[type="number"] { width:72px; flex:0 0 auto; text-align:center; font-variant-numeric:tabular-nums; }
+  .hw-hint { font-size:0.82em; color:var(--text-faint); }
+  .hw-checks { display:flex; gap:14px; flex-wrap:wrap; font-size:0.85em; color:var(--text-muted); }
+  .hw-checks label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+  .hw-preview { margin-top:12px; max-height:280px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; }
+  .hw-empty { font-size:0.85em; color:var(--text-faint); line-height:1.5; padding:6px 0; }
+  .hw-sum { font-size:0.82em; color:var(--text-muted); padding-bottom:2px; }
+  .hw-warn { color:#e0a33e; font-weight:600; }
+  .hw-day { border:1px solid var(--border); border-radius:var(--radius); padding:8px 10px; background:var(--surface-hover); }
+  /* Tavani asan gun: engellenmiyor, GORUNUR kiliniyor. */
+  .hw-day.over { border-color:#e0a33e; }
+  .hw-day-head { display:flex; justify-content:space-between; align-items:baseline; font-size:0.82em; font-weight:700; color:var(--text); margin-bottom:4px; }
+  .hw-day-min { font-weight:600; color:var(--text-muted); font-variant-numeric:tabular-nums; }
+  .hw-item { font-size:0.86em; color:var(--text-muted); padding:2px 0; }
+  .hw-item-min { color:var(--text-faint); font-variant-numeric:tabular-nums; }
+  .qty-row input { flex:1; min-width:0; text-align:center; font-variant-numeric:tabular-nums; font-weight:600; }
+  .qty-step { flex:0 0 auto; width:44px; height:44px; font-size:1.15em; line-height:1; font-weight:600; background:var(--surface-hover); color:var(--text); border:1px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; box-shadow:none; }
+  .qty-step:hover { background:var(--surface); }
+  .qty-unit { flex:0 0 auto; font-size:0.82em; color:var(--text-muted); min-width:62px; }
   .meal-macro-row { display:flex; gap:6px; margin-top:6px; }
   .meal-macro-row input { flex:1; min-width:0; }
   .custom-save-btn { margin-top:8px; width:100%; }
@@ -3136,6 +3165,18 @@
   .food-result-name { color:var(--text); font-size:0.9em; }
   .food-result-brand { color:var(--text-muted); font-size:0.85em; }
   .food-result-kcal { color:var(--text-muted); font-size:0.8em; flex:0 0 auto; white-space:nowrap; }
+  /* Hızlı ekle: sonuç satırı + 44px dokunma alanlı "+" (2 Eyl 2026).
+     Satır gövdesi porsiyon editörünü açar, "+" 1 birimi doğrudan ekler. */
+  .food-row { display:flex; align-items:stretch; gap:6px; }
+  .food-row .food-result { flex:1 1 auto; min-width:0; }
+  .food-quick { flex:0 0 44px; min-height:44px; display:flex; align-items:center; justify-content:center; font-size:1.3em; line-height:1; padding:0; color:var(--text-muted); background:var(--surface-hover); border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; box-shadow:none; }
+  .food-quick:hover { border-color:var(--accent); color:var(--text); }
+  .food-quick:active { transform:scale(0.94); }
+  /* Sıfır sonuç: boş ekran bırakma, çıkış yollarını göster (2 Eyl 2026) */
+  .food-none { padding:14px 12px; text-align:center; border:1px dashed var(--border); border-radius:var(--radius); }
+  .food-none-t { color:var(--text-muted); font-size:0.88em; margin-bottom:10px; }
+  .food-none-btns { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  .food-none-btns button { min-height:40px; }
   .food-portion { margin-top:12px; padding:12px; background:var(--surface-hover); border:1px solid var(--border); border-radius:var(--radius); }
   .portion-pick { font-weight:700; color:var(--text-strong); margin-bottom:10px; }
   .portion-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }

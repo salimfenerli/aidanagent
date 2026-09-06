@@ -73,17 +73,36 @@ describe('tembel yukleme sozlesmesi', () => {
     // Diyet render'i modul yuklendikten SONRA cagrilmali
     assert.ok(blok.indexOf('loadModule(') < blok.indexOf('renderProgram()'),
       'renderProgram modul yuklenmeden cagriliyor — "not defined" ile patlar');
-    // Diyet sekmesi UC modul ister (program + nutrition + health)
-    assert.ok(/'program', 'nutrition', 'health'/.test(blok),
-      'diyet sekmesi beslenme ya da saglik modulunu yuklemiyor');
+    // Diyet sekmesi DORT modul ister (program + nutrition + health + foods)
+    assert.ok(/'program', 'nutrition', 'health', 'foods'/.test(blok),
+      'diyet sekmesi beslenme / saglik / besin DB modulunu yuklemiyor');
   });
 
-  test('LAZY_MODULES tam olarak program + nutrition + health + supabase', () => {
+  test('LAZY_MODULES tam olarak program + nutrition + health + supabase + foods + school + onboarding', () => {
     const blok = /const LAZY_MODULES = \{([\s\S]*?)\};/.exec(core);
     assert.ok(blok, 'LAZY_MODULES okunamadi');
     const anahtarlar = [...blok[1].matchAll(/(\w+)\s*:/g)].map((m) => m[1]).sort();
-    assert.deepStrictEqual(anahtarlar, ['health', 'nutrition', 'program', 'supabase'],
+    assert.deepStrictEqual(anahtarlar, ['foods', 'health', 'nutrition', 'onboarding', 'program', 'school', 'supabase'],
       'modul listesi degisti — sw.js/deploy.py/Actions paths da guncellendi mi?');
+  });
+
+  // 🔴 6 Eyl 2026 — DEPLOY ZINCIRI TESTE BAGLANDI. foods.js Actions `paths`
+  // listesinde YOKTU: yalniz o dosya degisen bir commit hicbir deploy
+  // tetiklemezdi ve is sessizce canliya cikmazdi (14 Agustos'ta ayni sinif
+  // hata 3 haftalik deploy'u durdurdu). Artik her tembel modul dort yerde
+  // birden aranıyor.
+  test('her tembel modul sw.js + deploy.py + Actions paths listesinde', () => {
+    const blok = /const LAZY_MODULES = \{([\s\S]*?)\};/.exec(core);
+    const dosyalar = [...blok[1].matchAll(/'\/([\w.-]+)'/g)].map((m) => m[1]);
+    assert.ok(dosyalar.length >= 6, 'modul dosyalari okunamadi');
+    const sw = readText('sw.js');
+    const py = readText('aidan-pages-deploy.py');
+    const yml = readText('.github/workflows/deploy.yml');
+    for (const f of dosyalar) {
+      assert.ok(sw.includes("'/" + f + "'"), f + ' sw.js ASSETS listesinde yok — cevrimdisi acilmaz');
+      assert.ok(py.includes('"' + f + '"'), f + ' aidan-pages-deploy.py INCLUDE listesinde yok — deploy edilmez');
+      assert.ok(yml.includes("- '" + f + "'"), f + ' Actions paths listesinde yok — degistiginde deploy TETIKLENMEZ');
+    }
   });
 });
 
@@ -310,13 +329,25 @@ describe('ilk yukleme butcesi', () => {
     // dalindan cagriliyor. Esik 219 -> 201: olcum 200 KB, 1 KB pay birakildi.
     // ⚠️ Kazanilan 19 KB yeni ozelliklere harcanabilir ama esik BIRLIKTE
     // yukseltilmez — eski borc boyle birikmisti.
-    assert.ok(kb <= 201,
-      `ilk yukleme ${kb} KB gzip — butce 201 KB. Yeni agir bagimlilik statik eklendi mi?`);
+    //
+    // 2 Eyl 2026: esik 201 -> 185. Besin arama iyilestirmeleri olcumu 204
+    // KB'ye cikardi — yani butceyi ASTI. Dogru cevap esigi yukseltmek degil,
+    // kritik yolda isi olmayani cikarmakti. IKI ADIMDA odendi:
+    //   1) TURK_FOODS (470 besin, 8.5 KB gzip) -> foods.js  => 195 KB
+    //   2) YEMEK EKLEME MODALININ TAMAMI (arama, porsiyon editoru, barkod,
+    //      kendi besinlerim, tarifler, takviyeler, ogun duzenleme + trNorm;
+    //      48.6 KB kaynak / 14 KB gzip) -> foods.js          => 182 KB
+    // Ikinci adimin gerekcesi: bu fonksiyonlarin cagri yerlerinin HEPSI
+    // renderDiet/renderDiary icinde ya da modalin kendi HTML'inde; ikisi de
+    // foods.js inmeden calismiyor. Yani kritik yolda hicbir isi yoktu.
+    // Olcum 182 KB, 3 KB pay birakildi.
+    assert.ok(kb <= 185,
+      `ilk yukleme ${kb} KB gzip — butce 185 KB. Yeni agir bagimlilik statik eklendi mi?`);
   });
 
   test('tembel moduller butceye DAHIL DEGIL (gercekten ayrildilar)', () => {
     const statik = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1].replace(/^\//, ''));
-    for (const m of ['program.js', 'supabase.js', 'nutrition.js', 'health.js']) {
+    for (const m of ['program.js', 'supabase.js', 'nutrition.js', 'health.js', 'foods.js', 'school.js', 'onboarding.js']) {
       assert.ok(!statik.includes(m), m + ' hala statik');
     }
     assert.ok(gz('program.js') + gz('supabase.js') + gz('nutrition.js') > 80 * 1024,

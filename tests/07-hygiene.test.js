@@ -23,6 +23,10 @@ const LF_DOSYALAR = ['styles.css'];
 const CRLF_DOSYALAR = [
   'core.js', 'ui.js', 'tasks.js', 'program.js', 'sw.js', 'asistan.html',
   'aidan-worker/worker.js', 'CLAUDE.md',
+  // 6 Eyl 2026: uc tembel modul listede YOKTU. foods.js .gitattributes'ta da
+  // yoktu — `* text=auto` ile depoya LF yazilip Windows'a CRLF acilacakti,
+  // yani 14 Agustos'ta 3 haftalik deploy'u durduran tuzagin aynisi acikti.
+  'nutrition.js', 'health.js', 'foods.js', 'school.js', 'onboarding.js',
 ];
 
 describe('satir sonu disiplini', () => {

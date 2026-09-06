@@ -36,7 +36,9 @@ function esc(s) {
 
 function motor() {
   const core = fs.readFileSync(path.join(ROOT, 'core.js'), 'utf8');
-  const i = core.indexOf('const TURK_FOODS'), j = core.indexOf('\n];', i) + 3;
+  // 2 Eyl 2026: TURK_FOODS core.js'ten foods.js'e (tembel modul) tasindi.
+  const foods = fs.readFileSync(path.join(ROOT, 'foods.js'), 'utf8');
+  const i = foods.indexOf('const TURK_FOODS'), j = foods.indexOf('\n];', i) + 3;
   const slots = core.match(/const MEAL_SLOTS = \{[^}]*\};/)[0];
   // 30 Agu 2026: hcBMR ui.js'ten health.js'e tasindi (tembel modul).
   const ui = fs.readFileSync(path.join(ROOT, 'health.js'), 'utf8');
@@ -55,7 +57,7 @@ function motor() {
     _toasts: [],
   };
   vm.createContext(ctx);
-  vm.runInContext(core.slice(i, j) + '\n' + slots + '\n' + ui.slice(hb, he), ctx);
+  vm.runInContext(foods.slice(i, j) + '\n' + slots + '\n' + ui.slice(hb, he), ctx);
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'program.js'), 'utf8'), ctx);
   vm.runInContext(nutSrc +
     '\n;globalThis.__N = { nutAiValidate, nutAiFacts, nutAiHtml, nutAiClear, nutDowLabel,' +

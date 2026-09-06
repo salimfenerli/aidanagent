@@ -23,7 +23,9 @@ const nutSrc = fs.readFileSync(path.join(ROOT, 'nutrition.js'), 'utf8');
 // core.js'in TAMAMI degil — sadece besin DB + ogun slotlari (localStorage yok)
 function motor() {
   const core = fs.readFileSync(path.join(ROOT, 'core.js'), 'utf8');
-  const i = core.indexOf('const TURK_FOODS'), j = core.indexOf('\n];', i) + 3;
+  // 2 Eyl 2026: TURK_FOODS core.js'ten foods.js'e (tembel modul) tasindi.
+  const foods = fs.readFileSync(path.join(ROOT, 'foods.js'), 'utf8');
+  const i = foods.indexOf('const TURK_FOODS'), j = foods.indexOf('\n];', i) + 3;
   const slots = core.match(/const MEAL_SLOTS = \{[^}]*\};/)[0];
   const ctx = {
     console, Date, Math, JSON, Number, String, Array, Object, Promise,
@@ -37,7 +39,7 @@ function motor() {
   const ui = fs.readFileSync(path.join(ROOT, 'health.js'), 'utf8');
   const hb = ui.indexOf('function hcBMR('), he = ui.indexOf('\n}', hb) + 3;
   vm.createContext(ctx);
-  vm.runInContext(core.slice(i, j) + '\n' + slots + '\n' + ui.slice(hb, he), ctx);
+  vm.runInContext(foods.slice(i, j) + '\n' + slots + '\n' + ui.slice(hb, he), ctx);
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'program.js'), 'utf8'), ctx);
   vm.runInContext(nutSrc +
     '\n;globalThis.__N = { NUT_LIMITS, NUT_PAL, NUT_TEMPLATES, NUT_MICRO, NUT_FILL, nutBMR, nutTargets,' +
@@ -738,11 +740,19 @@ describe('eklenen yag sinirlari', () => {
   test('dolgu kaynaklari GERCEK besin ve protein tasimiyor', () => {
     // Dolgu, protein kapisina takilmadan kalori tasimak icin var; protein
     // tasirsa isini yapamaz ve yag kaldiracina geri donulur.
+    // 5 Eyl 2026: NUT_FILL artik slot basina LISTE — dolgu ile karbonhidrat
+    // capasi ayni besin olabiliyordu (aksam: 3 porsiyon + 1 dolgu = 4
+    // hasla nmis patates). Her adayin ayri ayri kurallara uymasi gerekir.
     for (const slot of Object.keys(M.NUT_FILL)) {
-      const f = M.nutFood(M.NUT_FILL[slot]);
-      assert.ok(f, slot + ': dolgu besini TURK_FOODS\'ta yok — ' + M.NUT_FILL[slot]);
-      assert.ok(f.p <= 3, slot + ': dolgu ' + f.n + ' ' + f.p + ' g protein tasiyor');
-      assert.ok(f.c >= 15, slot + ': dolgu ' + f.n + ' karbonhidrat tasimiyor');
+      const adaylar = M.NUT_FILL[slot];
+      assert.ok(Array.isArray(adaylar) && adaylar.length >= 2,
+        slot + ': dolgu listesi en az 2 aday icermeli (capa cakisirsa yedek lazim)');
+      for (const ad of adaylar) {
+        const f = M.nutFood(ad);
+        assert.ok(f, slot + ': dolgu besini TURK_FOODS\'ta yok — ' + ad);
+        assert.ok(f.p <= 3, slot + ': dolgu ' + f.n + ' ' + f.p + ' g protein tasiyor');
+        assert.ok(f.c >= 15, slot + ': dolgu ' + f.n + ' karbonhidrat tasimiyor');
+      }
     }
   });
 });

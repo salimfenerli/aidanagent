@@ -21,7 +21,9 @@ const { loadApp } = require('./helpers/load.js');
 
 // 30 Agu 2026: nutrition.js hcBMR / hcEnergyCheck / hcWeightTrend cagiriyor;
 // o cekirdek ui.js'ten health.js'e tasindi, testin de yuklemesi gerekiyor.
-const app = loadApp({ scripts: ['core.js', 'tasks.js', 'ui.js', 'program.js', 'nutrition.js', 'health.js'] });
+// 2 Eyl 2026: TURK_FOODS core.js'ten foods.js'e tasindi (tembel modul) —
+// nutFood() ona bagli, o olmadan motor BOS ogun uretir (sessiz sifir).
+const app = loadApp({ scripts: ['core.js', 'tasks.js', 'ui.js', 'program.js', 'nutrition.js', 'health.js', 'foods.js'] });
 const E = (kod) => app.evalIn(kod);
 const J = (kod) => JSON.parse(E('JSON.stringify(' + kod + ')'));
 
@@ -467,6 +469,63 @@ describe('6 — determinizm ve dayaniklilik', () => {
     const b = gun(65, 'strength', 'kas', 1);
     assert.notStrictEqual(JSON.stringify(a.meals), JSON.stringify(b.meals));
     assert.ok(Math.abs(b.ozet.sapma.kcal) <= 8, 'ikinci sablonda kalori sapiyor');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7 — TABAK BUTUNLUGU (5 Eyl 2026)
+// Motorun 5 Eyl denetiminde cikan uc gercek hata. Ucu de "sayilar tutuyor
+// ama tabak/plan yanlis" sinifindan; birim test degil URETILEN PLANDAN
+// dogrulanir, cunku ucu de tam orada gorunmez oldu.
+// ---------------------------------------------------------------------------
+describe('7 — tabak butunlugu', () => {
+  test('dolgu ile capa AYNI BESIN AILESINDEN olamaz', () => {
+    // 🔴 Bulunan hata: aksam[1] capasi 'Haşlanmış patates', dolgu da oydu —
+    // tabakta 3 porsiyon capa + 1 dolgu = 4 HASLANMIS PATATES cikiyordu.
+    // Capaya konan TAVAN (3) boylece fiilen deliniyordu.
+    const kotu = [];
+    for (const k of KOMBINASYONLAR) {
+      const g = gun(k.kg, k.tip, k.hedef, k.idx);
+      for (const m of g.meals) {
+        const adlar = (m.items || []).filter(x => x.adet > 0).map(x => x.n);
+        for (let i = 0; i < adlar.length; i++) {
+          for (let j = i + 1; j < adlar.length; j++) {
+            if (J(`nutAyniAile(${JSON.stringify(adlar[i])},${JSON.stringify(adlar[j])})`)) {
+              kotu.push(k.kg + 'kg/' + k.tip + ' ' + m.slot + ': ' + adlar[i] + ' + ' + adlar[j]);
+            }
+          }
+        }
+      }
+    }
+    assert.deepStrictEqual(kotu.slice(0, 5), []);
+  });
+
+  test('ayni protein capasi gun icinde iki ogunde kullanilmaz', () => {
+    // 🔴 Bulunan hata: tek `sablonIdx` bes slota birden uygulaniyordu ve
+    // havuzlar ayni sirada oldugu icin idx1'de hem ara hem atistirma
+    // 'Protein tozu' seciyordu. Gun proteini 2.48 g/kg ile SERT TAVANA
+    // yapisiyordu (hedef 2.0 g/kg).
+    const kotu = [];
+    for (const k of KOMBINASYONLAR) {
+      const g = gun(k.kg, k.tip, k.hedef, k.idx);
+      const capalar = g.meals.map(m => (m.items || []).find(x => x.rol === 'p'))
+        .filter(Boolean).map(x => x.n);
+      const tekrar = capalar.filter((n, i) => capalar.indexOf(n) !== i);
+      if (tekrar.length) kotu.push(k.kg + 'kg/' + k.tip + '/idx' + k.idx + ': ' + tekrar.join(','));
+    }
+    assert.deepStrictEqual(kotu.slice(0, 5), []);
+  });
+
+  test('gun kalorisi hedefin ALTINA sistematik kaymiyor', () => {
+    // 🔴 Bulunan hata: doldurma dongusu hedefin %95'inde duruyordu ve
+    // sonuc 20 kombinasyonun 17'sinde hedefin ALTINDA bitiyordu
+    // (ortalama -%3,4). Kas kazaniminda bu, +350 kcal'lik fazlanin ucte
+    // birinin buharlasmasi demek — motorun kendi "asil risk AZ YEMEK"
+    // ilkesiyle celisiyor. Tek gun degil ORTALAMA olculur: sablon tabanli
+    // bir plan tek gunde hedefi tam tutturamaz, ama SISTEMATIK sapamaz.
+    const sapmalar = KOMBINASYONLAR.map(k => gun(k.kg, k.tip, k.hedef, k.idx).ozet.sapma.kcal);
+    const ort = sapmalar.reduce((a, b) => a + b, 0) / sapmalar.length;
+    assert.ok(ort > -2.5, 'ortalama kalori sapmasi %' + ort.toFixed(1) + ' — motor sistematik AZ yediriyor');
   });
 });
 
