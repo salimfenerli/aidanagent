@@ -78,11 +78,11 @@ describe('tembel yukleme sozlesmesi', () => {
       'diyet sekmesi beslenme / saglik / besin DB modulunu yuklemiyor');
   });
 
-  test('LAZY_MODULES tam olarak program + nutrition + health + supabase + foods + school + onboarding', () => {
+  test('LAZY_MODULES tam olarak program + nutrition + health + supabase + foods + school + onboarding + karne', () => {
     const blok = /const LAZY_MODULES = \{([\s\S]*?)\};/.exec(core);
     assert.ok(blok, 'LAZY_MODULES okunamadi');
     const anahtarlar = [...blok[1].matchAll(/(\w+)\s*:/g)].map((m) => m[1]).sort();
-    assert.deepStrictEqual(anahtarlar, ['foods', 'health', 'nutrition', 'onboarding', 'program', 'school', 'supabase'],
+    assert.deepStrictEqual(anahtarlar, ['foods', 'health', 'karne', 'nutrition', 'onboarding', 'program', 'school', 'supabase'],
       'modul listesi degisti — sw.js/deploy.py/Actions paths da guncellendi mi?');
   });
 
@@ -347,7 +347,7 @@ describe('ilk yukleme butcesi', () => {
 
   test('tembel moduller butceye DAHIL DEGIL (gercekten ayrildilar)', () => {
     const statik = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1].replace(/^\//, ''));
-    for (const m of ['program.js', 'supabase.js', 'nutrition.js', 'health.js', 'foods.js', 'school.js', 'onboarding.js']) {
+    for (const m of ['program.js', 'supabase.js', 'nutrition.js', 'health.js', 'foods.js', 'school.js', 'onboarding.js', 'karne.js']) {
       assert.ok(!statik.includes(m), m + ' hala statik');
     }
     assert.ok(gz('program.js') + gz('supabase.js') + gz('nutrition.js') > 80 * 1024,

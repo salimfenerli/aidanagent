@@ -205,7 +205,7 @@ function fmtDayLabel(iso) {
   if (iso === t) return 'Bugün';
   if (iso === shiftDateStr(t, 1)) return 'Yarın';
   const d = new Date(iso + 'T00:00:00');
-  const g = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'][d.getDay()];
+  const g = GUN_KISA[d.getDay()];
   const ay = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'][d.getMonth()];
   return `${g} ${d.getDate()} ${ay}`;
 }

@@ -234,3 +234,73 @@ describe('uygulama ve sinir durumlar', () => {
     assert.strictEqual(new Set(r.blocks.map(b => b.id)).size, r.blocks.length, 'blok id catismasi');
   });
 });
+
+describe('plan BUGÜN ekranına bağlı (now-card)', () => {
+  // 🔴 Plani kurup bakmamak, plani hic kurmamakla ayni yere cikar. Onceden
+  // now-card YALNIZ reminderTime'i olan goreve bakiyordu: gunu bloklara
+  // bolduktan sonra ana ekran "su an ne var" sorusuna cevap vermiyor, her
+  // seferinde Plan sekmesine gecmek gerekiyordu.
+  const nn = () => W.document.getElementById('nowNext');
+  const simdiDk = () => dk(A.evalIn('nowHM()'));
+  const hm = (v) => String(Math.floor(((v % 1440) + 1440) % 1440 / 60)).padStart(2, '0') + ':' + String(v % 60).padStart(2, '0');
+  const planKur = (blocks) => { veri().dayPlan = { date: bugun(), blocks }; };
+
+  test('SU ANKI blok now-card\'da gorunuyor', () => {
+    const n = simdiDk();
+    planKur([{ id: 1, start: hm(n - 10), end: hm(n + 20), label: 'Matematik', kind: 'task', done: false }]);
+    W.tickNow();
+    assert.notStrictEqual(nn().style.display, 'none', 'now-next gizli');
+    assert.match(nn().textContent, /şu an:.*Matematik/);
+    assert.match(nn().textContent, /20 dk kaldı/);
+  });
+
+  test('su anki blok bitince SIRADAKI gosteriliyor', () => {
+    const n = simdiDk();
+    planKur([
+      { id: 1, start: hm(n - 10), end: hm(n + 20), label: 'Matematik', kind: 'task', done: true },
+      { id: 2, start: hm(n + 40), end: hm(n + 70), label: 'Kickboks', kind: 'fixed', done: false },
+    ]);
+    W.tickNow();
+    assert.match(nn().textContent, /40 dk sonra:.*Kickboks/);
+  });
+
+  test('2 saatten uzaktaki blok gosterilmiyor (gurultu)', () => {
+    const n = simdiDk();
+    planKur([{ id: 3, start: hm(n + 200), end: hm(n + 230), label: 'Uzak', kind: 'task', done: false }]);
+    A.evalIn('_nextReminder = null');
+    W.tickNow();
+    assert.strictEqual(nn().style.display, 'none');
+  });
+
+  test('plan yoksa HATIRLATMAYA dusuyor (eski davranis korunuyor)', () => {
+    const n = simdiDk();
+    planKur([]);
+    A.evalIn(`_nextReminder = { reminderTime: '${hm(n + 30)}', text: 'diş randevusu' }`);
+    W.tickNow();
+    assert.match(nn().textContent, /30 dk sonra:.*diş randevusu/);
+  });
+
+  test('DUNUN plani bugunun ekranina sizmiyor', () => {
+    const n = simdiDk();
+    veri().dayPlan = { date: A.evalIn('shiftDateStr(today(), -1)'),
+      blocks: [{ id: 4, start: hm(n - 10), end: hm(n + 20), label: 'Dun kalmis', kind: 'task', done: false }] };
+    A.evalIn('_nextReminder = null');
+    W.tickNow();
+    assert.ok(!/Dun kalmis/.test(nn().textContent) || nn().style.display === 'none',
+      'dunun blogu bugun gosteriliyor');
+  });
+
+  test('now-card blogu PLANA goturuyor (kapi)', () => {
+    const html = fs.readFileSync(path.join(ROOT, 'asistan.html'), 'utf8');
+    assert.ok(/id="nowNext"[^>]*onclick="showTab\('plan'/.test(html),
+      'now-next tiklanabilir degil — bilgi var, yol yok');
+  });
+
+  test('aksam ozetinde "Yarini planla" var', () => {
+    // Aksam ritualinin son adimi: dugme Plan sekmesindeydi, ozetin icinde
+    // degildi — yani gunu kapatirken bir sekme uzaktaydi.
+    const html = fs.readFileSync(path.join(ROOT, 'asistan.html'), 'utf8');
+    const box = html.slice(html.indexOf('id="eveningSummary"'), html.indexOf('id="eveningSummary"') + 900);
+    assert.ok(/planTomorrow\(\)/.test(box), 'aksam ozetinde yarini planla yok');
+  });
+});

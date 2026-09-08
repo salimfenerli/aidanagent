@@ -34,6 +34,140 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 - **Hevy fitness (v7-111):** antrenman senkron (`/hevy-sync` proxy) + 1RM/rekor takibi + planlayıcıya "antrenman günü" bağı. ⚠️ **Hevy Pro ŞART** (API key ücretsiz hesapta üretilemez). Canlı test Salim'de.
 - **Çapraz-modül:** günlük skor kartı, "Aidan'ın notu" tek dürtü, takviye/odak geçmiş şeridi, Classroom ödev görselden ekleme.
 
+### 🔴 6 Eylül 2026 — 🍽️ DİYET KURULUMU: MOTOR HAZIRDI, PROFİL YOKTU (v7-182)
+
+Salim *"diyet yazmaya hazır olsun"* dedi. **Canlı veriye bakıldı** ve durum şuydu:
+
+```
+data.diet.calc      : NULL          ← profil hiç girilmemiş
+data.diet.kcalGoal  : 2200          ← ELLE konmuş, motor hesaplamamış
+data.diet.plan      : 0 satır
+data.program        : atletik, 6 gün ✓
+tartı                : her gün geliyor ✓
+```
+
+68.8 kg'da 6 gün antrenman yapan biri **2200 kcal hedefiyle** diyet yazmaya başlayacaktı — motor devrede olsa aynı gün için **3281 kcal** diyordu. Yine aynı desen: **motor hazır, kapı kapalı.** Üstelik kapı iki kat gömülüydü — hedef hesaplayıcı *kapalı* bir `<details>` içinde ("Hedefler & öğün hatırlatıcıları") ve boş durum yalnızca *"aşağıdaki hesaplayıcıya yaş, boy ve kilonu gir"* diyordu: hangi alanın eksik olduğu yazmıyor, oraya götüren bir yol da yok.
+
+**1 — KİLO ARTIK TARTIDAN OKUNUYOR (`nutProfile`).** Profil `calc.weight`e bağlıydı: hesaplayıcı bir kez çalıştırılmazsa motor hiç açılmıyor, çalıştırılsa bile o gün girilen kilo **aylarca donuyordu** — oysa tartı her sabah gerçek kiloyu yolluyor. Artık en yeni tartı kaydı `calc.weight`i **eziyor**. ⚠️ **Boy zorunlu kalıyor:** `hcBMR` boysuz anlamlı sayı üretmez; 0 ile çağırmak uydurma hedef demektir, o yüzden profil `null` döner ve motor **susar** (teste bağlı).
+
+**2 — EKSİK OLAN NE, ADIYLA YAZIYOR.** `dietSetupEksik()` → `['yaş','boy']`. Boş beslenme planı artık *"Plan için tek eksik: yaş ve boy. Kilonu tartıdan alıyorum (68.8 kg), onu yazmana gerek yok."* diyor ve **"Kurulumu aç"** düğmesi kapalı `<details>`i açıp, oraya kaydırıp **ilk eksik alana odaklanıyor**.
+
+**3 — ELLE KONMUŞ HEDEF SESSİZ KALMIYOR.** Günlüğün hedef kartının altında tek satır: *"Bu hedef elle konmuş — yaş ve boy girilmediği için motor senin verinden hesaplayamıyor"* + aynı kapı. ⚠️ **Yalnız bugün gösteriliyor**; geçmiş günü incelerken "kurulum yap" demek gürültüdür (teste bağlı).
+
+**4 — 🔴 EKRAN BİR ŞEY VAAT EDİP KOD TERSİNİ YAPIYORDU.** Boş durum *"kilonu tartıdan alıyorum, yazmana gerek yok"* derken `calcGoals` doğrulaması **boş kiloyu reddediyordu** ("Yaş, boy ve kiloyu doğru gir"). Yani yeni metin tek başına yalan olacaktı. `calcGoals` artık kilo alanı boşsa son tartıya düşüyor, hata mesajı da genel cümle yerine **eksiğin adını** yazıyor.
+
+**Sonuç: diyet yazmaya başlamak için gereken tek şey yaş + boy.** Girildiği an zincirin tamamı ayağa kalkıyor — hedef gün tipine göre hesaplanıyor (dövüş günü 3281 kcal), örnek gün üretiliyor, plana aktarım açılıyor, günlükteki "kalan" doğru sayıyı sayıyor. Uçtan uca teste bağlandı.
+
+**Ölçüm:** `33-hedef-kaynagi` 14 → **24 test** (kurulum kapısı 10: kilo kaynağı 4 · uyarı yüzeyleri 3 · kapı 1 · uçtan uca zincir 1 · gürültü kontrolü 1). **36 dosya toplam 1127 test yeşil.** İlk yükleme 184.2 KB.
+**Cache:** v7-181 → **v7-182**
+
+---
+
+### 🔴 6 Eylül 2026 — ⚖️ BAYAT TARTI ÖLÇÜMÜ: VERİ GELMEMEKTEN KÖTÜSÜ (v7-181)
+
+Salim: *"tartıdan veri düşmüyor uygulamaya, zincir bozulmuş diye bildirim geliyor."* Veritabanına bakıldı — **veri DÜŞÜYORDU, ama hep AYNI veri:**
+
+```
+2026-08-14   68.8 kg / %15.5 / 58.1
+2026-09-01   68.8 kg / %15.5 / 58.1
+2026-09-08   68.8 kg / %15.5 / 58.1      ← üçü birebir aynı
+2026-08-08   68.1 kg / %14.8 / 58.0
+2026-08-10   68.1 kg / %14.8 / 58.0      ← aynı desen daha önce de olmuş
+```
+
+**Kök neden:** iOS Kısayolu *"EN SON Sağlık örneğini"* okuyor ve `date` **göndermiyor**; uç da tarihsiz kaydı `trToday()` ile bugüne damgalıyor. Xiaomi → Apple Sağlık bağlantısı koptuğunda örnek yenilenmiyor ama Kısayol yine de çalışıyor ve **haftalar önceki ölçümü her sabah bugünün kilosu olarak** yolluyor.
+
+**⚠️ BU, VERİ GELMEMEKTEN DAHA KÖTÜ.** Trend canlı görünüyor, kilo eğimi sahte düz çıkıyor, `palKat` kalibrasyonu — ki gerçek kilo regresyonu istiyor — çöple besleniyor, ve `hcWeightTrend`'in *"N gündür tartım kaydı gelmiyor"* uyarısı da **susuyor**, çünkü teknik olarak kayıt var. Sessiz veri zehirlenmesi: uyarı sisteminin kendisi kör ediliyor.
+
+**Düzeltme — `/body`'de bayat ölçüm koruması.** Tek ölçüm + tarih yollanmamış + otomatik kaynak iken, gelen kg ve yağ en yeni kayıtla **birebir aynıysa** ve o kayıt **2+ gün eskiyse** yazılmıyor; `409` + `stale:true` + eyleme dönük özet dönüyor:
+
+```
+⚠️ Tartı verisi yenilenmemiş — 2026-09-01 ölçümünün aynısı geliyor (68.8 kg).
+Xiaomi Home → Apple Sağlık bağlantısını kontrol et.
+```
+
+Kısayol zaten cevabı bildirimde gösteriyor (kurulum adımı 6), yani **hiçbir telefon değişikliği yapmadan** sessiz yalan, her sabah görünen doğru bir teşhise dönüşüyor.
+- ⚠️ **Ardışık günde aynı değer GERÇEK olabilir** — 2 gün eşiği tam olarak bunun için (teste bağlı).
+- ⚠️ **Toplu dolgu (`items`) ve tarihli gönderim MUAF** — geçmiş dolgusu meşru olarak eski tarihlere yazar.
+- ⚠️ Kısayol'un metin/virgüllü biçimi ve Apple Sağlık'ın kesirli yağ oranı (`0.155` = %15.5) da aynı sayılıyor; yoksa koruma biçim yüzünden atlanırdı.
+- Bugüne ait kayıtla karşılaştırma yapılmıyor (gün içi ikinci tartım upsert'tir).
+
+**Asıl çözüm belgeye yazıldı:** `ios-shortcuts.md`'ye `date` alanı eklendi — ölçümün **kendi** `Başlangıç Tarihi`ni `yyyy-MM-dd` biçimleyip yollamak. Böylece bayat örnek kendi eski gününe yazılır (zararsız upsert), bugüne değil. Sunucu koruması o kurulmasa da çalışıyor; ikisi birlikte hem yanlış veriyi engelliyor hem sebebini söylüyor.
+
+**Ölçüm:** `tests/35-bayat-tarti.test.js` **12 test** (gerçek vakanın kendisi · biçim tuzakları 2 · yanlış alarm 6 · belge-kod tutarlılığı 1). Karar bloğu **gövdeden çıkarılıp** çalıştırılıyor — kopya değil, blok silinirse test bulamaz ve kırmızı olur. **36 dosya toplam 1118 test yeşil.**
+**Cache:** v7-180 → **v7-181**
+
+---
+
+### 🔴 6 Eylül 2026 — 🔔 BİLDİRİM KAPISI: SESSİZ ÖLÜMÜN ÜÇ HÂLİ (v7-180)
+
+ADHD uygulamasında hatırlatma gelmiyorsa uygulama hiç açılmıyor — bildirim zincirindeki sessiz bir kopma **tek başına ürünü öldürür**. Zincir uçtan uca denetlendi.
+
+**✅ Worker tarafı sağlam çıktı** (dokunulmadı, sözleşmeleri teste bağlandı): ölü subscription 404/410'da temizlenip kaydediliyor · cron kaçırdığı eski slotu telafi etmiyor (aralıklıda 30 dk, takviye nag'ında 5 dk penceresi — yoksa gün ortasında bildirim yağmuru) · gece yarısı taşması ele alınmış · blok ping'leri `b.start/end/id/kind/done` okuyor, yani **yerel planlayıcının ürettiği bloklarla da çalışıyor** (alan adları kayarsa planlı gün sessizce bildirimsiz kalır — teste bağlandı).
+
+**🔴 Kopma UYGULAMA tarafındaydı ve üç hâli vardı; üçü de kullanıcıya hiçbir şey söylemiyordu.**
+
+**1 — iOS'ta push YALNIZ ana ekrana eklenmiş PWA'da çalışır.** Safari sekmesinde `Notification` çoğu sürümde tanımlı bile değil; uygulama o durumda **"Bu cihaz bildirimi desteklemiyor"** yazıyordu. Bu yanlış ve **yanlış yöne gönderen** bir mesaj: cihaz destekliyor, **sekme** desteklemiyor — kullanıcı telefon ayarlarına gidip orada yapabileceği hiçbir şey bulamıyor. Salim bunu iPhone'da kullanacak; yani doğru kurulmadan **hiçbir hatırlatma gelmeyecekti** ve sebebi hiçbir yerde yazmıyordu.
+Yeni `pwaStandalone()` / `isIOS()` / `iosTabda()`. Hem şerit hem Ayarlar artık gerçek sebebi ve çözümü yazıyor (*Paylaş ▸ Ana Ekrana Ekle*), `askNotif` de o ortamda boşuna izin istemiyor. ⚠️ iPadOS 13+ kendini Mac gibi tanıttığı için `maxTouchPoints` ile ayrılıyor.
+
+**2 — İzin var ama cihaz kayıtlı değil: en sinsi hâli.** Her şey açık görünüyor, tek bildirim gelmiyor. Uyarı **yalnız Ayarlar ekranındaydı** — ana ekranda hiçbir iz yoktu, yani ancak "haftalardır hatırlatma gelmiyor" diye fark edilirdi ki ADHD'de bu hiç fark edilmemek demektir. Artık `notifBanner` üç durumu ayırıyor: iOS sekmesi · izin istenmemiş · **izin var + kayıt yok** (tek dokunuşla kaydeder). Kayıt varsa ve izin reddedilmişse şerit **susuyor** — ısrar eden uyarı gürültüye dönüşür (teste bağlı).
+
+**3 — Açılıştaki abonelik tazelemesi sonucu şeride yansımıyordu.** Abonelik sonradan sessizce ölürse (iOS'ta olur) tazeleme başarısız oluyor ve hiçbir şey söylenmiyordu. Artık `subscribeToPush()` sonrası şerit yeniden çiziliyor; `enablePushHere` ve `resubscribePush` de aynı şekilde.
+
+**💸 BÜTÇE BORCU ALTINCI TAKSİT.** Şerit mantığı ilk yüklemeyi **184.9 KB**'ye çıkardı (bütçe 185). **Uyku trend modalı** (`SLEEP_HYGIENE_TIPS` + `renderSleepTrend` + hedef/hatırlatıcı ayarları, 114 satır) `health.js`'e taşındı — modal yalnız uyku kartına dokununca açılıyor ve `health.js` zaten Diyet sekmesinde tembel iniyor; üstelik uyku orasının alanı (`hcRecovery` uyku borcunu okuyor). ⚠️ **`renderDailyScore` ui.js'te KALDI** — Görevler sekmesi her açılışta çağırıyor, gerçekten kritik yolda (teste bağlı: yanlışlıkla taşınırsa kırmızı). İlk yükleme **182.8 KB**.
+
+**Ölçüm:** `tests/34-bildirim-kapisi.test.js` **17 test** (iOS ortam ayrımı 6 · kayıt yok hâli 4 · kapı sözleşmeleri 4 · worker regresyon kilidi 3). **35 dosya toplam 1106 test yeşil.**
+**Cache:** v7-179 → **v7-180**
+
+---
+
+### 🔴 6 Eylül 2026 — ⚖️ TEK HEDEF KAYNAĞI + GÜN KISALTMASI (v7-179)
+
+Salim *"diyet ve antrenman kısmını kullanmaya başlayacağım"* dedi. İki akış **sıfırdan kurulum yapan bir kullanıcı gibi** (boş `localStorage`, gerçek çip tıklamaları) koşturuldu. Motorlar sağlam çıktı; **kurulum yüzeyinde iki hata** vardı ve ikisi de ilk beş dakikada karşına çıkanlardan.
+
+**1 — 🔴 AYNI EKRANDA İKİ FARKLI HEDEF, HANGİSİNİN GEÇERLİ OLDUĞU HİÇBİR YERDE YAZMIYOR.**
+Diyet sekmesindeki hesaplayıcı (`calcGoals`, core.js) kendi **Mifflin** BMR'sini, kullanıcının açılır menüden seçtiği PAL'i ve sabit **1.8 g/kg** proteini kullanıp doğrudan `data.diet.kcalGoal`e yazıyordu. Beslenme motoru (`nutrition.js`) ise paylaşılan **`hcBMR`**yi, **gün tipine göre** PAL'i (dinlenme 1.55 → ağırlık+dövüş 1.8) ve **enerji mevcudiyeti tabanını** kullanıyor.
+Ölçüm (16 yaş · 178 cm · 68.5 kg): **hesaplayıcı BMR 1723 → 3274 kcal**, **motor BMR 1870 → 2899 kcal**. Günlük ekranı 3274'e göre "kalan" sayıyor, plan 2899 öneriyordu — **375 kcal fark**, üst üste iki kart.
+**⚠️ MOTOR KAZANIR.** `hcBMR` sağlık raporuyla ortak çekirdek (ui.js ↔ worker.js ikizi), PAL gün tipine duyarlı, enerji mevcudiyeti tabanı ve 16 yaş kilitleri ona bağlı. **Hesaplayıcının tek işi artık PROFİL toplamak** (yaş/boy/kilo/cinsiyet → `data.diet.calc`).
+- Yeni `nutSyncDietGoals(t)`: motor hedefi hesaplayınca **günlüğe yazıyor** (kcal + 3 makro + su). Böylece günlükteki "kalan" ile plandaki hedef **aynı sayı**. Değişmediyse `save()` çağrılmıyor — her render'da yazmak senkron trafiğini boşa şişirirdi (teste bağlı).
+- Hedef **gün tipine göre değişiyor** ve bu artık günlüğe de yansıyor: aynı profil için dinlenme 3249, ağırlık 3529, ağırlık+dövüş 3623.
+- Hesaplayıcıdaki **aktivite seçimi artık hedefi belirlemiyor** (motor gün tipinden okuyor) ve bu ekranda **açıkça yazıyor** — çalışmayan bir kontrol bırakmak kullanıcıya yalan söylemektir.
+- `nutrition.js` inmemişken yedek hesap duruyor ama kartta *"kaba hesap — motor yüklenince yeniden hesaplanır"* yazıyor.
+
+**2 — 🔴 GÜN KISALTMASI TÜRKÇEDE `slice(0, 3)` İLE YAPILMIŞTI.**
+`PROGRAM_GUNLER[d].slice(0, 3)`: *Pazartesi→"Paz"* ile *Pazar→"Paz"*, *Cumartesi→"Cum"* ile *Cuma→"Cum"* çakışıyor. Antrenman kurulum ekranındaki **dövüş günü çipleri** tam olarak böyleydi: yedi çipin ikisi ayırt edilemiyordu — `Paz Sal Çar Per Cum Cum Paz`. Kullanıcı hangi güne bastığını göremiyordu ve bu ekran programın **ilk adımı**. Aynı hata `nutrition.js`'in haftalık şeridinde de vardı.
+**Çözüm:** `core.js` → `const GUN_KISA = ['Paz','Pzt','Sal','Çar','Per','Cum','Cmt']` tek kaynak; ui.js ve school.js'teki kopyalar da ona bağlandı. ⚠️ `nutrition.js` **bağlanamadı**: `18-nutrition` motoru core.js OLMADAN yalıtılmış bir vm'de yüklüyor ve bu sözleşme bilerek var — orada kendi kopyası duruyor, **iki dizinin aynı kaldığı teste bağlandı** (kayma nöbeti). Ayrıca `slice(0,3)` ile gün kısaltmayı yasaklayan sabotaj testi eklendi.
+
+**✅ SIFIRDAN KURULUM UÇTAN UCA DOĞRULANDI** (bu iki düzeltmeden sonra):
+- **Antrenman:** çipleri tıkla → `buildProgram` → 4 güç + 2 dövüş günü, her harekette ad/set/tekrar/dinlenme/RPE, koçluk notları (patlayıcı iş seansın başında, ilk 2 hafta teknik haftası, hacim tavanı gerekçesiyle) doğru basılıyor.
+- **Beslenme:** profil → hedef → örnek gün → **plana aktarım kalori kaybetmiyor** (3453 = 3453, 21 kalem) ve ikinci aktarım elle eklenen satırları silmiyor, çiftlemiyor (teste bağlı).
+
+**Ölçüm:** `tests/33-hedef-kaynagi.test.js` **14 test** (gün kısaltması 4 · tek hedef kaynağı 6 · kurulum uçtan uca 3 · aktarım 2 — kapı testleri dahil). **34 dosya toplam 1089 test yeşil.** İlk yükleme 183.7 KB.
+**Cache:** v7-178 → **v7-179**
+
+---
+
+### 🔴 6 Eylül 2026 — 🔗 PLAN İLE "BUGÜN" EKRANI BİRBİRİNE BAĞLANDI (v7-178)
+
+Yerel planlayıcı geldikten sonra kalan boşluk: **planı kurup ona bakmamak.** Günü saat saat bloklara bölüyorsun, sonra ana ekran (Görevler) *"şu an ne var"* sorusuna cevap vermiyor — her seferinde Plan sekmesine geçmen gerekiyor. Planı kurup bakmamak, planı hiç kurmamakla aynı yere çıkar.
+
+**1 — `now-card` artık planı okuyor.** Üstteki saat kartındaki `nowNext` satırı yalnız `reminderTime`i olan görevlere bakıyordu. Yeni sıra: **şu anki blok → 2 saat içindeki sıradaki blok → hatırlatma.**
+- Şu anki blok: `şu an: Matematik · 20 dk kaldı` (son 5 dk'da `urgent`).
+- Sıradaki: `40 dk sonra: Kickboks (20:13)` (10 dk kala `urgent`).
+- ⚠️ **2 saatten uzaktaki blok gösterilmiyor** — sürekli görünen bir "sonraki" gürültüdür, uyarı değeri kalmaz.
+- ⚠️ **Dünün planı bugünün ekranına sızmıyor** (`dayPlan.date === today()` kapısı; teste bağlı).
+- Plan yoksa **eski hatırlatma davranışı aynen duruyor** — teste bağlı.
+- Satır artık **tıklanabilir** → Plan sekmesi. Bilgi var ama yolu yoksa yarım iş.
+
+**2 — Akşam özetine "Yarını planla" düğmesi.** Düğme Plan sekmesindeydi; günü kapatırken bir sekme uzaktaydı. Akşam ritüelinin son adımı artık özetin içinde: *bugünü gör → Aidan'a anlat → yarını planla.*
+
+**💸 BÜTÇE BORCU BEŞİNCİ TAKSİT.** Bu iki ekleme ilk yüklemeyi tam **185.0 KB**'ye getirdi (bütçe 185 — yani pay sıfır). **Haftalık karne** (193 satır) `karne.js`'e taşındı: yalnız "Karne" düğmesinden açılıyor, her açılışta iniyor ve ayrıştırılıyordu. ⚠️ **`recordDoneHour` ui.js'te KALDI** — görev bitince çağrılıyor, o gerçekten kritik yolda; taşınsaydı karne indirilmeden istatistik toplanmazdı. `openKarneModal` artık bir kapı: modülü indirip `karneOpen()` çağırıyor. **İlk yükleme 182.8 KB** (pay 2.2 KB).
+
+**Ölçüm:** `32-yerel-plan` 20 → **27 test** (now-card bağı 5 + kapı 2). **33 dosya toplam 1074 test yeşil.**
+**Cache:** v7-177 → **v7-178**
+
+---
+
 ### 🔴 6 Eylül 2026 — 🗓️ GÜN PLANI ARTIK AI'SIZ DA KURULUYOR (v7-177)
 
 Salim: *"uygulama günlük kullanabileceğim bir duruma gelsin."* Günlük döngü kullanıcı gibi gezildi; Görevler sekmesi zaten iyi bir "bugün" ekranı (now-card · günlük skor · Aidan'ın notu · uyku · geri sayım · okul · Bugünün 3'ü · kapasite · akşam özeti + günlük). **Kırık halka Plan sekmesiydi.**

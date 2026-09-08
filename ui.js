@@ -824,31 +824,7 @@ function closeWeeklyInsight() {
   save();
 }
 
-// ============ HAFTALIK KARNE (istediğinde aç — Karne butonu) ============
-let _karneWeek = 'this'; // 'this' | 'last'
-const KARNE_CAT = { odev: 'Ödev', ders: 'Özel Ders', ev: 'Ev', kisisel: 'Kişisel', kategorisiz: '• Diğer' };
-const KARNE_DAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
-const KARNE_DAYS_FULL = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
-
-// Pazartesi ISO'sundan o haftanın 7 gün dizisini üretir (öğlen demirli → UTC kayması yok)
-function daysOfWeekIso(mondayIso) {
-  const out = [];
-  const base = new Date(mondayIso + 'T12:00:00');
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(base);
-    d.setDate(base.getDate() + i);
-    out.push(isoLocal(d));
-  }
-  return out;
-}
-
-// iso tarihinden 1 gün öncesi (öğlen demirli → UTC kayması yok)
-function prevDayIso(iso) {
-  const d = new Date(iso + 'T12:00:00');
-  d.setDate(d.getDate() - 1);
-  return isoLocal(d);
-}
-
+// ============ HAFTALIK KARNE — kapi (motor karne.js'te, TEMBEL) ============
 // weeksAgo: 0 = bu hafta, 1 = geçen hafta, 2 = önceki hafta...
 // Görev bitince o saatin sayacını artır — data.hourStats = {0..23: count}.
 // Zamanla dolan histogram; "en verimli saatin" analizini besler.
@@ -858,164 +834,20 @@ function recordDoneHour() {
   data.hourStats[String(h)] = (data.hourStats[String(h)] || 0) + 1;
 }
 
-// En verimli saat aralığını hesapla. Yeterli veri yoksa (toplam < 6) null döner.
-function bestHourInfo() {
-  const hs = data.hourStats || {};
-  let total = 0;
-  const arr = new Array(24).fill(0);
-  for (let h = 0; h < 24; h++) { const c = hs[String(h)] || 0; arr[h] = c; total += c; }
-  if (total < 6) return { ready: false, total };
-  let bestStart = 0, bestSum = -1;
-  for (let h = 0; h < 24; h++) {
-    const sum = arr[h] + arr[(h + 1) % 24];
-    if (sum > bestSum) { bestSum = sum; bestStart = h; }
+/**
+ * ⚠️ 6 Eyl 2026 — KARNE MOTORU karne.js'E TASINDI. Blok 193 satirdi ve
+ * YALNIZ "Karne" dugmesinden aciliyordu; her acilista iniyor, ayristiriliyor
+ * ve bellekte duruyordu. Ilk yukleme butcesi (185 KB) doluydu; eslik degil
+ * borc odendi. `recordDoneHour` burada KALDI — gorev bitince cagriliyor,
+ * yani gercekten kritik yolda.
+ */
+async function openKarneModal() {
+  try {
+    await loadModule('karne');
+    if (typeof karneOpen === 'function') karneOpen();
+  } catch (e) {
+    showToast('Karne yuklenemedi: ' + e.message, 'error', 4000);
   }
-  const end = (bestStart + 2) % 24;
-  const pad = n => String(n).padStart(2, '0');
-  const label = `${pad(bestStart)}:00–${pad(end)}:00`;
-  let part = '';
-  if (bestStart >= 5 && bestStart < 12) part = 'sabah';
-  else if (bestStart >= 12 && bestStart < 17) part = 'öğleden sonra';
-  else if (bestStart >= 17 && bestStart < 22) part = 'akşam';
-  else part = 'gece';
-  return { ready: true, total, label, part, count: bestSum };
-}
-
-function karneStats(weeksAgo) {
-  const start = getMondayIso(weeksAgo * 7);
-  // Haftanın sonu: bu hafta → bugün; geçmiş hafta → bir sonraki pazartesiden önceki gün (o haftanın pazarı)
-  const end = weeksAgo === 0 ? today() : prevDayIso(getMondayIso((weeksAgo - 1) * 7));
-  const tasks = data.tasks || [];
-  const done = tasks.filter(t => t.doneDate && t.doneDate >= start && t.doneDate <= end);
-  const byCat = {};
-  done.forEach(t => { const c = t.category || 'kategorisiz'; byCat[c] = (byCat[c] || 0) + 1; });
-  const dayIsos = daysOfWeekIso(start);
-  const byDayArr = dayIsos.map(iso => done.filter(t => t.doneDate === iso).length);
-  const mitDone = done.filter(t => t.mitDate && t.mitDate >= start && t.mitDate <= end).length;
-  let focusMin = 0;
-  done.forEach(t => { if (t.actualMin) focusMin += t.actualMin; });
-  return { start, end, done: done.length, byCat, dayIsos, byDayArr, mitDone, focusMin };
-}
-
-function openKarneModal() {
-  _karneWeek = 'this';
-  renderKarne();
-  document.getElementById('karneModal').classList.add('active');
-}
-function closeKarneModal() {
-  document.getElementById('karneModal').classList.remove('active');
-}
-function setKarneWeek(w) { _karneWeek = w; renderKarne(); }
-
-function renderKarne() {
-  const el = document.getElementById('karneBody');
-  if (!el) return;
-  const which = _karneWeek;
-  const weeksAgo = which === 'last' ? 1 : 0;
-  const s = karneStats(weeksAgo);
-  const other = karneStats(weeksAgo + 1); // gösterilen haftadan bir önceki hafta
-
-  const tabs = `
-    <div class="krn-tabs">
-      <button class="krn-tab ${which === 'this' ? 'active' : ''}" onclick="setKarneWeek('this')">Bu hafta</button>
-      <button class="krn-tab ${which === 'last' ? 'active' : ''}" onclick="setKarneWeek('last')">Geçen hafta</button>
-    </div>`;
-
-  // Hiç biten yoksa: nazik boş durum
-  if (s.done === 0) {
-    const msg = which === 'this'
-      ? 'Hafta yeni başladı — ilk görevi bitirince burası dolmaya başlar. '
-      : 'Geçen hafta kayıt yok. Sorun değil, önemli olan bugün. ';
-    el.innerHTML = tabs + `<div class="krn-empty">${msg}</div>`;
-    return;
-  }
-
-  // Karşılaştırma
-  let cmp = '';
-  const diff = s.done - other.done;
-  if (other.done > 0 || s.done > 0) {
-    if (diff > 0) cmp = `<span class="krn-cmp up">↑ ${diff} fazla</span>`;
-    else if (diff < 0) cmp = `<span class="krn-cmp down">↓ ${-diff} az</span>`;
-    else cmp = `<span class="krn-cmp flat">= aynı</span>`;
-  }
-  const cmpNote = which === 'this' ? 'geçen haftaya göre' : 'önceki haftaya göre';
-
-  // Gün gün bar grafik
-  const maxDay = Math.max(1, ...s.byDayArr);
-  const todayIso = today();
-  const bars = s.byDayArr.map((c, i) => {
-    const h = c ? Math.max(8, Math.round((c / maxDay) * 100)) : 3;
-    const isToday = which === 'this' && s.dayIsos[i] === todayIso;
-    return `<div class="krn-bar-col">
-      <div class="krn-bar-val">${c || ''}</div>
-      <div class="krn-bar ${isToday ? 'today' : ''}" style="height:${h}%;"></div>
-      <div class="krn-bar-day ${isToday ? 'today' : ''}">${KARNE_DAYS[i]}</div>
-    </div>`;
-  }).join('');
-
-  // En verimli gün (2+ biten)
-  const maxVal = Math.max(...s.byDayArr);
-  const maxIdx = s.byDayArr.indexOf(maxVal);
-  const topDay = maxVal >= 2 ? KARNE_DAYS_FULL[maxIdx] : '';
-
-  // Kategori dağılımı
-  const catEntries = Object.entries(s.byCat).sort((a, b) => b[1] - a[1]);
-  const maxCat = Math.max(1, ...catEntries.map(e => e[1]));
-  const catRows = catEntries.map(([k, v]) => `
-    <div class="krn-cat-row">
-      <span class="krn-cat-lbl">${KARNE_CAT[k] || k}</span>
-      <span class="krn-cat-track"><span class="krn-cat-fill" style="width:${Math.round(v / maxCat * 100)}%;"></span></span>
-      <span class="krn-cat-num">${v}</span>
-    </div>`).join('');
-
-  // Nazik kapanış cümlesi
-  let note;
-  if (topDay) note = `En verimli günün <b>${topDay}</b> oldu. Zor işleri o güne saklamak işe yarıyor olabilir.`;
-  else if (s.mitDone >= 3) note = `<b>${s.mitDone}</b> MIT bitirmişsin — net odak, güzel ritim. `;
-  else if (diff > 0) note = `Önceki haftadan <b>${diff}</b> görev fazla. Yükseliştesin `;
-  else note = 'Her biten görev bir kazanç. Kendine iyi davran. ';
-
-  // Alt farkındalık (anlık durum)
-  const overdue = (data.tasks || []).filter(t => !t.done && t.due && t.due < todayIso).length;
-  const stuck = (data.tasks || []).filter(t => !t.done && (t.postponeCount || 0) >= 3).length;
-  let footer = '';
-  if (overdue || stuck) {
-    footer = `<div class="krn-footer">
-      ${overdue ? `<span>${overdue} gecikmiş bekliyor</span>` : ''}
-      ${stuck ? `<span>${stuck} çok ertelenmiş</span>` : ''}
-    </div>`;
-  }
-
-  el.innerHTML = tabs + `
-    <div class="krn-hero">
-      <div class="krn-big">${s.done}</div>
-      <div class="krn-big-lbl">görev bitti${cmp ? `<br>${cmp} <span class="krn-cmp-note">${cmpNote}</span>` : ''}</div>
-    </div>
-    <div class="krn-chart">${bars}</div>
-    <div class="krn-statline">
-      ${s.mitDone ? `<span class="krn-pill">${s.mitDone} MIT</span>` : ''}
-      ${s.focusMin ? `<span class="krn-pill">~${Math.round(s.focusMin)} dk odak</span>` : ''}
-      ${catEntries[0] ? `<span class="krn-pill">${KARNE_CAT[catEntries[0][0]] || catEntries[0][0]}</span>` : ''}
-    </div>
-    ${catRows ? `<div class="krn-section-lbl">Kategori dağılımı</div><div class="krn-cats">${catRows}</div>` : ''}
-    ${bestHourBlock()}
-    <div class="krn-note">${note}</div>
-    ${footer}
-  `;
-}
-
-// En verimli saat kartı (tüm zaman histogramından). Karnede kategori dağılımının altında.
-function bestHourBlock() {
-  const bh = bestHourInfo();
-  if (!bh.ready) {
-    const need = 6 - (bh.total || 0);
-    return `<div class="krn-besthour building">${icon('saat')} En verimli saatin: <b>${need} görev daha</b> bitince ortaya çıkar (veri birikiyor).</div>`;
-  }
-  return `<div class="krn-besthour">
-    <div class="krn-besthour-icon">${icon('saat')}</div>
-    <div class="krn-besthour-txt">En çok <b>${bh.label}</b> arası (${bh.part}) iş bitiriyorsun.<br>
-      <span class="krn-besthour-sub">Zor görevleri bu saate koymayı dene.</span></div>
-  </div>`;
 }
 
 // ============ DİYET KARNESİ (haftalık / aylık özet) ============
@@ -2275,10 +2107,38 @@ function tickNow() {
   }
 
   // Yaklaşan hatırlatma (2 saat içinde) — saniyelik geri sayım, 15 dk altı acil
+  //
+  // ⚠️ 6 Eyl 2026 — GÜN PLANI BURAYA BAĞLANDI. Önceden bu satır YALNIZ
+  // `reminderTime`i olan görevlere bakıyordu: günü saat saat bloklara
+  // bölüyorsun, sonra ana ekran "şu an ne var" sorusuna cevap vermiyor ve
+  // her seferinde Plan sekmesine geçmen gerekiyordu. Planı kurup bakmamak,
+  // planı hiç kurmamakla aynı yere çıkar.
+  // Sıra: ŞU ANKİ blok > 2 saat içindeki SIRADAKİ blok > hatırlatma.
   const nn = document.getElementById('nowNext');
   if (nn) {
     let show = false;
-    if (_nextReminder && _nextReminder.reminderTime) {
+    const dp = (data.dayPlan && data.dayPlan.date === today()) ? (data.dayPlan.blocks || []) : [];
+    if (dp.length && typeof hmToMin === 'function') {
+      const simdi = dp.find(b => b && !b.done && hmToMin(b.start) <= nowMin && nowMin < hmToMin(b.end));
+      const sonraki = dp.filter(b => b && !b.done && hmToMin(b.start) > nowMin)
+        .sort((a, b) => hmToMin(a.start) - hmToMin(b.start))[0];
+      if (simdi) {
+        const kalan = hmToMin(simdi.end) - nowMin;
+        nn.innerHTML = '<b>şu an:</b> ' + escapeHtml((simdi.label || '').slice(0, 24)) +
+          ' <span style="opacity:.7">· ' + kalan + ' dk kaldı</span>';
+        nn.classList.toggle('urgent', kalan <= 5);
+        show = true;
+      } else if (sonraki && hmToMin(sonraki.start) - nowMin <= 120) {
+        const fark = hmToMin(sonraki.start) - nowMin;
+        const txt = fark < 60 ? fark + ' dk' : Math.floor(fark / 60) + 'sa ' + (fark % 60) + 'dk';
+        nn.innerHTML = icon('saat') + ' ' + txt + ' sonra: ' + escapeHtml((sonraki.label || '').slice(0, 24)) +
+          ' <span style="opacity:.7">(' + sonraki.start + ')</span>';
+        nn.classList.toggle('urgent', fark <= 10);
+        show = true;
+      }
+    }
+    // Plan yoksa ya da bugün için blok kalmadıysa hatırlatmaya düşülür.
+    if (!show && _nextReminder && _nextReminder.reminderTime) {
       const [h, m] = _nextReminder.reminderTime.split(':').map(Number);
       if (!isNaN(h) && !isNaN(m)) {
         const diff = (h * 60 + m) - nowMin;
@@ -2445,7 +2305,70 @@ function savePushSub(sub) {
   save();
 }
 
+/**
+ * 🔴 6 Eyl 2026 — iOS'TA PUSH YALNIZ ANA EKRANA EKLENMIS PWA'DA CALISIR.
+ * Safari SEKMESINDE `Notification` cogu surumde hic tanimli degil; uygulama
+ * o durumda "Bu cihaz bildirimi desteklemiyor" yaziyordu — YANLIS ve
+ * yanlis yone gonderen bir mesaj: cihaz destekliyor, SEKME desteklemiyor.
+ * Kullanici "bildirimleri aç"a basiyor, hicbir sey olmuyor, sebebi hicbir
+ * yerde yazmiyor. ADHD uygulamasinda hatirlatma gelmiyorsa uygulama hic
+ * acilmiyor — yani bu sessiz hata tek basina urunu olduruyor.
+ */
+function pwaStandalone() {
+  try {
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+      window.navigator.standalone === true;
+  } catch (_) { return false; }
+}
+function isIOS() {
+  const ua = navigator.userAgent || '';
+  // iPadOS 13+ kendini Mac gibi tanitiyor; dokunma noktasi sayisi ayirt ediyor.
+  return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+}
+/** iOS + ana ekrana EKLENMEMIS: push bu ortamda hic calismaz. */
+function iosTabda() { return isIOS() && !pwaStandalone(); }
+
+/**
+ * Bildirim serisi — UC sessiz hata durumunu ayirir:
+ *  1) iOS sekmesi: push imkansiz, cozum "Ana Ekrana Ekle"
+ *  2) izin istenmemis: klasik izin serisi
+ *  3) izin VAR ama cihaz kayitli DEGIL: en tehlikelisi — her sey acik
+ *     gorunur, tek bir bildirim bile gelmez ve hicbir yerde yazmaz.
+ */
+function renderNotifBanner() {
+  const b = document.getElementById('notifBanner');
+  if (!b) return;
+  const yok = !('Notification' in window);
+  if (iosTabda()) {
+    b.innerHTML = 'Hatırlatmalar için Aidan\'ı ana ekrana ekle — Safari\'de paylaş ▸ <b>Ana Ekrana Ekle</b>. ' +
+      'iPhone\'da bildirim yalnız böyle çalışır.';
+    b.onclick = null;
+    b.style.display = 'block';
+    return;
+  }
+  if (yok) { b.style.display = 'none'; return; }
+  if (Notification.permission === 'default') {
+    b.textContent = 'Hatırlatmaların çalışması için bildirimlere izin ver (tıkla)';
+    b.onclick = askNotif;
+    b.style.display = 'block';
+    return;
+  }
+  if (Notification.permission === 'granted' &&
+      !((data.settings && data.settings.pushSubs) || []).length) {
+    b.textContent = 'Bu cihaz arka plan bildirimine kayıtlı değil — dokun, kaydedeyim';
+    b.onclick = enablePushHere;
+    b.style.display = 'block';
+    return;
+  }
+  b.style.display = 'none';
+}
+
 function askNotif() {
+  if (iosTabda()) {
+    showToast('iPhone\'da bildirim yalnız ana ekrana eklenmiş uygulamada çalışır. ' +
+      'Safari\'de paylaş ▸ Ana Ekrana Ekle.', 'warning', 7000);
+    return;
+  }
   if (!('Notification' in window)) {
     showToast('Bu cihaz bildirimi desteklemiyor', 'warning');
     return;
@@ -2463,6 +2386,7 @@ function askNotif() {
       showToast('Bildirim izni reddedildi. Telefon ayarlarından açabilirsin.', 'warning', 5000);
     }
     renderNotifSettings();
+    renderNotifBanner();
   });
 }
 
@@ -2494,6 +2418,14 @@ function notify(title, body, opts = {}) {
 function renderNotifSettings() {
   const el = document.getElementById('notifSettings');
   if (!el) return;
+  if (iosTabda()) {
+    el.innerHTML =
+      '<div style="color:var(--danger);">Bildirimler bu ortamda çalışmaz</div>' +
+      '<div style="color:var(--text-muted);font-size:0.85em;margin-top:4px;line-height:1.5;">' +
+      'iPhone\'da Web Push yalnız <b>ana ekrana eklenmiş</b> uygulamada çalışır — Safari sekmesinde değil. ' +
+      'Paylaş ▸ <b>Ana Ekrana Ekle</b> yap, sonra Aidan\'ı ana ekrandan aç ve buraya dön.</div>';
+    return;
+  }
   if (!('Notification' in window)) {
     el.innerHTML = `<div style="color:var(--text-muted);font-size:0.85em;">Bu cihaz bildirimi desteklemiyor.</div>`;
     return;
@@ -2541,8 +2473,7 @@ function pushLogRelTime(when) {
   const hhmm = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   if (dayDiff === 0) return `bugün ${hhmm}`;
   if (dayDiff === 1) return `dün ${hhmm}`;
-  const names = ['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
-  return `${names[d.getDay()]} ${hhmm}`;
+  return `${GUN_KISA[d.getDay()]} ${hhmm}`;
 }
 
 function renderPushLog() {
@@ -2846,119 +2777,23 @@ function editSleep() {
 }
 
 // ===== 😴 Uyku trend modalı + hijyen + yatma hatırlatıcısı (Faz 1 · v7-116) =====
-const SLEEP_HYGIENE_TIPS = [
-  'Yatmadan 1 saat önce ekranı bırak — mavi ışık melatonini geciktirir.',
-  'Öğleden sonra kafein (kahve, kola, enerji içeceği) uykuyu böler.',
-  'Odayı serin ve karanlık tut — 18-20°C ideal.',
-  'Her gün aynı saatte yat-kalk, hafta sonu dahil — ritim oturur.',
-  'Yatakta telefon yerine 10 dk kitap ya da nefes — beyin "yatak = uyku" öğrenir.',
-  'Akşam ağır/geç yemeği yatıştan 2-3 saat önce bitir.'
-];
-function sleepHygieneTip() {
-  const d = new Date();
-  const idx = (d.getFullYear() * 372 + d.getMonth() * 31 + d.getDate()) % SLEEP_HYGIENE_TIPS.length;
-  return SLEEP_HYGIENE_TIPS[idx];
+/**
+ * ⚠️ 6 Eyl 2026 — UYKU TREND MODALI health.js'E TASINDI (3.8 KB gz).
+ * Modal yalniz uyku kartina dokununca aciliyor; her acilista iniyordu.
+ * Bildirim serisi eklenince ilk yukleme 184.9 KB'ye ciktı (butce 185) —
+ * yine esik yukseltilmedi, borc odendi. health.js zaten Diyet sekmesinde
+ * tembel iniyor ve uyku ORASININ alani (hcRecovery uyku borcunu okuyor).
+ * ⚠️ `renderDailyScore` BURADA KALDI — Gorevler sekmesi her acilista
+ * cagiriyor, yani gercekten kritik yolda.
+ */
+async function openSleepTrend() {
+  try {
+    await loadModule('health');
+    if (typeof sleepTrendOpen === 'function') sleepTrendOpen();
+  } catch (e) {
+    showToast('Uyku ekrani yuklenemedi: ' + e.message, 'error', 4000);
+  }
 }
-function openSleepTrend() { renderSleepTrend(); const m = document.getElementById('sleepTrendModal'); if (m) m.classList.add('active'); }
-function closeSleepTrend() { const m = document.getElementById('sleepTrendModal'); if (m) m.classList.remove('active'); }
-function renderSleepTrend() {
-  const el = document.getElementById('sleepTrendBody');
-  if (!el) return;
-  if (typeof ensureSleep === 'function') ensureSleep();
-  const g = (typeof ensureSleepGoal === 'function') ? ensureSleepGoal() : { enabled: false, wake: '07:00', targetH: 8, leadMin: 30 };
-  const target = g.targetH || 8;
-  const series = [];
-  for (let i = 29; i >= 0; i--) {
-    const d = shiftDateStr(today(), -i);
-    series.push({ date: d, rec: (data.sleep || []).find(x => x.date === d) || null });
-  }
-  const W = 320, H = 96, gap = 2, n = series.length;
-  const bw = (W - (n - 1) * gap) / n, maxH = 10;
-  const bars = series.map((it, i) => {
-    const x = (i * (bw + gap)).toFixed(1), s = it.rec;
-    if (!s || s.hours == null) {
-      const cls = s && s.quality ? s.quality : 'none';
-      return `<rect x="${x}" y="${H - 5}" width="${bw.toFixed(1)}" height="5" rx="1.5" class="stb ${cls}" opacity="0.45"><title>${it.date}${s && s.quality ? ' · ' + SLEEP_QLABEL[s.quality] : ' · kayıt yok'}</title></rect>`;
-    }
-    const h = Math.max(3, Math.min(s.hours, maxH) / maxH * H);
-    const cls = s.quality || (s.hours >= 7 ? 'good' : s.hours >= 6 ? 'ok' : 'bad');
-    return `<rect x="${x}" y="${(H - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" class="stb ${cls}"><title>${it.date}: ${fmtSleepHours(s.hours)}</title></rect>`;
-  }).join('');
-  const ty = (H - Math.min(target, maxH) / maxH * H).toFixed(1);
-  const chart = `<svg class="sleep-trend-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="30 günlük uyku grafiği"><line x1="0" y1="${ty}" x2="${W}" y2="${ty}" class="st-goal"/>${bars}</svg>`;
-
-  const st = (typeof sleepStats30 === 'function') ? sleepStats30() : { count: 0 };
-  const debt = (typeof sleepDebt === 'function') ? sleepDebt()
-    : { debt: 0, nights: 0, est: 0, missing: 0, band: 'clear', recoveryNights: 0 };
-  const fmt = h => (h == null ? '–' : fmtSleepHours(Math.round(h * 100) / 100));
-  const trd = d => new Date(d + 'T12:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
-
-  let statsHtml = '';
-  if (st.count >= 2) {
-    const wdWe = (st.weekdayAvg != null && st.weekendAvg != null)
-      ? `<div class="stt-row"><span>Hafta içi</span><b>${fmt(st.weekdayAvg)}</b></div><div class="stt-row"><span>Hafta sonu</span><b>${fmt(st.weekendAvg)}</b></div>`
-      : `<div class="stt-row"><span>Ortalama</span><b>${fmt(st.overallAvg)}</b></div>`;
-    const bwr = (st.best && st.worst)
-      ? `<div class="stt-row"><span>En iyi gece</span><b class="good">${fmt(st.best.hours)} · ${trd(st.best.date)}</b></div><div class="stt-row"><span>En kötü gece</span><b class="bad">${fmt(st.worst.hours)} · ${trd(st.worst.date)}</b></div>`
-      : '';
-    statsHtml = `<div class="sleep-trend-stats">${wdWe}${bwr}</div>`;
-  } else {
-    statsHtml = `<div class="sleep-trend-empty">Birkaç gece daha saat girince trend ve ortalamalar çıkar.</div>`;
-  }
-
-  let debtHtml = '';
-  if (debt.nights >= 2) {
-    const estNote = debt.est ? `<span class="sd-est">${debt.est} gece saat girilmemiş, kendi kalite–saat ortalamandan tahmin edildi.</span>` : '';
-    if (debt.band === 'clear') {
-      debtHtml = `<div class="sleep-debt ok">Uyku borcun yok — hedefe yakınsın.${estNote}</div>`;
-    } else {
-      const cls = debt.band === 'mild' ? 'warn' : 'bad';
-      const lbl = SLEEP_BAND_LABEL[debt.band] || '';
-      const rec = debt.recoveryNights
-        ? ` Hedefin 1 saat üstünde <b>${debt.recoveryNights} gece</b> uyursan kapanır.`
-        : ' Toparlanma birkaç haftayı bulur.';
-      debtHtml = `<div class="sleep-debt ${cls}">Uyku borcu <b>${fmt(debt.debt)}</b> · ${lbl}.${rec}${estNote}</div>`;
-    }
-  } else if (debt.missing >= 3) {
-    debtHtml = `<div class="sleep-debt ok">Son 2 haftanın ${debt.missing} gecesi kayıtsız — borç hesabı için birkaç gece daha gerek.</div>`;
-  }
-
-  let tipHtml = '';
-  if ((typeof badSleepStreak === 'function') && badSleepStreak() >= 1) {
-    tipHtml = `<div class="sleep-tip"><span class="st-tip-lbl">İpucu</span>${escapeHtml(sleepHygieneTip())}</div>`;
-  }
-
-  const bedStr = (typeof sleepTargetBedStr === 'function') ? sleepTargetBedStr() : null;
-  const pushStr = (typeof sleepBedtimeStr === 'function') ? sleepBedtimeStr() : null;
-  const targetOpts = [6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10].map(v => `<option value="${v}" ${v === target ? 'selected' : ''}>${fmtSleepHours(v)}</option>`).join('');
-  const leadOpts = [0, 15, 30, 45, 60].map(v => `<option value="${v}" ${v === (g.leadMin || 30) ? 'selected' : ''}>${v} dk önce</option>`).join('');
-  const reminderHtml = `<div class="sleep-goal">
-      <div class="sg-head">
-        <span class="sg-title">Yatma hatırlatıcısı</span>
-        <button class="sg-toggle ${g.enabled ? 'on' : ''}" onclick="toggleSleepReminder()" role="switch" aria-checked="${g.enabled}"><span class="sg-knob"></span></button>
-      </div>
-      <div class="sg-row"><label>Kalkış saati</label><input type="time" value="${g.wake || '07:00'}" onchange="setSleepWake(this.value)"></div>
-      <div class="sg-row"><label>Hedef uyku</label><select onchange="setSleepTarget(this.value)">${targetOpts}</select></div>
-      <div class="sg-row"><label>Bildirim</label><select onchange="setSleepLead(this.value)">${leadOpts}</select></div>
-      <div class="sg-calc">${bedStr ? `Yat: <b>${bedStr}</b> · bildirim <b>${pushStr}</b>` : 'Kalkış saatini gir'}</div>
-      ${g.enabled ? `<div class="sg-note">Bildirim için Ayarlar'dan push'un açık olması gerekir.</div>` : ''}
-    </div>`;
-
-  el.innerHTML = `<div class="sleep-trend-legend"><span>0</span><span>hedef ${fmtSleepHours(target)}</span><span>${maxH}s</span></div>
-    ${chart}
-    ${statsHtml}
-    ${debtHtml}
-    ${tipHtml}
-    ${reminderHtml}`;
-}
-function toggleSleepReminder() {
-  const g = ensureSleepGoal(); g.enabled = !g.enabled;
-  syncSleepReminder(); save(); renderSleepTrend();
-  showToast(g.enabled ? 'Yatma hatırlatıcısı açık' : 'Yatma hatırlatıcısı kapalı', g.enabled ? 'success' : 'info', 2200);
-}
-function setSleepWake(v) { const g = ensureSleepGoal(); g.wake = v || '07:00'; syncSleepReminder(); save(); renderSleepTrend(); }
-function setSleepTarget(v) { const g = ensureSleepGoal(); g.targetH = Math.max(4, Math.min(12, parseFloat(v) || 8)); syncSleepReminder(); save(); renderSleepTrend(); }
-function setSleepLead(v) { const g = ensureSleepGoal(); g.leadMin = Math.max(0, Math.min(120, parseInt(v, 10) || 0)); syncSleepReminder(); save(); renderSleepTrend(); }
 
 function renderDailyScore() {
   if (typeof renderSleepCard === 'function') renderSleepCard();
@@ -3244,6 +3079,7 @@ async function enablePushHere() {
   if (ok) showToast('Bu cihaz kaydedildi', 'success', 3000);
   else showToast('Kayıt başarısız — PWA olarak ana ekrana ekli mi?', 'warning', 4000);
   renderNotifSettings();
+  renderNotifBanner();
 }
 
 // Push subscription stale ise (ör. SW push handler eklenmeden önce subscribe olunmuşsa)
@@ -3274,15 +3110,16 @@ async function resubscribePush() {
     showToast('Sıfırlama hatası: ' + (e && e.message || e), 'warning', 4000);
   }
   renderNotifSettings();
+  renderNotifBanner();
 }
 
-if ('Notification' in window && Notification.permission === 'default') {
-  const banner = document.getElementById('notifBanner');
-  if (banner) banner.style.display = 'block';
-}
-// İzin zaten verilmişse, sayfa açılışında subscription'ı tazele (cihaz kaydı eksikse tamamla)
+renderNotifBanner();
+// İzin zaten verilmişse, sayfa açılışında subscription'ı tazele (cihaz kaydı eksikse tamamla).
+// ⚠️ Tazeleme SONUCU da serifi guncelliyor: abonelik sessizce olduyse (iOS'ta
+// olur) kullanici bunu ancak "haftalardir hatirlatma gelmiyor" diye fark
+// ederdi — o da ADHD'de hic fark edilmemek demek.
 if ('Notification' in window && Notification.permission === 'granted') {
-  setTimeout(() => subscribeToPush(), 2500);
+  setTimeout(() => { Promise.resolve(subscribeToPush()).catch(() => {}).then(renderNotifBanner); }, 2500);
 }
 
 // ============ SUPABASE BULUT SENKRONU ============

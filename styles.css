@@ -3030,6 +3030,16 @@
   /* Ogun duzenlemede miktar (6 Eyl 2026): dokunma hedefleri 44px, sayi alani
      tabular ve buyuk — telefonda tek elle artir/azalt edilebilsin. */
   .qty-row { display:flex; align-items:center; gap:8px; margin-top:8px; }
+  /* now-next artik plana goturuyor — dokunulabilir oldugu belli olsun */
+  .now-next[role="button"] { cursor:pointer; }
+  .now-next[role="button"]:hover { opacity:.85; }
+
+  /* Hedef hesaplayici notu — hangi sayinin nereden geldigini soyler */
+  .calc-note { font-size:0.78em; color:var(--text-faint); line-height:1.45; margin:6px 0 8px; }
+  /* Elle konmus hedef uyarisi — gorunur ama alarm degil */
+  .diet-goal-warn { margin-top:8px; padding:8px 10px; font-size:0.8em; line-height:1.5; color:var(--text-muted); background:var(--surface-hover); border:1px solid var(--border); border-radius:var(--radius); }
+  .diet-goal-warn button { margin-left:6px; }
+  .nut-empty button { margin-top:8px; }
 
   /* Odev paketi (6 Eyl 2026) — haftalik odevi gunlere bolen modal */
   .hw-form { display:flex; flex-direction:column; gap:8px; }

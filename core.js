@@ -9,7 +9,7 @@
 // yoldan cikarir. Ilk cizim beklemez; auth birkac yuz ms sonra oturur.
 const LAZY_MODULES = { program: '/program.js',
   nutrition: '/nutrition.js', health: '/health.js', supabase: '/supabase.js',
-  foods: '/foods.js', school: '/school.js', onboarding: '/onboarding.js' };
+  foods: '/foods.js', school: '/school.js', onboarding: '/onboarding.js', karne: '/karne.js' };
 const _moduleLoads = {};
 function moduleLoaded(name) { return !!(_moduleLoads[name] && _moduleLoads[name]._done); }
 function loadModule(name) {
@@ -530,6 +530,34 @@ function renderDietDateNav() {
 
 // ===== DİYET render + handler =====
 const MEAL_SLOTS = { kahvalti: 'Kahvaltı', ogle: 'Öğle', aksam: 'Akşam', atistirma: 'Atıştırma' };
+// ⚠️ 6 Eyl 2026 — GÜN KISALTMASI TEK KAYNAKTAN. Türkçede ilk üç harfi almak
+// ÇALIŞMAZ: "Pazartesi"→"Paz" ile "Pazar"→"Paz", "Cumartesi"→"Cum" ile
+// "Cuma"→"Cum" çakışıyor. program.js'in antrenman kurulum ekranındaki dövüş
+// günü çipleri tam olarak böyle yazılmıştı: yedi çipin ikisi ayırt
+// edilemiyordu, yani kullanıcı hangi güne bastığını göremiyordu.
+// JS getDay() sırası: 0=Pazar.
+const GUN_KISA = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+
+/**
+ * ⚠️ ELLE KONMUŞ HEDEF SESSİZ KALMASIN.
+ * Profil girilmemişse beslenme motoru susuyor ve günlük, geçmişte elle
+ * yazılmış bir `kcalGoal`i sayıyor — hiçbir yerde "bu sayı senin verinden
+ * gelmiyor" yazmadan. Gerçek veride görülen tam olarak buydu: profil yok,
+ * hedef 2200 kcal elle kalmış, motor hiç çalışmamış.
+ * ⚠️ Uyarı YALNIZ bugün gösteriliyor; geçmiş günü incelerken "kurulum yap"
+ * demek anlamsız ve gürültü.
+ */
+function renderDietGoalWarn() {
+  const el = document.getElementById('dietGoalWarn');
+  if (!el) return;
+  const bugunMu = dietKey() === today();
+  const eksik = (typeof dietSetupEksik === 'function') ? dietSetupEksik() : [];
+  if (!bugunMu || !eksik.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = '';
+  el.innerHTML = 'Bu hedef <b>elle konmuş</b> — ' + escapeHtml(eksik.join(' ve ')) +
+    ' girilmediği için motor senin verinden hesaplayamıyor. ' +
+    '<button class="small" onclick="dietSetupOpen()">Kurulumu aç</button>';
+}
 
 function renderDiet() {
   ensureDiet();
@@ -551,6 +579,7 @@ function renderDiet() {
   fg.style.strokeDasharray = circ.toFixed(1);
   fg.style.strokeDashoffset = (circ * (1 - pct)).toFixed(1);
   fg.classList.toggle('over', totalKcal > goal);
+  renderDietGoalWarn();
   // Alt bölümler
   renderDietPlan();
   renderWater();
@@ -970,6 +999,39 @@ function setDietGoals() {
 }
 
 // --- Hedef hesaplayıcı (Mifflin-St Jeor BMR → TDEE → amaç + makro) ---
+/**
+ * 🔴 6 Eyl 2026 — KURULUM GÖMÜLÜYDU. Hedef hesaplayıcı KAPALI bir
+ * `<details>` içinde ("Hedefler & öğün hatırlatıcıları"). Profil girilmeden
+ * beslenme motoru hiç çalışmıyor, plan üretilmiyor ve günlük ELLE konmuş bir
+ * hedefi sayıyor — üstelik bunu hiçbir yerde söylemeden.
+ * Gerçek veride görülen buydu: profil yok, hedef 2200 kcal elle kalmış,
+ * plan 0 satır. Motor hazır, kapı kapalıydı.
+ */
+function dietSetupEksik() {
+  ensureDiet();
+  const c = data.diet.calc || {};
+  const eksik = [];
+  if (!(Number(c.age) >= 10 && Number(c.age) <= 100)) eksik.push('yaş');
+  if (!(Number(c.height) >= 120 && Number(c.height) <= 230)) eksik.push('boy');
+  // ⚠️ KILO EKSIK SAYILMAZ: tartıdan otomatik geliyor (bkz. nutProfile).
+  const kg = Number(c.weight) || ((data.diet.weights || []).filter(w => w && w.kg > 0).pop() || {}).kg;
+  if (!(kg > 0)) eksik.push('kilo');
+  return eksik;
+}
+/** Kurulum kutusunu aç, oraya kaydır ve İLK EKSİK alana odaklan. */
+function dietSetupOpen() {
+  const box = document.getElementById('dietSetupBox');
+  if (!box) return;
+  box.open = true;
+  const eksik = dietSetupEksik();
+  const alan = eksik.includes('yaş') ? 'calcAge' : eksik.includes('boy') ? 'calcHeight' : 'calcWeight';
+  setTimeout(() => {
+    try { box.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+    const el = document.getElementById(alan);
+    if (el) el.focus();
+  }, 80);
+}
+
 let _calcSex = 'male', _calcGoal = 'keep';
 function selectCalcSex(s, btn) { _calcSex = s; btn.parentElement.querySelectorAll('.slot-chip').forEach(c => c.classList.remove('active')); btn.classList.add('active'); }
 function selectCalcGoal(g, btn) { _calcGoal = g; btn.parentElement.querySelectorAll('.slot-chip').forEach(c => c.classList.remove('active')); btn.classList.add('active'); }
@@ -991,32 +1053,78 @@ function calcGoals() {
   ensureDiet();
   const age = parseInt(document.getElementById('calcAge').value, 10);
   const cm = parseFloat((document.getElementById('calcHeight').value || '').replace(',', '.'));
-  const kg = parseFloat((document.getElementById('calcWeight').value || '').replace(',', '.'));
+  // ⚠️ KILO ALANI BOSSA TARTIDAN OKU. Ekran "kilonu tartıdan alıyorum,
+  // yazmana gerek yok" diyordu ama doğrulama boş kiloyu reddediyordu —
+  // yani ekran bir şey vaat edip kod tersini yapıyordu.
+  let kg = parseFloat((document.getElementById('calcWeight').value || '').replace(',', '.'));
+  if (!(kg >= 30 && kg <= 300)) {
+    const sonTarti = ((data.diet.weights || []).filter(w => w && w.kg > 0).pop() || {}).kg;
+    if (sonTarti > 0) kg = sonTarti;
+  }
   const act = parseFloat(document.getElementById('calcActivity').value) || 1.55;
   if (!(age >= 10 && age <= 100) || !(cm >= 120 && cm <= 230) || !(kg >= 30 && kg <= 300)) {
-    showToast('Yaş, boy ve kiloyu doğru gir', 'info'); return;
+    const eksik = (typeof dietSetupEksik === 'function') ? dietSetupEksik() : [];
+    showToast(eksik.length ? 'Eksik: ' + eksik.join(', ') : 'Yaş, boy ve kiloyu doğru gir', 'info', 4000);
+    return;
   }
-  // Mifflin-St Jeor
+  data.diet.calc = { sex: _calcSex, age, height: cm, weight: kg, activity: String(act), goal: _calcGoal };
+  save();
+  const el = document.getElementById('calcResult');
+  if (!el) return;
+
+  // 🔴 6 Eyl 2026 — HEDEFI ARTIK BURASI BELIRLEMIYOR.
+  // Onceden bu hesaplayici kendi Mifflin BMR'si + kullanicinin sectigi PAL +
+  // sabit 1.8 g/kg protein ile `kcalGoal`e yaziyordu; beslenme motoru ise
+  // paylasilan hcBMR'yi, GUN TIPINE gore PAL'i ve enerji mevcudiyeti tabanini
+  // kullaniyor. Ayni ekranda iki farkli sayi duruyordu (olcum: 3274 vs 2899)
+  // ve hangisinin gecerli oldugu hicbir yerde yazmiyordu.
+  // Motor kazanir; burasi PROFIL toplar.
+  const nut = (typeof nutTargets === 'function' && typeof nutDayType === 'function')
+    ? nutTargets({ sex: _calcSex, age, height: cm, weight: kg },
+                 nutDayType(new Date().getDay(), data.program),
+                 (data.diet.nut && data.diet.nut.hedef) || (_calcGoal === 'gain' ? 'kas' : 'koru'))
+    : null;
+
+  if (nut) {
+    el.innerHTML =
+      `<div class="calc-out"><b>${nut.kcal} kcal</b> <span class="calc-sub">bugün · BMR ${nut.bmr}, harcama ~${nut.tdee}</span></div>` +
+      `<div class="calc-out-macros">Protein ${nut.protein}g · Karb ${nut.carb}g · Yağ ${nut.fat}g</div>` +
+      '<div class="calc-note">Hedefi beslenme motoru hesaplıyor: günün tipine göre (dinlenme / ağırlık / dövüş) ' +
+      'değişiyor, o yüzden yukarıdaki aktivite seçimi yalnızca profil kaydı. Program kurduğunda gün tipi oradan okunuyor.</div>' +
+      `<button class="small primary" onclick="applyCalcGoals()">Hedefleri güncelle</button>`;
+    return;
+  }
+
+  // Motor inmediyse yedek hesap — hangi yoldan geldigi ACIKCA yaziliyor.
   const bmr = Math.round(10 * kg + 6.25 * cm - 5 * age + (_calcSex === 'male' ? 5 : -161));
   const tdee = Math.round(bmr * act);
   let kcal = tdee;
-  if (_calcGoal === 'lose') kcal = Math.max(Math.round(bmr * 1.1), tdee - 500);   // BMR'nin çok altına inme
+  if (_calcGoal === 'lose') kcal = Math.max(Math.round(bmr * 1.1), tdee - 500);
   else if (_calcGoal === 'gain') kcal = tdee + 350;
-  // Makro: protein 1.8 g/kg, yağ kcal'in %25'i, kalan karbonhidrat
   const protein = Math.round(1.8 * kg);
   const fat = Math.round(kcal * 0.25 / 9);
   const carb = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
-  data.diet.calc = { sex: _calcSex, age, height: cm, weight: kg, activity: String(act), goal: _calcGoal };
-  save();
   const goalLbl = _calcGoal === 'lose' ? 'kilo ver' : (_calcGoal === 'gain' ? 'kilo al' : 'koru');
-  const el = document.getElementById('calcResult');
-  if (el) el.innerHTML =
+  el.innerHTML =
     `<div class="calc-out"><b>${kcal} kcal/gün</b> <span class="calc-sub">(${goalLbl} · BMR ${bmr}, TDEE ${tdee})</span></div>` +
     `<div class="calc-out-macros">Protein ${protein}g · Karb ${carb}g · Yağ ${fat}g</div>` +
+    '<div class="calc-note">Kaba hesap — beslenme motoru henüz yüklenmedi. Diyet sekmesi tam açıldığında ' +
+    'hedef gün tipine göre yeniden hesaplanır.</div>' +
     `<button class="small primary" onclick="applyCalcGoals(${kcal},${protein},${carb},${fat})">Bu hedefleri uygula</button>`;
 }
+
+/**
+ * Argumansiz cagrilirsa MOTOR hesabini uygular (tek kaynak); argumanlarla
+ * cagrilirsa yedek hesabi. Yedek yol yalnizca nutrition.js inmemisken olusur.
+ */
 function applyCalcGoals(kcal, protein, carb, fat) {
   ensureDiet();
+  if (kcal == null) {
+    if (typeof renderNutrition === 'function') renderNutrition();   // nutSyncDietGoals iceriden yazar
+    renderDiet();
+    showToast('Hedefler profiline göre güncellendi', 'success');
+    return;
+  }
   data.diet.kcalGoal = kcal; data.diet.proteinGoal = protein; data.diet.carbGoal = carb; data.diet.fatGoal = fat;
   save(); renderDiet();
   showToast('Hedefler güncellendi', 'success');

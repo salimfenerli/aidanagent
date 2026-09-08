@@ -97,7 +97,7 @@
       <div class="now-clock" id="nowClock">--:--</div>
       <div class="now-day-label" id="nowDayLabel">günün ritmi</div>
       <div class="now-day-bar"><span class="now-day-fill" id="nowDayFill" style="width:0%"></span></div>
-      <div class="now-next" id="nowNext" style="display:none;"></div>
+      <div class="now-next" id="nowNext" style="display:none;" role="button" tabindex="0" title="Plana git" onclick="showTab('plan', document.querySelector('[data-tab=plan]'))"></div>
     </div>
     <div id="dailyScore"></div>
     <div id="aidanNote" style="display:none;"></div>
@@ -172,6 +172,7 @@
       <div class="evening-summary-stats" id="eveningStats"></div>
       <div class="evening-list" id="eveningList"></div>
       <button class="evening-journal-btn" onclick="openJournalModal()">Bugünü Aidan'a anlat</button>
+      <button class="evening-journal-btn secondary" onclick="planTomorrow(); showTab('plan', document.querySelector('[data-tab=plan]'));">Yarını planla</button>
     </div>
     <div class="action-row">
       <button class="suggest-btn" onclick="suggestTask()">Şu an ne yapayım?</button>
@@ -306,6 +307,7 @@
         <div class="cal-stat"><span class="cal-stat-num" id="calGoal">2000</span><span class="cal-stat-lbl">hedef kcal</span></div>
         <div class="cal-stat"><span class="cal-stat-num" id="calFood">0</span><span class="cal-stat-lbl">yenen kcal</span></div>
       </div>
+      <div class="diet-goal-warn" id="dietGoalWarn" style="display:none;"></div>
     </div>
 
     <div class="macro-card">
@@ -447,7 +449,7 @@
     </div>
 
     <!-- Öğün hatırlatıcı + hedefler -->
-    <details class="diet-extra">
+    <details class="diet-extra" id="dietSetupBox">
       <summary>Hedefler & öğün hatırlatıcıları</summary>
       <div class="diet-calc">
         <div class="diet-calc-title">Hedef hesaplayıcı</div>

@@ -71,6 +71,42 @@ Bunu iPhone'da **Notlar**'a geçici olarak yapıştır — birazdan lazım olaca
      |---|---|---|
      | `kg` | Metin | değişken **kilo** |
      | `fat` | Metin | değişken **yag** |
+     | `date` | Metin | değişken **olcumTarihi** (aşağıya bak) |
+
+#### ⚠️ `date` alanını atlama — 6 Eylül 2026'da bu yüzden bozulduk
+
+Kısayol "**en son** Sağlık örneğini" okuyor. Xiaomi → Apple Sağlık bağlantısı
+koparsa örnek yenilenmiyor ama Kısayol yine de çalışıyor: **haftalar önceki
+ölçümü bugünün kilosu olarak** yolluyor. Gerçekte olan buydu — 14 Ağustos,
+1 Eylül ve 8 Eylül kayıtları birbirinin aynısıydı (68.8 kg / %15.5).
+
+Bu, veri gelmemekten **daha kötü**: trend canlı görünüyor, kilo eğimi sahte
+düz çıkıyor, kalori kalibrasyonu çöple besleniyor ve "tartım gelmiyor"
+uyarısı da susuyor çünkü teknik olarak kayıt var.
+
+**Çözüm — ölçümün KENDİ tarihini yolla:**
+
+- Adım 2'deki "Sağlık Örneklerini Bul" (Kilo) çıktısına bir tane daha
+  **"Sağlık Örneği Ayrıntılarını Al"** ekle → Ayrıntı: **`Başlangıç Tarihi`**
+- **"Tarihi Biçimlendir"** ekle → Biçim: **Özel** → `yyyy-MM-dd`
+- **"Değişkene Ayarla"** → adı: `olcumTarihi`
+- Yukarıdaki tabloda `date` alanına bu değişkeni koy
+
+Böylece bayat bir örnek kendi eski tarihine yazılır (zararsız), bugüne değil.
+
+**Ayrıca sunucu da koruyor:** `date` yollamasan bile, gelen ölçüm en son
+kayıtla birebir aynıysa ve o kayıt 2+ gün eskiyse uç **yazmıyor** ve
+bildirimde şunu döndürüyor:
+
+```
+⚠️ Tartı verisi yenilenmemiş — 2026-09-01 ölçümünün aynısı geliyor (68.8 kg).
+Xiaomi Home → Apple Sağlık bağlantısını kontrol et.
+```
+
+Bu bildirimi görüyorsan sorun Aidan'da değil: **tartı → Xiaomi Home → Apple
+Sağlık** halkalarından biri kopmuş. Sırayla bak: tartıya çık ve Xiaomi Home
+uygulamasında yeni ölçüm göründü mü · Ayarlar → Sağlık → Veri Erişimi'nde
+Xiaomi'nin `Kilo` ve `Vücut Yağ Yüzdesi` izinleri hâlâ açık mı.
 
      > Değer kutusuna dokununca çıkan listeden değişkeni seç — elle yazma.
 

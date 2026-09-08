@@ -2331,7 +2331,7 @@ function renderProgramSetup() {
     chip('places', 'bw', 'Vücut ağırlığı') +
     '</div></div>' +
     '<div class="prog-f"><label>Dövüş antrenmanı günleri</label><div class="prog-chips">' +
-    [1, 2, 3, 4, 5, 6, 0].map(d => chip('fightDays', d, PROGRAM_GUNLER[d].slice(0, 3))).join('') +
+    [1, 2, 3, 4, 5, 6, 0].map(d => chip('fightDays', d, GUN_KISA[d])).join('') +
     '</div><div class="prog-hint">Bu günlere ağırlık koymaz; ağır bacak gününü de bu günlerin ' +
     'yanına yerleştirmez.</div></div>' +
     '<div class="prog-f"><label>Şu an kaç tekrar yapabiliyorsun?</label><div class="prog-nums">' +

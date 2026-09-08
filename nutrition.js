@@ -1524,11 +1524,23 @@ function setNutYag(o) {
   renderNutrition();
 }
 
+/**
+ * ⚠️ 6 Eyl 2026 — KILO ARTIK TARTIDAN OKUNUYOR.
+ * Önceden profil `calc.weight`e bağlıydı: hesaplayıcı bir kez çalıştırılmazsa
+ * motor hiç açılmıyordu, çalıştırılsa bile o gün girilen kilo AYLARCA
+ * donuyordu — oysa tartı her sabah gerçek kiloyu yolluyor. Artık en yeni
+ * tartı kaydı `calc.weight`i EZİYOR; hesaplayıcının işi yaş + boy.
+ * ⚠️ BOY zorunlu: `hcBMR` boysuz anlamlı sayı üretmez, 0 ile çağırmak
+ * uydurma hedef demektir — o yüzden profil `null` döner ve motor SUSAR.
+ */
 function nutProfile() {
   ensureDiet();
-  const c = data.diet.calc;
-  if (!c || !(c.weight > 0)) return null;
-  return { sex: c.sex || 'male', age: Number(c.age) || 16, height: Number(c.height) || 0, weight: Number(c.weight) || 0 };
+  const c = data.diet.calc || {};
+  const sonTarti = (data.diet.weights || []).filter(w => w && w.kg > 0).pop();
+  const kg = (sonTarti && sonTarti.kg) || Number(c.weight) || 0;
+  const cm = Number(c.height) || 0;
+  if (!(kg > 0) || !(cm >= 120 && cm <= 230)) return null;
+  return { sex: c.sex || 'male', age: Number(c.age) || 16, height: cm, weight: kg };
 }
 
 function setNutGoal(h) {
@@ -1555,6 +1567,39 @@ function nutSlotLabel(slot) {
   return (typeof MEAL_SLOTS !== 'undefined' && MEAL_SLOTS[slot]) || slot;
 }
 
+/**
+ * 🔴 6 Eyl 2026 — TEK HEDEF KAYNAGI.
+ *
+ * AYNI EKRANDA IKI FARKLI SAYI vardi. Diyet sekmesindeki hesaplayici
+ * (`calcGoals`, core.js) kendi Mifflin BMR'sini, kullanicinin sectigi PAL'i
+ * ve sabit 1.8 g/kg proteini kullanip `data.diet.kcalGoal`e yaziyordu;
+ * beslenme motoru ise paylasilan `hcBMR`yi, gun tipine gore PAL'i ve enerji
+ * mevcudiyeti tabanini kullaniyor. Ornek olcum (16 yas, 178 cm, 68.5 kg):
+ * hesaplayici BMR 1723 / hedef 3274 kcal, motor BMR 1870 / hedef 2899 kcal.
+ * Gunluk ekrani 3274 gosterip "kalan"i ona gore sayiyor, plan 2899 oneriyor.
+ * 375 kcal fark, hangisinin gecerli oldugu hicbir yerde yazmiyor.
+ *
+ * ⚠️ MOTOR KAZANIR: `hcBMR` saglik raporuyla ORTAK cekirdek, PAL gun tipine
+ * gore degisiyor (dinlenme 1.55 → agirlik+dovus 1.8), enerji mevcudiyeti
+ * tabani var ve 16 yas kilitleri buna bagli. Hesaplayicinin tek isi artik
+ * PROFIL toplamak (yas/boy/kilo/cinsiyet).
+ *
+ * ⚠️ Hedef GUN TIPINE gore degisiyor; gunluk her acilista bugunun tipine
+ * senkronlaniyor. Degismediyse `save()` cagrilmiyor — her render'da yazmak
+ * senkron trafigini bosa sisirirdi.
+ */
+function nutSyncDietGoals(t) {
+  if (!t || !(t.kcal > 0)) return false;
+  ensureDiet();
+  const d = data.diet;
+  const yeni = { kcalGoal: t.kcal, proteinGoal: t.protein, carbGoal: t.carb, fatGoal: t.fat };
+  let degisti = false;
+  for (const k in yeni) { if (d[k] !== yeni[k]) { d[k] = yeni[k]; degisti = true; } }
+  if (t.waterL > 0 && d.waterGoalL !== t.waterL) { d.waterGoalL = t.waterL; degisti = true; }
+  if (degisti) { save(); if (typeof renderDiet === 'function') renderDiet(); }
+  return degisti;
+}
+
 function renderNutrition() {
   const el = document.getElementById('nutSection');
   if (!el) return;
@@ -1562,10 +1607,23 @@ function renderNutrition() {
   const prof = nutProfile();
 
   if (!prof) {
+    // ⚠️ "Aşağıdaki hesaplayıcıya gir" YETMIYORDU: hesaplayıcı KAPALI bir
+    // <details> icinde ve hangi alanin eksik oldugu yazmiyordu. Eksigi
+    // ADIYLA soyle, kapiyi da tek dokunusa indir.
+    const eksik = (typeof dietSetupEksik === 'function') ? dietSetupEksik() : [];
+    const sonTarti = (data.diet.weights || []).filter(w => w && w.kg > 0).pop();
     el.innerHTML = '<div class="nut-wrap nut-empty">' +
       '<div class="nut-head"><h3>Beslenme planı</h3></div>' +
-      '<p class="nut-lead">Önce aşağıdaki hesaplayıcıya yaş, boy ve kilonu gir — ' +
-      'plan senin verinden hesaplanır, tahmin edilmez.</p></div>';
+      '<p class="nut-lead">' +
+      (eksik.length
+        ? 'Plan için tek eksik: <b>' + escapeHtml(eksik.join(' ve ')) + '</b>. ' +
+          (sonTarti ? 'Kilonu tartıdan alıyorum (' + sonTarti.kg + ' kg), ' +
+            'onu yazmana gerek yok. ' : '') +
+          'Girdiğin an hedef ve örnek gün senin verinden hesaplanır — tahmin edilmez.'
+        : 'Profil okunamadı — hesaplayıcıyı bir kez çalıştır.') +
+      '</p>' +
+      '<button class="small primary" onclick="dietSetupOpen()">Kurulumu aç</button>' +
+      '</div>';
     return;
   }
 
@@ -1573,6 +1631,7 @@ function renderNutrition() {
   const tip = nutDayType(bugun, data.program);
   const t = nutTargets(prof, tip, n.hedef);
   if (!t) { el.innerHTML = ''; return; }
+  nutSyncDietGoals(t);
 
   const ogunler = nutBuildDay(t, prof.weight, n.sablon);
   const ozet = nutDaySummary(ogunler, t, prof.weight);
@@ -1640,7 +1699,7 @@ function renderNutrition() {
 
   const hafta = nutWeek(prof, n.hedef, data.program).map(g =>
     '<span class="nut-day' + (g.dow === bugun ? ' on' : '') + '">' +
-    escapeHtml((typeof programDayLabel === 'function' ? programDayLabel(g.dow) : String(g.dow)).slice(0, 3)) +
+    escapeHtml(DKRN_WD[g.dow] || String(g.dow)) +
     ' <b>' + (g.hedef ? g.hedef.kcal : '—') + '</b></span>').join('');
 
   el.innerHTML = '<div class="nut-wrap">' +
@@ -2104,6 +2163,9 @@ function nutAiHtml(n) {
 // asagidaki typeof kapisi duruyor — sozlesme degil, emniyet kemeri.
 // ============================================================================
 let _dietKarnePeriod = 'week'; // 'week' | 'month'
+// ⚠️ core.js'teki GUN_KISA ile AYNI olmak zorunda (teste bagli). Dogrudan
+// ona bagli DEGIL cunku 18-nutrition motoru core.js OLMADAN, yalitilmis bir
+// vm'de yukluyor — bu dosya cekirdege bagimli hale gelirse o sozlesme kirilir.
 const DKRN_WD = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
 
 function dietKarneStats(period) {

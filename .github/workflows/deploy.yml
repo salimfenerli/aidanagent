@@ -14,6 +14,7 @@ on:
       - 'foods.js'
       - 'school.js'
       - 'onboarding.js'
+      - 'karne.js'
       - 'supabase.js'
       - 'html5-qrcode.min.js'
       - 'styles.css'

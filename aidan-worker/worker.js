@@ -8358,6 +8358,48 @@ async function handleBodyApi(request, env) {
   data.diet = data.diet || {};
   data.diet.weights = data.diet.weights || [];
 
+  // 🔴 6 Eyl 2026 — BAYAT ÖLÇÜM KORUMASI.
+  // Kısayol "en son Sağlık örneğini" okuyor ve TARİH GÖNDERMİYOR; uç da
+  // tarihsiz kaydı bugüne damgalıyor. Xiaomi → Apple Sağlık bağlantısı
+  // koptuğunda Kısayol haftalar önceki ölçümü her sabah BUGÜNÜN kilosu
+  // olarak yolluyor. Gerçekte olan buydu: 14 Ağu, 1 Eyl ve 8 Eyl kayıtları
+  // birbirinin AYNISI (68.8 kg / %15.5 / 58.1).
+  // ⚠️ Bu, veri gelmemekten DAHA KÖTÜ: trend canlı görünüyor, kilo eğimi
+  // sahte düz çıkıyor, palKat kalibrasyonu (gerçek regresyon isteyen) çöple
+  // besleniyor ve "N gündür tartım gelmiyor" uyarısı da susuyor — çünkü
+  // teknik olarak kayıt VAR.
+  // Kural: tek ölçüm + tarih YOLLANMAMIŞ + otomatik kaynak iken, kg ve yağ
+  // en yeni kayıtla birebir aynıysa ve o kayıt 2+ gün eskiyse YAZMA.
+  // ⚠️ Ardışık günde aynı değer GERÇEK olabilir (2 gün eşiği onun için).
+  // ⚠️ Toplu dolgu (items) ve tarihli gönderim bu kuraldan MUAF.
+  const tekOlcum = !Array.isArray(body.items) && raw.length === 1;
+  const tarihYok = !(typeof body.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.date.slice(0, 10)));
+  if (tekOlcum && tarihYok) {
+    const bugun = trToday();
+    const gelenKg = srvBodyNum(raw[0].kg, 20, 500, 1);
+    let gelenFatRaw = srvBodyNum(raw[0].fat, 0.03, 70, 3);
+    const gelenFat = (gelenFatRaw != null && gelenFatRaw < 1)
+      ? Math.round(gelenFatRaw * 1000) / 10 : gelenFatRaw;
+    // Siralamaya GUVENME: liste her yazmada siralaniyor ama disaridan
+    // gelmis/elle duzenlenmis veride garanti degil.
+    const oncekiler = data.diet.weights
+      .filter(w => w && w.date && w.date < bugun && w.kg != null)
+      .sort((a, b) => (a.date < b.date ? -1 : 1));
+    const enYeni = oncekiler.length ? oncekiler[oncekiler.length - 1] : null;
+    if (enYeni && gelenKg != null && enYeni.kg === gelenKg &&
+        (gelenFat == null || enYeni.fat === gelenFat)) {
+      const farkGun = Math.round(
+        (new Date(bugun + 'T00:00:00Z') - new Date(enYeni.date + 'T00:00:00Z')) / 86400000);
+      if (farkGun >= 2) {
+        return jsonCors({
+          ok: false, saved: 0, stale: true, lastRealDate: enYeni.date,
+          summary: `⚠️ Tartı verisi yenilenmemiş — ${enYeni.date} ölçümünün aynısı geliyor ` +
+            `(${gelenKg} kg). Xiaomi Home → Apple Sağlık bağlantısını kontrol et.`,
+        }, 409, cors);
+      }
+    }
+  }
+
   const saved = [];
   for (const it of raw) {
     if (!it || typeof it !== 'object') continue;
