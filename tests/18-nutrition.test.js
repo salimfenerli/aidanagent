@@ -216,17 +216,42 @@ describe('makro dağılımı', () => {
     }
   });
 
-  test('protein öğünlere EŞİT dağıtılıyor', () => {
+  // ⚠️ 9 Eyl 2026 — BU TEST TERSINE CEVRILDI. Eskiden "protein ogunlere
+  // ESIT dagitiliyor" diye kilitliyordu; o sozlesme MOTORUN HATASIYDI.
+  // Esit dagitim ana ogunun hedefini ara ogunle ayni yapiyor, motorun tek
+  // cikisi da ana ogunde capayi yarimlamak oluyordu — "yarim porsiyon
+  // somon + 3 patates" tam olarak bu satirin korudugu davranisti.
+  test('protein ANA ÖĞÜNE ağırlıklı dağıtılıyor (eşit DEĞİL)', () => {
     const t = M.nutTargets(PROF, 'strength', 'koru');
     const ogunler = M.nutMealSplit(t, 70);
     // ⚠️ Ogun sayisi SABIT DEGIL, kalori esigine bagli (>3000 kcal -> 5).
-    // Burada 4 yazmak testi profile baglar: antrenman bilimi guncellemesi
-    // hedefi 3034'e cikarinca bu satir kirmiziya dondu, motorda bir sey
-    // bozulmamisti. Sozlesme "esit dagitim", "4 ogun" degil.
     assert.strictEqual(ogunler.length, M.nutMealCount(t.kcal));
-    const p = ogunler.map((o) => o.protein);
-    assert.ok(Math.max.apply(null, p) - Math.min.apply(null, p) <= 1,
-      'protein ogunlere esit dagitilmamis: ' + p.join(', '));
+    const bul = (s) => (ogunler.find((o) => o.slot === s) || {}).protein || 0;
+    const ana = Math.min(bul('ogle'), bul('aksam'));
+    const yan = Math.max(bul('ara'), bul('atistirma'));
+    assert.ok(ana > yan,
+      'ana ogun payi ara ogunden buyuk degil: ' + ogunler.map((o) => o.slot + ':' + o.protein).join(', '));
+    // Ana ogun payi GERCEK BIR PORSIYONU karsilamali — Turk ana yemegi
+    // porsiyonu 38-47 g protein tasiyor. Altinda kalirsa motor capayi
+    // yarimlamak zorunda kalir.
+    assert.ok(ana >= 34,
+      'ana ogun payi bir porsiyonun altinda: ' + ana + ' g');
+  });
+
+  test('hiçbir öğün 0.25 g/kg eşiğinin altına itilmiyor', () => {
+    // Esik alti ogun kas protein sentezini maksimuma cikarmaz; agirlikli
+    // dagitim bunu ara ogunu ezerek yapmamali.
+    for (const tip of ['rest', 'strength', 'fight', 'both']) {
+      for (const kg of [45, 55, 70, 90]) {
+        const p = { sex: 'male', age: 16, height: 175, weight: kg };
+        const t = M.nutTargets(p, tip, 'kas');
+        const dip = kg * 0.25;
+        for (const o of M.nutMealSplit(t, kg)) {
+          assert.ok(o.protein >= dip - 1,
+            kg + 'kg/' + tip + ' ' + o.slot + ': ' + o.protein + ' g < esik ' + Math.round(dip));
+        }
+      }
+    }
   });
 
   test('⚠️ öğün başı protein KIRPILMIYOR (toplam tutmalı)', () => {

@@ -590,6 +590,8 @@ function renderDiet() {
   renderSupplements();
   renderMacroBars();
   renderMacroDonut();
+  // nutrition.js tembel iner; Diyet sekmesi acilmadan once yoktur.
+  if (typeof renderNutOner === 'function') renderNutOner();
   if (typeof renderHevySection === 'function') renderHevySection();
   // Hedef inputları
   const gk = document.getElementById('goalKcal'); if (gk) gk.value = d.kcalGoal;
