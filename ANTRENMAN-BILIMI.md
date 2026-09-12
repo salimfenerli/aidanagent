@@ -32,7 +32,7 @@ AI yalnızca **haftalık sağlık raporunda** kullanılır, o da hazır hesaplan
 
 ---
 
-## 1. Bölünme seçimi 🟢
+## 1. Bölünme seçimi 🟡
 
 | Haftalık güç günü | Bölünme |
 |---|---|
@@ -40,9 +40,9 @@ AI yalnızca **haftalık sağlık raporunda** kullanılır, o da hazır hesaplan
 | 4 | Upper / Lower |
 | 5 | Push / Pull / Legs |
 
-Dayanak: kas grubu başına **haftalık frekans**ın toplam hacim kadar önemli olması. Az günde her kası her seans çalışırsın; çok günde bölmek zorundasın çünkü tek seansa sığmaz.
+Dayanak: 2 günde PPL yaparsan her kası haftada 0.67 kez çalışırsın — bu bir tercih değil hacim matematiğidir.
 
-Bu bir tercih değil hacim matematiğidir — 2 günde PPL yaparsan her kası haftada 0.67 kez çalışırsın.
+⚠️ **30 Ağu 2026 denetimi — gerekçe düzeltildi, etiket 🟢 → 🟡.** Burada eskiden "dayanak: haftalık **frekansın** toplam hacim kadar önemli olması" yazıyordu. Denetim bunu kabul etmedi: hacim eşitlendiğinde frekansın bağımsız bir etkisi gösterilmiş değil. Bölünmenin gerçek dayanağı frekans değil **per-seans hacim tavanı** — bir seansta bir kasa verimli şekilde yüklenebilen set sayısı sınırlı, o yüzden çok günde bölmek zorunludur. Sonuç aynı, gerekçe farklı; ve gerekçe yanlışken etiket 🟢 olamaz.
 
 ---
 
@@ -91,6 +91,30 @@ Motor bandı **zorlar**: altında kalan kasa set ekler, üstünde kalandan alır
 ### Sabit üst tavan: 20 set 🟡
 
 `maxSetsPerMuscleWeek: 20`. Hedef bandının üstünde ikinci bir güvenlik ağı. 16 yaş + okul + dövüş yükünde toparlanma kapasitesi yetişkinden düşük.
+
+### 🔴 12 Eyl 2026 — tavan artık DOLAYLI işi de sayıyor
+
+30 Ağustos denetiminin **en yüksek öncelikli teknik bulgusu** buydu ve 13 gün açık kaldı: `PROGRAM_IKINCIL`'in fraksiyonel sayımı (doğrudan 1 set, dolaylı 0.5 set) **yalnız durum raporundaydı**; 20 set tavanı ve bandın üstü doğrudan seti sayıyordu.
+
+Sonuç: **tavan fiilen bağlamıyordu.** 14 set bench + 10 set dip yapan biri triseps için "0 doğrudan set" görünüp 12 fraksiyonel set taşıyor, motor da "tavan aşılmadı" diyordu.
+
+Eski gerekçe — "hacim önerilerinin dayandığı çalışmalar doğrudan set sayar" — denetimde çürütüldü: doğrudan-set sayımı bir **ölçüm kolaylığı**, mekanik yükün tanımı değil.
+
+**Asimetri bilinçli:**
+
+| | Ne sayar | Neden |
+|---|---|---|
+| **Tavan** (güvenlik üst sınırı) | fraksiyonel | Üst sınır **toplam mekanik yüke** dairdir; dolaylı yük de yüktür |
+| **Taban** (hedef bandın altı) | doğrudan set | Taban "o kas **hedefli iş** aldı mı" garantisidir |
+
+8 set kürek ile bisepsi 4 fraksiyonel sete saydırıp doğrudan iş vermemek tabanın amacını boşa çıkarır. İki yön de muhafazakâr tarafa düşer: tavan daha erken bağlar, taban daha çok iş ister. 🟡 (gerekçeli mühendislik seçimi, doğrudan kanıt değil)
+
+**İki yan etki çıktı ve ikisi de düzeltildi:**
+
+1. **Tavan aşımı kırpılamıyordu.** 5 günlük PPL'de sırtta 9 bileşke × 2 set = 18 doğrudan + RDL'nin dolaylı payı = 20.5 set. Hepsi 2 sette olduğu için kırpılacak set yok, hepsi bileşke olduğu için çıkarılacak izolasyon yok — motor **sessizce duruyordu**. Artık haftada aynı **kalıp + kademe** ikinci kez geçiyorsa o *tekrar* çıkarılır; kalıbın kendisi programda kalır.
+2. **İtiş/çekiş oranı tek koldan düzeltilemiyordu.** Fraksiyonel sayım çekiş tarafını banda dayandırınca set eklenemiyor, oran bozuk kalıyordu (ölçülen en kötü hâl itiş 20 / çekiş 13). Oran **iki uçtan** düzelir: çekiş eklenemiyorsa itişten set düşürülür. İtiş fazlalığı omuz riskinin kalıbıysa, fazlalığı kaldırmak da çözümdür — ve tavanla çatışmaz.
+
+Yalnızca dolaylı yükle tavanı aşan kas (hiç doğrudan hareketi olmayan) **kırpılmaz**: bencin setini düşürmek göğsü cezalandırmak olurdu. Ama motor susmaz, sebebini yazar.
 
 ### Hacim hedefi olmayan bölgeler
 
@@ -275,6 +299,7 @@ Hafifletmede **ağırlık değil set** düşer — amaç toparlanmak, gerilemek 
 | Slot 0'da ana kaldırış | +45 |
 | Hafta içinde kullanılmamış | +20 |
 | Dövüş sporcusunda tek taraflı iş | +12 |
+| Serbest ağırlık tercihi (`pri`) | ×4 güç/atletik · ×2 hipertrofi |
 | **Aynı aile tekrarı** | **−40** |
 | Aynı kalıp + kademe tekrarı | −14 |
 | Aynı kası o gün tekrar yükleme | −8 |
@@ -295,7 +320,11 @@ Eski kural (`aynı aile = −40`, istisnasız) bir hataya yol açıyordu: ikinci
 
 İki değişiklik:
 
-**1 — `pri` (transfer puanı), puana ×12 ile girer:**
+**1 — `pri` (transfer puanı) puana girer. 🟡**
+
+⚠️ **12 Eyl 2026 — çarpan 12'den düşürüldü (30 Ağu denetim bulgusu).** Serbest ağırlık ile makine arasında **hipertrofide fark yok** ([Haugen 2023](https://doi.org/10.1186/s13102-023-00713-4), p=0.751) ve **sıçramada yok** (p=0.290). Oysa `pri` çarpanı (×12) aynı kalıp+kademe tekrarı cezasından (−14) neredeyse büyüktü — motor "serbest ağırlık" uğruna sahte çeşitliliği neredeyse tolere ediyordu. Kanıt yoksa ağırlık da olmaz.
+
+Sıfırlanmadı, çünkü serbest ağırlığın kanıtlı *olmayan* bir avantajı değil **mühendislik** avantajı var: kademeli yüklenebilirlik (bar 1,25 kg artar, makine 5 kg atlar) ve bileşik kalıbın transferi. Bu yüzden yük/transfer odaklı hedeflerde (güç, atletik) **×4**, saf hipertrofide **×2** — ikisi de kalıp cezasının altında kalır.
 
 | pri | Ne | Örnek |
 |---|---|---|
@@ -333,6 +362,12 @@ Seans süresinden 8 dk ısınmaya ayrılır ve **ne yapılacağı yazılır**:
 ---
 
 ## 9.5 Seans süresi — motor artık yalan söylemiyor 🟢
+
+### ⚠️ 12 Eyl 2026 — set süresi sabit 45 sn değil, TEMPODAN türetiliyor
+
+30 Ağu denetim bulgusu: sabit 45 sn/set motorun **kendi tempo basamaklarıyla** çelişiyordu. Kademe 1'de tempo `2-1-X-0` = ~4 sn/tekrar ve 3-5 tekrar → set ~20 sn, yani 45 iki kattan fazla şişiriyordu. Kademe 3'te `3-0-1-1` = 5 sn/tekrar ve 8-12 tekrar → set 40-60 sn, yani 45 bu kez **az** sayıyordu. İki yönde birden yanlış bir sabit, seans bütçesini hareket kaybettirecek kadar kaydırıyordu.
+
+Artık `set süresi = tekrar × tempo toplamı + 10 sn kurulum`, 20-120 sn arasına kırpılır. `X` (patlayıcı konsantrik) 1 sn sayılır. Tempo/tekrar henüz yazılmamışsa (hareket seçim aşaması) 45 sn tabanına düşer.
 
 Kullanıcı "60 dk" diyor, motor 77 dk'lık seans yazıyor ve **bunu söylemiyordu.**
 
@@ -395,6 +430,19 @@ Teste bağlı: hiçbir kademe-1 hareketinde konsantrik 1 sn'yi geçemez.
 
 ## 9.7 RPE 🟢
 
+### ⚠️ 12 Eyl 2026 — öncelik sırası YAZIYA GEÇİRİLDİ
+
+Şartnamede hem "kademe 1 RPE 7-8" hem "atletik hedefte ana kaldırış RPE 6-7" yazıyordu. İkisi **aynı hücreyi** yönetiyor ve hangisinin kazandığı hiçbir yerde yazmıyordu — kodda ise atletik kuralı **hiç yoktu**, yani şartname uygulanmayan bir şey söylüyordu. İkisi de düzeltildi:
+
+| Sıra | Durum | RPE | Gerekçe |
+|---|---|---|---|
+| 1 | Patlayıcı iş | **yok** | Ölçü efor değil **hız** |
+| 2 | Boyun | 6-7 | İzometrik koruma işi, zorlanmaz |
+| 3 | Atletik + kademe 1 | **6-7** | Bar hızı yetmezliğe yaklaşırken düşer; güç transferi orada kaybolur. Patlayıcı hedefte 3-4 RIR yerleşik yaklaşımdır |
+| 4 | Kademe tablosu | `PROGRAM_RPE` | Varsayılan |
+
+Sonra sırayla: ORTA gün üst sınırı alta çeker · teknik haftası −1 · deload 6 tavanı. **Tavan her koşulda 9** — RPE 10 hiçbir yoldan yazılamaz.
+
 Motorun bilinen eksiği olarak listelenmişti (bölüm 12, madde 3): *"Efor derecesi (RIR/RPE) yok."* Artık var.
 
 | Kademe | RPE | RIR karşılığı |
@@ -418,6 +466,12 @@ RPE hafta değişiminde yeniden hesaplanır — seans kaçırılan haftada bile,
 ---
 
 ## 9.8 Vücut ağırlığı kalibrasyonu 🟢
+
+### ⚠️ 12 Eyl 2026 — artık yetmezlik seti istenmiyor
+
+Kurulum ekranı "**tek sette temiz yapabildiğin maksimum**" soruyordu. Bu tanımı gereği **RPE 10 bir set**: motorun kendi RPE 10 yasağıyla ve hemen yanında duran "1RM denemesi asla istenmez" cümlesiyle çelişiyordu. (30 Ağu denetim bulgusu.)
+
+Soru **tahmine** çevrildi. Gerekçesi: bu sayı yalnızca **yük ipucu** üretir (kolaylaştırma mı, kemerle ek kilo mu); çalışma ağırlığı buradan türemez. O yüzden ±2 tekrar hata zararsızdır — başarısızlığa kadar zorlanmak değildir.
 
 "Barfiks 4 × 3-5" yazmak 2 barfiks çekebilen biri için imkânsız, 20 çekebilen için ısınmadır. Motor bunu bilmeden yazmamalı.
 
@@ -516,7 +570,9 @@ Artık her gün için ceza hesaplanıyor, en düşük cezalı gün seçiliyor:
 
 Sonuç: **%40 → %0.** Beraberlikte hafta sırası kazanır, seçim deterministik kalır. Çözülemeyen durumda (çok az boş gün) motor susmuyor, ayrı bir not düşüyor.
 
-### Antagonist denge: çekiş ≥ itiş × 0.8 🟢
+### Antagonist denge: çekiş ≥ itiş × 0.8 🟡
+
+⚠️ **30 Ağu 2026 denetimi — etiket 🟢 → 🟡.** "Haftalık itiş:çekiş set oranı eşiği" için birincil kaynak **bulunamadı**; 0.8 antrenörlük folkloru. Gerçek kanıt omuz sağlığında **dış/iç rotasyon kuvvet oranında**, set oranında değil. Kural yine de duruyor, çünkü ölçülen bozulma gerçekti (itiş 20 / çekiş 10) ve düzeltmenin maliyeti yok; ama sayının arkasında çalışma olduğunu iddia etmiyoruz.
 
 İkinci bulunan hata. Şablonlar 2 itiş + 2 çekiş kurulmuştu ama **her iki üst gün de itişle başlıyordu** ve zaman bütçesi son slotu kestiğinde kesilen hep çekiş oluyordu. 45 dk'lık programda hafta toplamı **itiş 20 / çekiş 10** çıkıyordu.
 

@@ -70,6 +70,72 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 
 
 
+### 🔴 12 Eylül 2026 — 🍽️ GRAM SORGUSU 200 PORSİYON EKLİYORDU + ⚖️ HACİM MUHASEBESİ (v7-186)
+
+Salim: *"o yemek arama ekleme kısmı biraz sıkıntılıydı ben kullanırken"* ve *"antrenman kısmı mantığına da baktın mı, bilime uygun olsun her şey."* İkisi de ayrı bulgu çıkardı ve ikisi de **kapı** hatasıydı.
+
+## 🔴 "200 gr tavuk göğsü" → 49.600 kcal
+
+jsdom'da kullanıcı gibi gezince çıktı. Akış: yaz → **+** bas.
+
+```
+"200 gr tavuk gogsu"   + →  Tavuk göğsü ×200 · 49.600 kcal
+"300 gram tavuk gogsu" ⏎ →  Tavuk göğsü ×200 ×300 · 14.880.000 kcal
+```
+
+**Sebep:** `parseFoodQuery` birim kelimesini **atıyor**, yalnız sayıyı döndürüyordu. Hızlı ekleme de o sayıyı **porsiyon çarpanı** sanıyordu. Enter aynı yolu kullandığı için **en doğal hareket en büyük hatayı üretiyordu**. Eklenen kayıt hafızaya `×200` adıyla giriyor ve bir sonraki miktarlı arama onu **tekrar** çarpıyordu — 14.880.000 kcal'lik zincir buradan.
+
+⚠️ **Motor zaten gram biliyordu:** `TURK_FOODS[].g` alanı ve porsiyon editörünün Gram kipi Ağustos'tan beri duruyor. Eksik olan tek şey kapıydı — *"motor var, kapı yok"* deseninin aynısı (bkz. 30 Ağu "program kur" düğmesi, 6 Eyl friction avı).
+
+**Düzeltmeler:**
+
+| Ne | Önce | Sonra |
+|---|---|---|
+| `parseFoodQuery` | birimi atıyordu | `{qty, unit, gram, core}` döndürür; `ml` birim listesinde hiç yoktu, eklendi |
+| Gram sorgusu + hızlı ekle | ×200 porsiyon | `200/g` çarpanı, etiket `(200g)` |
+| Gram tabanı bilinmeyen kalem | sessizce ×200 | **çarpma yok**, 1 birim + toast sebebi yazar |
+| Adında miktar olan hafıza kaydı | yeniden çarpılıyordu | etiketten **tabana inilip** yeniden ölçeklenir |
+| Porsiyon editörü (yavaş yol) | adet kutusuna 200 | **Gram kipine geçer**, 200 g yazar |
+| `addPickedFood` (barkod/OFF) | `Date.now()` id, geri alma yok | `_mealId()` + `_mealUndoToast` |
+| `addAiFood` | geri alma yok | `_mealUndoToast` |
+
+**Hafıza satırları gram tabanını temel besinden DEVRALIYOR.** Kullanıcının en çok kullandığı satırlar bunlar ve gram alanı yoktu: `"200 gr tavuk göğsü"` ilk kullanımda çalışıp **ikincisinde sessizce 1 porsiyon** ekliyordu (çünkü artık hafızadan geliyordu). Ad temel besinle aynıysa **ve kcal de aynıysa** (±%2) gram tabanı biliniyor demektir — uydurma değil, devralma.
+
+**Gram sorgusunda liste sırası değişir.** Gram tabanını yalnız temel besinler bilir. İki ayrı tuzak çıktı: (1) gram tabanı olmayan bir hafıza kaydı listenin başında durursa Enter onu seçiyordu; (2) normalde hafıza satırı temel besin ikizini **gizliyor** — bu ayıklama, gramı *uygulayabilen tek satırı* listeden siliyordu. Gram sorgusunda ayıklama yapılmaz ve temel besinler öne geçer.
+
+**🔴 SIRALAMA TERSTİ.** `"peynir"` arayan ilk üç sonuçta **peynir görmüyordu**: *Peynirli börek · Peynirli omlet · Peynirli poğaça*. Tek bonus "ad sorguyla **başlıyor**" idi (+30.000) ve tam kelime eşleşmesini eziyordu — `peynirli` sorguyla başlıyor, `Beyaz peynir`de ise tam kelime var ama ad `beyaz` ile başlıyor. Tam kelime eşleşmesi adın sorguyla başlamasından **daha güçlü bir sinyaldir**: tamKelime +40.000, önek +10.000. Şimdi ilk üç *Krem peynir · Beyaz peynir · Cottage peyniri*.
+
+**🔒 `tests/38-gram-sorgusu.test.js` (15 test).** En değerli olanı tek senaryo değil **hata sınıfını** kilitliyor: *"hiçbir miktarlı sorgu tek dokunuşta 5000 kcal üstü kayıt üretmez"* — hangi yoldan gelirse gelsin.
+
+## ⚖️ Antrenman motoru — 30 Ağustos denetiminin bekleyen bulguları
+
+30 Ağu'da motor beş bağımsız literatür denetiminden geçmişti. **En yüksek öncelikli teknik bulgu 13 gün açık kaldı**, şimdi kapatıldı.
+
+**🔴 FRAKSİYONEL SAYIM TAVANI BAĞLAMIYORDU.** `PROGRAM_IKINCIL`'in 0.5 sayımı (doğrudan 1 set, dolaylı 0.5) **yalnız durum raporundaydı**; 20 set güvenlik tavanı ve bandın üstü doğrudan seti sayıyordu. 14 set bench + 10 set dip yapan biri triseps için "0 doğrudan set" görünüp 12 fraksiyonel set taşıyor, motor "tavan aşılmadı" diyordu. Eski gerekçe ("çalışmalar doğrudan set sayar") denetimde çürütüldü: doğrudan-set sayımı **ölçüm kolaylığı**, mekanik yükün tanımı değil.
+
+**Asimetri bilinçli:** TAVAN fraksiyonel sayar (üst sınır toplam mekanik yüke dairdir), TABAN doğrudan sayar (o kas **hedefli iş** aldı mı garantisi). İkisi de muhafazakâr tarafa düşer.
+
+İki yan etki çıktı, ikisi de düzeltildi:
+
+1. **Tavan aşımı kırpılamıyordu.** 5 günlük PPL'de sırt: 9 bileşke × 2 set = 18 doğrudan + RDL dolaylı = 20,5 (tavan 20). Hepsi 2 sette → kırpılacak set yok; hepsi bileşke → çıkarılacak izolasyon yok. Motor **sessizce duruyordu** (*"sadece bileşke kaldı, dur"*). Artık haftada aynı **kalıp + kademe** ikinci kez geçiyorsa o tekrar çıkar; kalıbın kendisi kalır (test: hem `pull_h` hem `pull_v` programda durmalı).
+2. **İtiş/çekiş oranı tek koldan düzeltilemiyordu.** Fraksiyonel sayım çekişi banda dayandırınca set eklenemiyor, oran bozuk kalıyordu (itiş 20 / çekiş 13). Oran **iki uçtan** düzelir: çekiş eklenemiyorsa **itişten set düşürülür** — itiş fazlalığı omuz riskinin kalıbıysa fazlalığı kaldırmak da çözümdür ve tavanla çatışmaz. Güvenlik koşulu: itiş kası doğrudan set tabanının altına inmez, hiçbir hareket 2 setin altına düşmez.
+
+**Aynı denetimin dört küçük bulgusu:**
+
+- **`pri` çarpanı ×12 → ×4/×2.** Serbest ağırlık ile makine arasında hipertrofide fark yok (Haugen 2023, p=0.751), sıçramada yok (p=0.290). Oysa çarpan, aynı kalıp+kademe tekrarı cezasından (−14) neredeyse büyüktü: motor "serbest ağırlık" uğruna sahte çeşitliliği neredeyse tolere ediyordu. Sıfırlanmadı çünkü kanıtlı olmayan değil **mühendislik** avantajı var (bar 1,25 kg artar, makine 5 kg atlar) — yük/transfer hedeflerinde ×4, saf hipertrofide ×2.
+- **RPE öncelik sırası yazıya geçti.** Şartname hem "kademe 1 → 7-8" hem "atletik ana kaldırış → 6-7" diyordu; kodda atletik kuralı **hiç yoktu**. Sıra: patlayıcı (RPE yok) → boyun 6-7 → atletik+kademe 1 **6-7** → kademe tablosu. Tavan her koşulda 9.
+- **Set süresi sabit 45 sn değil, tempodan türetiliyor.** Kademe 1 (`2-1-X-0`, 3-5 tekrar) ~20 sn, kademe 3 (`3-0-1-1`, 8-12 tekrar) 40-60 sn. Sabit 45 iki yönde birden yanlıştı ve seans bütçesini hareket kaybettirecek kadar kaydırıyordu.
+- **Vücut ağırlığı referansı artık yetmezlik seti istemiyor.** "Tek sette temiz yapabildiğin maksimum" tanımı gereği RPE 10 bir setti — motorun kendi RPE 10 yasağıyla ve yanındaki "1RM denemesi asla istenmez" cümlesiyle çelişiyordu. Tahmine çevrildi: sayı yalnız yük ipucu üretir, çalışma ağırlığı buradan türemez.
+
+**Şartname etiketleri düzeltildi (🟢 → 🟡):** bölüm 1 (bölünmenin dayanağı frekans değil **per-seans hacim tavanı**), bölüm 8 (`pri`), bölüm 11 (çekiş ≥ itiş × 0.8 — birincil kaynak yok, gerçek kanıt dış/iç rotasyon oranında). *Yanlış etiketlenmiş bir 🟢, diğer tüm 🟢'ların güvenilirliğini düşürür.*
+
+**Zaten yapılmış çıkan:** dips kademe 2 → 1 (`PROGRAM_TIER1`'de duruyordu).
+
+**🔒 `tests/39-hacim-muhasebesi.test.js` (16 test).** 144 yapılandırma taranıyor; kritik olan: fraksiyonel sayımla hiçbir kas tavanı aşmıyor, **ya da** yalnız dolaylı yükle aşıyorsa motor bunu yazıyor.
+
+cache v7-185 → v7-186
+Test: 1185/1185 geçti (1154 → 1185, 31 yeni).
+
 ### 🔴 12 Eylül 2026 — 🔬 BESİN VERİTABANI 2. DENETİM: MİKRO TABLODA ÖLÇEK KALINTISI (v7-185)
 
 Salim: *"veri tabanında yanlışlar var, onların hepsini düzelt."* v7-184 tabloyu yeniden üretmişti ve 1149 test yeşildi — ama **yeşil testler tablonun DOĞRU olduğunu değil, KENDİ İÇİNDE TUTARLI olduğunu söylüyordu.** Bu denetim farklı bir eksende yapıldı: her değer **dış referansla** (USDA FoodData Central / myfooddata / TürKomp) per-100 g karşılaştırıldı.
