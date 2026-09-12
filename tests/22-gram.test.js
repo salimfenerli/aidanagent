@@ -40,9 +40,11 @@ function bugununOgunleri() {
 }
 
 describe('Temel besin veritabani — gram karsiligi', () => {
-  test('470 besinin HEPSINDE g alani var ve pozitif', () => {
+  test('481 besinin HEPSINDE g alani var ve pozitif', () => {
     const f = seedFoods();
-    assert.strictEqual(f.length, 482, 'besin sayisi degismis');
+    // 12 Eyl 2026: 'Kakaolu findik kremasi' BIREBIR 'Findik kremasi' kopyasiydi
+    // (ayni g/k/p/c/f). Arama sonucunda iki ayni satir cikiyordu; alias'a indirildi.
+    assert.strictEqual(f.length, 481, 'besin sayisi degismis');
     const eksik = f.filter(x => !(Number(x.g) > 0));
     assert.strictEqual(eksik.length, 0, 'g alani olmayan: ' + eksik.slice(0, 5).map(x => x.n).join(', '));
   });

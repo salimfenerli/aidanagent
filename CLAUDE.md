@@ -70,6 +70,64 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 
 
 
+### 🔴 12 Eylül 2026 — 🔬 BESİN VERİTABANI 2. DENETİM: MİKRO TABLODA ÖLÇEK KALINTISI (v7-185)
+
+Salim: *"veri tabanında yanlışlar var, onların hepsini düzelt."* v7-184 tabloyu yeniden üretmişti ve 1149 test yeşildi — ama **yeşil testler tablonun DOĞRU olduğunu değil, KENDİ İÇİNDE TUTARLI olduğunu söylüyordu.** Bu denetim farklı bir eksende yapıldı: her değer **dış referansla** (USDA FoodData Central / myfooddata / TürKomp) per-100 g karşılaştırıldı.
+
+**🔴 ASIL BULGU — mikro tabloda v7-184 ölçeklemesinin kalıntısı.** `NUT_MICRO_DATA` **porsiyon başına** tutulur. v7-184'te 92 kayıt gram oranıyla yeniden ölçeklendi; bir kayıtta eski gram yanlış varsayıldıysa sonuç sessizce kaydı. En net örnek **ceviz**: porsiyon "2 yarım" = 5 g, kalsiyum 9 mg yazıyordu → **180 mg/100 g**, gerçek değer **98**. Demir 6,0 (gerçek 2,9), lif 12,0 (gerçek 6,7) — üçü de ~1,8×, yani tek bir gram hatasının izi.
+
+**Neden mevcut kapı görmedi:** `24-beslenme-kalite`'deki "makul aralık" testi **porsiyon başına** bakıyor (`ca <= 400`). 5 g cevizde 9 mg kalsiyum makul bir sayıdır. Hata yalnız **100 g'a normalize edilince** görünür. Ölçek hatası ancak ölçekten bağımsız bir eksende yakalanır.
+
+**🔴 Düzeltilen mikro kayıtlar (per 100 g):**
+
+| besin | alan | tabloda | gerçek |
+|---|---|---|---|
+| Ceviz | Ca / Fe / lif | 180 / 6,0 / 12,0 | **98 / 2,9 / 6,7** |
+| Kabak çekirdeği | Ca / Fe / lif | 60 / 16,7 / 8,0 | **46 / 8,8 / 6,0** |
+| Fıstık ezmesi | Fe | 3,8 | **1,9** |
+| Domates | lif / Ca | 2,8 / 14 | **1,2 / 10** |
+| Salatalık | lif | 1,3 | **0,5** |
+| Haşlanmış patates | Fe / lif / Ca | 0,7 / 3,0 / 12 | **0,31 / 1,8 / 8** |
+| Muz | lif | 1,7 | **2,6** |
+| Müsli | lif | 4,2 | **7,0** |
+| Makarna | Fe | 0,8 | **0,5** |
+| Ispanak yemeği | Fe | 1,1 | **2,2** |
+| Kuru kayısı | Ca | 75 | **55** |
+| Yoğurt (yağsız) | Ca | 120 | **160** (yağsızda katı madde yoğunlaşır) |
+| Badem sütü (şekersiz) | Ca / D | 15 / 0 | **120 / 30** (ticari bitki sütü zenginleştirilir) |
+| Beyaz peynir · Kaşar | Fe | 0,1/porsiyon | **0,2** |
+| Sardalya | D | 300 | **200** (konserve referansı) |
+
+⚠️ **İnek sütündeki düşük D DOĞRU ve öyle kaldı.** USDA 51 IU/100 g verir çünkü ABD'de süt D ile zenginleştirilir; **Türkiye'de zenginleştirilmiyor**, tablodaki ~2,5 IU gerçektir. Referans testi bunu yanlış alarm üretmeden geçirsin diye referans satırı Türkiye'ye göre yazıldı ve gerekçesi koda yazıldı.
+
+**Yeni mikro kayıt (3):** Badem sütü · Yulaf sütü · Soya sütü (şekersiz) — bitki sütleri Ca+D ile zenginleştirilir ve tabloda hiç mikro kaydı yoktu, bu da kapsamı düşürüp motoru gereksiz susturuyordu.
+
+**🔴 Makro düzeltmeleri.** `Yoğurt (yağsız)` karbonhidratı Atwater'ı %14 tutmuyordu (11/13/0 → 11,4/15,4/0,4). `Hurma` proteini 3,0 g/100 g yazıyordu, gerçek 1,8. `Karnabahar` 35 kcal/100 g — yağsız haşlanmış karnabahar 25. `Humus` USDA değerine çekildi (178 → 166 kcal/100 g, karb 20,1 → 14,3, lif 3,0 → 6,0).
+
+**🔴 Kompozit yemekler bileşenden yeniden kuruldu.** 56 kompozit yemek, tablonun KENDİ doğrulanmış bileşenleriyle tarif üzerinden yeniden hesaplandı (ör. *köfte ekmek* = sandviç ekmeği 85 g + ızgara köfte 90 g + domates + ezme). 51'i ±%20 içinde çıktı — yani tablonun kompozit tahminleri büyük oranda sağlam. Gerçekten sapan 4'ü düzeltildi:
+
+- **Köfte ekmek** 550 → **460** kcal (bileşen toplamı 438)
+- **Lahmacun dürüm** 420 → **365** kcal (bileşen toplamı 321)
+- **Kahvaltı tabağı** 570 → **530** kcal
+- **Yumurtalı ekmek** 240 → **262** kcal (tek yönü YUKARI olan düzeltme)
+
+Yanlış alarm kaydı: **cacık** bileşen toplamının %37 altında çıktı — cacık **suyla seyreltilir**, tarif hesabı suyu saymıyordu. Tablo doğruydu. Aynı şekilde *etli kuru fasulye / etli nohut* suyunu sayan tarif yüzünden sapmış görünüyor; dokunulmadı.
+
+**Yapısal temizlik:** `Ton balığı` konservesi 110 g, `Ton balığı (suda)` 80 g'dı — aynı ürün iki farklı konserve gramıyla. 80 g'a (süzülmüş standart) eşitlendi. `Kakaolu fındık kreması` satırı `Fındık kreması` ile **birebir aynıydı** (aynı g/k/p/c/f); arama iki özdeş sonuç veriyordu, alias'a indirildi. Tablo 482 → **481**.
+
+**🔒 Kalıcı kapı — `tests/37-besin-referans.test.js` (5 test):**
+1. **"makro değerleri referansla tutuyor (per 100 g)"** — 134 jenerik besin için dış referans tablosu koda gömüldü. Tolerans kcal %15, makro %20.
+2. **"mikro değerleri referansla tutuyor (porsiyon → per 100 g)"** — **bu denetimin bulduğu hata sınıfını kilitleyen test.** Porsiyon gramı değişip mikro değer ölçeklenmeden kalırsa kırmızı döner. Tolerans Ca %40, Fe %45, D %50, lif %45 (çeşit/marka yayılımı gerçek; amaç ölçek hatasını yakalamak, tam eşleşme değil).
+3. **"birebir aynı makroya sahip iki besin satırı yok"** — Kakaolu fındık kreması sınıfı. Kalorisiz içecekler (çay/soda) muaf, bilinçli ikizler (yumurta/haşlanmış yumurta, pirinç çeşitleri) adıyla muaf.
+4. Referans listesindeki her ad tabloda var + her besin adı tekil.
+
+⚠️ **Bilinçli sınır:** kompozit Türk yemekleri referans tablosuna **alınmadı** — per-100 g değerleri tarif bağımlıdır ve hiçbir referans veri tabanında yoktur. Onların denetimi bileşenden yeniden kurma yöntemiyle yapılır (yukarıdaki 56 yemek taraması), teste bağlanamaz.
+
+**Yeni besin eklerken:** jenerik besinse (et, balık, süt ürünü, tahıl, meyve, sebze, kuruyemiş, zenginleştirilmiş bitki sütü) `37-besin-referans`'taki `REF` tablosuna da ekle. Eklenmezse test yeşil kalır ama o besin hiç denetlenmez.
+
+cache v7-184 → v7-185
+Test: 1154/1154 geçti (1149 → 1154, 5 yeni).
+
 ### 🔴 10 Eylül 2026 — 🥩 BESİN VERİTABANI DENETİMİ: `g` ALANI ÖLÇÜLMEMİŞTİ (v7-184)
 
 Salim: *"bazı yemekler hala hatalı, o düzgün olsun, önemli benim için."* Denetim mekanik başladı, çünkü 470 kalemi göz kararı okumak hata bulmanın en kötü yolu.
