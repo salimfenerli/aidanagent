@@ -42,7 +42,7 @@ function bugununOgunleri() {
 describe('Temel besin veritabani — gram karsiligi', () => {
   test('470 besinin HEPSINDE g alani var ve pozitif', () => {
     const f = seedFoods();
-    assert.strictEqual(f.length, 470, 'besin sayisi degismis');
+    assert.strictEqual(f.length, 482, 'besin sayisi degismis');
     const eksik = f.filter(x => !(Number(x.g) > 0));
     assert.strictEqual(eksik.length, 0, 'g alani olmayan: ' + eksik.slice(0, 5).map(x => x.n).join(', '));
   });
@@ -53,13 +53,80 @@ describe('Temel besin veritabani — gram karsiligi', () => {
       dilim: [12, 80], bardak: [150, 300], kasik: [8, 30], avuc: [20, 45],
       fincan: [30, 120], kase: [120, 350], porsiyon: [60, 450],
     };
+    // ⚠️ 10 Eyl 2026 — ISTISNALAR ADIYLA YAZILIR, BANT GENISLETILMEZ.
+    // Bantlar EKMEK DILIMI ve CORBA KASESI varsayimiyla kalibre edildi. Uc
+    // sinif besin bu varsayimi gercekten kiriyor:
+    //   (1) buyuk dilim  — karpuz/pizza/borek/pasta dilimi 100-300 g'dir
+    //   (2) dusuk yogunluk — misir gevregi, musli, patlamis misir: kase
+    //       dolu ama hafif (patlamis misir ~0.04 g/ml)
+    //   (3) kucuk porsiyon — granola, pismaniye, grissini olcuyle yenir
+    // Bandi genisletmek bu uc durumu gecirirken ASIL aradigimiz olcek
+    // hatasini da gecirirdi. O yuzden istisna LISTE, her biri gerekcesiyle.
+    const istisna = {
+      'Karpuz': [150, 350], 'Kavun': [120, 300], 'Ananas': [80, 200],
+      'Pizza': [80, 160], 'Su böreği': [60, 160], 'Peynirli börek': [60, 160],
+      'Etli ekmek': [60, 160], 'Trileçe': [60, 160], 'Cheesecake': [60, 160],
+      'Mısır gevreği': [25, 60], 'Müsli': [30, 70], 'Patlamış mısır': [15, 45],
+      'Granola': [30, 70], 'Pişmaniye': [25, 60], 'Grissini': [20, 60],
+      'Şekersiz kakao': [3, 10],
+    };
     for (const f of seedFoods()) {
       const u = String(f.u).replace(/^\d+\s*/, '');
-      const s = sinir[u];
+      const s = istisna[f.n] || sinir[u];
       if (!s) continue;
       assert.ok(f.g >= s[0] && f.g <= s[1],
         `${f.n}: 1 ${u} = ${f.g} g, beklenen ${s[0]}-${s[1]}`);
     }
+  });
+
+  // ⚠️ 10 Eyl 2026 — YENI KAPI: gram alani UYDURULMUS mu?
+  // Denetimde ortaya cikan asil hata buydu: `g` olculmemis, `k`'dan geri
+  // turetilmisti (g = k / sabit). Belirtisi net — 470 besinin 59'u TAM
+  // 2.00 kcal/g, 32'si 1.50, 26'si 0.40 idi. Gercek besinlerde bu kadar
+  // tekrar OLMAZ; her kume bir kategoriye korlemesine uygulanmis bir
+  // carpandir. Tek tek deger denetlemek yerine DESENI kilitliyoruz.
+  test('gram alani k/sabit ile turetilmemis (uydurma gram kapisi)', () => {
+    const sayac = new Map();
+    for (const f of seedFoods()) {
+      if (!(f.g > 0) || !(f.k > 0)) continue;
+      const oran = (f.k / f.g).toFixed(2);
+      sayac.set(oran, (sayac.get(oran) || 0) + 1);
+    }
+    const enSik = [...sayac.entries()].sort((a, b) => b[1] - a[1])[0];
+    assert.ok(enSik[1] <= 20,
+      `${enSik[1]} besin ayni kcal/g oranini (${enSik[0]}) paylasiyor — ` +
+      'gram alani olculmemis, kalorinin sabite bolunmesiyle uretilmis olabilir');
+  });
+
+  // ⚠️ 10 Eyl 2026 — FIZIKSEL IMKANSIZLIK KAPISI.
+  // 100 gram besinin icinde 100 gramdan fazla makro olamaz. Denetimde 7
+  // besin bu kurali ciğniyordu (Cezerye 133 g, Bisküvi 113 g, Kabak
+  // cekirdegi 104 g/100 g) — hepsi kucuk porsiyonda tam sayiya yuvarlanmis
+  // makrolarin ve uydurma gramin birlikte urettigi hataydi.
+  test('100 g besinde makro toplami 100 g\'i asmiyor', () => {
+    for (const f of seedFoods()) {
+      if (!(f.g > 0)) continue;
+      const toplam = (f.p + f.c + f.f) / f.g * 100;
+      assert.ok(toplam <= 100,
+        `${f.n}: 100 g'da ${toplam.toFixed(0)} g makro — g ya da makrolar yanlis`);
+    }
+  });
+
+  // ⚠️ Kalori ile makro BIRBIRINI TUTMALI (Atwater: 4/4/9).
+  // Alkol ISTISNA ve bu bilincli: etanol 7 kcal/g tasir ama P/K/Y'nin
+  // hicbirine girmez, o yuzden bu uc kayitta fark GERCEKTIR.
+  test('kcal ile makrolar tutuyor (Atwater 4/4/9)', () => {
+    const alkol = ['Bira', 'Şarap', 'Rakı'];
+    const kotu = [];
+    for (const f of seedFoods()) {
+      if (alkol.includes(f.n) || !(f.k > 0)) continue;
+      const hesap = f.p * 4 + f.c * 4 + f.f * 9;
+      const fark = Math.abs(f.k - hesap);
+      if (fark >= 25 && fark / f.k >= 0.20) {
+        kotu.push(`${f.n}: yazan ${f.k} kcal, makrodan ${Math.round(hesap)}`);
+      }
+    }
+    assert.deepStrictEqual(kotu, []);
   });
 
   test('turetilen kcal/100g fiziksel olarak mumkun (<= 900)', () => {

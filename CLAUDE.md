@@ -70,6 +70,54 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 
 
 
+### 🔴 10 Eylül 2026 — 🥩 BESİN VERİTABANI DENETİMİ: `g` ALANI ÖLÇÜLMEMİŞTİ (v7-184)
+
+Salim: *"bazı yemekler hala hatalı, o düzgün olsun, önemli benim için."* Denetim mekanik başladı, çünkü 470 kalemi göz kararı okumak hata bulmanın en kötü yolu.
+
+**🔴 ASIL BULGU — `g` (porsiyon gramı) UYDURULMUŞ.** Kalori/makro tutarlılığı (Atwater 4/4/9) neredeyse temizdi: 470 besnin yalnız 3'ü sapıyordu ve üçü de **alkol** (etanol 7 kcal/g taşır, P/K/Y'ye girmez — yani doğrudurlar). Hatanın yeri başkaydı. `kcal / g` oranının dağılımına bakıldığında:
+
+```
+2.00 kcal/g -> 59 besin   (Tavuk göğsü, Adana kebap, Somon, Levrek, Köfte…)
+1.50 kcal/g -> 32 besin   (Pilav, Bulgur pilavı, Makarna, Mantı…)
+0.40 kcal/g -> 26 besin   (Çoban salata, Domates, Ispanak yemeği…)
+1.60 kcal/g -> 25 besin   ·   0.60 -> 24   ·   0.55 -> 14
+```
+
+Gerçek besinlerde bu kadar tekrar **olmaz**. Her küme, bir kategoriye körlemesine uygulanmış bir çarpandır: `g = k / sabit`. Yani porsiyon ağırlığı tartılmamış, **kaloriden geri türetilmiş**.
+
+**Neden önemli — `g` kullanıcıya görünüyor.** `foods.js` yemek modalında "1 porsiyon ≈ 125 g" yazıyor ve **Gram kipini** o sayı sürüyor. Ölçüm: tavuk göğsü `g:125` iken 200 g tartan biri **400 kcal / 75 g protein** görüyordu; doğrusu 330 kcal / 62 g. %21 hata, hem de tam olarak "tartıyla doğru yapayım" diyen kullanıcıda.
+
+**🔴 Referansla doğrulanan hatalar** (USDA FoodData Central / myfooddata, ayran için TürKomp türevi kaynak):
+
+| besin | tabloda /100g | gerçek /100g | kat |
+|---|---|---|---|
+| Haşlanmış patates | 191 kcal | **87** | 2,2× |
+| Domates | 40 kcal · 1,8 p | **18 · 0,9** | 2,2× |
+| Salatalık | 39 kcal · 2,6 p | **16 · 0,65** | 2,4× |
+| Levrek | 200 kcal · 38 p | **124 · 23,6** | 1,6× |
+| Ayran | 51 kcal · 4 p | **38 · 2,0** | 2,0× (protein) |
+| Yoğurt | 65 kcal · 5,9 p | **61 · 3,5** | 1,7× (protein) |
+| Mısır gevreği | kase = 120 g | **40 g** | 3× |
+| Muz | 175 g/adet | **118 g** | 1,5× |
+
+**Yöntem — tabloyu tek tek düzeltmedim, YENİDEN ÜRETTİM.** Her besin için (doğrulanmış per-100g referansı) × (gerçek porsiyon ağırlığı). Böylece iki hata sınıfı birden kapanıyor ve tablo kendi içinde tutarlı oluyor. 470 kalemin **433'ü** yeniden üretildi; dokunulmayan 37'si zaten doğru kurulmuş bölümlerdi (pirinç ailesi, diyet/light ürünler — onlar 150 g standart porsiyonla ve gerçek per-100g ile yazılmıştı). Makrolar artık gerektiğinde **ondalıklı** (5 g cevizin proteinini tam sayıya yuvarlamak %60 hata demekti).
+
+**🔴 MİKRO BESİN TABLOSU DA KAYDI.** `NUT_MICRO_DATA` değerleri **porsiyon başına** tutuluyor; gramlar değişince 129 kaydın **92'si** tutarsız kaldı. Hepsi gram oranıyla yeniden ölçeklendi. Doğrulama: süt 120 mg Ca/100g (gerçek 113) · somon 536 IU D/100g (gerçek ~526) · salatalık 16 mg Ca/100g (gerçek 16). Ciğer tava ölçekleme sonrası 10,1 mg demir verdi — motorun kendi "makul aralık" testi bunu yakaladı, gerçek değere (7,8 mg) çekildi.
+
+**🔴 YAN ETKİ: 'Yoğurt' ÇAPALIKTAN ÇIKTI.** Düzeltilmiş veriyle sade yoğurt 200 g kasede **7 g protein** (0,057 g/kcal). Motorun kendi yoğunluk sözleşmesi ≥0,08 istiyor — 17 g'lık bir ara öğün hedefini sade yoğurtla tutturmak 2,5 kase demek. Yani **çapa seçimi hatalı veriye dayanıyordu**. Yerine yoğun ve hafif olanlar: Cottage peyniri (0,113) ve hazır protein yoğurt (0,154).
+
+**Planlayıcıya etkisi** (69 kg / kas, 20 kombinasyon): kalori −0,2% → **−1,3%** · yağ −0,6% → **+4,3%** · karbonhidrat +1% → **−5%** · eşik altı öğün 1,0 → **0,1**. Karbonhidrat açığı yeni bir hata değil, protein fazlasının aritmetik gölgesi: plan hedefin %14 üstünde protein veriyor, o da 4×19 g ≈ %4 karbonhidrat yeri yiyor. Yağ fazlasını kırpma eşiğini 1,10'dan 1,05'e çekmek denendi — yağ düzeldi ama **kalori bozuldu** (hedefin %3'ünden fazla altında biten gün 1/20 → 7/20). Geri alındı; enerji payı %28,6 zaten AMDR'nin (%25-35) ortasında.
+
+**Ayrıca eklendi (12 kalem):** Pastırma · Hellim · Muhammara · Ezme · Pilav üstü döner · Islak hamburger · Kuru köfte · Tavuk ciğeri · Somon füme · Muzlu süt · Kuzu şiş · Dana rosto. Tablo 470 → **482**.
+
+**🔒 Kalıcı kapılar — `tests/22-gram.test.js`:**
+1. **"gram alanı k/sabit ile türetilmemiş"** — en sık `kcal/g` oranını paylaşan besin sayısı ≤ 20. Bu hatanın **desenini** kilitliyor; tek tek değer denetlemekten güçlü, çünkü aynı hata yarın başka bir kategoriye uygulanırsa da kırmızı olur. (Denetim öncesi bu sayı **59**'du.)
+2. **"100 g besinde makro toplamı 100 g'ı aşmıyor"** — fiziksel imkânsızlık kapısı. Denetimde 7 besin bunu çiğniyordu (Cezerye 133 g/100 g).
+3. **"kcal ile makrolar tutuyor (Atwater 4/4/9)"** — alkol adıyla istisna, gerekçesi yazılı.
+4. Birim-gram bantları korundu; genişletilmedi. Bandı gerçekten kıran üç sınıf (**büyük dilim** karpuz/pizza/börek · **düşük yoğunluk** mısır gevreği/patlamış mısır · **küçük porsiyon** granola/grissini) **adıyla istisna listesine** yazıldı. Bandı gevşetmek bu üçünü geçirirken asıl aradığımız ölçek hatasını da geçirirdi.
+
+⚠️ **Kalan bilinen sınır:** kompozit Türk yemeklerinin (kebap, güveç, dolma) per-100g değerleri tarif bağımlıdır ve referans veri tabanlarında yoktur — bunlar bileşim üzerinden **tahmin**dir, ±%15 beklenmelidir. Jenerik besinler (et, balık, süt ürünü, tahıl, meyve, sebze, kuruyemiş) referansla doğrulanmıştır.
+
 ### 🔴 9 Eylül 2026 — 🍽️ DİYET: KİŞİSEL TERCİH + PROTEİN DAĞILIMI + YAĞ AÇIĞI (v7-183)
 
 Salim: *"uygulama geliştirmeye devam et, diyet kısmını iyice geliştir"* → **kalan makro önerisi + tercihe göre kişiselleştirme**, ayrıca proje hafızasında iki tur boyunca "bilinen zayıflık" diye yazılı duran iki motor hatası.
