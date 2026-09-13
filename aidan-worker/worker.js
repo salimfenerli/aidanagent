@@ -3384,6 +3384,13 @@ async function generateHealthCoach(env, data, name) {
   const facts = buildHealthFactsSrv(data, 14);
   const r = await aiRun(env, {
     tier: 'heavy',
+    // ⚠️ PRO (13 Eyl 2026). Antrenman programini MOTOR yazar (program.js,
+    // deterministik, AI yok) — AI'in antrenmana dokundugu tek yer burasi:
+    // uyku + Hevy yuku + beslenme birlikte okunup "gun kaydir / hacim ayarla"
+    // onerisi uretiliyor. Cikti dogrudan uygulaniyor, o yuzden PRO.
+    // Haftada 1 cron + elle basilan dugme; fatura tavani ozelligin dogasiyla
+    // sinirli (bkz. KALICI MALIYET KURALI).
+    model: geminiModelPro(env),
     messages: [
       { role: 'system', content: HEALTH_COACH_PROMPT(name) + instructionsBlock(data) },
       { role: 'user', content: `Sağlık verileri (doğrulanmış):\n${facts}\n\nAnalizi yaz. TÜRKÇE, kısa, en fazla 2 öneri.` },
@@ -3421,8 +3428,11 @@ async function handleHealthCoachApi(request, env) {
   try {
     const session = await fetchUserDataForApi(env, user);
     const name = getUserDisplayName(session.data, user.email);
+    // PRO yalniz heavy kalirsa gecilir — acik model adi maliyet kilidini deler.
+    const hcTier = aiTierForUser(env, user, 'heavy');
     const r = await aiRun(env, {
-      tier: aiTierForUser(env, user, 'heavy'),
+      tier: hcTier,
+      model: hcTier === 'heavy' ? geminiModelPro(env) : undefined,
       messages: [
         { role: 'system', content: HEALTH_COACH_PROMPT(name) + instructionsBlock(data) },
         { role: 'user', content: `Sağlık verileri (doğrulanmış):\n${facts}\n\nAnalizi yaz. TÜRKÇE, kısa, en fazla 2 öneri.` },

@@ -92,9 +92,15 @@ Salim: *"özel program kısmına 'zeytin domates armut çıkar, sabah vaktim yok
 - **Maliyet kilidi korundu:** model adı yalnız `aiTierForUser` `heavy` döndürdüğünde geçilir. Açık model adını koşulsuz geçirmek, başka kullanıcının fatura üretmesini engelleyen kilidi delerdi.
 - **Ad geçersizse / bakiye bitmişse kendini onarır:** `aiRun` zaten 404/429/402/403'te ücretsiz modele düşüyor. Ama bu düşüş **sessizdi** → `aiRun` artık gerçekten kullanılan modeli (`res.model`) döndürüyor, uç `{plan, model}` veriyor ve kart altında **"Pro model ile yazıldı" / "ücretsiz model ile yazıldı"** yazıyor. Sessiz kalite düşüşü artık görünür.
 
+**🫀 SAĞLIK KOÇU DA PRO (aynı pakette).** Salim: *"antrenman programı yaparken de pro kullansın, bunlar mühim."*
+⚠️ **Antrenman programını AI YAZMIYOR — `program.js` motoru yazıyor** (deterministik, ağ isteği yok; tek `fetch` Hevy dışa aktarımı ve bu teste bağlı). Bölünme, hacim dağılımı, başlangıç ağırlıkları ve progresyon kural tabanlı; PRO sorusunun oraya bir karşılığı yok ve olmaması **bilinçli** (test edilebilir, $0, aynı girdiye aynı program).
+AI'ın antrenmana dokunduğu tek yer **`/health-coach`**: uyku + Hevy yükü + beslenme birlikte okunup "gün kaydır / hacim ayarla" önerisi üretiliyor ve çıktı doğrudan uygulanıyor. Hem haftalık cron hem "Analiz et" düğmesi artık PRO adını açıkça geçiriyor. Hacim küçük (haftada 1 + elle basılan düğme), yani fatura tavanı yine **özelliğin doğasıyla** sınırlı.
+
+**PRO adı geçen yer sayısı teste bağlandı** — yeni bir çağrı sessizce ücretliye eklenirse `06-security` kırmızı döner. Aynı testte "tüm heavy çağrıları ücretliye çevrilmiş mi" ve "açık model adı tier kilidine bağlı mı" kontrolleri var; açık model adını koşulsuz geçirmek `aiTierForUser` kilidini delerdi.
+
 ⚠️ **Salim'in yapabileceği (kod dışı):** Cloudflare → Worker → Settings → Variables'ta `GEMINI_MODEL_PRO` tanımlıysa o ad kullanılır; tanımlı değilse yukarıdaki varsayılan denenir. Kartta "ücretsiz model" yazıyorsa ad geçersiz ya da bakiye/kota bitmiştir.
 
-**Regresyon:** `20-ai-diet` 38 → **50 test** (kısıtların bağlayıcılığı 5 · güvenlik önceliğinin korunması 1 · kutu kalıcılığı 3 · PRO kilidi ve model rozeti 4). **1197/1197 yeşil.**
+**Regresyon:** `20-ai-diet` 38 → **50 test** (kısıtların bağlayıcılığı 5 · güvenlik önceliğinin korunması 1 · kutu kalıcılığı 3 · PRO kilidi ve model rozeti 4) · `06-security` 18 → **21 test** (PRO yüzeyinin sayısı · tier kilidi · antrenman motorunun AI'sız kalması). **1200/1200 yeşil.**
 
 cache v7-186 → v7-187
 

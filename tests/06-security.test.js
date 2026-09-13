@@ -154,6 +154,43 @@ describe('worker guvenlik sozlesmesi', () => {
     assert.ok(/AIDAN_EMAIL/.test(WK), 'AIDAN_EMAIL kontrolu yok');
   });
 
+  test('PRO model adi yalniz iki yerde acikca geciliyor', () => {
+    // 13 Eyl 2026 — heavy katmani GEMINI_MODEL_PRO secret'i yoksa ucretsiz
+    // Flash'a dusuyordu, yani "pro" katmani pratikte hic PRO kullanmiyor
+    // olabilirdi ve bunu hicbir yer soylemiyordu. Iki yol PRO adini ACIKCA
+    // gecirir: beslenme programi ve saglik kocu (AI'in antrenmana dokundugu
+    // tek yer). Diger heavy cagrilari (gun plani cron'u, borsa analizi)
+    // BILEREK secret'a bagli kaldi — hepsini ucretliye cevirmek ayri bir
+    // MALIYET karari, sessizce alinamaz.
+    assert.ok(/function geminiModelPro\(env\)/.test(WK), 'geminiModelPro silinmis');
+    const kullanim = (WK.match(/geminiModelPro\(env\)/g) || []).length;
+    assert.ok(kullanim >= 2 && kullanim <= 5,
+      'PRO adi beklenmedik sayida yerde geciyor (' + kullanim + ') — maliyet yuzeyi genislemis');
+    // geminiModelFor eski davranista: secret yoksa ucretsiz.
+    assert.ok(/t\.pro && env && \(env\.GEMINI_MODEL_PRO \|\| ''\)\.trim\(\)/.test(WK),
+      'TUM heavy cagrilari ucretliye cevrilmis');
+  });
+
+  test('PRO gecilen kullanici-tetiklemeli yollarda kilit duruyor', () => {
+    // Acik model adi kosulsuz gecilirse aiTierForUser kilidi delinir:
+    // baskasi `deep`'e dusurulse bile PRO modele giderdi.
+    for (const kalip of [
+      /model: tier === 'heavy' \? geminiModelPro\(env\) : undefined/,
+      /model: hcTier === 'heavy' \? geminiModelPro\(env\) : undefined/,
+    ]) {
+      assert.ok(kalip.test(WK), 'PRO adi tier kilidine baglanmamis: ' + kalip);
+    }
+  });
+
+  test('antrenman programi motoru AI cagirmiyor (PRO sorusu oraya ait degil)', () => {
+    const prog = readText('program.js');
+    const fetchler = (prog.match(/fetch\(/g) || []).length;
+    assert.strictEqual(fetchler, 1, 'program.js\'te beklenmeyen ag istegi');
+    assert.ok(/HEVY_ROUTINES_ENDPOINT/.test(prog), 'tek izinli istek Hevy disa aktarimi olmali');
+    assert.ok(!/aiRun|\/chat|\/plan|generativelanguage/.test(prog),
+      'program motoru AI\'a baglanmis — deterministik olmasi bilincli bir karar');
+  });
+
   test('serbest akisli sohbet ucretli katmana CIKMAZ', () => {
     // KALICI KURAL: serbest akisli ozellik `heavy` almaz, `deep` alir.
     // Tek istisna: kullanicinin acikca yazdigi /pro komutu.
