@@ -2420,7 +2420,7 @@ function nutAiPlana() {
 // ============================================================================
 
 const NUT_AI_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/diet-plan';
-const NUT_AI_REQ_MAX = 500;      // istek metni tavani (~150 token)
+const NUT_AI_REQ_MAX = 800;      // istek metni tavani (~240 token)
 const NUT_AI_FLOOR = 0.85;       // hedefin bu oraninin altinda kalan gun = gizli kalori acigi
 const NUT_AI_PROTEIN_MIN = 0.70; // altinda REDDETMEZ, uyarir — protein eksigi tehlikeli degil
 const NUT_AI_MAX_ITEMS = 12;     // ogun basina kalem tavani (depolama sismesin)
@@ -2517,9 +2517,32 @@ function nutAiValidate(plan, hedefler) {
   return out;
 }
 
-async function nutAiWrite() {
+// ⚠️ 13 Eyl 2026 — ISTEK KUTUSU KALICI DEGILDI VE SESSIZCE BOSALIYORDU.
+// `nutAiReq` yalnizca DOM'da duruyordu; renderNutrition() cagiran herhangi bir
+// sey (diyet tipi, PAL, yag orani, hedef, sablon dugmeleri ya da sekmeye tekrar
+// girmek) kutuyu KAYITLI eski istekle yeniden ciziyor, kullanicinin yazdigi
+// metin kayboluyordu. Sonra "Yeniden yaz"a basilinca eski/bos istekle plan
+// uretiliyor ve program degismemis gibi gorunuyordu — hatanin kendisi degil,
+// SEBEBI gorunmezdi. Artik yazarken kaydediliyor.
+let _nutIstekTimer = null;
+function nutAiIstekKaydet(v) {
+  const n = ensureNutrition();
+  n.aiIstek = String(v || '').slice(0, NUT_AI_REQ_MAX);
+  // Her tusa basista save() -> localStorage + bulut push trafigi. 600 ms bekle.
+  clearTimeout(_nutIstekTimer);
+  _nutIstekTimer = setTimeout(() => { save(); }, 600);
+}
+
+/** Kutudaki metin; kutu o an cizili degilse kayitli olan. */
+function nutAiIstek() {
   const el = document.getElementById('nutAiReq');
-  const istek = String((el && el.value) || '').trim().slice(0, NUT_AI_REQ_MAX);
+  const n = ensureNutrition();
+  if (el) return String(el.value || '').trim().slice(0, NUT_AI_REQ_MAX);
+  return String((n && n.aiIstek) || '').trim().slice(0, NUT_AI_REQ_MAX);
+}
+
+async function nutAiWrite() {
+  const istek = nutAiIstek();
   const facts = nutAiFacts();
   if (!facts) {
     showToast('Önce yaş, boy ve kilonu gir — plan senin verinden hesaplanır.', 'warning', 5000);
@@ -2553,10 +2576,17 @@ async function nutAiWrite() {
     n.ai = {
       istek, at: Date.now(), hedefTipi: facts.hedef,
       gunler: v.gunler, uyari: v.uyari,
+      // ⚠️ Istegin GERCEKTEN okundugunu gosteren tek yer bu. Plan degismis
+      // gibi gorunmuyorsa kullanici neyin uygulandigini buradan gorur;
+      // uygulanmayan kisit da "notlar"da yaziyor olmali.
+      uygulanan: (j.plan && Array.isArray(j.plan.uygulanan) ? j.plan.uygulanan : [])
+        .slice(0, 6).map(s => String(s).slice(0, 160)),
+      model: String(j.model || '').slice(0, 60),
       notlar: (j.plan && Array.isArray(j.plan.notlar) ? j.plan.notlar : [])
         .slice(0, 5).map(s => String(s).slice(0, 240)),
     };
     n.aiRed = null;
+    n.aiIstek = istek;
     save(); renderNutrition();
     showToast('Beslenme programın yazıldı.', 'success');
   } catch (e) {
@@ -2583,9 +2613,10 @@ function nutAiHtml(n) {
     (ai ? '<button class="nut-mini" onclick="nutAiPlana()">Plana aktar</button>' +
           '<button class="nut-mini" onclick="nutAiClear()">Sil</button>' : '') +
     '</div>' +
-    '<textarea id="nutAiReq" class="nut-ai-req" rows="2" maxlength="' + NUT_AI_REQ_MAX + '" ' +
-    'placeholder="Sevmediklerin, bütçen, okul saatlerin, yemek yapabilme durumun…">' +
-    escapeHtml((ai && ai.istek) || (red && red.istek) || '') + '</textarea>' +
+    '<textarea id="nutAiReq" class="nut-ai-req" rows="3" maxlength="' + NUT_AI_REQ_MAX + '" ' +
+    'oninput="nutAiIstekKaydet(this.value)" ' +
+    'placeholder="Sevmediklerin, okul/antrenman saatlerin, sabah vaktin, bütçen, yemek yapabilme durumun…">' +
+    escapeHtml((n && n.aiIstek != null ? n.aiIstek : ((ai && ai.istek) || (red && red.istek) || ''))) + '</textarea>' +
     '<div class="nut-ai-row">' +
     '<button id="nutAiBtn" class="nut-chip on" onclick="nutAiWrite()">' +
     (ai ? 'Yeniden yaz' : 'Aidan yazsın') + '</button>' +
@@ -2614,6 +2645,11 @@ function nutAiHtml(n) {
         '</div></div>').join('') +
       '</details>').join('') + '</div>';
 
+    if (Array.isArray(ai.uygulanan) && ai.uygulanan.length) {
+      h += '<div class="nut-ai-notes"><div class="nut-ai-sub">Senin yazdıklarından uyguladıklarım</div>' +
+        ai.uygulanan.map(s => '<div class="nt-row">' + escapeHtml(s) + '</div>').join('') +
+        '</div>';
+    }
     if (Array.isArray(ai.uyari) && ai.uyari.length) {
       h += '<div class="nut-ai-warn">' + ai.uyari.map(s =>
         '<div>' + escapeHtml(s) + '</div>').join('') + '</div>';
@@ -2623,7 +2659,12 @@ function nutAiHtml(n) {
         '<div class="nt-row">' + escapeHtml(s) + '</div>').join('') + '</div>';
     }
     h += '<div class="nut-ai-sub">Her günü hedefinle karşılaştırıp öyle kaydettim — ' +
-      'hedefin altında kalan bir plan buraya hiç düşmez.</div>';
+      'hedefin altında kalan bir plan buraya hiç düşmez.' +
+      // ⚠️ Model SESSIZCE ucretsize dusebiliyor (bakiye/kota/gecersiz ad).
+      // Hangi modelin yazdigini yazmak, "pro mu baktI" sorusunu bir daha
+      // sordurmaz ve dusus fark edilir olur.
+      (ai.model ? ' · ' + escapeHtml(/pro/i.test(ai.model) ? 'Pro model' : 'ücretsiz model') +
+        ' ile yazıldı' : '') + '</div>';
   }
 
   return h + '</div>';

@@ -46,6 +46,7 @@ function motor() {
 
   const ctx = {
     console, Date, Math, JSON, Number, String, Array, Object, Promise, isFinite,
+    setTimeout, clearTimeout,
     document: { getElementById: () => null },
     escapeHtml: esc,
     save() { ctx._saved = (ctx._saved || 0) + 1; },
@@ -62,7 +63,7 @@ function motor() {
   vm.runInContext(nutSrc +
     '\n;globalThis.__N = { nutAiValidate, nutAiFacts, nutAiHtml, nutAiClear, nutDowLabel,' +
     ' nutTargets, nutWeek, nutProfile, ensureNutrition, NUT_AI_FLOOR, NUT_AI_PROTEIN_MIN,' +
-    ' NUT_AI_REQ_MAX, NUT_AI_MAX_ITEMS, NUT_AI_ENDPOINT };', ctx);
+    ' NUT_AI_REQ_MAX, NUT_AI_MAX_ITEMS, NUT_AI_ENDPOINT, nutAiIstek, nutAiIstekKaydet };', ctx);
   return Object.assign(ctx, ctx.__N);
 }
 const M = motor();
@@ -405,5 +406,120 @@ describe('Impeccable — AI plan kartı', () => {
       const crlf = (b.toString('binary').match(/\r\n/g) || []).length;
       assert.strictEqual(lf, crlf, f + ' CRLF olmali');
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 13 Eyl 2026 — KISITLARIN GERCEKTEN UYGULANMASI
+//
+// Salim: "ozel program kismina kisit yazdim ama duzenlemiyo, bi bug var."
+// Uc ayri kusur cikti ve UCU DE ayni sonuca cikiyordu: yazdigi metin ya hic
+// gitmiyor ya da AI icin baglayici degil.
+//   1. istek prompt'ta "uslup/tercih" etiketiyle user mesajinin SONUNDAydi;
+//      sistem promptundaki varsayilan kalip daha buyurgandi.
+//   2. `nutAiReq` yalniz DOM'da duruyordu -> renderNutrition() cagiran her sey
+//      yazilani siliyor, "Yeniden yaz" eski/bos istekle plan uretiyordu.
+//   3. max_tokens 4000 + thinking:high -> 7 gunluk JSON ortasindan kesilebiliyordu.
+// ---------------------------------------------------------------------------
+describe('kişisel kısıtlar bağlayıcı', () => {
+  test('istek prompt\'ta ZORUNLU girdi — "üslup/tercih" etiketi YOK', () => {
+    assert.ok(!/üslup\/tercih/.test(handlerSrc),
+      'istek hala uslup tercihi diye etiketli — varsayilan kalip onu eziyor');
+    assert.ok(/KULLANICININ KISITLARI/.test(handlerSrc), 'kisit blogu yok');
+    assert.ok(/BAĞLAYICI/.test(handlerSrc), 'kisitlarin baglayici oldugu yazmiyor');
+    assert.ok(/KISIT KAZANIR/.test(handlerSrc),
+      'kisit ile varsayilan kalip catistiginda hangisinin kazandigi yazmiyor');
+  });
+
+  test('🔒 güvenlik kuralları hâlâ kısıtın ÜSTÜNDE', () => {
+    // Kisitlari baglayici yapmak, 16 yas kilitlerini gevsetmek DEGILDIR.
+    assert.ok(/KURALLAR KAZANIR/.test(handlerSrc));
+    assert.ok(/yalnız 1-5 numaralı güvenlik kuralları bunu ezer/.test(handlerSrc),
+      'kisit blogunun ustunde guvenlik onceligi yazmiyor');
+    assert.ok(/KISIT KALORİYİ DÜŞÜRMEZ/.test(handlerSrc),
+      '"az yiyeyim" tipi bir kisit kaloriyi dusurebilir gorunuyor');
+  });
+
+  test('uygulanamayan kısıt ve kullanıcının sorusu sessiz geçmiyor', () => {
+    assert.ok(/uygulamadığını/.test(handlerSrc) && /Sessizce yok sayma/.test(handlerSrc),
+      'uygulanmayan kisit sessizce yok sayilabiliyor');
+    assert.ok(/SORU varsa/.test(handlerSrc), 'kisit metnindeki soru cevapsiz kaliyor');
+  });
+
+  test('"uygulanan" alanı JSON sözleşmesinde ve PWA onu kırpıp saklıyor', () => {
+    assert.ok(/"uygulanan":\[/.test(handlerSrc), 'JSON sablonunda uygulanan yok');
+    assert.ok(/uygulanan: \(j\.plan && Array\.isArray\(j\.plan\.uygulanan\)/.test(nutSrc),
+      'donen uygulanan listesi kaydedilmiyor');
+    assert.ok(/slice\(0, 6\)\.map\(s => String\(s\)\.slice\(0, 160\)\)/.test(nutSrc),
+      'depolama tavani yok — tek JSON blob sisebilir');
+  });
+
+  test('uygulanan listesi kartta görünüyor ve kaçışlı basılıyor', () => {
+    const n = { ai: { at: Date.now(), gunler: [
+      { dow: 1, tip: 'strength', kcal: 3000, protein: 150, hedefKcal: 3000, hedefProtein: 150, ogunler: [] },
+    ], uygulanan: ['<img src=x onerror=alert(1)>', 'kahvaltı tek kalem'], uyari: [], notlar: [] } };
+    const h = M.nutAiHtml(n);
+    assert.ok(/uyguladıklarım/.test(h), 'uygulanan bloku cizilmiyor');
+    assert.ok(/kahvaltı tek kalem/.test(h));
+    assert.ok(!/<img\s/.test(h), 'uygulanan metni kacisilmamis');
+  });
+});
+
+describe('istek kutusu kalıcı', () => {
+  test('yazarken kaydediliyor (render kutuyu boşaltamaz)', () => {
+    assert.ok(/oninput="nutAiIstekKaydet\(this\.value\)"/.test(nutSrc),
+      'textarea yazileni kaydetmiyor — renderNutrition() metni siler');
+    assert.ok(/n && n\.aiIstek != null \? n\.aiIstek/.test(nutSrc),
+      'kutu kayitli metinden cizilmiyor');
+  });
+
+  test('gönderim kutuyu değil KAYITLI metni de okuyabiliyor', () => {
+    const m = nutSrc.slice(nutSrc.indexOf('async function nutAiWrite()'));
+    assert.ok(/const istek = nutAiIstek\(\);/.test(m.slice(0, 300)),
+      'nutAiWrite hala yalniz DOM okuyor');
+  });
+
+  test('kaydedilen metin tavanı aşmıyor ve geri okunuyor', () => {
+    M.data.diet = {};
+    M.nutAiIstekKaydet('x'.repeat(5000));
+    const n = M.ensureNutrition();
+    assert.strictEqual(n.aiIstek.length, M.NUT_AI_REQ_MAX);
+    assert.strictEqual(M.nutAiIstek().length, M.NUT_AI_REQ_MAX);
+    M.nutAiIstekKaydet('  zeytin çıkar  ');
+    assert.strictEqual(M.nutAiIstek(), 'zeytin çıkar');
+  });
+});
+
+describe('PRO model — diyet planı', () => {
+  test('PRO yalnız heavy katmanında geçiriliyor (maliyet kilidi)', () => {
+    assert.ok(/const tier = aiTierForUser\(env, user, 'heavy'\)/.test(handlerSrc));
+    assert.ok(/model: tier === 'heavy' \? geminiModelPro\(env\) : undefined/.test(handlerSrc),
+      'model acik gecilirse aiTierForUser kilidi delinir');
+  });
+
+  test('secret yoksa PRO adı var ama diğer heavy çağrılar ETKİLENMİYOR', () => {
+    assert.ok(/const GEMINI_MODEL_PRO_DEFAULT = '/.test(workerSrc));
+    // geminiModelFor bilerek eski davranista: secret yoksa ucretsiz.
+    assert.ok(/if \(t && t\.pro && env && \(env\.GEMINI_MODEL_PRO \|\| ''\)\.trim\(\)\) return/.test(workerSrc),
+      'tum heavy cagrilar ucretliye cevrilmis — bu bir MALIYET karari, sessizce alinmaz');
+  });
+
+  test('düşünme bütçesi 7 günlük JSON\'u kesmiyor', () => {
+    const m = handlerSrc.match(/max_tokens:\s*(\d+)/);
+    assert.ok(m && Number(m[1]) >= 8192,
+      'thinking:high cikis butcesini yer — plan ortasindan kesilir ve "okunabilir plan donmedi" hatasi cikar');
+  });
+
+  test('hangi modelin yazdığı kullanıcıya söyleniyor', () => {
+    assert.ok(/res = \{ response: out\.text, model: usedModel \}/.test(workerSrc),
+      'aiRun gercekten kullanilan modeli dondurmuyor');
+    assert.ok(/jsonCors\(\{ plan, model: r\.model/.test(handlerSrc));
+    const n = { ai: { at: Date.now(), model: 'gemini-3.5-pro', gunler: [
+      { dow: 1, tip: 'strength', kcal: 3000, protein: 150, hedefKcal: 3000, hedefProtein: 150, ogunler: [] },
+    ], uyari: [], notlar: [] } };
+    assert.ok(/Pro model ile yazıldı/.test(M.nutAiHtml(n)));
+    n.ai.model = 'gemini-3.5-flash';
+    assert.ok(/ücretsiz model ile yazıldı/.test(M.nutAiHtml(n)),
+      'PRO ucretsize dustugunde bu sessiz kaliyor');
   });
 });

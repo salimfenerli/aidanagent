@@ -163,6 +163,21 @@ function aiTierForUser(env, user, wanted) {
   return email && email === owner ? 'heavy' : 'deep';
 }
 
+// ⚠️ PRO MODEL ADI (13 Eyl 2026). `heavy` katmani env.GEMINI_MODEL_PRO secret'i
+// TANIMLI DEGILSE ucretsiz Flash'a dusuyor — yani "pro" katmani pratikte hic
+// PRO kullanmiyor olabilir ve bunu hicbir yer soylemiyordu.
+//
+// ⚠️ BU VARSAYILAN HER heavy CAGRISINA UYGULANMAZ. geminiModelFor bilerek
+// eski davranista birakildi (secret yoksa ucretsiz): gunluk plan cron'u,
+// Pazar saglik raporu ve borsa analizi de heavy'dir ve hepsini birden
+// ucretliye cevirmek Salim'in vermedigi bir MALIYET kararidir. Yalniz
+// beslenme programi (kullanici dugmeye basar, ayda birkac kez calisir,
+// cikti dogrudan uygulanir) bu adi ACIKCA ister.
+// Ad gecersizse / bakiye bitmisse aiRun 404/429/402/403'te ucretsize duser.
+const GEMINI_MODEL_PRO_DEFAULT = 'gemini-3.5-pro';
+function geminiModelPro(env) {
+  return ((env && env.GEMINI_MODEL_PRO) || '').trim() || GEMINI_MODEL_PRO_DEFAULT;
+}
 function geminiModelFor(env, tierName) {
   const t = AI_TIERS[tierName];
   if (t && t.pro && env && (env.GEMINI_MODEL_PRO || '').trim()) return env.GEMINI_MODEL_PRO.trim();
@@ -244,6 +259,9 @@ async function aiRun(env, opts) {
   });
 
   let resp = await call(body);
+  // Gercekten kullanilan model (asagidaki fallback'lerde ucretsize dusebilir).
+  // Cagiran taraf "PRO mu yazdi" sorusunu cevaplayabilsin diye geri doner.
+  let usedModel = model;
   // 503/500 = model o an aşırı yüklü (geçici). Kısa bekleyip TEK kez tekrar dene.
   // Google'ın yoğunluğu kullanıcıya hata olarak yansımamalı — bu ücret üretmez.
   if (!resp.ok && (resp.status === 503 || resp.status === 500)) {
@@ -258,7 +276,7 @@ async function aiRun(env, opts) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (rFree2.ok) resp = rFree2; else resp = rRetry;
+      if (rFree2.ok) { resp = rFree2; usedModel = geminiModel(env); } else resp = rRetry;
     } else {
       resp = rRetry;
     }
@@ -273,7 +291,7 @@ async function aiRun(env, opts) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (rFree.ok) resp = rFree;
+    if (rFree.ok) { resp = rFree; usedModel = geminiModel(env); }
   }
   // Model thinkingLevel'i tanımıyorsa (eski sürüm) 400 döner -> parametresiz tek tekrar
   if (!resp.ok && resp.status === 400) {
@@ -319,7 +337,7 @@ async function aiRun(env, opts) {
     }
   }
 
-  const res = { response: out.text };
+  const res = { response: out.text, model: usedModel };
   if (out.toolCalls.length) res.tool_calls = out.toolCalls;
   return res;
 }
@@ -6440,7 +6458,7 @@ SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
 // ENJEKTE EDILMEZ. "Madde madde yaz" gibi bir uslup talimati JSON cikti
 // sozlesmesini bozar. Bu iki yonlu teste baglidir.
 // ============================================================================
-const DIET_PLAN_REQ_MAX = 500;
+const DIET_PLAN_REQ_MAX = 800;
 
 function parseDietPlanJson(raw) {
   let s = String(raw || '').trim();
@@ -6497,6 +6515,24 @@ Hedefi: ${kasMi ? 'yağsız kas kazanımı' : 'kiloyu koruma'}.
 4. Vücut şekli, görünüm, kilo ya da yağ oranı hakkında yorum yapma. "İdeal" bir sayı söyleme.
 5. Teşhis koyma, hastalık ya da alerji tedavisi önerme. Alerji söylenmişse sadece o besini kullanma.
 
+📌 KULLANICININ KISITLARI — yukarıdaki 5 kural DIŞINDA HER ŞEYDE BAĞLAYICI:
+Aşağıda "KULLANICININ KISITLARI" başlığıyla verilen metin bir temenni ya da üslup tercihi DEĞİL,
+programın şeklini belirleyen ZORUNLU girdidir. Öğün saatleri, öğün sayısı, hangi besinin hiç
+geçmeyeceği ve hangi öğünün ne kadar pratik olacağı ORADAN belirlenir — senin varsayılan
+kalıbından değil. Kısıtla varsayılan kalıp çeliştiğinde KISIT KAZANIR.
+- "X çıkar / X sevmiyorum" denen besin programın HİÇBİR gününde, HİÇBİR öğününde geçmez.
+  Yerine benzer makrolu başka bir besin koy; öğünü silme.
+- Saat kısıtı verilmişse (okul, antrenman, iş) öğünler o saatlere kurulur. Kullanıcının
+  müsait olmadığını söylediği aralığa öğün YAZILMAZ; o aralığa denk gelen tek şey
+  taşınabilir ve hazırlıksız bir ara öğün olabilir, o da ancak kullanıcı öyle dediyse.
+- "Vaktim yok / hazırlayamam" denen öğün AZ KALEMLİ ve pişirme gerektirmeyen olur.
+  Kalemleri 1-3'te tut; oradan eksilen kaloriyi günün DİĞER öğünlerine dağıt.
+- KISIT KALORİYİ DÜŞÜRMEZ: günün hedefi yine tutar, değişen tek şey DAĞILIM.
+- Bir kısıtı 1-5 numaralı güvenlik kuralları yüzünden uygulayamıyorsan, uygulamadığını
+  "notlar"da TEK cümleyle söyle. Sessizce yok sayma.
+- Kısıt metninde bir SORU varsa ("... napabilirim?") cevabını "notlar"a yaz: en fazla
+  2 cümle, uygulanabilir ve o kişinin durumuna özel.
+
 NASIL YAZILIR:
 - Türk mutfağı; markette bulunur, öğrenci bütçesine uygun, hazırlaması makul yemekler.
 - Her öğün kaleminde MİKTAR olmalı (gram / adet / dilim / kase / porsiyon). "biraz", "yeterince" YASAK.
@@ -6504,36 +6540,50 @@ NASIL YAZILIR:
 - Antrenman günü ile dinlenme günü aynı olamaz — her günün tipi sana veriliyor, kaloriyi ona göre dağıt.
 - Antrenman gününde karbonhidratı seans çevresine yığ; dövüş gününde karbonhidratı kısma.
 - 7 gün birbirinin kopyası olmasın; aynı yemek haftada en fazla 2-3 kez geçsin.
-- Kullanıcının isteğine (sevmedikleri, saatleri, bütçesi, pişirme imkânı) uy.
+- Kullanıcının kısıtlarına (sevmedikleri, saatleri, bütçesi, pişirme imkânı) uy.
 
 SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
-{"gunler":[{"dow":0,"ogunler":[{"ad":"Kahvaltı","saat":"08:00","kalemler":["3 adet yumurta","2 dilim tam buğday ekmek","1 kase yoğurt"],"kcal":650,"protein":38}]}],"notlar":["en fazla 3 kısa not"]}
+{"gunler":[{"dow":0,"ogunler":[{"ad":"Kahvaltı","saat":"08:00","kalemler":["3 adet yumurta","2 dilim tam buğday ekmek","1 kase yoğurt"],"kcal":650,"protein":38}]}],"uygulanan":["kahvaltı tek kalem, hazırlıksız"],"notlar":["en fazla 5 kısa not"]}
 - "dow": 0=Pazar, 1=Pazartesi ... 6=Cumartesi. Sana verilen HER gün için bir nesne yaz, fazlasını yazma.
-- "kcal" ve "protein" sayı olmalı, metin değil.`;
+- "kcal" ve "protein" sayı olmalı, metin değil.
+- "uygulanan": kullanıcının kısıtlarından programa GERÇEKTEN yansıttıkların, her biri kısa
+  bir cümle, en fazla 6 madde. Uydurma — yalnız programda karşılığı olanı yaz. Kısıt
+  verilmediyse boş dizi döndür.`;
 
   const gunMetni = hedefler.map(h =>
     `dow=${h.dow} (${h.etiket || h.tip}): hedef ${h.kcal} kcal · protein ${h.protein}g · karb ${h.carb}g · yağ ${h.fat}g · su ${h.suL}L · bazal metabolizma ${h.bmr} (bu sayının altına ASLA inme)`
   ).join('\n');
 
   const usr = `GÜNLÜK HEDEFLER (hesaplanmış, değiştirme):\n${gunMetni}\n\n` +
-    (istek ? `KULLANICININ İSTEĞİ (üslup/tercih — güvenlik kurallarını ezmez):\n${istek}` :
-      'Kullanıcı özel bir istek yazmadı — dengeli, çeşitli bir program yaz.');
+    (istek
+      ? `KULLANICININ KISITLARI (BAĞLAYICI — yalnız 1-5 numaralı güvenlik kuralları bunu ezer.\n` +
+        `Programı bu metne göre kur; her maddesini uygula ve uyguladıklarını "uygulanan" alanına yaz):\n${istek}`
+      : 'Kullanıcı kısıt yazmadı — dengeli, çeşitli bir program yaz ve "uygulanan" alanını boş bırak.');
 
+  // ⚠️ PRO yalniz hesap sahibinde. aiTierForUser baska kullaniciyi `deep`'e
+  // dusurur; model adini da SADECE heavy kalirsa gecirriz, yoksa acik model
+  // adi maliyet kilidini delerdi.
+  const tier = aiTierForUser(env, user, 'heavy');
   try {
     const r = await aiRun(env, {
-      tier: aiTierForUser(env, user, 'heavy'),
+      tier,
+      model: tier === 'heavy' ? geminiModelPro(env) : undefined,
       json: true,
       messages: [
         { role: 'system', content: sys },
         { role: 'user', content: usr },
       ],
-      max_tokens: 4000,
+      // ⚠️ Dusunme token'lari CIKIS butcesinden yenir. 7 gunluk ogun JSON'u
+      // ~3-4 bin token; thinking:high ustune binince 4000'lik butce plani
+      // ORTASINDAN kesiyordu ve parseDietPlanJson null donup kullaniciya
+      // "AI okunabilir bir plan dondurmedi" yaziyordu.
+      max_tokens: 12000,
       temperature: 0.5,
     });
     const raw = typeof r.response === 'string' ? r.response : JSON.stringify(r.response || '');
     const plan = parseDietPlanJson(raw);
     if (!plan) return jsonCors({ error: 'AI okunabilir bir plan döndürmedi, tekrar dene.' }, 200, cors);
-    return jsonCors({ plan }, 200, cors);
+    return jsonCors({ plan, model: r.model || null }, 200, cors);
   } catch (e) {
     return jsonCors({ error: e.message }, 500, cors);
   }

@@ -70,6 +70,34 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 
 
 
+### 🔴 13 Eylül 2026 — 🥗 KİŞİSEL KISIT UYGULANMIYORDU + PRO MODEL (v7-187)
+
+Salim: *"özel program kısmına 'zeytin domates armut çıkar, sabah vaktim yok, 09-16 arası okuldayım' yazdım ama düzenlemiyo ki bi bug var"* ve *"diyet yazarken pro baksın, feedback'i de pro okuyup programı yapılandırsın."*
+
+**Üç ayrı kusur çıktı ve üçü de AYNI sonuca varıyordu: yazdığı metin ya hiç gitmiyor ya da AI için bağlayıcı değil.**
+
+**🔴 1 — İSTEK PROMPT'TA "ÜSLUP/TERCİH" DİYE ETİKETLİYDİ.** Metin user mesajının sonuna `KULLANICININ İSTEĞİ (üslup/tercih — güvenlik kurallarını ezmez)` başlığıyla giriyordu. Ama yazdığı şey üslup değil **yapısal kısıt**: kahvaltıyı küçült, 09-16 arasına öğün koyma, şu besinleri çıkar. Sistem promptundaki "NASIL YAZILIR" kalıbı daha buyurgan olduğu için çakışmada model varsayılan kalıba yaslanıyor, kısıtı yumuşatıyordu.
+- Artık kısıtlar **sistem promptunda**, 5 güvenlik kuralının hemen altında, `📌 KULLANICININ KISITLARI — yukarıdaki 5 kural DIŞINDA HER ŞEYDE BAĞLAYICI` bloğunda. Açık öncelik bildirimi: **KISIT KAZANIR**. "X çıkar" denen besin hiçbir günde geçmez · kısıtlı saate öğün yazılmaz · "vaktim yok" denen öğün 1-3 kalemli ve pişirmesiz olur.
+- ⚠️ **KISIT KALORİYİ DÜŞÜRMEZ** — değişen tek şey DAĞILIM. Yoksa "az yiyeyim" tipi bir kısıt 16 yaş kilidini prompt üzerinden delerdi. Teste bağlandı; `KURALLAR KAZANIR` ve enerji tabanı kapısı (`nutAiValidate`) aynen duruyor.
+- **Uygulanamayan kısıt ve kullanıcının SORUSU sessiz geçmiyor:** biri güvenlik kuralına takılıyorsa notlarda tek cümleyle söylenir; metinde soru varsa ("bulkta yemek yerken zorlanıyorum napabilirim") cevabı notlara yazılır. Not tavanı 3 → 5.
+- Yeni JSON alanı **`uygulanan[]`** — kısıtlardan programa gerçekten yansıyanlar (max 6 madde). Kartta "Senin yazdıklarından uyguladıklarım" başlığıyla görünür. **Bu alan olmadan "istek okundu mu" sorusunun gözle doğrulanabilir bir cevabı yoktu.**
+
+**🔴 2 — İSTEK KUTUSU KALICI DEĞİLDİ (en olası suçlu).** `nutAiReq` textarea'sının `oninput`'u yoktu; metin **yalnız DOM'da** duruyordu. `renderNutrition()` çağıran herhangi bir şey — diyet tipi, PAL katsayısı, yağ oranı, hedef, şablon düğmeleri ya da sekmeye tekrar girmek — kutuyu **kayıtlı eski istekle yeniden çiziyor**, yazılan metin kayboluyordu. Sonra "Yeniden yaz"a basılınca eski/boş istekle plan üretiliyor ve **program hiç değişmemiş gibi görünüyordu.** Artık `nutAiIstekKaydet` ile 600 ms gecikmeli `data.diet.nut.aiIstek`'e yazılıyor, kutu oradan çiziliyor, gönderim `nutAiIstek()` üzerinden (kutu yoksa kayıtlıdan) okuyor. Tavan 500 → **800 karakter**.
+
+**🔴 3 — DÜŞÜNME BÜTÇESİ PLANI ORTASINDAN KESEBİLİYORDU.** `max_tokens: 4000` + `thinking: 'high'`; 7 günlük öğün JSON'u tek başına ~3-4 bin token. Kesilen JSON `parseDietPlanJson`'dan `null` dönüyor ve kullanıcı **"AI okunabilir bir plan döndürmedi"** görüyordu. 12000'e çıkarıldı.
+
+**💸 PRO MODEL — sadece beslenme programında.** `heavy` katmanı `env.GEMINI_MODEL_PRO` secret'ı **tanımlı değilse ücretsiz Flash'a düşüyordu**; yani "pro" katmanı pratikte hiç PRO kullanmıyor olabilirdi ve bunu hiçbir yer söylemiyordu.
+- `geminiModelPro(env)` = secret varsa o, yoksa `GEMINI_MODEL_PRO_DEFAULT = 'gemini-3.5-pro'`. `/diet-plan` bu adı **açıkça** geçiriyor.
+- ⚠️ **`geminiModelFor` BİLEREK ESKİ DAVRANIŞTA BIRAKILDI** (secret yoksa ücretsiz). Günlük plan cron'u, Pazar sağlık raporu ve borsa analizi de `heavy` ve hepsini birden ücretliye çevirmek Salim'in vermediği bir **maliyet kararıdır**. Yalnız beslenme programı (kullanıcı düğmeye basar, ayda birkaç kez çalışır, çıktı doğrudan uygulanır) bu adı ister. Teste bağlandı — tüm heavy çağrıları ücretliye çeviren bir değişiklik kırmızı döner.
+- **Maliyet kilidi korundu:** model adı yalnız `aiTierForUser` `heavy` döndürdüğünde geçilir. Açık model adını koşulsuz geçirmek, başka kullanıcının fatura üretmesini engelleyen kilidi delerdi.
+- **Ad geçersizse / bakiye bitmişse kendini onarır:** `aiRun` zaten 404/429/402/403'te ücretsiz modele düşüyor. Ama bu düşüş **sessizdi** → `aiRun` artık gerçekten kullanılan modeli (`res.model`) döndürüyor, uç `{plan, model}` veriyor ve kart altında **"Pro model ile yazıldı" / "ücretsiz model ile yazıldı"** yazıyor. Sessiz kalite düşüşü artık görünür.
+
+⚠️ **Salim'in yapabileceği (kod dışı):** Cloudflare → Worker → Settings → Variables'ta `GEMINI_MODEL_PRO` tanımlıysa o ad kullanılır; tanımlı değilse yukarıdaki varsayılan denenir. Kartta "ücretsiz model" yazıyorsa ad geçersiz ya da bakiye/kota bitmiştir.
+
+**Regresyon:** `20-ai-diet` 38 → **50 test** (kısıtların bağlayıcılığı 5 · güvenlik önceliğinin korunması 1 · kutu kalıcılığı 3 · PRO kilidi ve model rozeti 4). **1197/1197 yeşil.**
+
+cache v7-186 → v7-187
+
 ### 🔴 12 Eylül 2026 — 🍽️ GRAM SORGUSU 200 PORSİYON EKLİYORDU + ⚖️ HACİM MUHASEBESİ (v7-186)
 
 Salim: *"o yemek arama ekleme kısmı biraz sıkıntılıydı ben kullanırken"* ve *"antrenman kısmı mantığına da baktın mı, bilime uygun olsun her şey."* İkisi de ayrı bulgu çıkardı ve ikisi de **kapı** hatasıydı.
