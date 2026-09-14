@@ -5408,3 +5408,45 @@ body.stocks-mode .stocks-mode-header { top: env(safe-area-inset-top, 0px); }
     width: 44px; height: 44px; transform: translate(-50%, -50%);
   }
 }
+
+/* ===== Beslenme: gunluk duzen · yemekhane · canta (13 Eyl 2026) ===== */
+.nd-grid { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 10px; }
+.nd-row { display: flex; align-items: center; gap: 8px; }
+.nd-day {
+  width: 34px; flex: none; font-size: 12px; font-weight: 600;
+  color: var(--text-muted, #a9abb3);
+}
+.nd-sep { color: var(--text-faint, #857e74); font-size: 12px; }
+.nd-row input[type="time"], .nd-lbl input[type="time"] {
+  background: var(--surface-2, #1b1c23); color: var(--text, #e5e1d9);
+  border: 1px solid var(--border, #2a2c35); border-radius: 8px;
+  padding: 5px 8px; font: inherit; font-size: 16px; font-variant-numeric: tabular-nums;
+  min-height: 34px;
+}
+.nd-opts { flex-wrap: wrap; align-items: center; gap: 8px; }
+.nd-lbl {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-muted, #a9abb3);
+}
+/* Disarida yenen ogun: tam kenar + tint (yan serit YOK — Impeccable) */
+.nut-meal.nm-out {
+  border-color: color-mix(in srgb, var(--info, #6fa8e8) 32%, var(--border, #2a2c35));
+  background: color-mix(in srgb, var(--info, #6fa8e8) 7%, var(--surface-2, #1b1c23));
+}
+.nut-cafe { margin-top: 6px; }
+.nut-cafe > summary {
+  cursor: pointer; font-size: 12.5px; font-weight: 600; padding: 4px 0;
+  color: var(--text-strong, #f5f3ee);
+}
+.nc-sen {
+  margin: 8px 0 0; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--border, #2a2c35); background: var(--surface-3, #24252d);
+}
+.nc-sen > b { font-size: 12.5px; color: var(--text-strong, #f5f3ee); }
+.nc-num {
+  font-size: 12px; font-variant-numeric: tabular-nums;
+  color: var(--text-muted, #a9abb3); margin: 2px 0 4px;
+}
+.nc-sen .nt-row { padding-left: 0; }
+.nc-ok { color: var(--success, #5cbf7a); }
+.nut-canta .nt-slot > b { color: var(--text-strong, #f5f3ee); font-size: 12.5px; }

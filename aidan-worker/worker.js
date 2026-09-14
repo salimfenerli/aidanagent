@@ -6469,6 +6469,11 @@ SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
 // sozlesmesini bozar. Bu iki yonlu teste baglidir.
 // ============================================================================
 const DIET_PLAN_REQ_MAX = 800;
+// ⚠️ DUZEN AYRI TAVAN. Okul/antrenman saatleri PWA'da yapilandirilmis bir
+// ayardan uretiliyor (`nutDuzenMetni`), kullanicinin serbest metninden degil.
+// Ayni kutuya doldurulsaydi 800 karakterin yarisini saat tablosu yer ve
+// kullanicinin kendi istegi sigmazdi.
+const DIET_PLAN_DUZEN_MAX = 700;
 
 function parseDietPlanJson(raw) {
   let s = String(raw || '').trim();
@@ -6500,6 +6505,7 @@ async function handleDietPlanApi(request, env) {
   if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
 
   const istek = String(body.istek || '').slice(0, DIET_PLAN_REQ_MAX).trim();
+  const duzen = String(body.duzen || '').slice(0, DIET_PLAN_DUZEN_MAX).trim();
   const hedefler = (Array.isArray(body.hedefler) ? body.hedefler : [])
     .slice(0, 7)
     .filter(h => h && isFinite(Number(h.dow)) && Number(h.kcal) > 0 && Number(h.bmr) > 0);
@@ -6551,6 +6557,12 @@ NASIL YAZILIR:
 - Antrenman gününde karbonhidratı seans çevresine yığ; dövüş gününde karbonhidratı kısma.
 - 7 gün birbirinin kopyası olmasın; aynı yemek haftada en fazla 2-3 kez geçsin.
 - Kullanıcının kısıtlarına (sevmedikleri, saatleri, bütçesi, pişirme imkânı) uy.
+- Her öğüne SAAT yaz ve saatler "GÜNLÜK DÜZEN" bloğuyla uyumlu olsun. Okul saatine denk
+  gelen öğün taşınabilir ve çatal bıçak istemeyen kalemlerden kurulur.
+- Kullanıcının MENÜSÜNÜ SEÇEMEDİĞİ bir öğün varsa (okul yemekhanesi, yemek kartı, yurt)
+  oraya kalem YAZMA: öğünün adını ve hedefini yaz, kalemler alanına tek satır olarak
+  "yemekhane tepsisi — hedef N kcal / N g protein" koy ve notlarda ana yemek etli
+  değilse yanında ne yiyeceğini söyle.
 
 SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
 {"gunler":[{"dow":0,"ogunler":[{"ad":"Kahvaltı","saat":"08:00","kalemler":["3 adet yumurta","2 dilim tam buğday ekmek","1 kase yoğurt"],"kcal":650,"protein":38}]}],"uygulanan":["kahvaltı tek kalem, hazırlıksız"],"notlar":["en fazla 5 kısa not"]}
@@ -6565,6 +6577,9 @@ SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
   ).join('\n');
 
   const usr = `GÜNLÜK HEDEFLER (hesaplanmış, değiştirme):\n${gunMetni}\n\n` +
+    (duzen
+      ? `GÜNLÜK DÜZEN (uygulamadan geldi, YAPISAL KISIT — öğün saatlerini buradan kur):\n${duzen}\n\n`
+      : '') +
     (istek
       ? `KULLANICININ KISITLARI (BAĞLAYICI — yalnız 1-5 numaralı güvenlik kuralları bunu ezer.\n` +
         `Programı bu metne göre kur; her maddesini uygula ve uyguladıklarını "uygulanan" alanına yaz):\n${istek}`

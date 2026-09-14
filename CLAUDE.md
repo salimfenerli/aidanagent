@@ -70,6 +70,40 @@ Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + depolama ölçümü) → 
 
 
 
+### 🔴 14 Eylül 2026 — 🗓️ GÜNLÜK DÜZEN: ÖĞÜN SAATLERİ HAYATTAN ÇIKIYOR (v7-188)
+
+Salim: *"saat 09.00-16.00 arası okulum var, salı ve perşembe okul 19.00'da bitiyo, 13.00'te okulun öğle yemeği var orda da yicem bunu nası yönetirim"* → ardından **"bu konuşmanın aynısı uygulama içinden yapılabilsin"**.
+
+**Motor doğru makroyu üretiyordu ama "ne zaman" ve "nerede" sorularını hiç cevaplamıyordu.** Örnek gün `Kahvaltı · Ara · Öğle · Akşam · Atıştırma` diye sıralanıyor, **saat yazmıyordu**. 09:00-16:00 okulda olan biri için bu plan kâğıt üzerinde doğru, hayatta uygulanamaz: öğle öğününü okulda yiyor ve **menüyü seçemiyor**, ara öğün teneffüse sığmalı ve taşınabilir olmalı, antrenman okul bitişine takılıyorsa akşam öğünü geceye kayıyor.
+
+**⚠️ SAAT HESABI AI'A BIRAKILMADI.** Aynı düzen her zaman aynı saatleri vermeli, test edilebilmeli ve $0 olmalı. AI'ın işi hedefi DOLDURMAK; düzeni motor kurar. Aynı düzen metni `/diet-plan` isteğine de **ayrı alan** olarak geçer (`nutDuzenMetni`) — yani iki yol da tek kaynaktan okur.
+
+**Yeni veri alanı:** `data.diet.nut.duzen = { okul:{dow:{bas,bit}}, yemekhane, yemekhaneSaat, antrenman, kalk }`. ⚠️ `ensureNutrition`'a EKLENMEDİ bilinçli olarak — o fonksiyonun dönen şekli testlerde sözleşme; ayrı `ensureNutDuzen()` var.
+
+**1 — ÖĞÜN SAATLERİ (`nutMealTimes`).** Kahvaltı okul başlangıcından 75 dk önce (okul yoksa kalkış+60) · ara kahvaltı-öğle ortası · öğle yemekhane saati · atıştırma antrenmandan 45 dk önce · akşam seans+90+30. ⚠️ **SIRA GARANTİSİ:** saatler hesaplandıktan sonra 75 dk'lık minimum aralıkla ileri itilir, yoksa geç biten okul gününde "16:00 ara öğün / 16:20 akşam" çıkıyordu. Ekranda öğünler **slot sırasına değil SAATE göre** diziliyor — atıştırma antrenman öncesine düştüğü için akşamdan önce gelir; saat yazıp yanlış sırada göstermek saat hiç yazmamaktan kötüdür.
+
+**2 — 🔴 SESSİZ KAYMA YOK.** Okul 18:00'den geç bitiyorsa `nutSeansSaati` antrenmanı okul bitişi+30'a kaydırıyor. Kaydırmanın kendisi doğru ama **sessiz yapılırsa** kullanıcı gece 21:30'a yazılmış bir akşam öğünü görür ve sebebini bilmez. `nutDuzenCakisma` aynı durumu her seferinde yazıyor ve eyleme dönük: *"o günü dinlenmeye al ve seansı hafta sonuna taşı, ya da akşam öğününü antrenman öncesine kaydır"*. Teste bağlı: **kayma varsa uyarı da VAR olmak zorunda**; erken biten okulda ya da dinlenme gününde uyarı ÇIKMAZ (yanlış alarm testi).
+
+**3 — 🍽️ MENÜSÜNÜ SEÇMEDİĞİN ÖĞÜNE KALEM YAZILMAZ.** Yemekhanede ne çıkacağını motor bilmiyor; oraya "1 porsiyon somon + 3 haşlanmış patates" yazmak planı hayatta yalan yapar. O öğün `disarida:true` işaretlenir ve motor yalnızca şunu üretir:
+- **hedef** (kcal + protein),
+- **üç tezgah senaryosu** — etli / baklagil / sebze; çorba + ana yemek + yan + pilav (0,5 adımlarla hedefe ölçeklenir, açık kalırsa ekmek). Sayılar `foods.js`'ten, uydurma yok.
+- **protein açığı ≥8 g ise çanta telafisi** (ton balığı → protein yoğurt → protein tozu; sıra kalori değil PRATİKLİK: okulda shaker çalkalamak gerçekçi değil).
+- **TEK KURAL:** *"Tepsiden kalkmadan tek soru: ana yemekte et ya da tavuk var mı? Yoksa çantadaki ton balığını aç."* Üç maddelik liste tezgahta hatırlanmaz, tek evet/hayır sorusu hatırlanır.
+⚠️ Etli senaryoda telafi ÖNERİLMEZ — gereksiz telafi yanlış alarmdır, teste bağlı.
+
+**4 — 🎒 ÇANTA.** Okul saatine denk gelen öğün taşınabilir olmak zorunda; şablon havuzundaki yumurta/somon/haşlanmış patates çantada iş görmez. `nutCantaOner` aynı hedefi `NUT_TASINIR` havuzundan (protein yoğurt, cottage, ton balığı, süzme yoğurt, protein tozu × simit, leblebi, muz, kuru üzüm, kuru kayısı) yeniden kurar. **Tercih katmanı burada da geçerli** — sevmediği besin çantaya da girmez (teste bağlı).
+
+**5 — PLANA AKTARIM.** `nutOrnekSatirlari(ogunler, zaman)` — dışarıda yenen öğünün kalemleri günlüğe yazılmaz, yerine hedef kalorili **tek satır** gider ("Okul yemekhanesi (tepsi)"): gün toplamı doğru kalır, kullanıcı tepsiyi görünce satırı düzenler. ⚠️ `zaman` verilmezse eski davranış aynen kalır (geriye uyum teste bağlı).
+
+**6 — AI'A DÜZEN AYRI ALAN GİDİYOR.** `{istek, duzen}`; worker'da `DIET_PLAN_DUZEN_MAX = 700` ve prompt'ta kendi bloğu (`GÜNLÜK DÜZEN — YAPISAL KISIT`). Aynı kutuya doldurulsaydı 800 karakterin yarısını saat tablosu yer ve kullanıcının kendi isteği sığmazdı; ayrıca hangisinin kazandığı belirsiz kalırdı. Prompt'a iki kural eklendi: her öğüne saat yaz ve düzenle uyumlu olsun · **menüsünü seçemediği öğüne kalem yazma**, hedefi ver ve notlarda telafiyi söyle. ⚠️ `KURALLAR KAZANIR` ve `nutAiValidate` enerji tabanı kapısı aynen duruyor; düzen metninin kalori düşürücü dil taşımadığı ayrıca teste bağlı.
+
+**Regresyon:** yeni `tests/40-gunluk-duzen.test.js` **31 test** (saat hesabı 6 · sessiz kayma 3 · yemekhane 6 · çanta 4 · plana aktarım 2 · AI köprüsü 5 · arayüz 4 + Impeccable/iOS 16px kapısı). Sabotajla doğrulandı: `nutDuzenCakisma` boş dönerse 2, yemekhane işaretlemesi kalkarsa 6 test kırmızı.
+
+⚠️ **Bu pakette DEĞİL:** `tests/32-yerel-plan.test.js`'in now-card testlerinden 3'ü kırmızı — **saat bağımlı** (gece 02:52'de koşunca blok penceresi tutmuyor) ve bu değişiklikten ÖNCE de kırmızıydı; ayrı iş olarak duruyor.
+
+cache v7-187 → v7-188
+Test: 1228/1231 (yeni 31 test; kırmızı 3'ü yukarıdaki saat bağımlı eski bulgu).
+
 ### 🔴 13 Eylül 2026 — 🥗 KİŞİSEL KISIT UYGULANMIYORDU + PRO MODEL (v7-187)
 
 Salim: *"özel program kısmına 'zeytin domates armut çıkar, sabah vaktim yok, 09-16 arası okuldayım' yazdım ama düzenlemiyo ki bi bug var"* ve *"diyet yazarken pro baksın, feedback'i de pro okuyup programı yapılandırsın."*
