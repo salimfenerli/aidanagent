@@ -683,6 +683,114 @@ function programCooldown(d, G) {
 // Gun adi (JS getDay: 0=Pazar)
 const PROGRAM_GUNLER = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
 
+// ---------- GUNLUK DUZEN: okul saati (19 Eyl 2026) ----------
+/**
+ * ⚠️ Motor 9 Agustos'tan 19 Eylul'e kadar okul saatini HIC BILMIYORDU.
+ * Kurulumda yalnizca "haftada kac gun" ve "seans kac dakika" soruluyordu;
+ * gunleri motor kendi seciyordu. Salisi 19:00'da biten bir okul icin motor
+ * o gune 75 dakikalik agir bacak gunu yazabiliyordu: kagit uzerinde dogru,
+ * hayatta 21:15'te biten bir seans.
+ *
+ * Kaynak TEK: okul saatleri `data.diet.nut.duzen` icinde duruyor (diyetin
+ * gunluk duzen katmani, v7-188). Antrenman motoru ayni yerden OKUR, kendi
+ * kopyasini tutmaz. Iki yerde iki farkli okul saati olmasi, hicbirinin
+ * dogru olmamasi demektir.
+ *
+ * Sayilar neden bunlar:
+ *   hazirlikDk 30 — okul cikisi ile seans arasi yol + yemek payi. nutrition.js
+ *     `nutSeansSaati` ile AYNI sayi; farkli olsalardi diyet 19:30 seansa gore
+ *     ogun yazarken motor 19:00 varsayiyor olurdu.
+ *   gecBitis 21:30 — bundan sonrasi ergende uyku baskilanma riski (yuksek
+ *     siddetli egzersiz ile uyku latansi arasindaki iliski 🟡; kesin saat
+ *     esigi literatur degil MAKUL KABUL — bu yuzden ceza, YASAK degil).
+ *   minSeansDk 30 — bunun altinda isinma + 3 hareket bile sigmaz.
+ */
+const PROGRAM_DUZEN = {
+  hazirlikDk: 30,
+  gecBitis: 21 * 60 + 30,
+  minSeansDk: 30,
+  varsayilanSeans: 17 * 60,
+};
+
+/** 'HH:MM' -> dakika. Gecersizse null (nutrition.js `nutDk` ile ayni sozlesme). */
+function progDk(s) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(s == null ? '' : s).trim());
+  if (!m) return null;
+  const h = Number(m[1]), d = Number(m[2]);
+  if (h > 23 || d > 59) return null;
+  return h * 60 + d;
+}
+/** Dakika -> 'HH:MM'. */
+function progSaat(dk) {
+  const x = Math.max(0, Math.min(24 * 60 - 1, Math.round(Number(dk) || 0)));
+  return String(Math.floor(x / 60)).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0');
+}
+
+/**
+ * Gunluk duzeni diyet tarafindan oku. Hicbir gun girilmemisse null doner ve
+ * motor eski davranisina duser — yani duzen GIRMEK ZORUNDA DEGILSIN.
+ */
+function programDuzenOku() {
+  const n = (typeof data === 'object' && data && data.diet && data.diet.nut) || null;
+  const d = n && n.duzen;
+  if (!d || typeof d !== 'object') return null;
+  const okul = {};
+  const kaynak = (d.okul && typeof d.okul === 'object') ? d.okul : {};
+  for (const k of Object.keys(kaynak)) {
+    const dow = Number(k);
+    if (!(dow >= 0 && dow <= 6)) continue;
+    const g = kaynak[k] || {};
+    const bas = progDk(g.bas), bit = progDk(g.bit);
+    if (bas == null || bit == null || bit <= bas) continue;
+    okul[String(dow)] = { bas: progSaat(bas), bit: progSaat(bit) };
+  }
+  const ant = progDk(d.antrenman);
+  if (!Object.keys(okul).length && ant == null) return null;
+  return { okul, antrenman: ant != null ? progSaat(ant) : null };
+}
+
+/**
+ * O gun seans KACTA baslar, kac dakika yer var, sure kisildi mi.
+ * @returns {{basDk:number, bas:string, yer:number, dk:number, kaydi:boolean,
+ *            kisildi:boolean, sigmaz:boolean, okulBit:(string|null)}}
+ */
+function programGunPencere(dow, duzen, sessionMin) {
+  const L = PROGRAM_DUZEN;
+  const istenen = Math.max(L.minSeansDk, Number(sessionMin) || 60);
+  const ant = duzen ? progDk(duzen.antrenman) : null;
+  let bas = ant != null ? ant : L.varsayilanSeans;
+  const okul = (duzen && duzen.okul) ? duzen.okul[String(dow)] : null;
+  const bit = okul ? progDk(okul.bit) : null;
+  let kaydi = false;
+  if (bit != null && bas < bit + L.hazirlikDk) { bas = bit + L.hazirlikDk; kaydi = true; }
+  const yer = Math.max(0, L.gecBitis - bas);
+  const dk = Math.max(L.minSeansDk, Math.min(istenen, yer));
+  return {
+    basDk: bas, bas: progSaat(bas), yer, dk, kaydi,
+    kisildi: dk < istenen,
+    sigmaz: yer < L.minSeansDk,
+    okulBit: bit != null ? progSaat(bit) : null,
+  };
+}
+
+/**
+ * Gun secim cezasi — okul yuzunden sikisan gunler.
+ * ⚠️ Deger araligi BILINCLI olarak dovus komsulugunun (70) ALTINDA:
+ * toparlanma kisiti, uygunluk kisitini her zaman yener. Sikisik bir aksam
+ * kotu bir seans demek; agir bacak gununu kickboks gunune yapistirmak
+ * sakatlik riski demek. Ikisi ayni terazide tartilmaz.
+ *   150 — o gune seans HIC sigmiyor (okul 21:00'da bitiyor gibi)
+ *    45 — sure kisiliyor ve gun AGIR BACAK (en uzun seans)
+ *    30 — sure kisiliyor
+ */
+function programDuzenCezasi(dow, duzen, sessionMin, altMi) {
+  if (!duzen) return 0;
+  const w = programGunPencere(dow, duzen, sessionMin);
+  if (w.sigmaz) return 150;
+  if (!w.kisildi) return 0;
+  return altMi ? 45 : 30;
+}
+
 /**
  * Guc gunlerini haftaya dagit.
  * ⚠️ Dovus gunleri de AGIR sayilir. Kurallar:
@@ -691,17 +799,33 @@ const PROGRAM_GUNLER = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe'
  *     (bacak yorgunlugu teknik calismayi ve sakatlik riskini dogrudan etkiler).
  *   - Haftada en az 1 tam dinlenme gunu birakilir.
  */
-function programAssignDays(strengthCount, fightDays) {
+function programAssignDays(strengthCount, fightDays, duzenCeza) {
   const dovus = new Set((fightDays || []).map(Number).filter(d => d >= 0 && d <= 6));
   // Pazartesi'den basla (1..6, sonra 0=Pazar)
   const sira = [1, 2, 3, 4, 5, 6, 0];
   const musait = sira.filter(d => !dovus.has(d));
   const secili = [];
-  // Once araliklarini acmaya calis: bir gun atlayarak sec
-  for (let adim = 2; adim >= 1 && secili.length < strengthCount; adim--) {
-    for (let i = 0; i < musait.length && secili.length < strengthCount; i += adim) {
-      const g = musait[i];
-      if (!secili.includes(g)) secili.push(g);
+  // ⚠️ OKUL KATMANI (19 Eyl 2026). Eskiden gunler YALNIZ araliga gore
+  // seciliyordu; okul cezasi ancak SECILMIS gunler arasinda sira
+  // degistirebiliyordu. Yani hafta ici bes gun de 20:00'de bitiyorken
+  // motor yine hafta ici secip sonra "en az kotu"yu aramaya calisiyordu.
+  // Artik gunler once UYGUNLUK kademesine ayrilir:
+  //   0    — seans tam sigiyor
+  //   1-99 — sure kisiliyor (hafta sonu bos dururken buraya konmaz)
+  //   100+ — hic sigmiyor (yalniz baska gun kalmadiysa)
+  // Kademe icinde eski aralik mantigi aynen isler -> determinizm korunur.
+  const ceza = (d) => (typeof duzenCeza === 'function' ? Number(duzenCeza(d, false)) || 0 : 0);
+  const kademe = (d) => { const c = ceza(d); return c >= 100 ? 2 : (c > 0 ? 1 : 0); };
+  const gruplar = [musait.filter(d => kademe(d) === 0),
+    musait.filter(d => kademe(d) === 1), musait.filter(d => kademe(d) === 2)];
+  for (const grup of gruplar) {
+    if (secili.length >= strengthCount) break;
+    // Once araliklarini acmaya calis: bir gun atlayarak sec
+    for (let adim = 2; adim >= 1 && secili.length < strengthCount; adim--) {
+      for (let i = 0; i < grup.length && secili.length < strengthCount; i += adim) {
+        const g = grup[i];
+        if (!secili.includes(g)) secili.push(g);
+      }
     }
   }
   // Hala eksikse kalanlari sirayla ekle
@@ -744,8 +868,9 @@ function programKomsuGun(a, b) {
  *    70 — agir bacak gunu dovuse komsu       ← eski tek kural
  *    20 — iki ust gun arka arkaya (hafif; ust govde daha hizli toparlar)
  */
-function programGunCezasi(dow, fightDays, yerlesikAlt, yerlesikUst, altMi) {
-  let ceza = 0;
+function programGunCezasi(dow, fightDays, yerlesikAlt, yerlesikUst, altMi, duzenCeza) {
+  // Okul/gunluk duzen cezasi (19 Eyl 2026) — bkz. programDuzenCezasi.
+  let ceza = (typeof duzenCeza === 'function' ? Number(duzenCeza(dow, altMi)) : 0) || 0;
   if (altMi) {
     if (programLegClash(dow, fightDays)) ceza += 70;
     for (const g of yerlesikAlt) {
@@ -802,15 +927,25 @@ function buildProgram(cfg, workouts) {
   // suresi KENDI kademesinin dinlenmesiyle hesaplanir.
   const ISINMA_DK = 8;
   const PATLAYICI_DK = G.athletic ? 10 : 0;   // seans basindaki patlayici blok
-  const butceSn = Math.max(300, (sessionMin - ISINMA_DK - PATLAYICI_DK) * 60);
+  // ⚠️ BUTCE ARTIK GUNE OZEL (19 Eyl 2026): okulun gec bittigi gunde seans
+  // kisalir. Eskiden tek bir global butce vardi; "75 dk" diyen kullaniciya
+  // 19:30'da baslayan 75 dakikalik sali aksami yaziliyordu.
+  const gunButceSn = (dk) => Math.max(300, (dk - ISINMA_DK - PATLAYICI_DK) * 60);
+  const butceSn = gunButceSn(sessionMin);
   // ⚠️ %15 tolerans: butce sert bir duvar degil. Seans sonunda antagonist
   // superset uygulanip sure GERI kazanildigi icin (bkz. programPairSupersets)
   // secim asamasinda hafif tasmaya izin verilir; aksi halde ucuz ama degerli
   // son slotlar (core, izolasyon) 15 saniyelik farkla programdan dusuyordu.
-  const butceTavan = butceSn * 1.15;
+  const butceTavanGenel = butceSn * 1.15;
   const hareketSn = (tier, sets) => programHareketSn(programRest(G, tier), sets);
 
-  const gunler = programAssignDays(sd, fightDays);
+  // GUNLUK DUZEN (19 Eyl 2026): okul saatleri diyet tarafindan okunur ve
+  // programa SNAPSHOT olarak yazilir. Snapshot sart: kullanici okul saatini
+  // sonradan degistirdiginde program kendiliginden degismemeli, ama
+  // "bu program hangi duzene gore kuruldu" sorusunun cevabi durmali.
+  const duzen = (c.duzen !== undefined) ? c.duzen : programDuzenOku();
+  const duzenCeza = duzen ? ((dow, altMi) => programDuzenCezasi(dow, duzen, sessionMin, altMi)) : null;
+  const gunler = programAssignDays(sd, fightDays, duzenCeza);
   const havuz = programExercisePool(places, avoid);
   const kullanilan = new Set();
   const kalipSayaci = {};   // 'hinge|1' -> kac kez kullanildi (hafta geneli)
@@ -834,7 +969,7 @@ function buildProgram(cfg, workouts) {
   const yerlestir = (i, altMi) => {
     let enIyi = 0, enDusuk = Infinity;
     for (let j = 0; j < bosSlot.length; j++) {
-      const c = programGunCezasi(bosSlot[j], fightDays, yerlesikAlt, yerlesikUst, altMi);
+      const c = programGunCezasi(bosSlot[j], fightDays, yerlesikAlt, yerlesikUst, altMi, duzenCeza);
       if (c < enDusuk) { enDusuk = c; enIyi = j; }
     }
     const dow = bosSlot.splice(enIyi, 1)[0];
@@ -856,6 +991,10 @@ function buildProgram(cfg, workouts) {
     const dow = eslesme[i];
     if (dow == null) continue;
     const sab = sablonlar[i];
+    // O gunun gercek zaman penceresi — okul saati varsa ondan turer.
+    const pencere = duzen ? programGunPencere(dow, duzen, sessionMin) : null;
+    const gunDk = pencere ? pencere.dk : sessionMin;
+    const butceTavan = pencere ? gunButceSn(gunDk) * 1.15 : butceTavanGenel;
     const odak = sab.focus || null;
     const secilenler = [];
     const gunKas = {};
@@ -1014,6 +1153,10 @@ function buildProgram(cfg, workouts) {
       type: 'strength',
       name: sab.ad,
       agirBacak: !!sab.agirBacak,
+      hedefDk: gunDk,
+      bas: pencere ? pencere.bas : null,
+      okulBit: pencere ? pencere.okulBit : null,
+      kisildi: !!(pencere && pencere.kisildi),
       odak: odak || null,
       exercises: secilenler.map(s => ({
         id: s.ex.id, tr: s.ex.tr, en: s.ex.en, muscle: s.ex.muscle,
@@ -1042,6 +1185,7 @@ function buildProgram(cfg, workouts) {
     createdAt: Date.now(),
     updatedAt: Date.now(),
     goal, sessionMin, places, fightDays, avoid,
+    duzen: duzen || null,
     strengthDays: sd,
     bodyweight: bw || null,
     bwMax,
@@ -1080,13 +1224,54 @@ function buildProgram(cfg, workouts) {
   // dinlenme sart oldugu icin 3 agir hareket tek basina 45 dk eder.
   // Once bilimsel cozum denenir (antagonist superset), yetmiyorsa DURUSTCE
   // sure yazilir — sessizce kirpmak da, susmak da yanlis.
-  const hedefDk = Math.max(20, sessionMin - ISINMA_DK);
   const tasan = [];
   for (const d of p.days) {
     if (d.type !== 'strength') continue;
-    if (programSessionMinutes(d) > hedefDk) programPairSupersets(d, hedefDk);
+    // ⚠️ Hedef sure GUNE OZEL: okulun gec bittigi gun daha kisa. Global sureyi
+    // kullanmak, kisilmis gunde supersetlerin hic devreye girmemesi demekti.
+    const gDk = Math.max(20, (Number(d.hedefDk) || sessionMin) - ISINMA_DK);
+    if (programSessionMinutes(d) > gDk) programPairSupersets(d, gDk);
     d.estMin = programSessionMinutes(d) + ISINMA_DK;
-    if (d.estMin > sessionMin + 3) tasan.push(d.estMin);
+    if (d.estMin > (Number(d.hedefDk) || sessionMin) + 3) tasan.push(d.estMin);
+    // Bitis saati: okul saati girilmisse gercek saat, yoksa yazilmaz.
+    if (d.bas) d.bitis = progSaat(progDk(d.bas) + d.estMin);
+  }
+  // ⚠️ SESSIZ KAYMA YOK (19 Eyl 2026) — diyet tarafindaki `nutDuzenCakisma`
+  // ile ayni kural: motor saati kendiliginden kaydirabilir ya da seansi
+  // kisaltabilir, AMA bunu yaptigini ve SEBEBINI yazmak zorunda. Sessizce
+  // kisaltmak, kullanicinin "neden bu gun 3 hareket?" sorusuna cevapsiz
+  // kalmasi demek; hatanin kendisinden once SEBEBI gorunmez olur.
+  if (duzen) {
+    const gucGun = p.days.filter(d => d.type === 'strength');
+    const etiket = (d) => programDayLabel(d.dow) +
+      (d.bas ? ' ' + d.bas + '–' + (d.bitis || progSaat(progDk(d.bas) + (d.estMin || 0))) : '');
+    const sigmaz = gucGun.filter(d => d.okulBit &&
+      (PROGRAM_DUZEN.gecBitis - progDk(d.bas)) < PROGRAM_DUZEN.minSeansDk);
+    const kisik = gucGun.filter(d => d.kisildi && sigmaz.indexOf(d) < 0);
+    const kaydik = gucGun.filter(d => d.okulBit && !d.kisildi && sigmaz.indexOf(d) < 0);
+    if (sigmaz.length) {
+      p.notes.push(sigmaz.map(etiket).join(', ') + ': okul ' +
+        sigmaz.map(d => d.okulBit).join('/') + ' bittigi icin bu gune seans SIGMIYOR — ' +
+        'hazirlik payindan sonra 30 dakika bile kalmiyor. Baska bos gun olmadigi icin ' +
+        'buraya kondu. Bu gunu dinlenmeye cevir ya da dovus gunlerinden birini kaydir.');
+    }
+    if (kisik.length) {
+      p.notes.push('Okul saatine gore KISALTILAN gunler: ' + kisik.map(d =>
+        programDayLabel(d.dow) + ' ' + d.hedefDk + ' dk (okul ' + d.okulBit + ', seans ' +
+        d.bas + ')').join(' · ') + '. Sen ' + sessionMin + ' dk demistin; okul cikisina 30 dk ' +
+        'hazirlik eklenince seans ' + progSaat(PROGRAM_DUZEN.gecBitis) + '’u gecmesin diye sure ' +
+        'kisildi. Uzun seans istiyorsan o gunu bosalt (dovus gunu yap ya da guc gunu sayisini ' +
+        '1 azalt) — dinlenmeyi kisaltmak dogru cozum degil.');
+    }
+    if (kaydik.length) {
+      p.notes.push('Seans saatleri okula gore kaydirildi: ' + kaydik.map(etiket).join(' · ') +
+        '. Okul cikisi + 30 dk hazirlik hesaba katildi; diyet tarafindaki ogun saatleri de ' +
+        'ayni saate gore yaziliyor.');
+    }
+  } else {
+    p.notes.push('Okul saatlerini girmedin — butun gunler 17:00 seans varsayimiyla planlandi. ' +
+      'Program kurulumundaki okul saatlerini doldurursan motor gec biten gunlere kisa seans ' +
+      'yazar ve o gunlere agir bacak gunu koymaz.');
   }
   if (p.days.some(d => d.type === 'strength' && (d.exercises || []).some(e => e.pair))) {
     p.notes.push('Seans süreye sığsın diye bazı hareketler EŞLEŞTİRİLDİ (aynı harfli ' +
@@ -2349,7 +2534,13 @@ function renderProgram() {
     return '<div class="prog-day">' +
       '<div class="pd-head"><span class="pd-dow">' + escapeHtml(programDayLabel(d.dow)) + '</span>' +
       '<span class="pd-name">' + escapeHtml(d.name) + '</span>' +
-      (d.estMin ? '<span class="pd-min">~' + d.estMin + ' dk</span>' : '') + '</div>' +
+      // Saat YALNIZ okul/duzen girilmisse yazilir — uydurma saat yazmaktansa
+      // hic yazmamak dogru (bkz. programDuzenOku).
+      (d.bas ? '<span class="pd-saat"' + (d.okulBit ? ' title="okul ' + escapeHtml(d.okulBit) +
+        ' bitiyor, +30 dk hazırlık"' : '') + '>' + escapeHtml(d.bas) +
+        (d.bitis ? '–' + escapeHtml(d.bitis) : '') + '</span>' : '') +
+      (d.estMin ? '<span class="pd-min' + (d.kisildi ? ' pd-min-kisik' : '') + '">~' + d.estMin +
+        ' dk</span>' : '') + '</div>' +
       isinma + '<div class="pd-list">' + baslik + satirlar + '</div>' + soguma + '</div>';
   }).join('');
 
@@ -2446,6 +2637,13 @@ function openProgramSetup() {
     fightDays: (p && p.fightDays) ? p.fightDays.slice() : [],
     avoid: (p && p.avoid) ? p.avoid.slice() : [],
     bwMax: (p && p.bwMax) ? Object.assign({}, p.bwMax) : {},
+    // Okul saatleri KAYITLI duzenden gelir (diyet ile tek kaynak), programdan
+    // degil: kullanici arada diyet sekmesinde degistirmis olabilir.
+    duzen: (function () {
+      const d = programDuzenOku();
+      return { okul: (d && d.okul) ? JSON.parse(JSON.stringify(d.okul)) : {},
+        antrenman: (d && d.antrenman) || '17:00' };
+    })(),
   };
   renderProgramSetup();
   const m = document.getElementById('programModal');
@@ -2481,6 +2679,43 @@ function progSetupPick(alan, deger) {
   renderProgramSetup();
 }
 
+/**
+ * Okul saati girisi. Bos birakmak = o gun okul yok (hafta sonu, tatil).
+ * ⚠️ Saat YALNIZ `data.diet.nut.duzen`'e yazilir — diyet motoru ayni alani
+ * okuyor. Ikinci bir kopya tutmak, iki modulun farkli saatle calismasi demek.
+ */
+function progSetupOkul(dow, alan, deger) {
+  if (!_progSetup) return;
+  const k = String(dow);
+  const o = _progSetup.duzen.okul;
+  const v = progDk(deger);
+  if (v == null) {
+    // Iki alandan biri bosaldiysa o gun tamamen dusuyor — yarim kayit
+    // (basi var bitisi yok) motorda sessizce yok sayilirdi.
+    if (alan === 'bas' || alan === 'bit') delete o[k];
+  } else {
+    o[k] = o[k] || { bas: '09:00', bit: '16:00' };
+    o[k][alan] = progSaat(v);
+    if (progDk(o[k].bit) <= progDk(o[k].bas)) delete o[k];
+  }
+}
+
+/** Pazartesi'yi Sali-Cuma'ya kopyala — 5 gun ayni saat girmek istemiyorsun. */
+function progSetupOkulHaftaIci() {
+  if (!_progSetup) return;
+  const o = _progSetup.duzen.okul;
+  const kaynak = o['1'];
+  if (!kaynak) { showToast('Once pazartesi saatlerini gir.', 'warning'); return; }
+  for (const d of [2, 3, 4, 5]) o[String(d)] = { bas: kaynak.bas, bit: kaynak.bit };
+  renderProgramSetup();
+}
+
+function progSetupSeansSaati(deger) {
+  if (!_progSetup) return;
+  const v = progDk(deger);
+  if (v != null) _progSetup.duzen.antrenman = progSaat(v);
+}
+
 function renderProgramSetup() {
   const el = document.getElementById('programSetupBody');
   if (!el || !_progSetup) return;
@@ -2503,6 +2738,42 @@ function renderProgramSetup() {
     '<div class="prog-f"><label>Seans süresi</label><div class="prog-chips">' +
     [30, 45, 60, 75, 90].map(n => chip('sessionMin', n, n + ' dk')).join('') +
     '</div></div>' +
+    // ---- OKUL SAATLERI (19 Eyl 2026) ----
+    // Kutular BOS birakilabilir: o gun okul yok demektir. Motor okul girilmemis
+    // gunu eski davranisiyla (17:00 seans) planlar.
+    '<div class="prog-f"><label>Okul saatlerin</label><div class="prog-okullar">' +
+    [1, 2, 3, 4, 5, 6, 0].map(d => {
+      const g = (s.duzen && s.duzen.okul[String(d)]) || {};
+      const inp = (alan, deger) => '<input type="time" value="' + escapeHtml(deger || '') +
+        '" onchange="progSetupOkul(' + d + ',\'' + alan + '\',this.value);renderProgramSetup()">';
+      return '<label class="prog-okul"><span>' + escapeHtml(GUN_KISA[d]) + '</span>' +
+        inp('bas', g.bas) + '<i>–</i>' + inp('bit', g.bit) + '</label>';
+    }).join('') +
+    '</div><div class="prog-okul-alt">' +
+    '<button class="prog-chip" onclick="progSetupOkulHaftaIci()">Pazartesiyi hafta içine kopyala</button>' +
+    '<label class="prog-num"><span>Antrenman saati</span>' +
+    '<input type="time" value="' + escapeHtml((s.duzen && s.duzen.antrenman) || '17:00') +
+    '" onchange="progSetupSeansSaati(this.value);renderProgramSetup()"></label></div>' +
+    (function () {
+      // Canli onizleme: hangi gun kac dakika. Kurmadan once gorunur olmali,
+      // yoksa "neden sali 45 dk?" sorusu programi gorene kadar sorulamaz.
+      const satir = [1, 2, 3, 4, 5, 6, 0]
+        .filter(d => s.duzen && s.duzen.okul[String(d)])
+        .map(d => {
+          const w = programGunPencere(d, s.duzen, s.sessionMin);
+          return GUN_KISA[d] + ' ' + w.bas + '→' + progSaat(w.basDk + w.dk) +
+            (w.sigmaz ? ' (sığmıyor)' : (w.kisildi ? ' (' + w.dk + ' dk)' : ''));
+        });
+      if (!satir.length) {
+        return '<div class="prog-hint">Okul saatini girersen motor o günlere kısa seans yazar ve ' +
+          'ağır bacak gününü oraya koymaz. Boş bırakırsan her gün ' +
+          progSaat(PROGRAM_DUZEN.varsayilanSeans) + ' varsayılır. Bu saatler diyet tarafıyla ' +
+          'AYNI kaynaktan okunur — bir yere girmen yeter.</div>';
+      }
+      return '<div class="prog-hint">Okul çıkışı + 30 dk hazırlık, seans ' +
+        progSaat(PROGRAM_DUZEN.gecBitis) + '’u geçmeyecek şekilde: ' +
+        escapeHtml(satir.join(' · ')) + '. Sığmayan güne güç günü konmaz (başka gün varsa).</div>';
+    })() + '</div>' +
     '<div class="prog-f"><label>Nerede antrenman yapıyorsun?</label><div class="prog-chips">' +
     chip('places', 'gym', 'Spor salonu') + chip('places', 'home', 'Ev · dambıl') +
     chip('places', 'bw', 'Vücut ağırlığı') +
@@ -2534,11 +2805,41 @@ function renderProgramSetup() {
       : ' · ' + (7 - agirGun) + ' gün dinlenme') + '</div>';
 }
 
+/**
+ * Okul saatlerini DIYETIN alanina yazar (data.diet.nut.duzen) — tek kaynak.
+ * ⚠️ `data.diet.nut` yoksa nutrition.js'in `ensureNutrition` varsayilanlariyla
+ * AYNI sekilde kurulur. Eksik kurmak, diyet sekmesi ilk acildiginda
+ * `ensureNutrition`'in "zaten var" deyip hedef/sablon alanlarini hic
+ * yazmamasi demekti.
+ */
+function programDuzenKaydet(duzen) {
+  if (typeof data !== 'object' || !data || !duzen) return null;
+  data.diet = data.diet || {};
+  if (!data.diet.nut || typeof data.diet.nut !== 'object') {
+    data.diet.nut = { hedef: 'koru', sablon: 0, kurulduAt: null };
+  }
+  const n = data.diet.nut;
+  if (!n.duzen || typeof n.duzen !== 'object') {
+    n.duzen = { okul: {}, yemekhane: false, yemekhaneSaat: '13:00', antrenman: '17:00', kalk: '07:00' };
+  }
+  n.duzen.okul = {};
+  for (const k of Object.keys(duzen.okul || {})) {
+    const g = duzen.okul[k];
+    const bas = progDk(g && g.bas), bit = progDk(g && g.bit);
+    if (bas == null || bit == null || bit <= bas) continue;
+    n.duzen.okul[String(Number(k))] = { bas: progSaat(bas), bit: progSaat(bit) };
+  }
+  if (progDk(duzen.antrenman) != null) n.duzen.antrenman = progSaat(progDk(duzen.antrenman));
+  save();
+  return n.duzen;
+}
+
 function saveProgramSetup() {
   if (!_progSetup) return;
   if (!_progSetup.places.length) { showToast('En az bir antrenman yeri seç.', 'warning'); return; }
   const h = (typeof ensureHevy === 'function') ? ensureHevy() : (data.hevy || { workouts: [] });
-  const p = buildProgram(_progSetup, h.workouts || []);
+  programDuzenKaydet(_progSetup.duzen);
+  const p = buildProgram(Object.assign({}, _progSetup, { duzen: programDuzenOku() }), h.workouts || []);
   if (!p.days.length) { showToast('Program üretilemedi — gün seçimini gözden geçir.', 'error'); return; }
   data.program = p;
   save();

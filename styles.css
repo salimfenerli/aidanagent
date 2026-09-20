@@ -4378,6 +4378,30 @@
 .prog-num input:focus { outline: none; border-color: var(--accent, #e2e2e2); }
 /* Seans suresi tahmini — gun basliginda, sag tarafta */
 .pd-min { margin-left: auto; font-size: 0.74em; font-weight: 600; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+/* Okul yuzunden kisilmis seans: sayi sessizce degismesin, RENK degissin */
+.pd-min-kisik { color: var(--warn, #e0a355); }
+/* Gun basligindaki seans saati (yalniz okul saati girilmisse) */
+.pd-saat {
+  margin-left: 8px; font-size: 0.74em; font-weight: 600;
+  color: var(--text-muted); font-variant-numeric: tabular-nums;
+}
+/* ---- Okul saati girisi (program kurulumu) ---- */
+.prog-okullar { display: flex; flex-wrap: wrap; gap: 6px; }
+.prog-okul {
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px 6px; border-radius: 8px;
+  border: 1px solid var(--border, #2a2c35); background: var(--surface-2, #1b1c23);
+}
+.prog-okul > span { min-width: 26px; font-size: 0.78em; color: var(--text-muted); font-weight: 600; }
+.prog-okul > i { font-style: normal; color: var(--text-muted); font-size: 0.8em; }
+.prog-okul input[type="time"] {
+  width: 84px; padding: 5px 6px; border-radius: 6px;
+  border: 1px solid var(--border, #2a2c35); background: var(--surface, #15161c);
+  color: var(--text-strong, #f5f3ee); font: inherit; font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.prog-okul input[type="time"]:focus { outline: none; border-color: var(--accent, #e2e2e2); }
+.prog-okul-alt { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-top: 8px; }
+.prog-okul-alt .prog-num input[type="time"] { width: 92px; }
 /* Antagonist superset: ayni harf dönüsümlü yapilir (A1 -> A2 -> dinlen) */
 
 .prog-day-fight .pd-name { color: var(--info, #6fa8e8); }

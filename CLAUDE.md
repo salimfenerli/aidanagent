@@ -175,6 +175,28 @@ jsdom'da kullanıcı gibi gezince çıktı. Akış: yaz → **+** bas.
 
 **🔒 `tests/38-gram-sorgusu.test.js` (15 test).** En değerli olanı tek senaryo değil **hata sınıfını** kilitliyor: *"hiçbir miktarlı sorgu tek dokunuşta 5000 kcal üstü kayıt üretmez"* — hangi yoldan gelirse gelsin.
 
+## 🕒 Antrenman motoru — OKUL SAATI KATMANI (19 Eyl 2026, v7-189)
+
+Motor 9 Ağustos'taki ilk commit'inden beri **okul saatini hiç bilmiyordu**. Kurulumda yalnızca "haftada kaç gün", "seans kaç dakika", yer, dövüş günleri ve kaçınılacak bölge soruluyor, günleri motor kendi seçiyordu. Okulu 19:00'da biten birine 75 dakikalık ağır bacak günü yazmak **kağıt üzerinde doğru, hayatta uygulanamaz** bir plan.
+
+**TEK KAYNAK.** Okul saatleri `data.diet.nut.duzen` içinde duruyor (diyetin günlük düzen katmanı, v7-188). Antrenman motoru **aynı alandan okur** (`programDuzenOku`), kendi kopyasını tutmaz — iki yerde iki farklı okul saati, hiçbirinin doğru olmaması demektir. Program kurulumundaki saat kutuları da oraya yazar (`programDuzenKaydet`); bir yere girmek yeter. `data.diet.nut` yoksa `ensureNutrition` varsayılanlarıyla (`hedef`/`sablon`) kurulur — eksik kurmak, diyet sekmesi ilk açıldığında `ensureNutrition`'ın "zaten var" deyip o alanları hiç yazmamasıydı.
+
+**Sayılar (`PROGRAM_DUZEN`):** `hazirlikDk 30` (okul çıkışı → seans; `nutSeansSaati` ile AYNI sayı, farklı olsalar diyet 19:30 seansa göre öğün yazarken motor 19:00 varsayardı) · `gecBitis 21:30` (sonrası ergende uyku baskılanma riski — ilişki 🟡, kesin saat eşiği **makul kabul**, bu yüzden ceza, yasak değil) · `minSeansDk 30` · varsayılan seans 17:00.
+
+**⚠️ GÜN SEÇİMİ İKİ KATMANLI — ilk denemede hata buradaydı.** Cezayı yalnız `programGunCezasi`'ne eklemek yetmedi: o fonksiyon **zaten seçilmiş** günler arasında sıra değiştiriyor, günleri seçen `programAssignDays` ise aralığa bakıyordu. Hafta içi beş gün de 20:00'de biterken motor yine hafta içi seçip "en az kötü"yü arıyordu. Artık `programAssignDays` günleri **uygunluk kademesine** ayırıyor: 0 = tam sığıyor, 1 = süre kısılıyor, 2 = hiç sığmıyor. Kademe içinde eski aralık mantığı aynen işler → determinizm korunur.
+
+**Ceza sıralaması — toparlanma > uygunluk:** 150 (gün sığmıyor) · 45 (kısılıyor + ağır bacak) · 30 (kısılıyor). Üçü de dövüş komşuluğu cezasının (70) **altında** tutuldu: sıkışık akşam kötü bir seans, ağır bacağı kickboks gününe yapıştırmak sakatlık riski. Teste bağlı.
+
+**Bütçe artık güne özel.** `gunButceSn(dk)` · her gün kendi penceresiyle (`programGunPencere`) hesaplanır; `d.hedefDk`, `d.bas`, `d.bitis`, `d.okulBit`, `d.kisildi` gün objesine yazılır. Superset sıkıştırması da artık global süreyi değil o günün süresini hedefler — eskisi kısılmış günde supersetlerin hiç devreye girmemesi demekti.
+
+**SESSİZ KAYMA YOK** (diyetteki `nutDuzenCakisma` ile aynı kural): saat kaydıysa bilgi notu, süre kısıldıysa **hangi gün, kaç dakika, neden** yazan not, gün hiç sığmıyorsa ne yapılacağını söyleyen not çıkar. Okul saati **hiç girilmemişse** motor 17:00 varsaydığını yazıyor. Normal okul saatinde (16:00 çıkış) **hiçbir not çıkmaz** — yanlış alarm da teste bağlı.
+
+**Programda saat YALNIZ okul/düzen girilmişse gösterilir** (`pd-saat`). Uydurma saat yazmaktansa hiç yazmamak doğru.
+
+**❌ AI PROGRAM YAZMIYOR — bilinçli.** Salim "yapay zeka kurallara göre yazsa daha iyi olmaz mı" diye sordu. Cevap hayır: aynı girdiyle iki farklı program çıkar (progresyon sabit tabana muhtaç), set tavanı/temas bütçesi/16 yaş kilitleri "yaklaşık" uygulanır, çıktı test edilemez ve her yeniden kurma Pro fatura demek. Doğru yapı: **AI metni ayara çevirir, programı motor kurar.** Serbest metin kutusu henüz YOK — açık iş.
+
+**🔒 `tests/41-okul-saati.test.js` (23 test).** Kilitledikleri: tek kaynak · pencere hesabı · ceza sıralamasının dövüş kuralını ezmemesi · gün seçiminin hafta sonuna kayması · determinizm · kısalmanın GERÇEK olması · not/yanlış alarm dengesi.
+
 ## ⚖️ Antrenman motoru — 30 Ağustos denetiminin bekleyen bulguları
 
 30 Ağu'da motor beş bağımsız literatür denetiminden geçmişti. **En yüksek öncelikli teknik bulgu 13 gün açık kaldı**, şimdi kapatıldı.
@@ -3732,6 +3754,8 @@ py aidan-pages-deploy.py
 
 
 ## ⏳ Açık işler / backlog
+
+- **Antrenman kurulumunda serbest metin kutusu** (19 Eyl 2026): "salı bacak istemiyorum, pazartesi sadece üst" gibi isteği Pro model **ayara** çevirsin, programı motor kursun. Diyetteki "kısıt kazanır" deseni (v7-187) buraya birebir taşınabilir. Ayrıca kurulumda **"şu günler sabit"** seçimi yok — günleri hâlâ motor seçiyor, kullanıcı elle sabitleyemiyor.
 
 - Multi-user Faz 2 (yeni user onboarding + admin görünümü) — `SUPABASE_SERVICE_KEY` eklenince
 
