@@ -217,6 +217,33 @@ Salim: *"programi yapay zeka verdigimiz kurallara gore yazsa daha iyi olmaz mi"*
 
 **🔒 `tests/42-program-istek.test.js` (16 test).** Her testin senaryosu "model saçmaladı": tavan üstü gün, ara değer süre, uydurma yer/bölge, bozuk saat, yarım dövüş günü listesi, çöp girdi. Ayrıca **PRO yuzeyi 3'e çıktı** (`/diet-plan`, `/health-coach`, `/program-cfg`) — bilinçli maliyet kararı, Salim'in *"antrenman programi yaparken de pro kullansin"* isteği.
 
+## 🧪 Serbest metin kutusu — KULLANICI GİBİ TEST (21 Eyl 2026, v7-191)
+
+Salim: *"metin kutusunu iyice geliştir kullanıcı gibi kullan bug tespiti yap"*. Kutu gerçek `asistan.html` içinde (jsdom) bir kullanıcı gibi kullanıldı: yaz → çip tıkla → "İsteğimi oku" → "Programı üret", AI cevabı 20 farklı gerçekçi/bozuk biçimde taklit edildi. **Birim testlerin hiçbiri bunları yakalamadı** — hepsi akış hatası.
+
+**Bulunan hatalar (hepsi düzeltildi, `tests/43-program-istek-akis.test.js` + 42'ye eklenenler):**
+
+1. **Okutulmamış istek sessizce yok sayılıyordu.** En doğal akış "yaz → Programı üret" — üret düğmesi kutuyu okumuyor. Artık ilk basışta durur ve söyler; ikinci basış kullanıcının kararı. Okunan metin `data.progIstekOkunan`'da.
+2. **İpucu olmayan bir düğmeyi gösteriyordu:** "Program kur" — modaldaki düğmenin adı "Programı üret".
+3. **Türkçe biçimler TOPTAN düşüyordu:** "19.00", "19", "75 dk", "1,5 saat", okul anahtarında "salı", dovüş günü "Perşembe", yer "salon", bölge "omuz". Hepsi artık okunuyor (`progDk` genişledi, `progGunNo` · `progSureDk` · `progYerAnahtar` · `progBolgeAnahtar`).
+4. **AI listeyi ezince kayıp görünmüyordu.** "Cumartesi de ekle" → model `[6]` döndürünce Sal/Per sessizce siliniyordu. Rapor artık **fark tabanlı**: "Sal, Per → Cmt (çıkarıldı: Sal, Per)". Prompta da "liste alanları TÜM LİSTEDİR" kuralı eklendi.
+5. **Değişmeyen alan "uygulandı" sayılıyordu**, toast "Ayarlar güncellendi" diyordu. Artık "Zaten böyleydi" ayrı blok.
+6. **Okul günü silinemiyordu** ("salı okulum yok artık"). `null`/`"yok"` = sil.
+7. **Çift tık iki Pro çağrısı** (iki fatura). `_progAiMesgul` kilidi; form yeniden çizilse de düğme meşgul kalıyor.
+8. **İstek sürerken kurulum kapatılınca** cevap kapalı formun nesnesine yazılıyor, toast "güncellendi" diyordu. Artık atılır ve söylenir.
+9. **Geri alma yolu yoktu.** "Geri al" düğmesi AI'dan önceki kurulum kopyasını geri yükler (metni silmez).
+10. **Eklem = kas grubu değil.** "Dizim ağrıyor" → tahminle "Ön bacak" seçmek squat/lunge/sıçramanın hepsini atar. Artık sebebiyle `atlanan`'a düşer; yalnız eklem yazıldıysa önceki seçim silinmez. Prompta da kural eklendi.
+
+**v7-189'dan kalan iki motor hatası da aynı testte çıktı:**
+
+- **"Kaydırıldı" yanlış alarmı:** 16:00'da biten okulda 17:00 seans hiç kaymaz, ama `okulBit` dolu diye not yazılıyordu. Gün objesine `kaydi` alanı eklendi, filtre onu okuyor.
+- **Boş erken gün dururken geç gün seçiliyordu:** Cuma (16:00) boşken Salı/Perşembe 19:30'a güç günü. Kayma cezası 10/15 (yalnız beraberlik bozucu, 20'nin altında — toparlanma kurallarını ezmez), kademe 4 oldu: serbest · kayıyor · kısılıyor · sığmıyor.
+- **Okul notları ASCII yazılmıştı** ("gunler", "kisildi") — kartın geri kalanı Türkçe karakterli. Düzeltildi, teste bağlı.
+
+**Yeni UI:** Ctrl+Enter gönderir · "Anladıkları" satırı (kutu neyi okuyabildiğini söylüyor, beklenti yönetimi) · yalnız soru döndüyse uyarı değil bilgi rengi.
+
+**Test edilemeyen:** gerçek Gemini çıktısı. Bu oturumdan worker'a erişim yok (proxy). Prompt kuralları teste bağlı ama modelin onlara uyduğu ancak canlıda görülür.
+
 ## ⚖️ Antrenman motoru — 30 Ağustos denetiminin bekleyen bulguları
 
 30 Ağu'da motor beş bağımsız literatür denetiminden geçmişti. **En yüksek öncelikli teknik bulgu 13 gün açık kaldı**, şimdi kapatıldı.
@@ -3886,6 +3913,8 @@ py aidan-pages-deploy.py
   health: [{date:'YYYY-MM-DD', steps, rhr, hrv, kcalOut, src}],  // (23 Ağu 2026) Fitbit Air → Apple Sağlık → Kısayol → `POST /health`; yeni→eski, son 120 gün
 
   reminders: [{id, label, time:'HH:MM', days:'daily'|'weekdays', enabled, lastFired:'YYYY-MM-DD'}],  // (Haz 10) sabit hatırlatıcılar — Worker 15dk cron push'lar
+
+  progIstekOkunan: '...',  // (21 Eyl 2026) son BAŞARIYLA okunan istek — "Programı üret" okutulmamış metni buradan anlar
 
   progIstek: 'haftada 4 gün, kickboks salı perşembe',  // (19 Eyl 2026) antrenman kurulumundaki serbest metin — kutu her yeniden çizimde buradan dolar; `/program-cfg` bunu okur
 

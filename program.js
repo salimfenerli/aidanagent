@@ -714,9 +714,13 @@ const PROGRAM_DUZEN = {
 
 /** 'HH:MM' -> dakika. Gecersizse null (nutrition.js `nutDk` ile ayni sozlesme). */
 function progDk(s) {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(String(s == null ? '' : s).trim());
+  // ⚠️ 21 Eyl 2026: yalniz 'HH:MM' kabul ediliyordu. Turkce yazimda saat
+  // "19.00" ya da duz "19" yazilir; AI ciktisi da bunu kopyalayabiliyor ve
+  // kullanicinin okul saati TAMAMEN dusuyordu (kullanici gibi test edilince
+  // cikti). Kabul: 19:00 · 19.00 · 19 · 9:30 · 9.30. Yazim yine HH:MM.
+  const m = /^(\d{1,2})(?:[:.](\d{2}))?$/.exec(String(s == null ? '' : s).trim());
   if (!m) return null;
-  const h = Number(m[1]), d = Number(m[2]);
+  const h = Number(m[1]), d = m[2] == null ? 0 : Number(m[2]);
   if (h > 23 || d > 59) return null;
   return h * 60 + d;
 }
@@ -787,8 +791,15 @@ function programDuzenCezasi(dow, duzen, sessionMin, altMi) {
   if (!duzen) return 0;
   const w = programGunPencere(dow, duzen, sessionMin);
   if (w.sigmaz) return 150;
-  if (!w.kisildi) return 0;
-  return altMi ? 45 : 30;
+  if (w.kisildi) return altMi ? 45 : 30;
+  // ⚠️ 21 Eyl 2026: saat KAYIYOR ama sure SIGIYORSA eskiden ceza 0'di.
+  // Kullanici gibi test edilince: okul 16:00'da biten Cuma bos dururken motor
+  // Sali/Persembe 19:30'a (bitis ~20:45) guc gunu koyuyordu. Kucuk ceza =
+  // yalniz BERABERLIK BOZUCU: bos erken gun varsa o secilir, yoksa gec gun
+  // yine kullanilir. 20'nin (iki ust gun arka arkaya) ALTINDA — toparlanma
+  // kurallarini asla ezmez.
+  if (w.kaydi) return altMi ? 15 : 10;
+  return 0;
 }
 
 /**
@@ -815,9 +826,9 @@ function programAssignDays(strengthCount, fightDays, duzenCeza) {
   //   100+ — hic sigmiyor (yalniz baska gun kalmadiysa)
   // Kademe icinde eski aralik mantigi aynen isler -> determinizm korunur.
   const ceza = (d) => (typeof duzenCeza === 'function' ? Number(duzenCeza(d, false)) || 0 : 0);
-  const kademe = (d) => { const c = ceza(d); return c >= 100 ? 2 : (c > 0 ? 1 : 0); };
-  const gruplar = [musait.filter(d => kademe(d) === 0),
-    musait.filter(d => kademe(d) === 1), musait.filter(d => kademe(d) === 2)];
+  // 0 serbest · 1 saat kayiyor ama sigiyor · 2 sure kisiliyor · 3 sigmiyor
+  const kademe = (d) => { const c = ceza(d); return c >= 100 ? 3 : (c >= 30 ? 2 : (c > 0 ? 1 : 0)); };
+  const gruplar = [0, 1, 2, 3].map(k => musait.filter(d => kademe(d) === k));
   for (const grup of gruplar) {
     if (secili.length >= strengthCount) break;
     // Once araliklarini acmaya calis: bir gun atlayarak sec
@@ -1157,6 +1168,10 @@ function buildProgram(cfg, workouts) {
       bas: pencere ? pencere.bas : null,
       okulBit: pencere ? pencere.okulBit : null,
       kisildi: !!(pencere && pencere.kisildi),
+      // ⚠️ 21 Eyl 2026: "okul var" ile "saat KAYDI" ayni sey degil. 16:00'da
+      // biten okulda 17:00 seans hic kaymaz; eskiden bu gun de "kaydirildi"
+      // notuna giriyordu — yanlis alarm.
+      kaydi: !!(pencere && pencere.kaydi),
       odak: odak || null,
       exercises: secilenler.map(s => ({
         id: s.ex.id, tr: s.ex.tr, en: s.ex.en, muscle: s.ex.muscle,
@@ -1248,30 +1263,30 @@ function buildProgram(cfg, workouts) {
     const sigmaz = gucGun.filter(d => d.okulBit &&
       (PROGRAM_DUZEN.gecBitis - progDk(d.bas)) < PROGRAM_DUZEN.minSeansDk);
     const kisik = gucGun.filter(d => d.kisildi && sigmaz.indexOf(d) < 0);
-    const kaydik = gucGun.filter(d => d.okulBit && !d.kisildi && sigmaz.indexOf(d) < 0);
+    const kaydik = gucGun.filter(d => d.kaydi && !d.kisildi && sigmaz.indexOf(d) < 0);
     if (sigmaz.length) {
       p.notes.push(sigmaz.map(etiket).join(', ') + ': okul ' +
-        sigmaz.map(d => d.okulBit).join('/') + ' bittigi icin bu gune seans SIGMIYOR — ' +
-        'hazirlik payindan sonra 30 dakika bile kalmiyor. Baska bos gun olmadigi icin ' +
-        'buraya kondu. Bu gunu dinlenmeye cevir ya da dovus gunlerinden birini kaydir.');
+        sigmaz.map(d => d.okulBit).join('/') + ' bittiği için bu güne seans SIĞMIYOR — ' +
+        'hazırlık payından sonra 30 dakika bile kalmıyor. Başka boş gün olmadığı için ' +
+        'buraya kondu. Bu günü dinlenmeye çevir ya da dövüş günlerinden birini kaydır.');
     }
     if (kisik.length) {
-      p.notes.push('Okul saatine gore KISALTILAN gunler: ' + kisik.map(d =>
+      p.notes.push('Okul saatine göre KISALTILAN günler: ' + kisik.map(d =>
         programDayLabel(d.dow) + ' ' + d.hedefDk + ' dk (okul ' + d.okulBit + ', seans ' +
-        d.bas + ')').join(' · ') + '. Sen ' + sessionMin + ' dk demistin; okul cikisina 30 dk ' +
-        'hazirlik eklenince seans ' + progSaat(PROGRAM_DUZEN.gecBitis) + '’u gecmesin diye sure ' +
-        'kisildi. Uzun seans istiyorsan o gunu bosalt (dovus gunu yap ya da guc gunu sayisini ' +
-        '1 azalt) — dinlenmeyi kisaltmak dogru cozum degil.');
+        d.bas + ')').join(' · ') + '. Sen ' + sessionMin + ' dk demiştin; okul çıkışına 30 dk ' +
+        'hazırlık eklenince seans ' + progSaat(PROGRAM_DUZEN.gecBitis) + '’u geçmesin diye süre ' +
+        'kısıldı. Uzun seans istiyorsan o günü boşalt (dövüş günü yap ya da güç günü sayısını ' +
+        '1 azalt) — dinlenmeyi kısaltmak doğru çözüm değil.');
     }
     if (kaydik.length) {
-      p.notes.push('Seans saatleri okula gore kaydirildi: ' + kaydik.map(etiket).join(' · ') +
-        '. Okul cikisi + 30 dk hazirlik hesaba katildi; diyet tarafindaki ogun saatleri de ' +
-        'ayni saate gore yaziliyor.');
+      p.notes.push('Seans saatleri okula göre kaydırıldı: ' + kaydik.map(etiket).join(' · ') +
+        '. Okul çıkışı + 30 dk hazırlık hesaba katıldı; diyet tarafındaki öğün saatleri de ' +
+        'aynı saate göre yazılıyor.');
     }
   } else {
-    p.notes.push('Okul saatlerini girmedin — butun gunler 17:00 seans varsayimiyla planlandi. ' +
-      'Program kurulumundaki okul saatlerini doldurursan motor gec biten gunlere kisa seans ' +
-      'yazar ve o gunlere agir bacak gunu koymaz.');
+    p.notes.push('Okul saatlerini girmedin — bütün günler 17:00 seans varsayımıyla planlandı. ' +
+      'Program kurulumundaki okul saatlerini doldurursan motor geç biten günlere kısa seans ' +
+      'yazar ve o günlere ağır bacak günü koymaz.');
   }
   if (p.days.some(d => d.type === 'strength' && (d.exercises || []).some(e => e.pair))) {
     p.notes.push('Seans süreye sığsın diye bazı hareketler EŞLEŞTİRİLDİ (aynı harfli ' +
@@ -2645,85 +2660,221 @@ const PROG_AI_REQ_MAX = 800;
 const PROG_SESSION_CHOICES = [30, 45, 60, 75, 90];
 const PROGRAM_PLACES = { gym: 'Spor salonu', home: 'Ev · dambıl', bw: 'Vücut ağırlığı' };
 
+/** Turkce karakterleri sadelestir: "Perşembe" -> "persembe". */
+function progSade(x) {
+  return String(x == null ? '' : x).toLocaleLowerCase('tr')
+    .replace(/ı/g, 'i').replace(/ş/g, 's').replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u').replace(/ö/g, 'o').replace(/ç/g, 'c').trim();
+}
+
+/**
+ * Gun numarasi: 0..6 ya da Turkce/Ingilizce gun adi. Taninmazsa null.
+ * ⚠️ Model okul nesnesinin ANAHTARINA "sali" yazabiliyor — eskiden bu gun
+ * "gecersiz gun" diye dusuyordu.
+ */
+const PROG_GUN_ADLARI = {
+  pazar: 0, paz: 0, sunday: 0, sun: 0,
+  pazartesi: 1, pzt: 1, monday: 1, mon: 1,
+  sali: 2, sal: 2, tuesday: 2, tue: 2,
+  carsamba: 3, car: 3, wednesday: 3, wed: 3,
+  persembe: 4, per: 4, thursday: 4, thu: 4,
+  cuma: 5, cum: 5, friday: 5, fri: 5,
+  cumartesi: 6, cmt: 6, saturday: 6, sat: 6,
+};
+function progGunNo(x) {
+  if (typeof x === 'number' || /^\s*\d+\s*$/.test(String(x))) {
+    const n = Math.round(Number(x));
+    return (n >= 0 && n <= 6) ? n : null;
+  }
+  const k = progSade(x);
+  return Object.prototype.hasOwnProperty.call(PROG_GUN_ADLARI, k) ? PROG_GUN_ADLARI[k] : null;
+}
+
+/** "75", "75 dk", "1 saat", "1.5 saat", "1,5 saat" -> dakika. */
+function progSureDk(x) {
+  if (typeof x === 'number') return isFinite(x) && x > 0 ? x : null;
+  const t = progSade(x).replace(',', '.');
+  const m = /(\d+(?:\.\d+)?)/.exec(t);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!(n > 0)) return null;
+  return /saat|hour|\bsa\b|\bh\b/.test(t) ? n * 60 : n;
+}
+
+/** Yer esanlamlilari — anahtar YA DA gunluk Turkce. */
+const PROG_YER_ES = {
+  gym: 'gym', salon: 'gym', 'spor salonu': 'gym', spor: 'gym', fitness: 'gym',
+  home: 'home', ev: 'home', evde: 'home', dambil: 'home', dumbbell: 'home',
+  bw: 'bw', 'vucut agirligi': 'bw', kalistenik: 'bw', calisthenics: 'bw', bodyweight: 'bw', park: 'bw',
+};
+function progYerAnahtar(x) {
+  const k = progSade(x);
+  return PROG_YER_ES[k] || (PROGRAM_PLACES[x] ? x : null);
+}
+
+/**
+ * Bolge: anahtar ya da Turkce etiket. EKLEM ayri ele alinir: "diz", "bel",
+ * "bilek", "dirsek" bir kas grubu degil. Onu tahminen "Ön bacak"a cevirmek
+ * squat'i, lunge'u, sicramayi programdan TAMAMEN atar — sessizce yapilacak
+ * bir karar degil. Kullaniciya sebebiyle birlikte soylenir.
+ */
+const PROG_EKLEM = { diz: 'diz', dizler: 'diz', knee: 'diz', bel: 'bel', 'bel fitigi': 'bel',
+  'lower back': 'bel', bilek: 'bilek', wrist: 'bilek', dirsek: 'dirsek', elbow: 'dirsek',
+  'ayak bilegi': 'ayak bileği', ankle: 'ayak bileği', 'kalca eklemi': 'kalça eklemi' };
+function progBolgeAnahtar(x) {
+  if (PROGRAM_MUSCLES[x]) return { k: x };
+  const s = progSade(x);
+  for (const k of Object.keys(PROGRAM_MUSCLES)) {
+    const et = progSade(PROGRAM_MUSCLES[k]);
+    if (s === et || et.split('/').indexOf(s) >= 0) return { k };
+  }
+  const es = { gogus: 'chest', sirt: 'back', omuz: 'shoulders', omuzlar: 'shoulders', boyun: 'neck',
+    karin: 'core', core: 'core', baldir: 'calves', kalca: 'glutes', biseps: 'biceps', triseps: 'triceps',
+    'on bacak': 'quads', quadriceps: 'quads', 'arka bacak': 'hams', hamstring: 'hams' };
+  if (es[s]) return { k: es[s] };
+  if (PROG_EKLEM[s]) return { eklem: PROG_EKLEM[s] };
+  return null;
+}
+
+/** Gun listesini insan diliyle yaz: [2,4] -> "Sal, Per" · [] -> "yok". */
+function progGunListe(dizi) {
+  const sira = [1, 2, 3, 4, 5, 6, 0];
+  const s = (dizi || []).slice().sort((a, b) => sira.indexOf(a) - sira.indexOf(b));
+  return s.length ? s.map(d => GUN_KISA[d]).join(', ') : 'yok';
+}
+
 /**
  * AI'dan donen ayari SUZ ve kurulum formuna uygula.
+ *
  * Beyaz liste disindaki her sey atilir ve `atlanan`a yazilir — sessizce
  * yutmak, "istegim uygulandi mi" sorusunu yine cevapsiz birakirdi.
- * @returns {{uygulanan: string[], atlanan: string[]}}
+ *
+ * ⚠️ 21 Eyl 2026 — RAPOR ARTIK FARK TABANLI. Kullanici gibi test edilince iki
+ * sorun cikti:
+ *   1) AI "cumartesi de ekle" istegine yalniz [6] dondurunce Sali/Persembe
+ *      SESSIZCE siliniyordu ve panel yalniz "dovus gunleri: Cmt" yaziyordu.
+ *      Artik "Sal, Per → Cmt (çıkarıldı: Sal, Per)" yazar — kayip gorunur.
+ *   2) Zaten oyle olan ayar "uygulandi" diye listeleniyor ve toast "Ayarlar
+ *      güncellendi" diyordu. Artik degismeyen alan `ayni`ya duser.
+ * @returns {{uygulanan: string[], ayni: string[], atlanan: string[], degisen: number}}
  */
 function progCfgUygula(ayar, hedef) {
   const s = hedef || _progSetup;
-  const out = { uygulanan: [], atlanan: [] };
-  if (!s || !ayar || typeof ayar !== 'object') return out;
+  const out = { uygulanan: [], ayni: [], atlanan: [], degisen: 0 };
+  if (!s || !ayar || typeof ayar !== 'object' || Array.isArray(ayar)) return out;
+  if (!s.duzen) s.duzen = { okul: {}, antrenman: '17:00' };
+  if (!s.duzen.okul) s.duzen.okul = {};
+  const esit = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const yaz = (etiket, once, sonra, metin) => {
+    if (esit(once, sonra)) { out.ayni.push(etiket); return; }
+    out.degisen++;
+    out.uygulanan.push(metin);
+  };
 
   if (ayar.goal !== undefined) {
-    if (PROGRAM_GOALS[ayar.goal]) { s.goal = ayar.goal; out.uygulanan.push('hedef: ' + PROGRAM_GOALS[ayar.goal].ad); }
-    else out.atlanan.push('bilinmeyen hedef: ' + String(ayar.goal).slice(0, 24));
+    const g = PROGRAM_GOALS[ayar.goal] ? ayar.goal
+      : Object.keys(PROGRAM_GOALS).find(k => progSade(PROGRAM_GOALS[k].ad) === progSade(ayar.goal));
+    if (g) {
+      const once = s.goal; s.goal = g;
+      yaz('hedef', once, g, 'Hedef: ' + (PROGRAM_GOALS[once] ? PROGRAM_GOALS[once].ad + ' → ' : '') + PROGRAM_GOALS[g].ad);
+    } else out.atlanan.push('Bilinmeyen hedef: ' + String(ayar.goal).slice(0, 24));
   }
   if (ayar.strengthDays !== undefined) {
-    const n = Math.round(Number(ayar.strengthDays));
-    if (n >= 1 && n <= PROGRAM_LIMITS.maxStrengthDays) { s.strengthDays = n; out.uygulanan.push('haftada ' + n + ' güç günü'); }
-    else if (n > PROGRAM_LIMITS.maxStrengthDays) {
-      // Tavan motorda ZATEN var; burada kirpip uygulamak dogru, sessiz kalmak degil.
-      s.strengthDays = PROGRAM_LIMITS.maxStrengthDays;
-      out.uygulanan.push('haftada ' + PROGRAM_LIMITS.maxStrengthDays + ' güç günü (istenen ' + n + ', tavan ' + PROGRAM_LIMITS.maxStrengthDays + ')');
-    } else out.atlanan.push('geçersiz gün sayısı: ' + String(ayar.strengthDays).slice(0, 12));
+    const n = Math.round(progSureDk(ayar.strengthDays) || 0);
+    const tavan = PROGRAM_LIMITS.maxStrengthDays;
+    if (n >= 1) {
+      const once = s.strengthDays;
+      s.strengthDays = Math.min(n, tavan);
+      yaz('gün sayısı', once, s.strengthDays, 'Güç günü: ' + once + ' → ' + s.strengthDays +
+        (n > tavan ? ' (istenen ' + n + ', tavan ' + tavan + ')' : ''));
+    } else out.atlanan.push('Geçersiz gün sayısı: ' + String(ayar.strengthDays).slice(0, 12));
   }
   if (ayar.sessionMin !== undefined) {
-    const n = Number(ayar.sessionMin);
-    if (isFinite(n) && n > 0) {
+    const n = progSureDk(ayar.sessionMin);
+    if (n) {
       // En yakin secenege oturt: form CIP tabanli, arada bir deger secili
       // gorunmez ve kullanici "uygulanmamis" sanir.
       const yakin = PROG_SESSION_CHOICES.reduce((a, b) => Math.abs(b - n) < Math.abs(a - n) ? b : a);
-      s.sessionMin = yakin;
-      out.uygulanan.push('seans ' + yakin + ' dk' + (yakin !== n ? ' (' + n + ' dk’ya en yakın seçenek)' : ''));
-    } else out.atlanan.push('geçersiz seans süresi');
+      const once = s.sessionMin; s.sessionMin = yakin;
+      yaz('seans süresi', once, yakin, 'Seans: ' + once + ' → ' + yakin + ' dk' +
+        (yakin !== n ? ' (' + Math.round(n) + ' dk’ya en yakın seçenek)' : ''));
+    } else out.atlanan.push('Seans süresi okunamadı: ' + String(ayar.sessionMin).slice(0, 16));
   }
   if (ayar.places !== undefined) {
     const ham = (Array.isArray(ayar.places) ? ayar.places : [ayar.places]).map(x => String(x));
-    const liste = ham.filter(x => PROGRAM_PLACES[x]);
-    // ⚠️ Tanınmayanı sessizce ELEMEK yetmez: "evde de yaparım" diyen birine
-    // yalnız salon yazıp susmak, isteğin okunmadığını gizler.
-    if (liste.length !== ham.length) out.atlanan.push('tanınmayan antrenman yeri: ' +
-      ham.filter(x => !PROGRAM_PLACES[x]).join(', ').slice(0, 40));
+    const liste = [];
+    const bilinmeyen = [];
+    for (const x of ham) { const k = progYerAnahtar(x); if (k) { if (liste.indexOf(k) < 0) liste.push(k); } else bilinmeyen.push(x); }
+    // ⚠️ Taninmayani sessizce ELEMEK yetmez: "evde de yaparim" diyen birine
+    // yalniz salon yazip susmak, istegin okunmadigini gizler.
+    if (bilinmeyen.length) out.atlanan.push('Tanınmayan antrenman yeri: ' + bilinmeyen.join(', ').slice(0, 40));
     if (liste.length) {
-      s.places = liste.filter((x, i) => liste.indexOf(x) === i);
-      out.uygulanan.push('yer: ' + s.places.map(x => PROGRAM_PLACES[x]).join(', '));
+      const once = s.places.slice(); s.places = liste;
+      yaz('antrenman yeri', once.slice().sort(), liste.slice().sort(), 'Yer: ' +
+        once.map(x => PROGRAM_PLACES[x]).join(', ') + ' → ' + liste.map(x => PROGRAM_PLACES[x]).join(', '));
     }
   }
   if (ayar.fightDays !== undefined) {
-    const ham = Array.isArray(ayar.fightDays) ? ayar.fightDays : [ayar.fightDays];
-    const liste = ham.map(x => Math.round(Number(x))).filter(d => d >= 0 && d <= 6);
-    const tekil = liste.filter((x, i) => liste.indexOf(x) === i);
-    if (tekil.length === ham.length) {
+    const ham = Array.isArray(ayar.fightDays) ? ayar.fightDays : (ayar.fightDays == null ? [] : [ayar.fightDays]);
+    const liste = ham.map(progGunNo);
+    if (liste.every(d => d != null)) {
+      const tekil = liste.filter((x, i) => liste.indexOf(x) === i);
+      const once = s.fightDays.slice();
       s.fightDays = tekil;
-      out.uygulanan.push('dövüş günleri: ' + (tekil.length ? tekil.map(d => GUN_KISA[d]).join(', ') : 'yok'));
-    } else out.atlanan.push('geçersiz dövüş günü numarası');
+      const cikan = once.filter(d => tekil.indexOf(d) < 0);
+      yaz('dövüş günleri', once.slice().sort(), tekil.slice().sort(), 'Dövüş günleri: ' +
+        progGunListe(once) + ' → ' + progGunListe(tekil) +
+        (cikan.length ? ' (çıkarıldı: ' + progGunListe(cikan) + ')' : ''));
+    } else out.atlanan.push('Geçersiz dövüş günü: ' + ham.filter((x, i) => liste[i] == null).join(', ').slice(0, 30));
   }
   if (ayar.avoid !== undefined) {
-    const ham = Array.isArray(ayar.avoid) ? ayar.avoid : [ayar.avoid];
-    const liste = ham.map(x => String(x)).filter(x => PROGRAM_MUSCLES[x]);
-    s.avoid = liste.filter((x, i) => liste.indexOf(x) === i);
-    if (liste.length) out.uygulanan.push('kaçınılacak: ' + s.avoid.map(x => PROGRAM_MUSCLES[x]).join(', '));
-    if (liste.length !== ham.length) out.atlanan.push('tanınmayan bölge adı');
-  }
-  if (ayar.okul !== undefined && ayar.okul && typeof ayar.okul === 'object') {
-    const yazilan = [];
-    for (const k of Object.keys(ayar.okul)) {
-      const dow = Math.round(Number(k));
-      const g = ayar.okul[k] || {};
-      const bas = progDk(g.bas), bit = progDk(g.bit);
-      if (!(dow >= 0 && dow <= 6)) { out.atlanan.push('geçersiz gün: ' + String(k).slice(0, 8)); continue; }
-      if (bas == null || bit == null || bit <= bas) { out.atlanan.push(GUN_KISA[dow] + ' okul saati okunamadı'); continue; }
-      s.duzen.okul[String(dow)] = { bas: progSaat(bas), bit: progSaat(bit) };
-      yazilan.push(GUN_KISA[dow] + ' ' + progSaat(bas) + '–' + progSaat(bit));
+    const ham = Array.isArray(ayar.avoid) ? ayar.avoid : (ayar.avoid == null ? [] : [ayar.avoid]);
+    const liste = [];
+    for (const x of ham) {
+      const r = progBolgeAnahtar(x);
+      if (r && r.k) { if (liste.indexOf(r.k) < 0) liste.push(r.k); }
+      else if (r && r.eklem) {
+        out.atlanan.push('“' + r.eklem + '” bir eklem, kas grubu değil — hangi hareket ağrıtıyorsa ' +
+          'o bölgeyi kendin seç (squat ağrıtıyorsa Ön bacak, bench ağrıtıyorsa Göğüs). ' +
+          'Tahminle seçmek o bölgenin bütün hareketlerini programdan atar.');
+      } else out.atlanan.push('Tanınmayan bölge: ' + String(x).slice(0, 24));
     }
-    if (yazilan.length) out.uygulanan.push('okul: ' + yazilan.join(' · '));
+    // Hepsi taninmadiysa mevcut listeye DOKUNMA: "diz" yazan kullanicinin
+    // onceden sectigi "Boyun" silinmemeli.
+    if (liste.length || !ham.length) {
+      const once = s.avoid.slice(); s.avoid = liste;
+      const ad = (d) => d.length ? d.map(x => PROGRAM_MUSCLES[x]).join(', ') : 'yok';
+      yaz('kaçınılacak bölge', once.slice().sort(), liste.slice().sort(), 'Kaçınılacak: ' + ad(once) + ' → ' + ad(liste));
+    }
+  }
+  if (ayar.okul !== undefined && ayar.okul && typeof ayar.okul === 'object' && !Array.isArray(ayar.okul)) {
+    for (const k of Object.keys(ayar.okul)) {
+      const dow = progGunNo(k);
+      if (dow == null) { out.atlanan.push('Geçersiz gün: ' + String(k).slice(0, 12)); continue; }
+      const g = ayar.okul[k];
+      const once = s.duzen.okul[String(dow)] || null;
+      // ⚠️ null / false / "yok" = o gun okul YOK. Eskiden silme yolu yoktu:
+      // "sali okulum yok artik" diyen kullanicinin eski saati kaliyordu.
+      if (g == null || g === false || /^(yok|none|-)$/i.test(String(g).trim())) {
+        delete s.duzen.okul[String(dow)];
+        yaz(GUN_KISA[dow] + ' okul', once, null, GUN_KISA[dow] + ' okul: ' +
+          (once ? once.bas + '–' + once.bit : '—') + ' → yok');
+        continue;
+      }
+      const bas = progDk(g.bas), bit = progDk(g.bit);
+      if (bas == null || bit == null || bit <= bas) { out.atlanan.push(GUN_KISA[dow] + ' okul saati okunamadı'); continue; }
+      const yeni = { bas: progSaat(bas), bit: progSaat(bit) };
+      s.duzen.okul[String(dow)] = yeni;
+      yaz(GUN_KISA[dow] + ' okul', once, yeni, GUN_KISA[dow] + ' okul: ' +
+        (once ? once.bas + '–' + once.bit + ' → ' : '') + yeni.bas + '–' + yeni.bit);
+    }
   }
   if (ayar.antrenman !== undefined) {
     const v = progDk(ayar.antrenman);
-    if (v != null) { s.duzen.antrenman = progSaat(v); out.uygulanan.push('antrenman saati ' + progSaat(v)); }
-    else out.atlanan.push('antrenman saati okunamadı');
+    if (v != null) {
+      const once = s.duzen.antrenman; s.duzen.antrenman = progSaat(v);
+      yaz('antrenman saati', once, s.duzen.antrenman, 'Antrenman saati: ' + (once ? once + ' → ' : '') + progSaat(v));
+    } else out.atlanan.push('Antrenman saati okunamadı: ' + String(ayar.antrenman).slice(0, 12));
   }
   return out;
 }
@@ -2753,14 +2904,58 @@ function progAiIstek() {
 
 /** Son cevirinin sonucu — formun altinda gosterilir, programa YAZILMAZ. */
 let _progAiSonuc = null;
+/** Uygulamadan ONCEKI kurulum — "Geri al" bunu geri yukler. */
+let _progAiOnceki = null;
+/** Ayni anda tek istek: cift tik iki Pro cagrisi (iki fatura) demekti. */
+let _progAiMesgul = false;
+/** "Programı üret" okutulmamis istek icin bir kez uyardi mi. */
+let _progUretUyarildi = false;
+
+/** Son BASARIYLA okunan istek metni (kutudaki metinle karsilastirilir). */
+function progAiOkunan() {
+  return String((typeof data === 'object' && data && data.progIstekOkunan) || '').trim();
+}
+
+/** Kurulumun geri alinabilir kopyasi (istek metni HARIC — o kullanicinin). */
+function progSetupKopya(s) {
+  return JSON.parse(JSON.stringify({
+    goal: s.goal, strengthDays: s.strengthDays, sessionMin: s.sessionMin,
+    places: s.places, fightDays: s.fightDays, avoid: s.avoid, duzen: s.duzen,
+  }));
+}
+
+/** Son AI uygulamasini geri al. Program URETILMEDIYSE tek tik yeter. */
+function progAiGeriAl() {
+  if (!_progSetup || !_progAiOnceki) return;
+  Object.assign(_progSetup, JSON.parse(JSON.stringify(_progAiOnceki)));
+  _progAiOnceki = null;
+  _progAiSonuc = null;
+  // Geri alinan istek artik "okunmus" sayilmaz: "Programı üret" bunu hatirlatir.
+  if (typeof data === 'object' && data) data.progIstekOkunan = '';
+  renderProgramSetup();
+  showToast('Geri alındı — ayarlar isteği okumadan önceki haline döndü.', 'info');
+}
+
+/** Ctrl/Cmd + Enter = "İsteğimi oku". Duz Enter yeni satir kalir. */
+function progAiTus(e) {
+  if (e && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    progAiCfgYaz();
+  }
+}
 
 async function progAiCfgYaz() {
-  if (!_progSetup) return;
+  if (!_progSetup || _progAiMesgul) return;
   const istek = progAiIstek();
   if (!istek) { showToast('Önce ne istediğini yaz.', 'warning'); return; }
   progAiIstekKaydet(istek);
+  // ⚠️ Istek surerken kurulum kapatilip yeniden acilirsa _progSetup YENI bir
+  // nesne olur. Eskiden cevap kapali formun nesnesine yaziliyor, toast
+  // "Ayarlar güncellendi" diyor ama hicbir sey gorunmuyordu. Cevap yalniz
+  // istegin ciktigi kurulum hala aciksa uygulanir.
+  const kurulum = _progSetup;
+  _progAiMesgul = true;
   const btn = document.getElementById('progAiBtn');
-  const eski = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = 'Okunuyor…'; }
   try {
     const token = (typeof getSupaToken === 'function') ? await getSupaToken() : null;
@@ -2775,38 +2970,60 @@ async function progAiCfgYaz() {
         yerler: Object.keys(PROGRAM_PLACES).map(k => ({ k, ad: PROGRAM_PLACES[k] })),
         kaslar: Object.keys(PROGRAM_MUSCLES).map(k => ({ k, ad: PROGRAM_MUSCLES[k] })),
         mevcut: {
-          goal: _progSetup.goal, strengthDays: _progSetup.strengthDays,
-          sessionMin: _progSetup.sessionMin, places: _progSetup.places,
-          fightDays: _progSetup.fightDays, avoid: _progSetup.avoid,
-          okul: _progSetup.duzen.okul, antrenman: _progSetup.duzen.antrenman,
+          goal: kurulum.goal, strengthDays: kurulum.strengthDays,
+          sessionMin: kurulum.sessionMin, places: kurulum.places,
+          fightDays: kurulum.fightDays, avoid: kurulum.avoid,
+          okul: kurulum.duzen.okul, antrenman: kurulum.duzen.antrenman,
         },
       }),
     });
     const j = await r.json().catch(() => ({}));
+    const m = document.getElementById('programModal');
+    if (_progSetup !== kurulum || !m || !m.classList.contains('active')) {
+      showToast('Kurulum kapatıldığı için okunan istek uygulanmadı.', 'info');
+      return;
+    }
     if (!r.ok || j.error) { showToast(j.error || ('İstek okunamadı (' + r.status + ')'), 'error', 6000); return; }
-    const sonuc = progCfgUygula(j.ayar, _progSetup);
+    const onceki = progSetupKopya(kurulum);
+    const sonuc = progCfgUygula(j.ayar, kurulum);
+    // Okunan metin kaydedilir: "Programı üret" okutulmamis istegi buradan anlar.
+    data.progIstekOkunan = istek;
+    _progUretUyarildi = false;
+    _progAiOnceki = sonuc.degisen ? onceki : null;
     _progAiSonuc = {
       at: Date.now(),
       uygulanan: sonuc.uygulanan,
+      ayni: sonuc.ayni,
       atlanan: sonuc.atlanan,
       // AI'in KENDI "yapamadim" listesi ayri tutulur: beyaz listeden dusen
       // (atlanan) bir HATA sinyali, motorun desteklemedigi istek ise EKSIK
       // OZELLIK sinyali. Ikisini karistirmak backlog'u korlestirir.
       uygulanamayan: (Array.isArray(j.uygulanamayan) ? j.uygulanamayan : []).slice(0, 6).map(x => ({
-        istek: String((x && x.istek) || '').slice(0, 120),
+        istek: String((x && x.istek) || x || '').slice(0, 120),
         sebep: String((x && x.sebep) || '').slice(0, 160),
-      })),
+      })).filter(x => x.istek),
       notlar: (Array.isArray(j.notlar) ? j.notlar : []).slice(0, 3).map(s => String(s).slice(0, 200)),
       model: String(j.model || '').slice(0, 60),
     };
     renderProgramSetup();
-    showToast(sonuc.uygulanan.length
-      ? 'Ayarlar güncellendi — kontrol et, sonra "Program kur".'
-      : 'Uygulanabilir bir ayar çıkmadı, aşağıdaki nedene bak.', sonuc.uygulanan.length ? 'success' : 'warning', 6000);
+    if (sonuc.degisen) {
+      showToast(sonuc.degisen + ' ayar değişti — kontrol et, sonra “Programı üret”.', 'success', 6000);
+    } else if (sonuc.ayni.length && !sonuc.atlanan.length) {
+      showToast('Ayarların zaten yazdığın gibiydi — değişen bir şey yok.', 'info', 5000);
+    } else if (!sonuc.atlanan.length && !_progAiSonuc.uygulanamayan.length && _progAiSonuc.notlar.length) {
+      // Model ayar degil SORU dondurdu ("hangi gunler okul var?") — bu bir
+      // hata degil, eksik bilgi. Uyari rengiyle gostermek yanlis sinyal.
+      showToast('Bir şey netleşmedi — aşağıdaki nota bak, kutuya ekleyip tekrar okut.', 'info', 6000);
+    } else {
+      showToast('Uygulanabilir bir ayar çıkmadı — aşağıdaki nedene bak.', 'warning', 6000);
+    }
   } catch (e) {
     showToast('Bağlantı hatası: ' + e.message, 'error', 6000);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = eski || 'İsteğimi oku'; }
+    _progAiMesgul = false;
+    // Form yeniden cizildiyse dugme de yenidir; eskisine degil GUNCELINE dokun.
+    const b2 = document.getElementById('progAiBtn');
+    if (b2) { b2.disabled = false; b2.textContent = 'İsteğimi oku'; }
   }
 }
 
@@ -2830,6 +3047,8 @@ function openProgramSetup() {
     })(),
   };
   _progAiSonuc = null;   // eski cevirinin sonucu yeni oturuma sizmasin
+  _progAiOnceki = null;  // geri al, baska bir kurulum oturumuna tasinmaz
+  _progUretUyarildi = false;
   renderProgramSetup();
   const m = document.getElementById('programModal');
   // ⚠️ Sinif adi 'active' — CSS'te acilma kurali YALNIZ `.modal-overlay.active`.
@@ -2923,29 +3142,39 @@ function renderProgramSetup() {
         dizi.map(x => '<div>' + escapeHtml(x) + '</div>').join('') + '</div>'
       : '';
     return '<div class="prog-ai-sonuc">' +
-      liste('Uyguladıklarım', r.uygulanan, 'ok') +
+      liste('Değiştirdiklerim', r.uygulanan, 'ok') +
+      // Degismeyen alan AYRI: "uygulandi" demek, hicbir sey olmamisken bir
+      // sey olmus gibi gosterir.
+      ((r.ayni || []).length ? '<div class="prog-ai-blok"><b>Zaten böyleydi</b><div>' +
+        escapeHtml(r.ayni.join(', ')) + '</div></div>' : '') +
       // Beyaz listeden DUSEN alan = hata sinyali (model tanimsiz deger yazdi)
       liste('Anlaşılmayan / atlanan', r.atlanan, 'warn') +
       (r.uygulanamayan.length
-        ? '<div class="prog-ai-blok warn"><b>Motor bunu desteklemiyor</b>' +
+        ? '<div class="prog-ai-blok warn"><b>Motor bunu henüz desteklemiyor</b>' +
           r.uygulanamayan.map(x => '<div>' + escapeHtml(x.istek) +
             (x.sebep ? ' — <i>' + escapeHtml(x.sebep) + '</i>' : '') + '</div>').join('') + '</div>'
         : '') +
       liste('Not', r.notlar, '') +
-      (r.model ? '<div class="prog-ai-model">' +
+      '<div class="prog-ai-alt">' +
+      (_progAiOnceki ? '<button class="prog-chip" onclick="progAiGeriAl()">Geri al</button>' : '') +
+      (r.model ? '<span class="prog-ai-model">' +
         escapeHtml(/pro/i.test(r.model) ? 'Pro model ile okundu' : 'ücretsiz model ile okundu') +
-        '</div>' : '') +
-      '</div>';
+        '</span>' : '') +
+      '</div></div>';
   })();
   el.innerHTML =
-    '<div class="prog-f prog-ai"><label>Ne istiyorsun? (serbest yaz)</label>' +
+    '<div class="prog-f prog-ai"><label for="progAiReq">Ne istiyorsun? (serbest yaz)</label>' +
     '<textarea id="progAiReq" rows="3" maxlength="' + PROG_AI_REQ_MAX + '" ' +
-    'placeholder="haftada 4 gün, kickboks salı ve perşembe, okul 19:00’da bitiyor, dizim ağrıyor" ' +
-    'oninput="progAiIstekKaydet(this.value)">' + escapeHtml(s.istek || '') + '</textarea>' +
+    'placeholder="haftada 4 gün 75 dk, kickboks salı ve perşembe, okul 9-16 ama salı 19:00’a kadar, omzum ağrıyor" ' +
+    'oninput="progAiIstekKaydet(this.value)" onkeydown="progAiTus(event)">' +
+    escapeHtml(s.istek || '') + '</textarea>' +
+    '<div class="prog-hint">Anladıkları: hedef · gün sayısı · seans süresi · dövüş günleri · ' +
+    'okul saatleri · antrenman saati · yer · ağrıyan bölge. Ctrl+Enter ile de gönderebilirsin.</div>' +
     '<div class="prog-okul-alt">' +
-    '<button class="prog-chip" id="progAiBtn" onclick="progAiCfgYaz()">İsteğimi oku</button>' +
+    '<button class="prog-chip" id="progAiBtn" onclick="progAiCfgYaz()"' + (_progAiMesgul ? ' disabled' : '') + '>' +
+    (_progAiMesgul ? 'Okunuyor…' : 'İsteğimi oku') + '</button>' +
     '<span class="prog-hint">Programı yapay zekâ YAZMAZ — yazdığını aşağıdaki ayarlara çevirir, ' +
-    'programı kural tabanlı motor kurar. Ayarları gözden geçirip “Program kur”a bas.</span></div>' +
+    'programı kural tabanlı motor kurar. Ayarları gözden geçirip “Programı üret”e bas.</span></div>' +
     aiSonucHtml + '</div>' +
     '<div class="prog-f"><label>Hedef</label><div class="prog-chips">' +
     Object.keys(PROGRAM_GOALS).map(k => chip('goal', k, PROGRAM_GOALS[k].ad)).join('') +
@@ -3055,6 +3284,21 @@ function programDuzenKaydet(duzen) {
 function saveProgramSetup() {
   if (!_progSetup) return;
   if (!_progSetup.places.length) { showToast('En az bir antrenman yeri seç.', 'warning'); return; }
+  // ⚠️ OKUTULMAMIS ISTEK (21 Eyl 2026, kullanici gibi test edilince cikti).
+  // En dogal akis: kutuya yaz -> "Programı üret". Ama uret dugmesi kutuyu
+  // OKUMAZ; yazilan metin sessizce yok sayiliyor ve kullanici isteginin
+  // islenmedigini ancak programa bakinca anliyordu. Ilk basista durdurup
+  // soyler; ikinci basis kullanicinin karari (metni bilerek birakmis olabilir).
+  const bekleyen = progAiIstek();
+  if (bekleyen && bekleyen !== progAiOkunan() && !_progUretUyarildi) {
+    _progUretUyarildi = true;
+    showToast('Kutuya yazdığın istek henüz okunmadı. Önce “İsteğimi oku”ya bas — ' +
+      'yazdığını yok sayıp üretmek için “Programı üret”e tekrar bas.', 'warning', 7000);
+    const bt = document.getElementById('progAiBtn');
+    if (bt && bt.focus) bt.focus();
+    return;
+  }
+  _progUretUyarildi = false;
   const h = (typeof ensureHevy === 'function') ? ensureHevy() : (data.hevy || { workouts: [] });
   programDuzenKaydet(_progSetup.duzen);
   const p = buildProgram(Object.assign({}, _progSetup, { duzen: programDuzenOku() }), h.workouts || []);

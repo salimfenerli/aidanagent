@@ -4399,6 +4399,8 @@
 .prog-ai-blok.ok > div::before { content: '✓ '; color: var(--success, #6bbf7b); }
 .prog-ai-blok.warn > div::before { content: '! '; color: var(--warn, #e0a355); }
 .prog-ai-model { font-size: 0.72em; color: var(--text-muted); opacity: 0.8; }
+.prog-ai-alt { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.prog-ai-blok:not(.ok):not(.warn) > div { color: var(--text-muted); }
 /* ---- Okul saati girisi (program kurulumu) ---- */
 .prog-okullar { display: flex; flex-wrap: wrap; gap: 6px; }
 .prog-okul {

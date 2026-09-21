@@ -6694,6 +6694,18 @@ KURALLAR:
    set tavanı ve yaş kilitleri motorda. "Her gün ağırlık" gibi bir istekte
    strengthDays motorda kırpılır; bunu notlarda söyle.
 5. "uygulanan" maddeleri KISA ve somut olsun ("kickboks salı-perşembe işlendi").
+6. LİSTE ALANLARI (fightDays, places, avoid) TÜM LİSTEDİR, ekleme değil: yazdığın liste
+   mevcut listenin YERİNE geçer. "Cumartesi de kickboks ekle" → mevcut [2,4] ise [2,4,6] yaz,
+   [6] DEĞİL. Kullanıcı bir öğeyi çıkarmadıysa mevcut öğeleri koru.
+7. "Salı okulum yok" gibi bir günü SİLME isteğinde okul içinde o günü null yaz:
+   {"okul":{"2":null}}. Göndermediğin günler olduğu gibi kalır.
+8. Saatleri 24 saat "HH:MM" yaz ("19.00" değil "19:00"). "Öğleden sonra 3" = "15:00".
+   "Bir gün azalt", "yarım saat uzat" gibi göreli istekleri MEVCUT AYAR'dan hesapla.
+9. EKLEM kas grubu değildir. "Dizim / belim / bileğim / dirseğim ağrıyor" → avoid'e
+   TAHMİNLE kas yazma (dizi "Ön bacak"a çevirmek squat'ı, lunge'u, sıçramayı tamamen atar).
+   Uygulanamayan'a yaz, sebebe "hangi hareket ağrıtıyorsa o bölgeyi seç" de. "Omzum" ve
+   "boynum" ise doğrudan bölgedir (shoulders, neck).
+10. Ağrı keskin, şişlik ya da sürekliyse notlara TEK cümle: "antrenmana ara verip baktır".
 
 SADECE şu JSON'u döndür, başka hiçbir metin yazma:
 {"ayar":{"strengthDays":4},"uygulanan":["haftada 4 gün ağırlık"],"uygulanamayan":[{"istek":"salı bacak olmasın","sebep":"motor güne özel bölge sabitlemeyi desteklemiyor"}],"notlar":["en fazla 3 kısa not"]}`;

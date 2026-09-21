@@ -149,6 +149,87 @@ describe('Model sacmalarsa: ayar bozulmaz, sebep yazilir', () => {
   });
 });
 
+describe('Turkce bicimler (21 Eyl — kullanici gibi test edilince cikti)', () => {
+  // Hepsi AI'in gercekten dondurebilecegi bicimler. Eskiden HEPSI atlaniyor,
+  // kullanicinin okul saati ve dovus gunleri tamamen dusuyordu.
+  test('gun ADI ile okul ve dovus gunu', () => {
+    const s = kurulum();
+    const r = M.progCfgUygula({ fightDays: ['salı', 'Perşembe'], okul: { 'çarşamba': { bas: '09:00', bit: '16:00' } } }, s);
+    assert.strictEqual(String(s.fightDays), '2,4');
+    assert.strictEqual(JSON.stringify(s.duzen.okul['3']), JSON.stringify({ bas: '09:00', bit: '16:00' }));
+    assert.strictEqual(r.atlanan.length, 0, JSON.stringify(r.atlanan));
+  });
+
+  test('saat: 19.00 · 19 · 9.30 hepsi okunur, HH:MM yazilir', () => {
+    const s = kurulum();
+    M.progCfgUygula({ okul: { '2': { bas: '9.30', bit: '19' } }, antrenman: '17.30' }, s);
+    assert.strictEqual(JSON.stringify(s.duzen.okul['2']), JSON.stringify({ bas: '09:30', bit: '19:00' }));
+    assert.strictEqual(s.duzen.antrenman, '17:30');
+  });
+
+  test('sure: "75 dk" · "1,5 saat" · "1 saat"', () => {
+    const a = kurulum(); M.progCfgUygula({ sessionMin: '75 dk' }, a); assert.strictEqual(a.sessionMin, 75);
+    const b = kurulum(); M.progCfgUygula({ sessionMin: '1,5 saat' }, b); assert.strictEqual(b.sessionMin, 90);
+    const c = kurulum(); M.progCfgUygula({ sessionMin: '1 saat' }, c); assert.strictEqual(c.sessionMin, 60);
+  });
+
+  test('yer ve bolge gunluk Turkceyle: salon, evde, omuz, göğüs', () => {
+    const s = kurulum();
+    M.progCfgUygula({ places: ['salon', 'evde'], avoid: ['omuz', 'Göğüs'] }, s);
+    assert.strictEqual(String(s.places), 'gym,home');
+    assert.strictEqual(String(s.avoid), 'shoulders,chest');
+  });
+});
+
+describe('Eklem kas grubu degildir', () => {
+  test('"diz" tahminle Ön bacak’a CEVRILMEZ, sebebiyle soylenir', () => {
+    // Cevirmek squat/lunge/sicramanin HEPSINI programdan atardi.
+    const s = kurulum();
+    const r = M.progCfgUygula({ avoid: ['diz'] }, s);
+    assert.strictEqual(s.avoid.length, 0);
+    assert.ok(r.atlanan.some(x => /eklem/.test(x) && /Ön bacak/.test(x)), JSON.stringify(r.atlanan));
+  });
+
+  test('yalniz eklem yazildiysa ONCEKI secim silinmez', () => {
+    const s = kurulum(); s.avoid = ['neck'];
+    M.progCfgUygula({ avoid: ['bel'] }, s);
+    assert.strictEqual(String(s.avoid), 'neck');
+  });
+});
+
+describe('Fark tabanli rapor', () => {
+  test('degismeyen alan "uygulandi" SAYILMAZ', () => {
+    const s = kurulum();
+    const r = M.progCfgUygula({ strengthDays: 3, sessionMin: 60 }, s);
+    assert.strictEqual(r.degisen, 0);
+    assert.strictEqual(r.uygulanan.length, 0);
+    assert.strictEqual(r.ayni.length, 2);
+  });
+
+  test('listeden DUSEN gun acikca yazilir (AI listeyi ezerse kayip gorunur)', () => {
+    const s = kurulum(); s.fightDays = [2, 4];
+    const r = M.progCfgUygula({ fightDays: [6] }, s);
+    const satir = r.uygulanan.find(x => /Dövüş/.test(x));
+    assert.ok(/Sal, Per → Cmt/.test(satir) && /çıkarıldı: Sal, Per/.test(satir), satir);
+  });
+
+  test('once → sonra birlikte yazilir', () => {
+    const s = kurulum();
+    const r = M.progCfgUygula({ sessionMin: 90 }, s);
+    assert.ok(r.uygulanan.some(x => /60 → 90 dk/.test(x)), JSON.stringify(r.uygulanan));
+  });
+});
+
+describe('Okul gunu silme', () => {
+  test('null / "yok" o gunun okulunu SILER', () => {
+    const s = kurulum();
+    s.duzen.okul = { '2': { bas: '09:00', bit: '19:00' }, '4': { bas: '09:00', bit: '19:00' } };
+    const r = M.progCfgUygula({ okul: { '2': null, 'perşembe': 'yok' } }, s);
+    assert.strictEqual(Object.keys(s.duzen.okul).length, 0);
+    assert.strictEqual(r.degisen, 2);
+  });
+});
+
 describe('Istek kutusu KALICI (v7-187 hatasinin aynisi olmasin)', () => {
   test('metin data.progIstek’e yazilir ve tavanda kirpilir', () => {
     const M2 = motor({});
@@ -176,6 +257,10 @@ describe('Yetki siniri: AI ayar cevirir, program yazmaz', () => {
     assert.ok(/program YAZMIYORSUN/.test(govde));
     assert.ok(/SEÇMİYORSUN/.test(govde), 'hareket secme yasagi promptta yok');
     assert.ok(/uygulanamayan/.test(govde), 'yapilamayan istek alani yok');
+    // 21 Eyl: liste ezme, gun silme ve eklem kurallari promptta olmali.
+    assert.ok(/T\u00dcM L\u0130STED\u0130R/.test(govde), 'liste alanlarinin tam liste oldugu yazmiyor');
+    assert.ok(/null yaz/.test(govde), 'okul gunu silme kurali yok');
+    assert.ok(/EKLEM kas grubu de\u011fildir/.test(govde), 'eklem kurali yok');
   });
 
   test('AI yolu buildProgram cagirmiyor — programi kullanici kurar', () => {
@@ -183,6 +268,6 @@ describe('Yetki siniri: AI ayar cevirir, program yazmaz', () => {
     const govde = SRC.slice(bas, SRC.indexOf('\n}', bas));
     assert.ok(bas > 0 && !/buildProgram\(/.test(govde));
     // saveProgramSetup ise kurar — dugme akisi korunuyor.
-    assert.ok(/function saveProgramSetup\(\)[\s\S]{0,800}buildProgram\(/.test(SRC));
+    assert.ok(/function saveProgramSetup\(\)[\s\S]{0,2500}buildProgram\(/.test(SRC));
   });
 });

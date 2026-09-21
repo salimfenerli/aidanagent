@@ -139,6 +139,29 @@ describe('Ceza siralamasi: toparlanma > uygunluk', () => {
     assert.strictEqual(M.programDuzenCezasi(2, duzen, 60, false), 150);
   });
 
+  test('saat KAYIYOR ama sigiyorsa kucuk ceza — yalniz beraberlik bozucu (21 Eyl)', () => {
+    // 19:00 cikis -> 19:30 seans, 75 dk sigar. Eskiden ceza 0'di ve motor bos
+    // Cuma dururken Sali/Persembe aksamina guc gunu koyuyordu.
+    const duzen = { okul: { '2': { bas: '09:00', bit: '19:00' } }, antrenman: '17:00' };
+    const ust = M.programDuzenCezasi(2, duzen, 75, false);
+    const alt = M.programDuzenCezasi(2, duzen, 75, true);
+    assert.ok(ust > 0 && ust < 20, 'kayma cezasi 0 ya da iki-ust-gun kuralini (20) ezecek kadar buyuk: ' + ust);
+    assert.ok(alt > ust && alt < 30, 'agir bacak icin biraz daha fazla, kisilmadan (30) az olmali: ' + alt);
+  });
+
+  test('bos erken gun varken gec gune guc gunu KONMAZ', () => {
+    // Salim'in gercek haftasi: okul 9-16, Sal/Per 19:00'a kadar; kickboks Car+Cmt.
+    const okul = { '1': { bas: '09:00', bit: '16:00' }, '2': { bas: '09:00', bit: '19:00' },
+      '3': { bas: '09:00', bit: '16:00' }, '4': { bas: '09:00', bit: '19:00' }, '5': { bas: '09:00', bit: '16:00' } };
+    const p = motor(veriyle(okul)).buildProgram(Object.assign({}, CFG,
+      { strengthDays: 4, sessionMin: 75, fightDays: [3, 6] }), []);
+    const guc = p.days.filter(d => d.type === 'strength').map(d => d.dow);
+    // 5 aday (Pzt Sal Per Cum Paz) icinden 4'u: gec gunlerden (Sal, Per) EN FAZLA biri.
+    const gec = guc.filter(d => d === 2 || d === 4);
+    assert.ok(gec.length <= 1, 'iki gec aksam birden secilmis: ' + guc);
+    assert.ok(guc.indexOf(5) >= 0, 'bos Cuma kullanilmamis: ' + guc);
+  });
+
   test('duzen yoksa ceza 0 — eski davranis aynen korunur', () => {
     assert.strictEqual(M.programDuzenCezasi(2, null, 60, true), 0);
   });
@@ -224,6 +247,7 @@ describe('SESSIZ KAYMA YOK', () => {
     assert.ok(not, 'kisaltma notu yok: ' + JSON.stringify(p.notes));
     assert.ok(/20:00/.test(not), 'not okul saatini yazmiyor');
     assert.ok(/21:30/.test(not), 'not gec saat esigini yazmiyor');
+    assert.ok(/günler/.test(not) && /kısıldı/.test(not), 'not Turkce karaktersiz yaziliyor');
   });
 
   test('saat kaydi ama kisilmadiysa BILGI notu var, kisaltma notu YOK (yanlis alarm)', () => {
@@ -232,7 +256,30 @@ describe('SESSIZ KAYMA YOK', () => {
     assert.ok((p.notes || []).every(n => !/KISALTILAN/i.test(n)), 'gereksiz kisaltma notu');
     const haftaIci = p.days.filter(d => d.type === 'strength' && d.dow >= 1 && d.dow <= 5);
     if (haftaIci.length) {
-      assert.ok((p.notes || []).some(n => /kaydirildi/i.test(n)), 'kayma notu yok');
+      assert.ok((p.notes || []).some(n => /kaydırıldı/i.test(n)), 'kayma notu yok');
+    }
+  });
+
+  test('okul var ama saat KAYMADIYSA "kaydirildi" notu CIKMAZ (21 Eyl yanlis alarmi)', () => {
+    // 16:00 cikis + 30 dk = 16:30 < 17:00 seans: hicbir sey kaymadi. Eskiden
+    // `okulBit` dolu diye bu gun de "kaydirildi" notuna giriyordu.
+    const p = motor(veriyle(OKUL_NORMAL)).buildProgram(CFG, []);
+    assert.ok((p.notes || []).every(n => !/kaydırıldı/i.test(n)), 'yanlis kayma notu: ' + JSON.stringify(p.notes));
+    for (const d of p.days.filter(x => x.type === 'strength')) assert.strictEqual(d.kaydi, false);
+  });
+
+  test('kullaniciya giden okul notlari Turkce karakterle yazilir', () => {
+    // v7-189'da notlar ASCII yazilmisti ("gunler", "kisildi") — diger notlarin
+    // hepsi Turkce karakterli; tek bir kart iki farkli dil gibi okunuyordu.
+    // Hafta ici hepsi gec: 5 gunun en az 3'u hafta icine dusmek ZORUNDA ->
+    // kisaltma notu kesin cikar. (Bos gun varken motor gec gune hic koymaz.)
+    const M = motor(veriyle({ '1': { bas: '09:00', bit: '20:00' }, '2': { bas: '09:00', bit: '20:00' },
+      '3': { bas: '09:00', bit: '20:00' }, '4': { bas: '09:00', bit: '20:00' }, '5': { bas: '09:00', bit: '20:00' } }));
+    const p = M.buildProgram(Object.assign({}, CFG, { strengthDays: 5, sessionMin: 90 }), []);
+    const okulNotlari = (p.notes || []).filter(n => /okul/i.test(n));
+    assert.ok(okulNotlari.length, 'okul notu yok');
+    for (const n of okulNotlari) {
+      assert.ok(!/\b(gunler|kisildi|cikisi|kaydirildi|varsayimiyla|demistin)\b/.test(n), 'ASCII Turkce: ' + n);
     }
   });
 
