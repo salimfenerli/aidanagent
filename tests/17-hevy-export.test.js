@@ -317,13 +317,15 @@ describe('PWA tarafı', () => {
       'Hevy\'deki rutin eskidiginde kullaniciya soylenmiyor');
   });
 
-  test('AI çağrısı yok — program.js hâlâ deterministik', () => {
-    // ⚠️ program.js'te fetch ARTIK VAR (Hevy aktarimi) ama AI cagrisi yok.
-    assert.ok(!/\/chat|\/plan|\/health-coach|aiRun/.test(programSrc),
-      'program.js bir AI ucuna baglanmis — motor kural tabanli kalmali');
-    const fetchler = programSrc.match(/fetch\(([A-Z_]+)/g) || [];
-    assert.deepStrictEqual([...new Set(fetchler)], ['fetch(HEVY_ROUTINES_ENDPOINT'],
+  test('AI programi yazmiyor — program.js motoru hala deterministik', () => {
+    // 19 Eyl 2026: /program-cfg eklendi (serbest metin → AYAR). Program yine
+    // motorda kuruluyor; izinli uc listesi bu iki tanedir, ucuncusu eklenirse
+    // bu test kirilir.
+    const fetchler = [...new Set(programSrc.match(/fetch\(([A-Z_]+)/g) || [])].sort();
+    assert.deepStrictEqual(fetchler, ['fetch(HEVY_ROUTINES_ENDPOINT', 'fetch(PROG_AI_ENDPOINT'],
       'program.js beklenmeyen bir uca istek atiyor');
+    assert.ok(!/aiRun|\/chat|\/health-coach/.test(programSrc),
+      'program.js dogrudan bir AI cagrisina baglanmis');
   });
 });
 

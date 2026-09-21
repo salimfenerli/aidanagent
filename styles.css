@@ -4385,6 +4385,20 @@
   margin-left: 8px; font-size: 0.74em; font-weight: 600;
   color: var(--text-muted); font-variant-numeric: tabular-nums;
 }
+/* ---- Serbest metin kutusu (program kurulumu) ---- */
+.prog-ai textarea {
+  width: 100%; min-height: 64px; padding: 9px 10px; border-radius: 9px;
+  border: 1px solid var(--border, #2a2c35); background: var(--surface-2, #1b1c23);
+  color: var(--text-strong, #f5f3ee); font: inherit; font-size: 14px; line-height: 1.45;
+  resize: vertical;
+}
+.prog-ai textarea:focus { outline: none; border-color: var(--accent, #e2e2e2); }
+.prog-ai-sonuc { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.prog-ai-blok { font-size: 0.8em; line-height: 1.5; color: var(--text-muted); }
+.prog-ai-blok b { display: block; margin-bottom: 2px; color: var(--text-strong, #f5f3ee); font-size: 0.95em; }
+.prog-ai-blok.ok > div::before { content: '✓ '; color: var(--success, #6bbf7b); }
+.prog-ai-blok.warn > div::before { content: '! '; color: var(--warn, #e0a355); }
+.prog-ai-model { font-size: 0.72em; color: var(--text-muted); opacity: 0.8; }
 /* ---- Okul saati girisi (program kurulumu) ---- */
 .prog-okullar { display: flex; flex-wrap: wrap; gap: 6px; }
 .prog-okul {

@@ -301,16 +301,27 @@ describe('progresyon — cikti ile, agirlikla DEGIL', () => {
 
 // ---------------------------------------------------------------------------
 describe('dayaniklilik ve sozlesmeler', () => {
-  test('AI cagrisi YOK — motor deterministik kalir', () => {
+  test('AI PROGRAMI YAZMIYOR — motor deterministik kalir', () => {
     const src = fs.readFileSync(path.join(ROOT, 'program.js'), 'utf8');
-    // ⚠️ 9 Agu: program.js'te artik TEK bir fetch var — Hevy'ye rutin yazma
-    // (disa aktarim, AI degil). Motorun kendisi hala kural tabanli ve $0.
-    // Sozlesme daraltildi: AI ucuna baglanmak YASAK, izinli tek uc Hevy.
-    assert.ok(!/\/chat|\/plan|\/health-coach|aiRun/.test(src),
-      'program.js bir AI ucuna baglanmis — motor kural tabanli ve $0 kalmali');
-    const fetchler = [...new Set(src.match(/fetch\(([A-Z_]+)/g) || [])];
-    assert.deepStrictEqual(fetchler, ['fetch(HEVY_ROUTINES_ENDPOINT'],
+    // ⚠️ 19 Eyl 2026: sozlesme DEGISTI ama gevsemedi. program.js artik
+    // /program-cfg ucuna baglaniyor — ancak o uc program YAZMIYOR, serbest
+    // metni AYAR alanlarina ceviriyor. Motorun kendisi hala $0 ve kural tabanli.
+    const izinli = ['fetch(HEVY_ROUTINES_ENDPOINT', 'fetch(PROG_AI_ENDPOINT'];
+    const fetchler = [...new Set(src.match(/fetch\(([A-Z_]+)/g) || [])].sort();
+    assert.deepStrictEqual(fetchler, izinli.slice().sort(),
       'program.js beklenmeyen bir uca istek atiyor: ' + fetchler.join(', '));
+    // MOTORUN KENDISI: buildProgram govdesinde ag istegi ya da await olamaz.
+    const bas = src.indexOf('function buildProgram(');
+    const govde = src.slice(bas, src.indexOf('\n}', bas));
+    assert.ok(bas > 0 && govde.length > 1000, 'buildProgram bulunamadi');
+    assert.ok(!/fetch\(|await |aiRun/.test(govde),
+      'buildProgram AI/ag cagrisi iceriyor — motor deterministik ve $0 kalmali');
+    // AI ciktisi dogrudan uygulanmaz: beyaz listeden gecer.
+    assert.ok(/function progCfgUygula\(/.test(src), 'AI ayar suzgeci silinmis');
+    const aiBas = src.indexOf('async function progAiCfgYaz(');
+    const aiGovde = src.slice(aiBas, src.indexOf('\n}', aiBas));
+    assert.ok(aiBas > 0 && !/buildProgram\(/.test(aiGovde),
+      'AI yolu programi kendisi kuruyor — program YALNIZ saveProgramSetup ile kurulur');
   });
 
   test('ayni girdi ayni programi verir (deterministik)', () => {

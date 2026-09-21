@@ -197,6 +197,26 @@ Motor 9 Ağustos'taki ilk commit'inden beri **okul saatini hiç bilmiyordu**. Ku
 
 **🔒 `tests/41-okul-saati.test.js` (23 test).** Kilitledikleri: tek kaynak · pencere hesabı · ceza sıralamasının dövüş kuralını ezmemesi · gün seçiminin hafta sonuna kayması · determinizm · kısalmanın GERÇEK olması · not/yanlış alarm dengesi.
 
+## 🗣️ Antrenman kurulumu — SERBEST METİN KUTUSU (19 Eyl 2026, v7-190)
+
+Salim: *"programi yapay zeka verdigimiz kurallara gore yazsa daha iyi olmaz mi"* — cevap **hayır**, ama isteğin okunmaması gerçek bir eksikti. Çözüm: **AI program yazmaz, AYARI doldurur.**
+
+**Neden AI program yazmıyor:** aynı girdiyle iki farklı program çıkar (progresyon sabit taban ister) · set tavanı / temas bütçesi / 16 yaş kilitleri "yaklaşık" uygulanır · çıktı test edilemez · her yeniden kurma Pro fatura demek. Ayar çevirmek ise **kapalı uçlu** bir iş: sonuç sonlu bir alan kümesine düşer.
+
+**Akış:** metin → `POST /program-cfg` (PRO, tier kilidi) → `{ayar, uygulanan, uygulanamayan, notlar}` → **`progCfgUygula` beyaz listesi** → kurulum formu güncellenir → **programı kullanıcı kurar**. AI ile program arasında hem beyaz liste hem insan gözü var; modelin uydurması en fazla "uygulanmadı" satırı üretir.
+
+**Beyaz liste alanları:** `goal` · `strengthDays` (tavan üstü **kırpılır ve yazılır**) · `sessionMin` (en yakın çipe oturur; arada bir değer formda seçili görünmez ve kullanıcı "uygulanmamış" sanardı) · `places` · `fightDays` · `avoid` · `okul` · `antrenman`. **Yazılmayan alan değişmez** — AI'ın sessizliği ayar silmemeli; promptta da açıkça yazıyor.
+
+**İki ayrı "olmadı" listesi bilinçli:** `atlanan` = beyaz listeden düşen (model tanımsız değer yazdı, **hata sinyali**) · `uygulanamayan` = motorun desteklemediği istek (**eksik özellik sinyali**, backlog girdisi). Karıştırmak backlog'u körleştirir.
+
+**Motorun şu an desteklemediği ve bu yüzden `uygulanamayan`'a düşen istekler:** güne özel bölge/hareket sabitleme ("salı bacak istemiyorum"), hareket adı seçme, set/tekrar/ağırlık belirleme, dinlenme süresi, bir günü "hafif" yapma.
+
+**⚠️ KUTU KALICI — v7-187'deki hatanın aynisi burada daha riskliydi:** kurulum formu her çip tıklamasında yeniden çiziliyor. Metin `data.progIstek`'e 600 ms gecikmeyle yazılır, kutu oradan çizilir.
+
+**⚠️ SÖZLEŞME DEĞİŞTİ, GEVŞEMEDİ:** eski kural "program.js AI'a hiç bağlanmaz"dı. Yeni kural: izinli uç **tam olarak iki** (`HEVY_ROUTINES_ENDPOINT`, `PROG_AI_ENDPOINT`), `buildProgram` gövdesinde `fetch`/`await` **olamaz**, AI çıktısı `progCfgUygula`'dan geçmeden ayara yazılamaz, `progAiCfgYaz` **`buildProgram` çağıramaz**. 06-security · 14-athletic · 17-hevy-export üçü birden bu sözleşmeyi tutuyor.
+
+**🔒 `tests/42-program-istek.test.js` (16 test).** Her testin senaryosu "model saçmaladı": tavan üstü gün, ara değer süre, uydurma yer/bölge, bozuk saat, yarım dövüş günü listesi, çöp girdi. Ayrıca **PRO yuzeyi 3'e çıktı** (`/diet-plan`, `/health-coach`, `/program-cfg`) — bilinçli maliyet kararı, Salim'in *"antrenman programi yaparken de pro kullansin"* isteği.
+
 ## ⚖️ Antrenman motoru — 30 Ağustos denetiminin bekleyen bulguları
 
 30 Ağu'da motor beş bağımsız literatür denetiminden geçmişti. **En yüksek öncelikli teknik bulgu 13 gün açık kaldı**, şimdi kapatıldı.
@@ -3495,6 +3515,8 @@ Günde 288 istek (limit 100K). `Promise.allSettled` — bir iş patlarsa diğerl
 
 - `POST /food-macros` — besin makro arama (USDA + AI).
 
+- `POST /program-cfg` — serbest metin → **antrenman AYARI** (program DEĞİL). PRO model, `aiTierForUser` kilidi. Dönen ayar PWA'da `progCfgUygula` beyaz listesinden geçer; programı kullanıcı "Program kur"a basınca motor kurar.
+
 - `POST /diet-plan` — AI beslenme programı. **Hedefleri PWA hesaplar**, worker BMR hesaplamaz; dönen plan PWA'daki `nutAiValidate` kapısından geçmeden kaydedilmez.
 
 - `POST /diet-plan-image` · `POST /classroom-image` — görsel OCR (diyet programı / Classroom ödevi).
@@ -3755,7 +3777,7 @@ py aidan-pages-deploy.py
 
 ## ⏳ Açık işler / backlog
 
-- **Antrenman kurulumunda serbest metin kutusu** (19 Eyl 2026): "salı bacak istemiyorum, pazartesi sadece üst" gibi isteği Pro model **ayara** çevirsin, programı motor kursun. Diyetteki "kısıt kazanır" deseni (v7-187) buraya birebir taşınabilir. Ayrıca kurulumda **"şu günler sabit"** seçimi yok — günleri hâlâ motor seçiyor, kullanıcı elle sabitleyemiyor.
+- **Antrenman kurulumunda "şu günler sabit" seçimi** — günleri hâlâ motor seçiyor, kullanıcı elle sabitleyemiyor. Serbest metin kutusu (v7-190) bu isteği `uygulanamayan`'a yazıyor; en sık düşen istek bu olacak.
 
 - Multi-user Faz 2 (yeni user onboarding + admin görünümü) — `SUPABASE_SERVICE_KEY` eklenince
 
@@ -3864,6 +3886,8 @@ py aidan-pages-deploy.py
   health: [{date:'YYYY-MM-DD', steps, rhr, hrv, kcalOut, src}],  // (23 Ağu 2026) Fitbit Air → Apple Sağlık → Kısayol → `POST /health`; yeni→eski, son 120 gün
 
   reminders: [{id, label, time:'HH:MM', days:'daily'|'weekdays', enabled, lastFired:'YYYY-MM-DD'}],  // (Haz 10) sabit hatırlatıcılar — Worker 15dk cron push'lar
+
+  progIstek: 'haftada 4 gün, kickboks salı perşembe',  // (19 Eyl 2026) antrenman kurulumundaki serbest metin — kutu her yeniden çizimde buradan dolar; `/program-cfg` bunu okur
 
   screen: { at, hurdlePct, scanned, dropped, dropCounts, rows:[{...,preScore,normScore,cycle}], comment, deepAt },  // (11 Agu 2026) BIST temel tarama — son tarama sonucu, max 12 satır
 

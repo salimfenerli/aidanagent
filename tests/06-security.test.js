@@ -182,13 +182,37 @@ describe('worker guvenlik sozlesmesi', () => {
     }
   });
 
-  test('antrenman programi motoru AI cagirmiyor (PRO sorusu oraya ait degil)', () => {
+  test('antrenman MOTORU AI cagirmiyor — AI yalniz AYARI dolduruyor', () => {
+    // ⚠️ 19 Eyl 2026: kural "program.js AI'a hic baglanmaz"dan
+    // "AI program YAZMAZ, ayar cevirir"e daraltildi. Gevseme degil: motorun
+    // kendisi (buildProgram) hala ag istegi iceremez ve AI ciktisi beyaz
+    // listeden (progCfgUygula) gecmeden ayara yazilamaz.
     const prog = readText('program.js');
-    const fetchler = (prog.match(/fetch\(/g) || []).length;
-    assert.strictEqual(fetchler, 1, 'program.js\'te beklenmeyen ag istegi');
-    assert.ok(/HEVY_ROUTINES_ENDPOINT/.test(prog), 'tek izinli istek Hevy disa aktarimi olmali');
-    assert.ok(!/aiRun|\/chat|\/plan|generativelanguage/.test(prog),
-      'program motoru AI\'a baglanmis — deterministik olmasi bilincli bir karar');
+    const fetchler = [...new Set(prog.match(/fetch\(([A-Z_]+)/g) || [])].sort();
+    assert.deepStrictEqual(fetchler, ['fetch(HEVY_ROUTINES_ENDPOINT', 'fetch(PROG_AI_ENDPOINT'],
+      'program.js\'te beklenmeyen ag istegi: ' + fetchler.join(', '));
+    const bas = prog.indexOf('function buildProgram(');
+    const govde = prog.slice(bas, prog.indexOf('\n}', bas));
+    assert.ok(!/fetch\(|await |aiRun/.test(govde), 'motor AI cagirmis');
+    assert.ok(/function progCfgUygula\(/.test(prog), 'AI ayar suzgeci yok');
+  });
+
+  test('/program-cfg PRO kilidi ve AI\'in yetki siniri', () => {
+    // Ucuncu PRO yuzeyi bilincli eklendi (Salim: "antrenman programi yaparken
+    // de pro kullansin"). Kilit AYNEN duruyor: acik model adi yalniz heavy
+    // kalan kullaniciya geciyor.
+    assert.ok(/url\.pathname === '\/program-cfg'/.test(WK), '/program-cfg rotasi yok');
+    const bas = WK.indexOf('async function handleProgramCfgApi');
+    const govde = WK.slice(bas, bas + 9000);
+    assert.ok(bas > 0, 'handleProgramCfgApi yok');
+    assert.ok(/const tier = aiTierForUser\(env, user, 'heavy'\)/.test(govde),
+      'tier kilidi yok — baska kullanici fatura uretebilir');
+    assert.ok(/model: tier === 'heavy' \? geminiModelPro\(env\) : undefined/.test(govde),
+      'PRO adi tier kilidine baglanmamis');
+    assert.ok(/verifyUser\(env, userToken\)/.test(govde) && /allowUser\(env, user\)/.test(govde),
+      'kimlik dogrulama yok');
+    // Prompt'un kendisi de sinirini yaziyor: hareket/set/tekrar secmek YASAK.
+    assert.ok(/program YAZMIYORSUN/.test(govde), 'AI\'in yetki siniri promptta yazmiyor');
   });
 
   test('serbest akisli sohbet ucretli katmana CIKMAZ', () => {

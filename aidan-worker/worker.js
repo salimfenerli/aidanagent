@@ -6614,6 +6614,135 @@ SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
   }
 }
 
+const PROGRAM_CFG_REQ_MAX = 800;   // serbest metin tavani (~240 token)
+
+/**
+ * 🏋️ SERBEST METIN → ANTRENMAN AYARI (19 Eyl 2026)
+ *
+ * ⚠️ AI BURADA PROGRAM YAZMAZ. Yalniz kullanicinin cumlesini motorun
+ * AYAR ALANLARINA cevirir; programi yine program.js'in deterministik motoru
+ * kurar. Sebep: ayni girdiyle iki farkli program cikmasi progresyonu
+ * imkansiz kilar, set tavani / temas butcesi / 16 yas kilitleri "yaklasik"
+ * uygulanir ve cikti test edilemez. Ayar cevirmek ise KAPALI UCLU bir is:
+ * sonuc sonlu bir alan kumesine duser, PWA tarafinda beyaz listeyle
+ * dogrulanir ve kullanici KURMADAN ONCE formda gorur.
+ *
+ * Donen ayar dogrudan uygulanmaz: PWA `progCfgUygula` ile alan alan suzer.
+ * Yani buradaki modelin uydurmasi en fazla "uygulanmadi" satiri uretir.
+ */
+async function handleProgramCfgApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
+
+  const istek = String(body.istek || '').slice(0, PROGRAM_CFG_REQ_MAX).trim();
+  if (!istek) return jsonCors({ error: 'bos istek' }, 400, cors);
+
+  // Secenek listeleri PWA'dan gelir (motorun kendi sabitleri TEK KAYNAK).
+  // Yine de burada kirpilir: uzun/cok sayida secenek prompt'u sisirir.
+  const kirp = (dizi, n, uz) => (Array.isArray(dizi) ? dizi : []).slice(0, n)
+    .map(x => String((x && x.k != null) ? x.k : x).slice(0, 24) +
+      ((x && x.ad) ? ' (' + String(x.ad).slice(0, uz) + ')' : ''));
+  const hedefler = kirp(body.hedefler, 8, 40);
+  const yerler = kirp(body.yerler, 8, 40);
+  const kaslar = kirp(body.kaslar, 24, 40);
+  const mevcut = (body.mevcut && typeof body.mevcut === 'object') ? body.mevcut : {};
+  const maxGun = Math.min(7, Math.max(1, Number(body.maxGun) || 5));
+
+  const sys = `Kullanıcının serbest metnini bir ANTRENMAN MOTORUNUN AYARLARINA çevir.
+
+⚠️ Sen program YAZMIYORSUN. Hareket, set, tekrar, ağırlık, bölünme SEÇMİYORSUN.
+Onları kural tabanlı motor yazıyor. Senin tek işin: cümleyi aşağıdaki SONLU ayar
+alanlarına çevirmek ve çeviremediklerini dürüstçe söylemek.
+
+AYAR ALANLARI (başkasını YAZMA):
+- goal: ${hedefler.join(' | ') || 'kas'}
+- strengthDays: 1..${maxGun} (haftada kaç gün ağırlık)
+- sessionMin: 30 | 45 | 60 | 75 | 90 (tek seans süresi)
+- places: ${yerler.join(' | ') || 'gym'} (birden fazla olabilir)
+- fightDays: 0..6 arası gün numaraları (dövüş/kickboks günleri)
+- avoid: ${kaslar.join(' | ') || '-'} (ağrıyan / kaçınılacak bölge)
+- okul: {"1":{"bas":"09:00","bit":"16:00"}} — gün numarası → okul saati
+- antrenman: "17:00" — normal antrenman saati
+
+GÜN NUMARALARI: 0=Pazar 1=Pazartesi 2=Salı 3=Çarşamba 4=Perşembe 5=Cuma 6=Cumartesi
+
+KURALLAR:
+1. YALNIZ metinde geçeni yaz. Kullanıcının söylemediği alanı JSON'a HİÇ KOYMA —
+   koymadığın alan mevcut ayarda olduğu gibi kalır. Varsayılan değer yazmak,
+   kullanıcının ayarını sessizce silmek demektir.
+2. UYDURMA. "Okulum geç bitiyor" gibi saat içermeyen bir cümleden saat üretme;
+   onu uygulanamayan'a yaz ve hangi bilgiye ihtiyaç duyduğunu söyle.
+3. Çeviremediğin her istek "uygulanamayan" dizisine girer. Motorun şu an
+   DESTEKLEMEDİĞİ şeyler: belirli bir güne belirli bölge/hareket sabitlemek
+   ("salı bacak istemiyorum"), hareket adı seçmek, set/tekrar/ağırlık belirlemek,
+   dinlenme süresi, bir günü "hafif" yapmak. Bunları ayara KıRPIP yazma.
+4. Güvenlik sınırlarını sen uygulamazsın ve delemezsin: haftalık ağır gün tavanı,
+   set tavanı ve yaş kilitleri motorda. "Her gün ağırlık" gibi bir istekte
+   strengthDays motorda kırpılır; bunu notlarda söyle.
+5. "uygulanan" maddeleri KISA ve somut olsun ("kickboks salı-perşembe işlendi").
+
+SADECE şu JSON'u döndür, başka hiçbir metin yazma:
+{"ayar":{"strengthDays":4},"uygulanan":["haftada 4 gün ağırlık"],"uygulanamayan":[{"istek":"salı bacak olmasın","sebep":"motor güne özel bölge sabitlemeyi desteklemiyor"}],"notlar":["en fazla 3 kısa not"]}`;
+
+  const usr = 'MEVCUT AYAR (değişmesini istemediği alanları tekrar yazma):\n' +
+    JSON.stringify({
+      goal: mevcut.goal, strengthDays: mevcut.strengthDays, sessionMin: mevcut.sessionMin,
+      places: mevcut.places, fightDays: mevcut.fightDays, avoid: mevcut.avoid,
+      okul: mevcut.okul, antrenman: mevcut.antrenman,
+    }).slice(0, 900) +
+    '\n\nKULLANICININ İSTEĞİ:\n' + istek;
+
+  // ⚠️ PRO yalniz hesap sahibinde — /diet-plan ve /health-coach ile AYNI kilit.
+  // Acik model adini kosulsuz gecirmek, baska kullanicinin fatura uretmesini
+  // engelleyen kilidi delerdi (teste bagli).
+  const tier = aiTierForUser(env, user, 'heavy');
+  try {
+    const r = await aiRun(env, {
+      tier,
+      model: tier === 'heavy' ? geminiModelPro(env) : undefined,
+      json: true,
+      messages: [
+        { role: 'system', content: sys },
+        { role: 'user', content: usr },
+      ],
+      max_tokens: 3000,
+      temperature: 0.2,   // ayar cevirisi yaraticilik isi degil
+    });
+    const raw = typeof r.response === 'string' ? r.response : JSON.stringify(r.response || '');
+    let out = null;
+    try { out = JSON.parse(raw); } catch {
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (m) { try { out = JSON.parse(m[0]); } catch { out = null; } }
+    }
+    if (!out || typeof out !== 'object') {
+      return jsonCors({ error: 'AI okunabilir bir ayar döndürmedi, tekrar dene.' }, 200, cors);
+    }
+    return jsonCors({
+      ayar: (out.ayar && typeof out.ayar === 'object') ? out.ayar : {},
+      uygulanan: Array.isArray(out.uygulanan) ? out.uygulanan.slice(0, 8) : [],
+      uygulanamayan: Array.isArray(out.uygulanamayan) ? out.uygulanamayan.slice(0, 6) : [],
+      notlar: Array.isArray(out.notlar) ? out.notlar.slice(0, 3) : [],
+      model: r.model || null,
+    }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+
 // Byte dizisi → base64 (Gemini image_url data URL için). base64ToBytes'in tersi.
 // Büyük görsellerde stack taşmasın diye parça parça (String.fromCharCode.apply sınırı).
 function bytesToBase64(bytes) {
@@ -8573,6 +8702,11 @@ export default {
     // Hedefleri PWA hesaplar; dönen plan PWA'da `nutAiValidate` kapısından geçer.
     if (url.pathname === '/diet-plan') {
       return handleDietPlanApi(request, env);
+    }
+
+    // 🏋️ Serbest metin → antrenman AYARI (programi AI yazmaz, motor kurar)
+    if (url.pathname === '/program-cfg') {
+      return handleProgramCfgApi(request, env);
     }
 
     // 📅 Takvim ICS feed (GET ?token=, iOS/Google abonelik)
