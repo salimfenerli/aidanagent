@@ -144,7 +144,9 @@ const NUT_MICRO_DATA = {
   'Tam buğday ekmek': { ca: 17,  fe: 0.8, d: 0,   lif: 2.3 },
   'Ekmek':            { ca: 13,  fe: 0.8, d: 0,   lif: 0.9 },
   'Simit':            { ca: 91,  fe: 2.5, d: 0,   lif: 3.4 },
-  'Yulaf ezmesi':     { ca: 19,  fe: 1.7, d: 0,   lif: 3.7 },
+  // 22 Eyl 2026: Yulaf ezmesi artik 50 g KURU yulaf (eskiden 200 g lapa). USDA 173904: Ca 52, Fe 4.3, lif 10.1 /100 g.
+  'Yulaf ezmesi':     { ca: 26,  fe: 2.2, d: 0,   lif: 5.1 },
+  'Yulaf lapası (suyla)': { ca: 19,  fe: 1.7, d: 0,   lif: 3.7 },
   'Bulgur pilavı':    { ca: 16,  fe: 1.3, d: 0,   lif: 6 },
   'Sebzeli bulgur':   { ca: 25,  fe: 1.4, d: 0,   lif: 6.3 },
   'Pilav':            { ca: 9,   fe: 0.7, d: 0,   lif: 0.8 },
@@ -779,6 +781,7 @@ const NUT_DUZEN_LIMITS = {
   seansSonraDk: 30,      // seans bitiminden yemege
   onceDk: 45,            // antrenman oncesi ogun, seanstan bu kadar once
   cikisDk: 45,           // okul cikisi penceresi
+  cikisHazirlik: 30,     // okul cikisi -> antrenman (program.js PROGRAM_DUZEN.hazirlikDk ile AYNI)
   araMin: 75,            // iki ogun arasi en az bu kadar dakika
   gecSaat: 22 * 60,      // bundan gec biten gun "gec" sayilir
   okulGecBit: 18 * 60,   // okul bundan gec bitiyorsa antrenmanla cakisir
@@ -807,10 +810,16 @@ function nutYuvarlaSaat(dk) { return Math.round(dk / 15) * 15; }
 function ensureNutDuzen() {
   const n = ensureNutrition();
   if (!n.duzen || typeof n.duzen !== 'object') {
-    n.duzen = { okul: {}, yemekhane: false, yemekhaneSaat: '13:00', antrenman: '17:00', kalk: '07:00' };
+    n.duzen = { okul: {}, ders: {}, yemekhane: false, yemekhaneSaat: '13:00', antrenman: '17:00', kalk: '07:00' };
   }
   const d = n.duzen;
   if (!d.okul || typeof d.okul !== 'object') d.okul = {};
+  // ⚠️ 24 Eyl 2026 — EK DERS / SABIT MESGULIYET. Salim: "pazartesi cikis
+  // matematik dersim var, persembe de okuldan sonra matematik". Kurs okul
+  // gibi davranir: o saatte disaridasin, antrenman ondan SONRA baslar, ogun
+  // tasinabilir olmali. Gun basina tek blok — iki kurs ust uste yazilmaz,
+  // ikisini kapsayan tek aralik girilir (basitlik bilincli).
+  if (!d.ders || typeof d.ders !== 'object') d.ders = {};
   if (nutDk(d.yemekhaneSaat) == null) d.yemekhaneSaat = '13:00';
   if (d.antrenman != null && nutDk(d.antrenman) == null) d.antrenman = '17:00';
   if (nutDk(d.kalk) == null) d.kalk = '07:00';
@@ -818,14 +827,46 @@ function ensureNutDuzen() {
   return d;
 }
 
-/** O gunun okul penceresi — {bas, bit} dakika cinsinden, yoksa null. */
-function nutOkulGun(dow, duzen) {
+/** O gunun SAF okul penceresi (ders haric) — yemekhane karari buna bakar. */
+function nutOkulSaf(dow, duzen) {
   const d = duzen || ensureNutDuzen();
   const g = d.okul ? d.okul[String(dow)] : null;
   if (!g) return null;
   const bas = nutDk(g.bas), bit = nutDk(g.bit);
   if (bas == null || bit == null || bit <= bas) return null;
   return { bas, bit };
+}
+
+/** O gunun ek ders blogu — {bas, bit} ya da null. */
+function nutDersGun(dow, duzen) {
+  const d = duzen || ensureNutDuzen();
+  const g = d.ders ? d.ders[String(dow)] : null;
+  if (!g) return null;
+  const bas = nutDk(g.bas), bit = nutDk(g.bit);
+  if (bas == null || bit == null || bit <= bas) return null;
+  return { bas, bit };
+}
+
+/**
+ * O gun "disarida" oldugun pencere: okul + ek ders birlesigi.
+ * ⚠️ Motorun butun saat kararlari (seans saati, ogun yeri, canta) buna bakar;
+ * yemekhane karari ise SAF okul penceresine bakar (kursta yemekhane yok).
+ */
+function nutOkulGun(dow, duzen) {
+  const okul = nutOkulSaf(dow, duzen);
+  const ders = nutDersGun(dow, duzen);
+  if (!okul) return ders ? { bas: ders.bas, bit: ders.bit } : null;
+  if (!ders) return okul;
+  return { bas: Math.min(okul.bas, ders.bas), bit: Math.max(okul.bit, ders.bit) };
+}
+
+function setNutDers(dow, bas, bit) {
+  const d = ensureNutDuzen();
+  const b = nutDk(bas), e = nutDk(bit);
+  if (b == null || e == null || e <= b) delete d.ders[String(dow)];
+  else d.ders[String(dow)] = { bas: nutSaat(b), bit: nutSaat(e) };
+  save();
+  renderNutrition();
 }
 
 function setNutOkul(dow, bas, bit) {
@@ -859,7 +900,12 @@ function nutSeansSaati(dow, dayType, duzen) {
   let s = nutDk(d.antrenman);
   if (s == null) return null;
   const okul = nutOkulGun(dow, d);
-  if (okul && s < okul.bit) s = okul.bit + 30;
+  // ⚠️ 24 Eyl 2026 — HAZIRLIK PAYI ESITLIKTE DE GECERLI. Kosul `s < okul.bit`
+  // idi: okul 17:00'da bitip antrenman 17:00 yazildiginda diyet seansi 17:00
+  // sayiyor, ANTRENMAN MOTORU ise (programGunPencere) okul cikisi + 30 dk ile
+  // 17:30 diyordu. Iki motor ayni gun icin iki farkli saat uretiyordu; ogun
+  // saatleri yarim saat kayiyordu. Tek kural: cikis + 30 dk.
+  if (okul && s < okul.bit + NUT_DUZEN_LIMITS.cikisHazirlik) s = okul.bit + NUT_DUZEN_LIMITS.cikisHazirlik;
   return s;
 }
 
@@ -916,7 +962,7 @@ function nutMealTimes(dow, dayType, meals, duzen) {
   for (const x of list) {
     if (x.dk == null) x.dk = 12 * 60;
     x.saat = nutSaat(x.dk);
-    const yer = nutSlotYer(x.slot, x.dk, okul, d);
+    const yer = nutSlotYer(x.slot, x.dk, okul, d, dow);
     x.yer = yer.yer;
     x.etiket = yer.etiket;
     x.tasinabilir = yer.tasinabilir;
@@ -937,15 +983,33 @@ const NUT_YER = {
  * okulda yenecek ogun TASINABILIR olmali, yemekhanede yenecek ogunun
  * kalemlerini motor YAZAMAZ (menuyu kullanici secmiyor).
  */
-function nutSlotYer(slot, dk, okul, duzen) {
+function nutSlotYer(slot, dk, okul, duzen, dow) {
+  // 'okul' burada BIRLESIK pencere (okul + ders). Yemekhane karari saf okula
+  // bakar: kursta yemekhane yok.
   const d = duzen || ensureNutDuzen();
   const y = (k) => ({ yer: k, etiket: NUT_YER[k].etiket, tasinabilir: NUT_YER[k].tasinabilir, disarida: NUT_YER[k].disarida });
   if (!okul) return y('ev');
   if (dk >= okul.bas && dk <= okul.bit) {
-    if (slot === 'ogle' && d.yemekhane) return y('yemekhane');
+    // ⚠️ 24 Eyl 2026 — YEMEKHANE YALNIZ HAFTA ICI. Ayar tek bir "yemekhane var"
+    // kutusuydu ve okul saati girilen HER gune uygulaniyordu: cumartesi okulu
+    // olan kullanicinin plani "okul yemekhanesi" diyor, motor o ogune kalem
+    // yazmiyor ve kullanici o gun ac kaliyordu. Hafta sonu okulda yemek yok:
+    // ogun tasinabilir (canta) kurulur. dow verilmezse eski davranis.
+    const haftaIci = (dow == null) || (Number(dow) >= 1 && Number(dow) <= 5);
+    // Duzende o gunun okulu yoksa gelen pencere saf okul sayilir (dogrudan
+    // cagrilan testler ve eski kayitlar icin).
+    const saf = (dow == null) ? okul : (nutOkulSaf(dow, d) || okul);
+    const okuldaMi = saf && dk >= saf.bas && dk <= saf.bit;
+    if (slot === 'ogle' && d.yemekhane && haftaIci && okuldaMi) return y('yemekhane');
     return y('tenefus');
   }
-  if (dk > okul.bit && dk <= okul.bit + NUT_DUZEN_LIMITS.cikisDk) return y('cikis');
+  // ⚠️ 23 Eyl 2026 — AKSAM YEMEGI CIKIS PENCERESINE GIRMEZ. Okulu 19:00'da
+  // biten Persembe'de 19:45 aksam yemegi "okul cikisi · cantadan" diye
+  // isaretleniyordu; o saatte zaten evdesin. Cikis penceresi antrenman
+  // oncesi hizli karbonhidrat icindir (ara/atistirma), ana ogun icin degil.
+  if (dk > okul.bit && dk <= okul.bit + NUT_DUZEN_LIMITS.cikisDk) {
+    return y(slot === 'aksam' || slot === 'kahvalti' ? 'ev' : 'cikis');
+  }
   return y('ev');
 }
 
@@ -1100,13 +1164,24 @@ function nutYemekhane(o) {
 // HEDEFI tasinabilir kalemlerle yeniden kurar.
 // ============================================================================
 const NUT_TASINIR = {
-  protein: ['Protein yoğurt', 'Cottage peyniri', 'Ton balığı', 'Süzme yoğurt', 'Protein tozu'],
+  protein: ['Protein yoğurt', 'Protein bar', 'Cottage peyniri', 'Ton balığı', 'Süzme yoğurt', 'Protein tozu'],
   carb: ['Simit', 'Leblebi', 'Muz', 'Kuru üzüm', 'Kuru kayısı'],
   yag: ['Badem', 'Fındık', 'Ceviz'],
 };
 
+/**
+ * ⚠️ PRATIKLIK CEZASI (22 Eyl 2026, gercek veriyle kurulan planda cikti).
+ * Secim yalniz "proteine en yakin" idi: 25 g hedefe 1 olcek protein tozu
+ * (23 g) hep kazaniyordu ve cantaya IKI ogun icin toz yaziliyordu — okulda
+ * shaker calkalamak gercekci degil (telafi sirasi v7-188'de bu yuzden
+ * tozu en sona koymustu). Ceza gram cinsinden eklenir; baska aday yoksa
+ * toz yine secilir.
+ */
+// Sut urunleri de ceza alir: SOGUK ZINCIR. 09:00'da cikan cantadaki yogurt
+// 18:45'te 10 saattir oda sicakliginda — "2 kase suzme yogurt" cantada is gormez.
+const NUT_CANTA_ZAHMET = { 'Protein tozu': 8, 'Süzme yoğurt': 4, 'Protein yoğurt': 4, 'Cottage peyniri': 4 };
 /** Tasinabilir kalemlerle bir ogun hedefini kur. Deterministik, 0.5 adimli. */
-function nutCantaOner(o) {
+function nutCantaOner(o, kullanilan) {
   const hedefK = Number(o && o.kcal) || 0;
   const hedefP = Number(o && o.protein) || 0;
   if (!(hedefK > 0)) return null;
@@ -1117,8 +1192,10 @@ function nutCantaOner(o) {
     if (!nutIzinli(ad)) continue;
     const f = nutFood(ad);
     if (!f || !(f.p > 0)) continue;
+    // Ayni gun cantada ZATEN olan capa tekrar edilmez (bkz. nutCanta).
+    const tekrar = (kullanilan && kullanilan.indexOf(ad) >= 0) ? 12 : 0;
     for (let a = 0.5; a <= 3; a += 0.5) {
-      const fark = Math.abs(f.p * a - hedefP);
+      const fark = Math.abs(f.p * a - hedefP) + (NUT_CANTA_ZAHMET[ad] || 0) + tekrar;
       if (!capa || fark < capa.fark) capa = { f, adet: nutRound(a, f.u) || a, fark };
     }
   }
@@ -1154,12 +1231,20 @@ function nutCantaOner(o) {
  */
 function nutCanta(meals, times, yemekhaneVar) {
   const out = [];
+  // ⚠️ 22 Eyl 2026 — CESITLILIK. Her ogun AYRI seciliyordu; gercek veriyle kurulan
+  // planda ara ogun + atistirma + yemekhane telafisi UCU DE ton baligiydi: gunde 3
+  // kutu. Ton baligi civa nedeniyle haftalik sinirlanan bir besin (FDA/EPA: light
+  // tuna haftada 2-3 porsiyon) — ergende gunde 3 kutu savunulamaz. Ayni gun cantada
+  // kullanilan protein capasi sonraki ogunde 12 g "ceza" alir (baska aday varsa
+  // o secilir), telafi de cantada ton varsa sonra degil ONCE digerine duser.
+  const kullanilan = [];
   (times || []).forEach((z, i) => {
     const m = (meals || [])[i];
     if (!m || !z || z.disarida) return;
     if (!z.tasinabilir) return;
-    const one = nutCantaOner(m);
+    const one = nutCantaOner(m, kullanilan);
     if (!one) return;
+    if (one.items && one.items[0]) kullanilan.push(one.items[0].n);
     out.push({
       slot: m.slot, saat: z.saat, etiket: z.etiket,
       neden: z.yer === 'cikis' ? 'okul çıkışı — antrenmandan önce' : 'teneffüse sığmalı, çatal bıçak istemez',
@@ -1167,7 +1252,8 @@ function nutCanta(meals, times, yemekhaneVar) {
     });
   });
   if (yemekhaneVar) {
-    const t = nutFood('Ton balığı');
+    // Telafi: cantada ton baligi zaten varsa protein bar (ayni gun 2. kutu yok).
+    const t = nutFood(kullanilan.indexOf('Ton balığı') >= 0 && nutIzinli('Protein bar') ? 'Protein bar' : 'Ton balığı');
     if (t) out.push({
       slot: 'telafi', saat: null, etiket: 'yemekhane telafisi',
       neden: 'ana yemekte et/tavuk yoksa aç',
@@ -2185,6 +2271,18 @@ function nutBalanceDay(meals, t, kg) {
  * (hedef 2.0 g/kg, sapma +%23). Capasi o gun kullanilmis bir sablon
  * atlanir; havuz tukenirse ilk aday kullanilir (plan uretilmeden kalmaz).
  */
+/**
+ * ⚠️ HAFTA BOYU AYNI MENU (23 Eyl 2026). Ornek gun `n.sablon` ile kuruluyordu;
+ * o deger gune gore degismedigi icin haftanin YEDI GUNU ayni tabakti
+ * (yumurta+tahin kahvalti, izgara kofte+pilav ogle, kiyma+pilav aksam).
+ * Sablon havuzunda slot basina 5+ sablon var ve kullanilmiyordu. Gun indeksi
+ * eklenince hafta kendiliginden cesitlenir; "Baska oner" (n.sablon++) yine
+ * butun gunleri birlikte kaydirir, yani kullanicinin kontrolu bozulmaz.
+ */
+function nutGunSablon(n, dow) {
+  return (Number(n && n.sablon) || 0) + (Number(dow) || 0);
+}
+
 function nutBuildDay(t, kg, sablonIdx) {
   const ogunler = nutMealSplit(t, kg);
   const kullanilan = new Set();
@@ -2392,6 +2490,28 @@ function nutProfile() {
   return { sex: c.sex || 'male', age: Number(c.age) || 16, height: cm, weight: kg };
 }
 
+/**
+ * ⚠️ IKI HEDEF KAYNAGI CELISIYOR MU (22 Eyl 2026). Gercek veride hesaplayicida
+ * "kilo al" (calc.goal = gain) secili, beslenme motorunda ise "Kiloyu koru"
+ * duruyordu — motorun kendi varsayilani, kullanici hic secmemis olabilir.
+ * Sonuc: bulk yaptigini soyleyen kullanicinin gunluk hedefi ~350 kcal eksik.
+ * Sessizce birini digerine esitlemek YANLIS (kullanici "kas" hedefini fazla
+ * bulup bilerek "koru"ya gecmis olabilir); dogru olan celiskiyi GOSTERMEK.
+ */
+function nutHedefCelisme(n) {
+  const c = (typeof data !== 'undefined' && data.diet && data.diet.calc) || {};
+  const h = n && n.hedef;
+  let mesaj = '';
+  if (c.goal === 'gain' && h === 'koru') {
+    mesaj = 'Hesaplayıcıda hedefin <b>kilo al</b>, burada <b>Kiloyu koru</b> seçili — plan ' +
+      'koruma kalorisiyle yazılıyor (günde ~350 kcal eksik). Bulk yapıyorsan “Kas kazan”a dokun.';
+  } else if (c.goal === 'lose' && h === 'kas') {
+    mesaj = 'Hesaplayıcıda hedefin <b>kilo ver</b>, burada <b>Kas kazan</b> seçili. Bu araç kilo ' +
+      'verme planı yazmaz; hangisini istediğini netleştir.';
+  }
+  return mesaj ? '<div class="nut-note nut-warn">' + mesaj + '</div>' : '';
+}
+
 function setNutGoal(h) {
   const n = ensureNutrition();
   n.hedef = h === 'kas' ? 'kas' : 'koru';   // ⚠️ ucuncu secenek YOK
@@ -2482,7 +2602,7 @@ function renderNutrition() {
   if (!t) { el.innerHTML = ''; return; }
   nutSyncDietGoals(t);
 
-  const ogunler = nutBuildDay(t, prof.weight, n.sablon);
+  const ogunler = nutBuildDay(t, prof.weight, nutGunSablon(n, bugun));
   const ozet = nutDaySummary(ogunler, t, prof.weight);
   const gercek = ozet.gercek;
 
@@ -2630,6 +2750,7 @@ function renderNutrition() {
     '<button class="nut-chip' + (n.hedef === 'koru' ? ' on' : '') + '" onclick="setNutGoal(\'koru\')">Kiloyu koru</button>' +
     '<button class="nut-chip' + (n.hedef === 'kas' ? ' on' : '') + '" onclick="setNutGoal(\'kas\')">Kas kazan</button>' +
     '</div>' +
+    nutHedefCelisme(n) +
 
     // Yag orani — bant ICINDE serbest. Gram karsiligi yaninda yaziyor ki
     // "yuzde" soyut kalmasin; itiraz zaten gram uzerineydi.
@@ -2717,20 +2838,29 @@ function nutDuzenHtml(d, cakisma) {
   const ozet = okulVar
     ? gunler.filter(x => nutOkulGun(x, d)).map(x => {
       const g = nutOkulGun(x, d);
-      return DKRN_WD[x] + ' ' + nutSaat(g.bas) + '-' + nutSaat(g.bit);
+      const c = nutDersGun(x, d);
+      return DKRN_WD[x] + ' ' + nutSaat(g.bas) + '-' + nutSaat(g.bit) + (c ? ' (ders)' : '');
     }).join(' · ')
     : 'okul saati girilmedi';
 
   const satirlar = gunler.map(dow => {
     const g = d.okul[String(dow)] || null;
-    const idB = 'ndB' + dow, idE = 'ndE' + dow;
+    const c = (d.ders && d.ders[String(dow)]) || null;
+    const idB = 'ndB' + dow, idE = 'ndE' + dow, idDB = 'ndDB' + dow, idDE = 'ndDE' + dow;
     return '<div class="nd-row"><span class="nd-day">' + escapeHtml(DKRN_WD[dow]) + '</span>' +
       '<input type="time" id="' + idB + '" value="' + escapeHtml(g ? g.bas : '') + '" ' +
       'onchange="setNutOkul(' + dow + ', this.value, document.getElementById(\'' + idE + '\').value)">' +
       '<span class="nd-sep">–</span>' +
       '<input type="time" id="' + idE + '" value="' + escapeHtml(g ? g.bit : '') + '" ' +
       'onchange="setNutOkul(' + dow + ', document.getElementById(\'' + idB + '\').value, this.value)">' +
-      (g ? '<button class="nut-mini" onclick="setNutOkul(' + dow + ', \'\', \'\')">sil</button>' : '') +
+      // Ek ders / kurs: okul gibi sayilir (o saatte disaridasin, seans sonra baslar).
+      '<span class="nd-sep nd-ders-lbl">ders</span>' +
+      '<input type="time" id="' + idDB + '" value="' + escapeHtml(c ? c.bas : '') + '" ' +
+      'onchange="setNutDers(' + dow + ', this.value, document.getElementById(\'' + idDE + '\').value)">' +
+      '<span class="nd-sep">–</span>' +
+      '<input type="time" id="' + idDE + '" value="' + escapeHtml(c ? c.bit : '') + '" ' +
+      'onchange="setNutDers(' + dow + ', document.getElementById(\'' + idDB + '\').value, this.value)">' +
+      (g || c ? '<button class="nut-mini" onclick="setNutOkul(' + dow + ', \'\', \'\');setNutDers(' + dow + ', \'\', \'\')">sil</button>' : '') +
       '</div>';
   }).join('');
 
@@ -2742,7 +2872,8 @@ function nutDuzenHtml(d, cakisma) {
     '<div class="nut-sub">Öğün saatleri buradan çıkıyor — <b>tahmin edilmiyor</b>. ' +
     'Okul saatlerini gir; okul saatine denk gelen öğün taşınabilir olur, yemekhanede ' +
     'yediğin öğüne motor kalem yazmaz (menüyü sen seçmiyorsun), antrenman okul bitişine ' +
-    'takılıyorsa saat kayar ve <b>bunu sana söyler</b>.</div>' +
+    'takılıyorsa saat kayar ve <b>bunu sana söyler</b>. Sağdaki <b>ders</b> alanı ek ders/kurs ' +
+    'içindir: okul gibi sayılır, antrenman ondan sonra başlar.</div>' +
     '<div class="nd-grid">' + satirlar + '</div>' +
     '<div class="nut-goal nd-opts">' +
     '<button class="nut-chip' + (d.yemekhane ? ' on' : '') + '" ' +
@@ -2963,7 +3094,7 @@ function nutOrnekPlana() {
   const t = nutTargets(prof, tip, n.hedef);
   if (!t) return;
   const dow = new Date().getDay();
-  const ogunler = nutBuildDay(t, prof.weight, n.sablon);
+  const ogunler = nutBuildDay(t, prof.weight, nutGunSablon(n, dow));
   const satirlar = nutOrnekSatirlari(ogunler, nutMealTimes(dow, tip, ogunler, ensureNutDuzen()));
   if (!satirlar.length) { showToast('Aktarılacak öğün yok', 'info'); return; }
   const p = nutPlanBul();

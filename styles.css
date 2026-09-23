@@ -4701,6 +4701,8 @@
   background: color-mix(in srgb, var(--warning, #e0a458) 8%, transparent);
   color: var(--text, #d8d9de);
 }
+.nd-row .nd-ders-lbl { font-size: 11px; color: var(--text-muted); margin-left: 6px; }
+.nd-row input[type="time"] { min-width: 88px; }
 .nut-micro-wrap { margin: 12px 0; }
 .nut-micro-wrap summary {
   cursor: pointer; font-size: 13px; font-weight: 600;

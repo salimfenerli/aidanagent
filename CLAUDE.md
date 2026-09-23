@@ -217,6 +217,64 @@ Salim: *"programi yapay zeka verdigimiz kurallara gore yazsa daha iyi olmaz mi"*
 
 **🔒 `tests/42-program-istek.test.js` (16 test).** Her testin senaryosu "model saçmaladı": tavan üstü gün, ara değer süre, uydurma yer/bölge, bozuk saat, yarım dövüş günü listesi, çöp girdi. Ayrıca **PRO yuzeyi 3'e çıktı** (`/diet-plan`, `/health-coach`, `/program-cfg`) — bilinçli maliyet kararı, Salim'in *"antrenman programi yaparken de pro kullansin"* isteği.
 
+## 📚 EK DERS / KURS KATMANI (24 Eyl 2026, v7-195)
+
+Salim: *"pazartesi çıkış matematik dersim var, perşembe de okuldan sonra matematik"*. Okul saati tek başına yetmiyor: kurs da "dışarıdasın" demek.
+
+**Veri:** `data.diet.nut.duzen.ders = { "<dow>": {bas, bit} }` — gün başına **tek blok** (iki kurs üst üste yazılmaz, ikisini kapsayan aralık girilir; basitlik bilinçli). Diyet ekranındaki Günlük düzen satırlarında okul saatinin yanında **ders** alanı var.
+
+**Kural: ders okul gibi sayılır.** `nutOkulGun` artık okul ∪ ders birleşiğini döndürür (seans saati, öğün yeri, çanta buna bakar); **`nutOkulSaf`** saf okul penceresidir ve **yemekhane kararı ona bakar** — kursta yemekhane yok. `programGunPencere` aynı birleşimi kendi tarafında yapar (`duzen.ders`), yani iki motor yine aynı saati verir.
+
+**Salim'in gerçek düzeni hesabına yazıldı** (Supabase `aidan_data.data.diet.nut.duzen`): okul Pzt/Çar/Cum 09:00-17:00 · Sal/Per 09:00-19:00 · Cmt 09:00-14:00; ders Pzt 17:30-19:00, Per 19:30-21:00 (**bu iki saat varsayım** — uygulamadan düzeltilebilir); yemekhane 13:00 hafta içi; antrenman 17:00; kalkış 07:00.
+
+**Sonuç (4 gün · 75 dk):** Pzt 19:30 (ders sonrası) · Sal 19:30 · Cum 17:30 · Paz 17:00; Per artık **seçilmiyor** (ders 21:00'e kadar). Kickboks Çar/Cmt.
+
+## 🏫 GERÇEK OKUL DÜZENİ (24 Eyl 2026, v7-194)
+
+Salim'in gerçek düzeni: **Sal/Per 19:00**, diğer hafta içi **17:00**, **Cumartesi 14:00**'te okul bitiyor; **yemekhane yalnız hafta içi**. Bu düzen iki hata açığa çıkardı:
+
+1. **Yemekhane her okul gününe uygulanıyordu.** Ayar tek bir "yemekhane var" kutusu; cumartesi okulu olan kullanıcıya "okul yemekhanesi" yazıyor ve motor o öğüne **kalem yazmıyordu** — yani cumartesi öğle boş kalıyordu. `nutSlotYer(..., dow)`: yemekhane yalnız dow 1-5; hafta sonu okulda öğle **çantaya** kurulur.
+2. **İki motor aynı gün için iki farklı seans saati veriyordu.** `nutSeansSaati` koşulu `s < okul.bit` idi: okul 17:00'da bitip antrenman 17:00 yazılınca diyet 17:00 diyor, `programGunPencere` çıkış + 30 dk ile 17:30 diyordu — öğün saatleri yarım saat kayıyordu. Artık iki tarafta da **çıkış + 30 dk** (`NUT_DUZEN_LIMITS.cikisHazirlik` = `PROGRAM_DUZEN.hazirlikDk`), teste bağlı.
+
+**⚠️ Bilinen kırmızı (bu değişikliklerden ÖNCE de vardı):** `31-odev-paketi` → "gün sayısından fazla ödev günlere yayılır". Dağıtıcı **bugüne kalan süreye** göre iş koyuyor; test gerçek saate bağlı ve gece/akşam koşulduğunda dengesiz çıkıyor. Saati dondurmak yetmedi (id'ler `Date.now()`'dan üretiliyor, dondurunca çakışıyor) — gerçek düzeltme dağıtıcının gün kapasitesi hesabında, ayrı iş.
+
+## 🥗 DİYETİ KULLANICI GİBİ KURMA (23 Eyl 2026, v7-193)
+
+Salim: *"diyet daha önemli benim için, iyice oturdu mu, uygulamaya kullanıcı gibi girip diyet yazdırır mısın"*. Gerçek profil + gerçek program ile **yedi günün tamamı** kuruldu (tek gün değil). Üç şey çıktı:
+
+1. **🔴 HAFTANIN YEDİ GÜNÜ AYNI TABAKTI.** Örnek gün `n.sablon` ile kuruluyordu; o değer güne göre değişmiyor. Havuzda slot başına 5+ şablon var ve **hiç kullanılmıyordu** — tek güne bakan hiçbir test bunu göremez. `nutGunSablon(n, dow)` = `n.sablon + dow`; "Başka öner" yine bütün haftayı birlikte kaydırır (kullanıcının kontrolü durur).
+2. **Akşam yemeği "çantadan" işaretleniyordu.** Okul 19:00'da bittiğinde 19:45 akşam öğünü çıkış penceresine (45 dk) düşüyordu. O pencere **antrenman öncesi hızlı karbonhidrat** için; ana öğün evde yenir. `nutSlotYer`: `aksam`/`kahvalti` → ev.
+3. **Test saate bağlıydı** (`32-yerel-plan` now-card): bloklar gerçek saate göre kuruluyor, 22:00'den sonra "40 dk sonra" ertesi güne taşıp iki test kırmızı dönüyordu. Saat 14:00'e sabitlendi. **Kural: test gerçek saate bağlanmaz.**
+
+**⚠️ Motor çıktısının bilinen toleransı:** gün proteini hedefin %8-18 üstünde bitiyor (138 g hedefte 147-165 g). Doktrin bunu kaldırıyor (2,5 g/kg azalan getiri), `nutDaySummary` gerçeği yazıyor.
+
+## 🔎 GERÇEK VERİYLE DENETİM — besin DB + antrenman + diyet (22 Eyl 2026, v7-192)
+
+Salim: *"diyet programı ve antrenman programı yazalım ... besinlerin makroları da doğru olsun, database'i internetle karşılaştırır mısın, kullanırken görüyorum database hatalarını"*. Programlar **Supabase'deki gerçek veriyle** (Hevy geçmişi + profil) kullanıcı gibi kuruldu. **Sentetik test verisi bu hataların hiçbirini üretmiyordu** — motorun beklediği biçimdeydi. Kural: **bir motoru değiştirdikten sonra gerçek veriyle bir kez kur ve çıktıyı bir antrenör/diyetisyen gözüyle oku.**
+
+**Besin DB — per-100 g değerler zaten doğruydu (37 USDA'ya bağlı). Hatalar ARAMA ve ÖLÇÜ katmanındaydı:**
+- `'g'` birim listesinde yoktu → **"50 g yulaf" hiç sonuç vermiyordu** (boşluklu yazım en yaygını; bitişik "50g" çalışıyordu).
+- **"Yulaf ezmesi" 200 g PİŞMİŞ LAPA** değeri taşıyordu (71 kcal/100 g). Türkiye'de ürün adı kuru yulaf → 50 g yazan 36 kcal görüyordu (5,4 kat eksik). Artık kuru (USDA 173904), lapa ayrı satır. ⚠️ Porsiyon 50 g **bilinçli**: 40 g'da beslenme motoru 50 kg/dovüş/kas köşesinde yağ payını %36'ya taşıyordu (AMDR testi) — motor o köşede kırılgan, porsiyon değişikliğinde 18-nutrition'ı koştur.
+- **Çiğ/kuru ölçüm satırları yoktu** (sporcu pişmemiş tartar): tavuk göğsü, kıyma, makarna, bulgur, kırmızı/yeşil mercimek, nohut, kuru fasulye, kinoa, patates. Değerler myfooddata.com (USDA FDC) üzerinden tek tek doğrulandı, FDC id'leri 37'deki REF satırlarında.
+- **Ev ölçüsü** besinin porsiyonuna çarpılıyordu: "2 yemek kaşığı yulaf" = 2 porsiyon, "1 çay kaşığı bal" = yemek kaşığı. `_olcuDonustur`: aynı aile → çarpan (çay kaşığı = 1/3), farklı aile → hacimden grama (yoğunluk tablosu: yulaf 0,4 · un 0,55 · kuru tahıl 0,85 · bal 1,4).
+- **Takma ad tam eşleşmesi bonus almıyordu**: "yulaf" → Yulaf sütü, "patates" → Püre. +45000, **tavan 99999** (adın kendisi 100000 her zaman kazanır: "pirinç" → Pirinç, Pilav değil).
+- Labne (light) proteini 2 katıydı (15 → 7 g/100 g, Pınar etiketi 6,8).
+
+**Antrenman motoru:**
+- **Hevy adları kullanıcının DILİNDE** ("Squat (Bar)", "Oturarak Leg Curl (Makine)") → 21 hareketin 21'inde "geçmiş yok". `PROGRAM_HEVY_TID` (Hevy şablon kimliği, dilden bağımsız) + dışa aktarımda öğrenilen `hevy.tplMap`.
+- **Alet uyumu**: Smith e1RM'i (34) eğimli dambıla yazılıyordu (25 kg, gerçek ~15). `programAlet` farklıysa eşleşme yok. Taban ad **eşit** olmalı ("bench press" ≠ "incline bench press").
+- **Yakın geçmiş 8 hafta** (`PROGRAM_GECMIS_GUN`): Haziran'daki tek şüpheli curl 25 kg Eylül'e 20 kg yazdırıyordu. Pencerede kayıt yoksa tüm geçmiş.
+- **Makine karşılıkları** eklendi (kademe 2, pri 1): `mchest` · `isorow` · `mshoulder` (aile ohp) · `calfpress` (aile calf). Ana kaldırış yine serbest ağırlık.
+- **Geçmiş bonusu +10** (`programPickScore`): kalıp tekrar cezasının (14) altında — yalnız eşit adaylar arasında bilinen ağırlığı olanı seçer. Sonuç: ağırlığı yazılan hareket 1-2'den 8+'ya.
+
+**Beslenme:**
+- **Çanta**: ara öğün + atıştırma + telafi üçü de ton balığıydı (günde 3 kutu; FDA/EPA light tuna haftada 2-3 porsiyon). Sonra 2 ölçek protein tozu, sonra 2 kase süzme yoğurt (10 saat soğuk zincirsiz). `NUT_CANTA_ZAHMET` (toz 8 · süt ürünü 4) + aynı gün tekrar cezası 12 + Protein bar havuza eklendi.
+- **İki hedef kaynağı çelişiyordu**: hesaplayıcıda "kilo al", motorda "Kiloyu koru" (motorun varsayılanı). Sessizce eşitlenmedi (kullanıcı "kas"ı fazla bulup bilerek "koru"ya geçmiş olabilir); `nutHedefCelisme` ekranda söylüyor.
+
+**🔒 Testler:** `44-besin-olcu` (15 — kullanıcı gibi arama/ekleme) · `45-gercek-veri` (9 — gerçek Hevy özetiyle) · 37'ye 12 REF satırı · 22 besin sayısı 481 → 492.
+
+**Bilinen, dokunulmadı:** jenerik "Ton balığı" satırı suda değeri taşıyor; Türkiye'de yaygın olan yağlı kutu (ayrı satır var). Değiştirmek beslenme motorunun telafi hesabını kaydırır — ayrı iş.
+
 ## 🧪 Serbest metin kutusu — KULLANICI GİBİ TEST (21 Eyl 2026, v7-191)
 
 Salim: *"metin kutusunu iyice geliştir kullanıcı gibi kullan bug tespiti yap"*. Kutu gerçek `asistan.html` içinde (jsdom) bir kullanıcı gibi kullanıldı: yaz → çip tıkla → "İsteğimi oku" → "Programı üret", AI cevabı 20 farklı gerçekçi/bozuk biçimde taklit edildi. **Birim testlerin hiçbiri bunları yakalamadı** — hepsi akış hatası.

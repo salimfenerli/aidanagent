@@ -18,7 +18,7 @@
  * - AI BAŞARISIZ OLURSA GÜN PLANSIZ KALMAZ (yerel plana düşer) ama hata
  *   YUTULMAZ — kullanıcı neden düştüğünü görür.
  */
-const { test, describe, after } = require('node:test');
+const { test, describe, after, before } = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
@@ -241,6 +241,19 @@ describe('plan BUGÜN ekranına bağlı (now-card)', () => {
   // bolduktan sonra ana ekran "su an ne var" sorusuna cevap vermiyor, her
   // seferinde Plan sekmesine gecmek gerekiyordu.
   const nn = () => W.document.getElementById('nowNext');
+  // ⚠️ 23 Eyl 2026 — SAAT SABITLENIYOR. Testler gercek saate gore blok
+  // kuruyordu: 22:00'den sonra kosuldugunda "40 dk sonra" blogu ERTESI GUNE
+  // tasiyor ve iki test kirmizi donuyordu (koddan degil, saatten). Saat
+  // dilimsiz ve gunden bagimsiz olsun diye bugunun 14:00'u sabitlenir.
+  const GercekDate = W.Date;
+  const sabitAn = new GercekDate(); sabitAn.setHours(14, 0, 0, 0);
+  before(() => {
+    W.Date = class extends GercekDate {
+      constructor(...a) { if (!a.length) { super(sabitAn.getTime()); } else { super(...a); } }
+      static now() { return sabitAn.getTime(); }
+    };
+  });
+  after(() => { W.Date = GercekDate; });
   const simdiDk = () => dk(A.evalIn('nowHM()'));
   const hm = (v) => String(Math.floor(((v % 1440) + 1440) % 1440 / 60)).padStart(2, '0') + ':' + String(v % 60).padStart(2, '0');
   const planKur = (blocks) => { veri().dayPlan = { date: bugun(), blocks }; };

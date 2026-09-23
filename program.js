@@ -213,6 +213,11 @@ const PROGRAM_EXERCISES = [
   { id: 'pushup',    tr: 'Şınav',                    en: 'Push Up',                    muscle: 'chest', pattern: 'push_h', compound: true,  places: ['gym', 'home', 'bw'] },
   { id: 'fly',       tr: 'Dambıl Fly',               en: 'Chest Fly (Dumbbell)',       muscle: 'chest', pattern: 'iso',    compound: false, places: ['gym', 'home'] },
   { id: 'cablefly',  tr: 'Kablo Fly',                en: 'Cable Fly Crossovers',       muscle: 'chest', pattern: 'iso',    compound: false, places: ['gym'] },
+  // ⚠️ 22 Eyl 2026 — MAKINE KARSILIKLARI. Kutuphanede yalniz serbest agirlik
+  // vardi; salonda makineyle calisan kullanicinin Hevy gecmisi hicbir harekete
+  // eslesmiyordu (gercek veride 21 hareketin 21'i "gecmis yok"). Kademe 2:
+  // ana kaldiris (kademe 1) serbest agirlik kalir — kademeli yuklenebilirlik.
+  { id: 'mchest',    tr: 'Eğimli Göğüs Press (Makine)', en: 'Incline Chest Press (Machine)', muscle: 'chest', pattern: 'push_h', compound: true, places: ['gym'] },
 
   // --- Sirt ---
   { id: 'pullup',    tr: 'Barfiks',                  en: 'Pull Up',                    muscle: 'back', pattern: 'pull_v', compound: true,  places: ['gym', 'home', 'bw'] },
@@ -221,12 +226,14 @@ const PROGRAM_EXERCISES = [
   { id: 'bbrow',     tr: 'Barbell Row',              en: 'Bent Over Row (Barbell)',    muscle: 'back', pattern: 'pull_h', compound: true,  places: ['gym'] },
   { id: 'dbrow',     tr: 'Tek Kol Dambıl Row',       en: 'Bent Over Row (Dumbbell)',   muscle: 'back', pattern: 'pull_h', compound: true,  places: ['gym', 'home'] },
   { id: 'seatedrow', tr: 'Oturarak Kablo Row',       en: 'Seated Cable Row',           muscle: 'back', pattern: 'pull_h', compound: true,  places: ['gym'] },
+  { id: 'isorow',    tr: 'Iso-Lateral Row (Makine)', en: 'Iso-Lateral Row (Machine)',  muscle: 'back', pattern: 'pull_h', compound: true,  places: ['gym'] },
   { id: 'invrow',    tr: 'Ters Şınav (Masa Altı)',   en: 'Inverted Row',               muscle: 'back', pattern: 'pull_h', compound: true,  places: ['home', 'bw'] },
   { id: 'facepull',  tr: 'Face Pull',                en: 'Face Pull',                  muscle: 'back', pattern: 'iso',    compound: false, places: ['gym', 'home'] },
 
   // --- Omuz ---
   { id: 'ohp',       tr: 'Omuz Press (Barbell)',     en: 'Overhead Press (Barbell)',   muscle: 'shoulders', pattern: 'push_v', compound: true,  places: ['gym'] },
   { id: 'dbohp',     tr: 'Dambıl Omuz Press',        en: 'Shoulder Press (Dumbbell)',  muscle: 'shoulders', pattern: 'push_v', compound: true,  places: ['gym', 'home'] },
+  { id: 'mshoulder', tr: 'Omuz Press (Makine)',      en: 'Shoulder Press (Machine Plates)', muscle: 'shoulders', pattern: 'push_v', compound: true, places: ['gym'] },
   { id: 'pikepush',  tr: 'Pike Şınav',               en: 'Pike Pushup',                muscle: 'shoulders', pattern: 'push_v', compound: true,  places: ['home', 'bw'] },
   { id: 'lateral',   tr: 'Yan Kaldırış',             en: 'Lateral Raise (Dumbbell)',   muscle: 'shoulders', pattern: 'iso',    compound: false, places: ['gym', 'home'] },
   { id: 'reardelt',  tr: 'Arka Omuz (Reverse Fly)',  en: 'Rear Delt Reverse Fly (Dumbbell)', muscle: 'shoulders', pattern: 'iso', compound: false, places: ['gym', 'home'] },
@@ -265,6 +272,7 @@ const PROGRAM_EXERCISES = [
 
   // --- Baldir ---
   { id: 'calfraise', tr: 'Baldır Kaldırış',          en: 'Standing Calf Raise',        muscle: 'calves', pattern: 'iso', compound: false, places: ['gym', 'home', 'bw'] },
+  { id: 'calfpress', tr: 'Baldır Press (Makine)',    en: 'Calf Press (Machine)',       muscle: 'calves', pattern: 'iso', compound: false, places: ['gym'] },
 
   // ============ PATLAYICI KATMAN (9 Agu 2026) ============
   // Ek alanlar: explosive · contact (tekrar basina yere temas) · metric (ilerleme
@@ -307,7 +315,7 @@ const PROGRAM_EXERCISES = [
 const PROGRAM_TIER1 = new Set(['bench', 'dbbench', 'dip', 'squat', 'legpress', 'rdl', 'dbrdl',
   'ohp', 'dbohp', 'bbrow', 'seatedrow', 'pullup', 'chinup', 'latpull', 'hipthrust']);
 // Yardimci bileske: tek tarafli ya da vucut agirligi; orta tekrar.
-const PROGRAM_TIER2 = new Set(['incline', 'pushup', 'invrow', 'pikepush', 'gobsquat',
+const PROGRAM_TIER2 = new Set(['incline', 'mchest', 'isorow', 'mshoulder', 'pushup', 'invrow', 'pikepush', 'gobsquat',
   'bulgarian', 'lunge', 'bwsquat', 'glutebr', 'closepush', 'dbrow', 'stepup']);
 // Tek tarafli is: dovus sporcusunda ayri deger tasir (tekme, denge, asimetri).
 const PROGRAM_UNI = new Set(['bulgarian', 'lunge', 'dbrow', 'bound', 'stepup']);
@@ -324,6 +332,9 @@ const PROGRAM_FAMILY = {
   bench: 'bench', dbbench: 'bench',                     // ayni press, bar vs dambil
   ohp: 'ohp', dbohp: 'ohp',                             // ayni omuz press
   pullup: 'pullup', chinup: 'pullup',                   // ayni cekis, tutus farkli
+  mshoulder: 'ohp',                                     // makine omuz press = ayni kalip
+  calfraise: 'calf', calfpress: 'calf',                 // ayni baldir isi
+  incline: 'incline', mchest: 'incline',                // egimli press, dambil vs makine
 };
 function programFamily(e) { return PROGRAM_FAMILY[e.id] || e.id; }
 // ⚠️ HAREKET KALITESI / TRANSFER PUANI (18 Agu 2026) — `pri`.
@@ -343,7 +354,7 @@ function programFamily(e) { return PROGRAM_FAMILY[e.id] || e.id; }
 const PROGRAM_PRI3 = new Set(['squat', 'dip', 'ohp', 'rdl', 'bbrow', 'pullup',
   'chinup', 'dip', 'hangclean', 'pushpress']);
 const PROGRAM_MAKINE = new Set(['legpress', 'latpull', 'seatedrow', 'legext',
-  'legcurl', 'cablefly', 'pushdown', 'neckharn']);
+  'legcurl', 'cablefly', 'pushdown', 'neckharn', 'mchest', 'isorow', 'mshoulder', 'calfpress']);
 
 // ⚠️ TEKRAR TABANI (18 Agu 2026) — kademe araligi her harekete uymaz.
 // Atletik hedefte kademe 1 araligi 3-5 ve motor bunu HIP THRUST'a da
@@ -353,7 +364,7 @@ const PROGRAM_MAKINE = new Set(['legpress', 'latpull', 'seatedrow', 'legext',
 const PROGRAM_REP_FLOOR = {
   hipthrust: 6, latpull: 6, seatedrow: 6, dbrow: 6, dbrdl: 6, legpress: 5,
   rdl: 5, dbbench: 5, dbohp: 5, glutebr: 8, calfraise: 8, legcurl: 8,
-  legext: 8, nordic: 3,
+  legext: 8, nordic: 3, calfpress: 8, isorow: 6, mchest: 5, mshoulder: 5,
   // ⚠️ 30 Agu 2026: dips kademe 1'e alindi (asagidaki nota bak) ama
   // atletik kademe-1 araligi 3-5. Agirlikli dips'te dip pozisyonu
   // omuz on kapsulunu son ROM'da yukler; 3 tekrar bunu maksimum yukle
@@ -398,7 +409,8 @@ const PROGRAM_IKINCIL = {
   incline: { triceps: 0.5, shoulders: 0.5 }, dip: { triceps: 0.5, shoulders: 0.5 },
   pushup: { triceps: 0.5, shoulders: 0.5 },
   ohp: { triceps: 0.5 }, dbohp: { triceps: 0.5 }, pikepush: { triceps: 0.5 },
-  pushpress: { triceps: 0.5 },
+  pushpress: { triceps: 0.5 }, mshoulder: { triceps: 0.5 },
+  mchest: { triceps: 0.5, shoulders: 0.5 }, isorow: { biceps: 0.5 },
   pullup: { biceps: 0.5 }, chinup: { biceps: 0.5 }, latpull: { biceps: 0.5 },
   bbrow: { biceps: 0.5 }, dbrow: { biceps: 0.5 }, seatedrow: { biceps: 0.5 },
   invrow: { biceps: 0.5 }, hangclean: { quads: 0.5, hams: 0.5 },
@@ -470,16 +482,81 @@ function programExercisePool(places, avoidMuscles) {
  * (Epley tersi), sonra %90 ile guvenli tarafa cekilir. Veri yoksa `null` doner
  * ve programda "kendine gore ayarla" yazar — UYDURULMUS AGIRLIK YAZILMAZ.
  */
-function programStartWeight(exercise, repTarget, workouts) {
-  const ws = Array.isArray(workouts) ? workouts : [];
+/**
+ * HEVY GECMISI ESLESTIRME (22 Eyl 2026)
+ *
+ * ⚠️ Salim'in gercek verisiyle kurulan programda 21 hareketin 21'inde "gecmis veri
+ * yok" yaziyordu — Hevy'de 24 antrenmani varken. Iki ayri hata:
+ *   1) Hevy isimleri KULLANICININ DILINDE geliyor ("Squat (Bar)", "Oturarak Leg
+ *      Curl (Makine)"), motor Ingilizce adla ariyordu ("Seated Leg Curl (Machine)").
+ *   2) Ad eslesmesi ALETI yok sayiyordu: "Incline Bench Press (Dumbbell)" icin
+ *      "Incline Bench Press (Smith Machine)" gecmisi de sayiliyor, SMITH'in toplam
+ *      yuku (e1RM 34) dambil basina uygulanip 25 kg yazilyordu — gercek ~15 kg.
+ * Cozum: once Hevy SABLON KIMLIGI (tid — dilden bagimsiz, Hevy kutuphanesinde
+ * sabit), yoksa ad + ALET UYUMU. Aletler farkliysa eslesme YOK: yanlis agirlik
+ * yazmaktansa agirlik yazmamak dogru.
+ */
+const PROGRAM_HEVY_TID = {
+  squat: 'D04AC939', legpress: 'C7973E0E', legcurl: '11A123F3', legext: '75A4F6C4',
+  latpull: '6A6C31A5', seatedrow: '0393F233', incline: '07B38369', pushdown: '93A552C6',
+  curl: '37FCC2BB', hammer: '7E3BC8B6', lateral: '422B08F1', gobsquat: '3D0C7C75',
+  mchest: 'FBF92739', isorow: 'AA1EB7D8', mshoulder: '059E835D', calfpress: '91237BDD',
+};
+/** Ad icindeki alet: Ingilizce ve Turkce Hevy yazimlari ayni sinifa iner. */
+function programAlet(ad) {
+  const s = String(ad || '').toLowerCase();
+  if (/smith/.test(s)) return 'smith';
+  if (/dumbbell|dambıl|dambil/.test(s)) return 'dambil';
+  if (/barbell|\(bar\)|\bbar\b/.test(s)) return 'bar';
+  if (/cable|kablo/.test(s)) return 'kablo';
+  if (/machine|makine/.test(s)) return 'makine';
+  if (/kettlebell/.test(s)) return 'kettlebell';
+  return null;
+}
+/** Bu Hevy kaydi bu harekete mi ait? Once tid, sonra ad + ALET UYUMU. */
+function programHevyEsles(exercise, ex, tidHaritasi) {
+  const tid = (tidHaritasi && tidHaritasi[exercise.id]) || PROGRAM_HEVY_TID[exercise.id];
+  // tid tutuyorsa kesin; tutmuyorsa ad + alet denenir (Hevy'de ayni hareketin
+  // ozel/kopya sablonu farkli tid tasiyabilir).
+  if (tid && ex.tid && ex.tid === tid) return true;
+  const ad = String(ex.name || '').toLowerCase();
+  const hedef = String(exercise.en || '').toLowerCase();
+  const kisa = hedef.split('(')[0].trim();
+  // ⚠️ "icerir" DEGIL, taban ad ESIT: "bench press" icin "incline bench press"
+  // gecmisi sayiliyordu (duz dambil bench'e egimli agirligi yaziliyordu).
+  const adKisa = ad.split('(')[0].trim();
+  if (!(ad === hedef || (kisa.length > 3 && adKisa === kisa))) return false;
+  const a1 = programAlet(hedef), a2 = programAlet(ad);
+  return !(a1 && a2 && a1 !== a2);
+}
+/**
+ * ⚠️ YAKIN GECMIS (22 Eyl 2026). Eskiden TUM gecmisin en yuksek e1RM'i
+ * aliniyordu. Gercek veride Haziran'daki tek bir "Bicep Curl 25 kg" kaydi
+ * (muhtemelen iki dambilin toplami) Eylul programina 20 kg curl yazdiriyordu —
+ * son iki kayit 10 kg. Yaz arasi da gucu dusurur. Kural: son kayittan geriye
+ * 8 hafta; o pencerede kayit yoksa tum gecmis (hic yoktan iyidir).
+ */
+const PROGRAM_GECMIS_GUN = 56;
+function programYakinGecmis(workouts) {
+  const ws = Array.isArray(workouts) ? workouts.filter(w => w && w.date) : [];
+  if (!ws.length) return Array.isArray(workouts) ? workouts : [];
+  const son = ws.map(w => String(w.date)).sort().slice(-1)[0];
+  // Tarih DILIMSIZ hesaplanir (UTC gunu): saat dilimi hatasi yasagi (07-hygiene).
+  const [y, a, g] = son.split('-').map(Number);
+  const t = new Date(Date.UTC(y, a - 1, g) - PROGRAM_GECMIS_GUN * 86400000);
+  const sinir = t.getUTCFullYear() + '-' + String(t.getUTCMonth() + 1).padStart(2, '0') + '-' +
+    String(t.getUTCDate()).padStart(2, '0');
+  return ws.filter(w => String(w.date) >= sinir);
+}
+function programStartWeight(exercise, repTarget, workouts, tidHaritasi) {
+  const yakin = programYakinGecmis(workouts);
+  const ws = yakin.some(w => (w.exercises || []).some(ex => ex && ex.top && programHevyEsles(exercise, ex, tidHaritasi)))
+    ? yakin : (Array.isArray(workouts) ? workouts : []);
   let best = 0;
   for (const w of ws) {
     for (const ex of (w.exercises || [])) {
       if (!ex || !ex.top) continue;
-      const ad = String(ex.name || '').toLowerCase();
-      const hedef = String(exercise.en || '').toLowerCase();
-      const kisa = hedef.split('(')[0].trim();
-      if (ad === hedef || (kisa.length > 3 && ad.includes(kisa))) {
+      if (programHevyEsles(exercise, ex, tidHaritasi)) {
         const e1 = Number(ex.top.e1rm);
         if (Number.isFinite(e1) && e1 > best) best = e1;
       }
@@ -551,7 +628,7 @@ function programUndulate(p, G, workouts, bw, bwMax) {
       e.repMax = Number(e.repMax) + PROGRAM_ORTA_ARTIS.max;
       // ⚠️ Tekrar araligi degisince AGIRLIK da degismeli. Ayni kiloyu
       // 3-5 yerine 6-9 tekrar yapmak "orta gun" degil "basarisiz agir gun".
-      const yeniKg = programStartWeight(lib(e.id), e.repMin, workouts);
+      const yeniKg = programStartWeight(lib(e.id), e.repMin, workouts, p.hevyTplMap || (p.hevy && p.hevy.tplMap));
       if (yeniKg != null) e.kg = yeniKg;
       // Vucut agirligi hareketinde de ek yuk yeni tekrara gore hesaplanir
       const yeniBw = programBodyweightCue(
@@ -748,9 +825,23 @@ function programDuzenOku() {
     if (bas == null || bit == null || bit <= bas) continue;
     okul[String(dow)] = { bas: progSaat(bas), bit: progSaat(bit) };
   }
+  // ⚠️ 24 Eyl 2026 — EK DERS / KURS. Salim'in pazartesi cikisinda ve persembe
+  // okuldan sonra matematik dersi var; o saatte salona gidemez. Ders AYRI
+  // tasinir (okul kaydini kirletmez), pencere hesabinda okulla birlesir —
+  // diyet tarafindaki `nutOkulGun` ile AYNI kural.
+  const dersK = (d.ders && typeof d.ders === 'object') ? d.ders : {};
+  const ders = {};
+  for (const k of Object.keys(dersK)) {
+    const dow = Number(k);
+    if (!(dow >= 0 && dow <= 6)) continue;
+    const g = dersK[k] || {};
+    const bas = progDk(g.bas), bit = progDk(g.bit);
+    if (bas == null || bit == null || bit <= bas) continue;
+    ders[String(dow)] = { bas: progSaat(bas), bit: progSaat(bit) };
+  }
   const ant = progDk(d.antrenman);
-  if (!Object.keys(okul).length && ant == null) return null;
-  return { okul, antrenman: ant != null ? progSaat(ant) : null };
+  if (!Object.keys(okul).length && !Object.keys(ders).length && ant == null) return null;
+  return { okul, ders, antrenman: ant != null ? progSaat(ant) : null };
 }
 
 /**
@@ -764,7 +855,11 @@ function programGunPencere(dow, duzen, sessionMin) {
   const ant = duzen ? progDk(duzen.antrenman) : null;
   let bas = ant != null ? ant : L.varsayilanSeans;
   const okul = (duzen && duzen.okul) ? duzen.okul[String(dow)] : null;
-  const bit = okul ? progDk(okul.bit) : null;
+  const ders = (duzen && duzen.ders) ? duzen.ders[String(dow)] : null;
+  // Gun "dolu" penceresi = okul ∪ ders; seans en gec bitisin 30 dk sonrasi.
+  const bitler = [okul ? progDk(okul.bit) : null, ders ? progDk(ders.bit) : null]
+    .filter(x => x != null);
+  const bit = bitler.length ? Math.max.apply(null, bitler) : null;
   let kaydi = false;
   if (bit != null && bas < bit + L.hazirlikDk) { bas = bit + L.hazirlikDk; kaydi = true; }
   const yer = Math.max(0, L.gecBitis - bas);
@@ -958,6 +1053,12 @@ function buildProgram(cfg, workouts) {
   const duzenCeza = duzen ? ((dow, altMi) => programDuzenCezasi(dow, duzen, sessionMin, altMi)) : null;
   const gunler = programAssignDays(sd, fightDays, duzenCeza);
   const havuz = programExercisePool(places, avoid);
+  // Kullanicinin GERCEKTEN yaptigi hareketler (Hevy gecmisi). Secimde beraberlik
+  // bozucu: bilinen calisma agirligi = tahminsiz, 1RM denemesi gerektirmeyen
+  // baslangic (16 yas) ve aliskanlik (yapilan program yapilmayan programdan iyidir).
+  const tidHaritasi = (c.hevyTplMap && typeof c.hevyTplMap === 'object') ? c.hevyTplMap : null;
+  const gecmis = new Set(havuz.filter(e => !e.explosive &&
+    programStartWeight(e, 8, workouts, tidHaritasi) != null).map(e => e.id));
   const kullanilan = new Set();
   const kalipSayaci = {};   // 'hinge|1' -> kac kez kullanildi (hafta geneli)
   const aileSayaci = {};    // 'rdl' -> kac kez (alet farki cesitlilik degil)
@@ -1028,7 +1129,7 @@ function buildProgram(cfg, workouts) {
       if (!adaylar.length) continue;
       let aday = null, enIyi = -Infinity;
       for (const e of adaylar) {
-        const sk = programPickScore(e, slot, { kullanilan, gunKas, kalipSayaci, aileSayaci, athletic: !!G.athletic, yukBazli: !!(G.athletic || G.setsHigh <= 15) });
+        const sk = programPickScore(e, slot, { kullanilan, gunKas, kalipSayaci, aileSayaci, gecmis, athletic: !!G.athletic, yukBazli: !!(G.athletic || G.setsHigh <= 15) });
         if (sk > enIyi) { enIyi = sk; aday = e; }
       }
       if (!aday) continue;
@@ -1064,7 +1165,7 @@ function buildProgram(cfg, workouts) {
         repMin: tMin, repMax: tMax,
         reps: tMin,
         rest: programRest(G, tier),
-        kg: programStartWeight(aday, tMin, workouts),
+        kg: programStartWeight(aday, tMin, workouts, tidHaritasi),
         bw: programBodyweightCue(aday.id, bw, Number(bwMax[PROGRAM_BW_TEST[aday.id]]) || 0, tMin),
       });
     }
@@ -1114,7 +1215,7 @@ function buildProgram(cfg, workouts) {
 
       let yeni = null, enIyiC = -Infinity;
       for (const e of cAdaylar) {
-        const sk = programPickScore(e, yer, { kullanilan, gunKas, kalipSayaci, aileSayaci, athletic: !!G.athletic, yukBazli: !!(G.athletic || G.setsHigh <= 15) });
+        const sk = programPickScore(e, yer, { kullanilan, gunKas, kalipSayaci, aileSayaci, gecmis, athletic: !!G.athletic, yukBazli: !!(G.athletic || G.setsHigh <= 15) });
         if (sk > enIyiC) { enIyiC = sk; yeni = e; }
       }
       if (!yeni) break;
@@ -1131,7 +1232,7 @@ function buildProgram(cfg, workouts) {
         sets: (G.setsByTier && G.setsByTier[yTier]) || 3,
         repMin: yMin, repMax: Math.max(yMax0, yMin + 2), reps: yMin,
         rest: programRest(G, yTier),
-        kg: programStartWeight(yeni, yMin, workouts),
+        kg: programStartWeight(yeni, yMin, workouts, tidHaritasi),
         bw: programBodyweightCue(yeni.id, bw, Number(bwMax[PROGRAM_BW_TEST[yeni.id]]) || 0, yMin),
       };
     }
@@ -1144,7 +1245,7 @@ function buildProgram(cfg, workouts) {
         !secilenler.some(x => x.ex.id === e.id));
       let cAday = null, cEnIyi = -Infinity;
       for (const e of coreAdaylar) {
-        const sk = programPickScore(e, 4, { kullanilan, gunKas, kalipSayaci, aileSayaci, athletic: !!G.athletic, yukBazli: !!(G.athletic || G.setsHigh <= 15) });
+        const sk = programPickScore(e, 4, { kullanilan, gunKas, kalipSayaci, aileSayaci, gecmis, athletic: !!G.athletic, yukBazli: !!(G.athletic || G.setsHigh <= 15) });
         if (sk > cEnIyi) { cEnIyi = sk; cAday = e; }
       }
       if (cAday) {
@@ -1396,6 +1497,14 @@ function programPickScore(e, slot, ctx) {
   if (ctx.athletic && (e.antiRot || e.pattern === 'carry')) s += 10;
   // Ayni kasi o gun ust uste yuklemeyi cezalandir
   s -= (ctx.gunKas[e.muscle] || 0) * 8;
+  // ⚠️ 22 Eyl 2026 — GECMIS BONUSU. Kullanicinin Hevy'de ZATEN yaptigi hareket
+  // +10. Olcu: kalip+kademe tekrar cezasinin (14) ve ayni aile cezasinin (40)
+  // ALTINDA — programlama kurallarini ezmez, yalniz esit adaylar arasinda
+  // bilinen agirligi olani secer. Gerekce 🟡: tahmini agirlik yerine olculmus
+  // agirlik (ergende 1RM denemesi istenmez) ve uyum. Makine/serbest ayrimi
+  // hipertrofide ve sicramada kanitsiz (Haugen 2023) — bu bonusun karsisinda
+  // duran tek sey muhendislik tercihi (pri).
+  if (ctx.gecmis && ctx.gecmis.has(e.id)) s += 10;
   return s;
 }
 
@@ -2245,7 +2354,7 @@ function advanceProgram(p, workouts, todayStr) {
       // kilo ekleyelim" mantigi yanlistir — ilerleme daha YUKSEK/UZAK sicramaktir,
       // olcusu de metre/santim. Asagida ayri dalda ele alinir.
       if (e.explosive && e.metric !== 'kg') continue;
-      const gercek = programLastPerformance(e, sonHafta);
+      const gercek = programLastPerformance(e, sonHafta, p.hevyTplMap || (p.hevy && p.hevy.tplMap));
       if (!gercek) continue;
       if (gercek.reps > e.repMax && e.kg != null) {
         const adim = Math.max(1.25, Math.round((e.kg * G.stepPct / 100) / 1.25) * 1.25);
@@ -2331,15 +2440,12 @@ function advanceProgram(p, workouts, todayStr) {
 }
 
 // Bir egzersizin son haftadaki en iyi seti
-function programLastPerformance(e, workouts) {
+function programLastPerformance(e, workouts, tidHaritasi) {
   let en = null;
   for (const w of workouts || []) {
     for (const ex of (w.exercises || [])) {
       if (!ex || !ex.top) continue;
-      const ad = String(ex.name || '').toLowerCase();
-      const hedef = String(e.en || '').toLowerCase();
-      const kisa = hedef.split('(')[0].trim();
-      if (ad === hedef || (kisa.length > 3 && ad.includes(kisa))) {
+      if (programHevyEsles(e, ex, tidHaritasi)) {
         const kg = Number(ex.top.kg) || 0, reps = Number(ex.top.reps) || 0;
         if (!en || kg > en.kg || (kg === en.kg && reps > en.reps)) en = { kg, reps };
       }
@@ -3301,7 +3407,9 @@ function saveProgramSetup() {
   _progUretUyarildi = false;
   const h = (typeof ensureHevy === 'function') ? ensureHevy() : (data.hevy || { workouts: [] });
   programDuzenKaydet(_progSetup.duzen);
-  const p = buildProgram(Object.assign({}, _progSetup, { duzen: programDuzenOku() }), h.workouts || []);
+  const eskiP = data.program;
+  const tplMap = eskiP && eskiP.hevy && eskiP.hevy.tplMap;
+  const p = buildProgram(Object.assign({}, _progSetup, { duzen: programDuzenOku(), hevyTplMap: tplMap || null }), h.workouts || []);
   if (!p.days.length) { showToast('Program üretilemedi — gün seçimini gözden geçir.', 'error'); return; }
   data.program = p;
   save();

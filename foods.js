@@ -50,7 +50,12 @@ const TURK_FOODS = [
   { n: 'Sigara böreği', u: 'adet', g: 25, k: 80, p: 2, c: 7, f: 4.8 },
   { n: 'Gözleme', u: 'adet', g: 180, k: 432, p: 14.4, c: 57.6, f: 16.2 },
   { n: 'Tost', u: 'adet', g: 130, k: 345, p: 15.6, c: 35.1, f: 16.3 },
-  { n: 'Yulaf ezmesi', u: 'porsiyon', g: 200, k: 142, p: 5, c: 24, f: 3, a: ['yulaf', 'oatmeal', 'yulaf lapası'] },
+  // ⚠️ 22 Eyl 2026 — "Yulaf ezmesi" 200 g PISMIS LAPA degeri tasiyordu (71 kcal/100 g).
+  // Turkiye'de "yulaf ezmesi" paketteki KURU yulafin adi; "50 g yulaf" yazan
+  // kullanici 195 kcal yerine 36 kcal goruyordu (5,4 kat eksik). Kaynak: USDA FDC
+  // 173904 rolled oats 379/13.2/67.7/6.5 (myfooddata). Lapa ayri satir oldu.
+  { n: 'Yulaf ezmesi', u: 'porsiyon', g: 50, k: 190, p: 6.6, c: 33.9, f: 3.3, a: ['yulaf', 'kuru yulaf', 'oats', 'yulaf flakes'] },
+  { n: 'Yulaf lapası (suyla)', u: 'kase', g: 200, k: 142, p: 5, c: 24, f: 3, a: ['oatmeal', 'yulaf lapası', 'porridge'] },
   { n: 'Mısır gevreği', u: 'kase', g: 40, k: 151, p: 3, c: 33.6, f: 0.4 },
   { n: 'Granola', u: 'porsiyon', g: 45, k: 212, p: 4.5, c: 28.8, f: 9 },
   // --- Çorbalar ---
@@ -116,7 +121,7 @@ const TURK_FOODS = [
   { n: 'Mevsim salata', u: 'porsiyon', g: 150, k: 60, p: 1.5, c: 6, f: 3.6 },
   { n: 'Domates', u: 'adet', g: 120, k: 22, p: 1.1, c: 4.7, f: 0.2 },
   { n: 'Salatalık', u: 'adet', g: 130, k: 21, p: 0.9, c: 4.7, f: 0.3 },
-  { n: 'Haşlanmış patates', u: 'adet', g: 135, k: 117, p: 2.6, c: 27.1, f: 0.1 },
+  { n: 'Haşlanmış patates', u: 'adet', g: 135, k: 117, p: 2.6, c: 27.1, f: 0.1, a: ['patates', 'potato'] },
   { n: 'Patates kızartması', u: 'porsiyon', g: 150, k: 468, p: 5.1, c: 61.5, f: 22.5 },
   { n: 'Avokado', u: 'yarım', g: 100, k: 160, p: 2, c: 8.5, f: 14.7 },
   // --- Meyveler ---
@@ -451,7 +456,8 @@ const TURK_FOODS = [
   { n: 'Kefir (light)', u: 'bardak', g: 200, k: 80, p: 7, c: 9, f: 1 },
   { n: 'Beyaz peynir (light)', u: 'dilim', g: 30, k: 48, p: 5.7, c: 0.5, f: 2.6 },
   { n: 'Kaşar peyniri (light)', u: 'dilim', g: 30, k: 78, p: 8.4, c: 0.6, f: 4.8 },
-  { n: 'Labne (light)', u: 'kaşık', g: 20, k: 35, p: 3, c: 1, f: 2 },
+  // 22 Eyl 2026: protein 15 g/100 g idi (light labne ~7). Etiket: Pınar Labne Light 6,8 g.
+  { n: 'Labne (light)', u: 'kaşık', g: 20, k: 29, p: 1.4, c: 1, f: 2.1 },
   { n: 'Krem peynir (light)', u: 'kaşık', g: 15, k: 30, p: 1.2, c: 0.9, f: 2.4 },
   { n: 'Cottage peyniri', u: 'porsiyon', g: 100, k: 98, p: 11.1, c: 3.4, f: 4.3, a: ['süzme peynir', 'cottage cheese'] },
   // Yumurtanın ayrılmış hâlleri — ak neredeyse saf protein, sarı yağ + D vitamini.
@@ -509,6 +515,20 @@ const TURK_FOODS = [
   { n: 'Şekersiz şurup', u: 'kaşık', g: 15, k: 5, p: 0, c: 1, f: 0, a: ['zero şurup', 'diyet şurup'] },
   { n: 'Ton balığı (suda)', u: 'kutu', g: 80, k: 93, p: 20.4, c: 0, f: 0.6, a: ['suda ton', 'light tuna'] },
   { n: 'Soya sütü (şekersiz)', u: 'bardak', g: 200, k: 66, p: 7, c: 3, f: 3, a: ['soy milk', 'soya sütü'] },
+  // --- CİĞ / KURU ölçüm (22 Eyl 2026) ---
+  // Sporcu çoğu zaman PİŞMEMİŞ tartar: "100 g makarna" = kuru makarna. Pişmiş
+  // satır tek seçenekken 100 g kuru makarna 158 kcal (gerçek 371) yazılıyordu.
+  // Değerler USDA FoodData Central (myfooddata.com üzerinden, 22 Eyl 2026).
+  { n: 'Tavuk göğsü (çiğ)', u: '100 g', g: 100, k: 120, p: 22.7, c: 0, f: 2.6, a: ['çiğ tavuk göğsü', 'çiğ tavuk'] },
+  { n: 'Dana kıyma (çiğ)', u: '100 g', g: 100, k: 215, p: 18.6, c: 0, f: 15.1, a: ['çiğ kıyma'] },
+  { n: 'Makarna (kuru)', u: 'porsiyon', g: 100, k: 371, p: 13.1, c: 74.7, f: 1.5, a: ['kuru makarna', 'çiğ makarna', 'pişmemiş makarna'] },
+  { n: 'Bulgur (kuru)', u: 'porsiyon', g: 80, k: 274, p: 9.8, c: 60.7, f: 1.1, a: ['kuru bulgur', 'çiğ bulgur', 'pişmemiş bulgur'] },
+  { n: 'Kırmızı mercimek (kuru)', u: 'porsiyon', g: 80, k: 286, p: 19.1, c: 50.5, f: 1.8, a: ['kırmızı mercimek', 'kuru mercimek', 'çiğ mercimek'] },
+  { n: 'Yeşil mercimek (kuru)', u: 'porsiyon', g: 80, k: 282, p: 19.7, c: 50.6, f: 0.8, a: ['yeşil mercimek'] },
+  { n: 'Nohut (kuru)', u: 'porsiyon', g: 80, k: 302, p: 16.4, c: 50.4, f: 4.8, a: ['kuru nohut', 'çiğ nohut'] },
+  { n: 'Kuru fasulye (pişmemiş)', u: 'porsiyon', g: 80, k: 266, p: 18.6, c: 48.1, f: 0.7, a: ['kuru fasulye tanesi', 'çiğ kuru fasulye'] },
+  { n: 'Kinoa (kuru)', u: 'porsiyon', g: 60, k: 221, p: 8.5, c: 38.5, f: 3.7, a: ['kuru kinoa', 'çiğ kinoa'] },
+  { n: 'Patates (çiğ)', u: 'adet', g: 170, k: 131, p: 3.4, c: 29.8, f: 0.2, a: ['çiğ patates'] },
   { n: 'Nohut (haşlanmış)', u: 'porsiyon', g: 150, k: 246, p: 13.4, c: 41.1, f: 3.9, a: ['haşlanmış nohut', 'chickpea'] },
   // --- Genisletme (10 Eyl 2026) — denetim sirasinda EKSIK oldugu gorulen
   //     yaygin kalemler. Degerler per-100g referanstan porsiyona cevrildi;
@@ -609,9 +629,15 @@ function foodMatchScore(ad, takmaAdlar, q) {
   // sorguyla baslamasindan DAHA guclu bir sinyaldir: sira bu yuzden degisti.
   const tamKelime = qt.every(t => adTokens.indexOf(t) >= 0);
   if (tamKelime) puan += 40000;
+  // ⚠️ 22 Eyl 2026: TAKMA AD TAM ESLESMESI bonus almiyordu. "yulaf" arayan ilk
+  // sirada "Yulaf sütü"nu goruyordu (kisa ad kazaniyordu), "patates" arayan
+  // "Patates püresi"ni. Takma ad sorgunun KENDISIYSE o satir kastedilendir.
+  // 100000'in (adin kendisi) altinda: ad eslesmesi hala once gelir.
+  if ((takmaAdlar || []).some(ta => trNorm(ta) === nq)) puan += 45000;
   if (nn.startsWith(nq)) puan += 10000;
   else if (adTokens[0] && adTokens[0].startsWith(qt[0])) puan += 2000;
-  return puan;
+  // Adin KENDISI tam eslesmesi (100000) her zaman kazanir: 'pirinç' -> Pirinç, Pilav degil.
+  return Math.min(puan, 99999);
 }
 // Temel besin DB araması — kelime bazlı VE + yazım toleransı + takma ad.
 function seedFoodMatches(q, limit) {
@@ -641,7 +667,7 @@ function seedFoodMatches(q, limit) {
 
 function openFoodModal(slot, tab) {
   if (slot) { _mealSlot = slot; syncMealSlotChips(); }
-  _foodPick = null; _foodResults = []; _pickQty = null; _pickGram = false;   // onceki aramanin miktari chip'e sizmasin
+  _foodPick = null; _foodResults = []; _pickQty = null; _pickGram = false; _pickParsed = null;   // onceki aramanin miktari chip'e sizmasin
   const m = document.getElementById('foodModal');
   if (!m) return;
   syncFoodModalTitle();
@@ -1022,12 +1048,21 @@ function foodMemoryMatches(q, limit) {
   return out;
 }
 let _foodInputTimer = null, _localMatches = [], _seedMatches = [], _customMatches = [], _pickQty = null, _pickGram = false;
+let _pickParsed = null;   // ev olcusu donusumu icin ham sorgu (bkz. _olcuDonustur)
+/** Secilen temel besine gore miktari ev olcusunden cevir (ham sorgudan, birikmesin). */
+function _olcuUygula(sf) {
+  if (!_pickParsed) return;
+  const d = _olcuDonustur(_pickParsed, sf);
+  if (d) { _pickQty = d.qty; _pickGram = d.gram; }
+  else { _pickQty = _pickParsed.qty; _pickGram = !!_pickParsed.gram; }
+}
 function onFoodSearchInput() { clearTimeout(_foodInputTimer); _foodInputTimer = setTimeout(renderLocalMatches, 180); }
 function renderLocalMatches() {
   const el = document.getElementById('foodLocal'); if (!el) return;
   const raw = (document.getElementById('foodSearchInput').value || '').trim();
   // '2 dilim ekmek' → miktar 2 + çekirdek 'ekmek'; miktar seçilen besinin adedine önyüklenir
   const parsed = parseFoodQuery(raw);
+  _pickParsed = parsed;
   _pickQty = parsed.qty;
   _pickGram = !!parsed.gram;
   const q = (parsed.core && parsed.core.length >= 2) ? parsed.core : raw;
@@ -1189,7 +1224,7 @@ function _quickAddFood(o) {
   };
   day.meals.push(rec);
   save(); renderDiet();
-  _pickQty = null; _pickGram = false;
+  _pickQty = null; _pickGram = false; _pickParsed = null;
   const inp = document.getElementById('foodSearchInput');
   // ⚠️ "Son aramalar" FIILEN OLUYDU: pushRecentFood yalniz bulut aramasindan
   // cagriliyordu, yani yerel arama yaygilastiginca hic dolmuyordu.
@@ -1215,6 +1250,7 @@ function _quickAddFood(o) {
 }
 function quickAddSeed(i) {
   const sf = _seedMatches[i]; if (!sf) return;
+  _olcuUygula(sf);
   // grams/unit GECIYOR: gram sorgusunu gram olarak uygulayan tek bilgi bu.
   _quickAddFood({ name: sf.n, kcal: sf.k, protein: sf.p, carb: sf.c, fat: sf.f, grams: sf.g || 0, unit: sf.u });
 }
@@ -1367,7 +1403,9 @@ function trNorm(str) {
 // Miktar+birim kelimeleri (trNorm edilmiş halleriyle) — arama sorgusundan ayıklamak için
 // 'bardagi/kasigi/...' iyelik ekli hâller de burada: "1 su bardağı pirinç"
 // yazan biri 'bardagi' kelimesinin sonuçları daraltmasını beklemiyor.
-const _FOOD_UNITS = ['dilim', 'dilimi', 'adet', 'adedi', 'tane', 'tanesi', 'bardak', 'bardagi', 'kase', 'kasede', 'kasesi', 'kasik', 'kasigi', 'porsiyon', 'porsiyonu', 'avuc', 'tabak', 'tabagi', 'top', 'kutu', 'kutusu', 'sise', 'fincan', 'durum', 'parca', 'kup', 'paket', 'olcek', 'kadeh', 'dal', 'yaprak', 'lokma', 'su', 'gr', 'gram', 'grami', 'ml', 'mililitre'];
+const _FOOD_UNITS = ['dilim', 'dilimi', 'adet', 'adedi', 'tane', 'tanesi', 'bardak', 'bardagi', 'kase', 'kasede', 'kasesi', 'kasik', 'kasigi', 'porsiyon', 'porsiyonu', 'avuc', 'tabak', 'tabagi', 'top', 'kutu', 'kutusu', 'sise', 'fincan', 'durum', 'parca', 'kup', 'paket', 'olcek', 'kadeh', 'dal', 'yaprak', 'lokma', 'su', 'g', 'gr', 'gram', 'grami', 'ml', 'mililitre'];
+// ⚠️ 22 Eyl 2026: 'g' listede YOKTU. "50 g yulaf" (boşluklu yazım — en yaygını)
+// çekirdeği "g yulaf" yapıyor ve HİÇBİR sonuç dönmüyordu; bitişik "50g" çalışıyordu.
 const _FOOD_WORDNUM = { yarim: 0.5, ceyrek: 0.25, bucuk: 1.5, bir: 1, iki: 2, uc: 3, dort: 4, bes: 5, alti: 6, yedi: 7, sekiz: 8, dokuz: 9, on: 10, yirmi: 20 };
 // GRAM sayan birim kelimeleri. Bunlar PORSIYON CARPANI DEGIL — "200 gr tavuk"
 // 200 porsiyon tavuk demek degildir. 12 Eyl 2026'ya kadar parseFoodQuery birim
@@ -1389,6 +1427,17 @@ function parseFoodQuery(q) {
     else if (yapisik) { qty = Number(yapisik[1].replace(',', '.')); unit = yapisik[3]; words = words.slice(1); }
     else if (_FOOD_WORDNUM[w0] != null) { qty = _FOOD_WORDNUM[w0]; words = words.slice(1); }
   }
+  // ⚠️ 22 Eyl 2026: "yemek kaşığı" / "çay kaşığı" / "su bardağı" iki kelimelik
+  // birim. 'yemek' ve 'cay' birim listesinde olamaz (yemek adında geçer), ama
+  // hemen ARDINDAN kaşık/bardak geliyorsa birimin parçasıdır. Eskiden
+  // "2 yemek kaşığı yulaf" -> çekirdek "yemek yulaf" -> hiç sonuç yoktu.
+  let olcek = null;
+  words = words.filter((w, i) => {
+    const olcu = (w === 'yemek' || w === 'cay' || w === 'tatli' || w === 'su') &&
+      /^(kasik|kasigi|bardak|bardagi)$/.test(words[i + 1] || '');
+    if (olcu && !olcek) olcek = w;
+    return !olcu || w === 'su';   // 'su' zaten birim listesinde, orada ayiklanir
+  });
   // birim kelimelerini çıkar (kalan çekirdek terim) — hepsi birimse ayıklama yapma
   const birimler = words.filter(w => _FOOD_UNITS.includes(w));
   if (!unit && birimler.length) unit = birimler[0];
@@ -1397,12 +1446,54 @@ function parseFoodQuery(q) {
     qty: (qty && qty > 0) ? qty : null,
     unit: unit || null,
     gram: !!(unit && _FOOD_GRAM_UNITS.includes(unit)),
+    olcek: olcek,
     core: (kept.length ? kept : words).join(' ').trim()
   };
 }
 
+/**
+ * EV ÖLÇÜSÜ -> BESİNİN KENDİ BİRİMİ (22 Eyl 2026)
+ *
+ * ⚠️ Eskiden sayı, birim ne olursa olsun besinin PORSİYONUNA çarpılıyordu:
+ *   "2 yemek kaşığı yulaf"  -> 2 × 40 g porsiyon = 80 g (gerçek ~20 g, 4 kat)
+ *   "1 çay kaşığı bal"      -> 1 × 21 g yemek kaşığı (gerçek ~7 g, 3 kat)
+ *   "1 su bardağı pirinç"   -> 1 × 150 g pişmiş porsiyon
+ * Kural: besinin birimi söylenen ölçüyle AYNI aileyse çarpan (çay kaşığı =
+ * yemek kaşığının 1/3'ü); farklıysa ölçü hacimden GRAMA çevrilir. Yoğunluk
+ * yalnız farkı büyük olan gruplar için yazıldı (yulaf 1 su bardağı ≈ 80 g,
+ * su ≈ 200 g) — kalanında 1 g/ml, en fazla ±%20 hata.
+ * @returns {{qty:number, gram:boolean}|null} null = dönüşüm gerekmiyor
+ */
+const _OLCU_ML = { kasik: { yemek: 15, tatli: 10, cay: 5, _: 15 }, bardak: { su: 200, cay: 100, _: 200 } };
+const _YOGUNLUK = [
+  [/yulaf|musli|granola|misir gevregi|corn flakes/, 0.4],
+  [/kakao|un\b|irmik/, 0.55],
+  [/pirinc \(ciğ\)|pirinc \(cig\)|bulgur \(kuru\)|mercimek \(kuru\)|nohut \(kuru\)|seker/, 0.85],
+  [/bal|pekmez|recel/, 1.4],
+];
+function _olcuDonustur(parsed, besin) {
+  if (!parsed || !(parsed.qty > 0) || parsed.gram || !besin) return null;
+  const u = parsed.unit || '';
+  const aile = /^kasi/.test(u) ? 'kasik' : (/^bardag|^bardak$|^su$/.test(u) ? 'bardak' : null);
+  if (!aile) return null;
+  const tur = parsed.olcek || '_';
+  const ml = (_OLCU_ML[aile][tur] || _OLCU_ML[aile]._);
+  const bu = trNorm(besin.u || '');
+  // 'su bardağı' -> 'su bardagi', 'kaşığı' -> 'kasigi': kok eslesmesi yeter.
+  if (bu.indexOf(aile === 'kasik' ? 'kasi' : 'barda') >= 0) {
+    // Ayni aile: besinin kasigi YEMEK kasigi, bardagi SU bardagi sayilir.
+    return { qty: parsed.qty * ml / _OLCU_ML[aile]._, gram: false };
+  }
+  if (!(besin.g > 0)) return null;
+  const ad = trNorm(besin.n || '');
+  let yog = 1;
+  for (const [re, d] of _YOGUNLUK) if (re.test(ad)) { yog = d; break; }
+  return { qty: Math.round(parsed.qty * ml * yog), gram: true };
+}
+
 function pickSeedFood(i) {
   const sf = _seedMatches[i]; if (!sf) return;
+  _olcuUygula(sf);
   _aiFood = { name: sf.n, kcal: sf.k, protein: sf.p, carb: sf.c, fat: sf.f, multi: false, items: [], source: 'seed', unit: sf.u, grams: sf.g || null };
   showAiPortion(sf.n, 'Temel · ' + sf.u, '');
   applyPickQty();
