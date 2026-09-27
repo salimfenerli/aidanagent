@@ -820,6 +820,7 @@ function ensureNutDuzen() {
   // tasinabilir olmali. Gun basina tek blok — iki kurs ust uste yazilmaz,
   // ikisini kapsayan tek aralik girilir (basitlik bilincli).
   if (!d.ders || typeof d.ders !== 'object') d.ders = {};
+  if (!NUT_TEPSI[d.tepsi]) d.tepsi = 'normal';
   if (nutDk(d.yemekhaneSaat) == null) d.yemekhaneSaat = '13:00';
   if (d.antrenman != null && nutDk(d.antrenman) == null) d.antrenman = '17:00';
   if (nutDk(d.kalk) == null) d.kalk = '07:00';
@@ -881,6 +882,7 @@ function setNutOkul(dow, bas, bit) {
 function setNutDuzen(alan, deger) {
   const d = ensureNutDuzen();
   if (alan === 'yemekhane') d.yemekhane = !!deger;
+  else if (alan === 'tepsi') d.tepsi = NUT_TEPSI[deger] ? deger : 'normal';
   else if (alan === 'antrenman') d.antrenman = deger ? nutSaat(nutDk(deger) != null ? nutDk(deger) : 17 * 60) : null;
   else if (alan === 'yemekhaneSaat' || alan === 'kalk') {
     const v = nutDk(deger);
@@ -1027,14 +1029,31 @@ function nutDuzenCakisma(duzen, program) {
     const okul = nutOkulGun(dow, d);
     if (!okul || okul.bit < NUT_DUZEN_LIMITS.okulGecBit) continue;
     const tip = nutDayType(dow, p);
-    if (tip === 'rest') continue;
     const seans = nutSeansSaati(dow, tip, d);
-    if (seans == null) continue;
+    // ⚠️ 24 Eyl 2026 — DINLENME GUNU DE GEC KALABILIR. Eskiden yalniz antrenman
+    // gunlerine bakiliyordu; ek ders (kurs) girince persembe DINLENME gunu olup
+    // yine de aksam yemegi 21:45'e kayiyor ve motor hic uyarmiyordu.
+    if (seans == null) {
+      const ders = nutDersGun(dow, d);
+      const aksam = Math.max(okul.bit + NUT_DUZEN_LIMITS.cikisDk, 19 * 60);
+      if (!ders || aksam < NUT_DUZEN_LIMITS.gecSaat - 45) continue;
+      out.push({
+        dow, tip, okulBit: nutSaat(okul.bit), seans: null, aksam: nutSaat(aksam),
+        gec: aksam >= NUT_DUZEN_LIMITS.gecSaat - 45,
+        metin: nutDowLabel(dow) + ' ders ' + nutSaat(ders.bit) + '’da bitiyor — akşam yemeği ' +
+          nutSaat(aksam) + '. Tek öğünü o saate yığma: dersten ÖNCE (' +
+          nutSaat(Math.max((nutOkulSaf(dow, d) || ders).bit, ders.bas - 30)) + ' civarı) doyurucu bir ara öğün ye, ' +
+          'dersten sonra hafif ve hızlı bir şey (yoğurt + meyve + protein) bırak.',
+      });
+      continue;
+    }
     const yemek = seans + NUT_DUZEN_LIMITS.seansDk + NUT_DUZEN_LIMITS.seansSonraDk;
     out.push({
       dow, tip, okulBit: nutSaat(okul.bit), seans: nutSaat(seans), aksam: nutSaat(yemek),
       gec: yemek >= NUT_DUZEN_LIMITS.gecSaat,
-      metin: nutDowLabel(dow) + ' okul ' + nutSaat(okul.bit) + '’da bitiyor — antrenman en erken ' +
+      // Ders varsa metin "okul X" demez: gunu kapatan sey ders (bkz. nutOkulGun).
+      metin: nutDowLabel(dow) + (nutDersGun(dow, d) ? ' ders ' : ' okul ') +
+        nutSaat(okul.bit) + '’da bitiyor — antrenman en erken ' +
         nutSaat(seans) + ', akşam yemeği ' + nutSaat(yemek) + '. Bulk’ta uykuyu bozmak kazancın ' +
         'yarısını götürür: o günü dinlenmeye al ve seansı hafta sonuna taşı, ya da akşam öğününü ' +
         'antrenman öncesine kaydırıp sonrasında sıvı protein iç.',
@@ -1074,6 +1093,23 @@ const NUT_CAFE = {
 // gercekci degil, ancak ton baligi bittiyse.
 const NUT_CAFE_TELAFI = ['Ton balığı', 'Protein yoğurt', 'Protein tozu'];
 const NUT_CAFE_PROTEIN_ACIK = 8;   // bu gramin altindaki acik icin canta acilmaz
+/**
+ * ⚠️ TEPSI PORSIYONU (24 Eyl 2026). Salim: "yemekhanede yemekleri kendim
+ * secmiyorum, porsiyonlar cok buyuk degil ama genelde". Motor senaryolari
+ * "pilavi 2-2,5 porsiyon iste" diye kuruyordu: tezgahta porsiyonu SEN
+ * belirlemiyorsan bu plan degil TEMENNI. Sonuc gunde 200-400 kcal sessiz acik
+ * — bulkta en pahali hata, cunku kullanici plani uyguladigini saniyor.
+ * Tavanlar: garnitur (pilav) ve ekmek kac porsiyona kadar istenebilir.
+ */
+const NUT_TEPSI = {
+  kucuk:   { ad: 'küçük porsiyon', garnitur: 1,   ekmek: 1 },
+  normal:  { ad: 'normal porsiyon', garnitur: 1.5, ekmek: 2 },
+  serbest: { ad: 'istediğim kadar', garnitur: 3,   ekmek: 3 },
+};
+function nutTepsi(duzen) {
+  const d = duzen || ensureNutDuzen();
+  return NUT_TEPSI[d.tepsi] ? d.tepsi : 'normal';
+}
 
 function nutCafeKalem(ad, adet) {
   const f = nutFood(ad);
@@ -1099,8 +1135,9 @@ function nutCafeSenaryo(tip, o) {
   const taban = [nutCafeKalem(NUT_CAFE.corba, 1), nutCafeKalem(meta.ad, 1),
     nutCafeKalem(tip === 'etli' ? NUT_CAFE.salata : NUT_CAFE.ayran, 1)].filter(Boolean);
 
+  const tepsi = NUT_TEPSI[nutTepsi()];
   let enIyi = null;
-  for (let g = 1; g <= 3; g += 0.5) {
+  for (let g = 1; g <= tepsi.garnitur; g += 0.5) {
     const kalem = nutCafeKalem(NUT_CAFE.garnitur, g);
     if (!kalem) break;
     const t = nutCafeTopla(taban.concat([kalem]));
@@ -1111,7 +1148,7 @@ function nutCafeSenaryo(tip, o) {
   let t = nutCafeTopla(items);
   // Hala 100 kcal'den fazla acik varsa ekmek — tezgahta her zaman var.
   let dilim = 0;
-  while (hedefK - t.kcal > 100 && dilim < 3) {
+  while (hedefK - t.kcal > 100 && dilim < tepsi.ekmek) {
     dilim++;
     const e = nutCafeKalem(NUT_CAFE.ekmek, dilim);
     t = nutCafeTopla(items.concat([e]));
@@ -1126,8 +1163,17 @@ function nutCafeSenaryo(tip, o) {
     telafi = adaylar.find(x => x.p >= acik - 4) || adaylar.sort((a, b) => b.p - a.p)[0] || null;
   }
   const ilaveli = telafi ? nutCafeTopla(son.concat([telafi])) : t;
+  // ⚠️ TEPSI HEDEFI TUTMUYORSA ACIGI CANTA KAPATIR. Eskiden yalniz PROTEIN
+  // acigina bakiliyordu; tepsi sabit porsiyonluysa asil eksik KALORI oluyor
+  // ve hicbir yerde yazmiyordu.
+  const kcalAcik = Math.round(hedefK - ilaveli.kcal);
+  // Esik 80 kcal: hafta ici bes gun x 100 kcal = 500 kcal/hafta sessiz acik.
+  const cantaEk = (kcalAcik > 80 && typeof nutCantaOner === 'function')
+    ? nutCantaOner({ kcal: kcalAcik, protein: Math.max(0, Math.round(hedefP - ilaveli.protein)) })
+    : null;
   return {
     tip, baslik: meta.baslik,
+    tepsiTip: nutTepsi(), kcalAcik: Math.max(0, kcalAcik), cantaEk,
     items: son.map(x => ({ n: x.n, u: x.u, adet: x.adet })),
     kcal: Math.round(t.kcal), protein: Math.round(t.protein),
     carb: Math.round(t.carb), fat: Math.round(t.fat),
@@ -1148,9 +1194,12 @@ function nutYemekhane(o) {
     // tek bir evet/hayir sorusudur.
     kural: 'Tepsiden kalkmadan tek soru: ana yemekte et ya da tavuk var mı? ' +
       'Yoksa çantadaki ton balığını aç.',
+    tepsi: NUT_TEPSI[nutTepsi()].ad,
     tezgah: [
       'Ana yemeği atlama, iki seçenek varsa etli/tavuklu olanı al.',
-      'Pilav ya da makarnayı 1,5-2 porsiyon iste, ekmeği bırakma — bulkta en ucuz kalori orada.',
+      nutTepsi() === 'serbest'
+        ? 'Pilav ya da makarnayı 1,5-2 porsiyon iste, ekmeği bırakma — bulkta en ucuz kalori orada.'
+        : 'Porsiyonu sen seçmiyorsun: tepsiden çıkanı bitir, ekmeği bırakma. Kalanı çantadan kapat — aşağıda yazıyor.',
       'Çorbayı ve ayranı al; tatlı çıktıysa reddetme.',
     ],
   };
@@ -1165,7 +1214,9 @@ function nutYemekhane(o) {
 // ============================================================================
 const NUT_TASINIR = {
   protein: ['Protein yoğurt', 'Protein bar', 'Cottage peyniri', 'Ton balığı', 'Süzme yoğurt', 'Protein tozu'],
-  carb: ['Simit', 'Leblebi', 'Muz', 'Kuru üzüm', 'Kuru kayısı'],
+  // ⚠️ Simit cikarildi (25 Eyl 2026): beyaz un, ~320 kcal, 10 g protein —
+  // diyet planinda ara ogun karbonhidrati olarak savunulamiyor.
+  carb: ['Leblebi', 'Muz', 'Kuru üzüm', 'Kuru kayısı', 'Tam buğday ekmek'],
   yag: ['Badem', 'Fındık', 'Ceviz'],
 };
 
@@ -1209,13 +1260,40 @@ function nutCantaOner(o, kullanilan) {
     if (!nutIzinli(ad)) continue;
     const f = nutFood(ad);
     if (!f) continue;
-    for (let a = 0.5; a <= 3; a += 0.5) {
+    // Meyve tavani cantada da gecerli ("3 adet muz" cantaya da yazilmaz);
+    // kuru atistirmalik (leblebi, kuru uzum) 2 avuc — "3 avuc leblebi" gunde
+    // iki kez 200 g ediyor. Ayni gun cantada zaten olan karbonhidrat da tekrar
+    // edilmez (60 kcal ceza, baska aday varsa o secilir).
+    const ust = /avuç/.test(String(f.u)) ? 2 : nutAdetTavan(f, 3);
+    const tekrarC = (kullanilan && kullanilan.indexOf(ad) >= 0) ? 60 : 0;
+    for (let a = 0.5; a <= ust; a += 0.5) {
       const adet = nutRound(a, f.u) || a;
-      const fark = Math.abs(kcal + f.k * adet - hedefK);
+      const fark = Math.abs(kcal + f.k * adet - hedefK) + tekrarC;
       if (!en || fark < en.fark) en = { f, adet, fark };
     }
   }
   if (en) { items.push({ n: en.f.n, u: en.f.u, adet: en.adet, k: en.f.k * en.adet, p: en.f.p * en.adet }); kcal += en.f.k * en.adet; }
+
+  // Kuruyemis: simit havuzdan cikinca (25 Eyl 2026) buyuk ara ogunlerde
+  // (500+ kcal) protein + karbonhidrat iki kalemle hedefin %30-40 altinda
+  // kaliyordu. Acik 80 kcal'i gecerse bir avuc kuruyemis eklenir (tavan 2).
+  if (hedefK - kcal > 80) {
+    let yg = null;
+    for (const ad of NUT_TASINIR.yag) {
+      if (!nutIzinli(ad)) continue;
+      const f = nutFood(ad);
+      if (!f || !(f.k > 0)) continue;
+      const tekrarY = (kullanilan && kullanilan.indexOf(ad) >= 0) ? 60 : 0;
+      for (let a = 1; a <= 2; a++) {
+        const fark = Math.abs(kcal + f.k * a - hedefK) + tekrarY;
+        if (!yg || fark < yg.fark) yg = { f, adet: a, fark };
+      }
+    }
+    if (yg && yg.fark < hedefK - kcal) {
+      items.push({ n: yg.f.n, u: yg.f.u, adet: yg.adet, k: yg.f.k * yg.adet, p: yg.f.p * yg.adet });
+      kcal += yg.f.k * yg.adet;
+    }
+  }
 
   const p = items.reduce((a, x) => a + x.p, 0);
   return {
@@ -1244,7 +1322,7 @@ function nutCanta(meals, times, yemekhaneVar) {
     if (!z.tasinabilir) return;
     const one = nutCantaOner(m, kullanilan);
     if (!one) return;
-    if (one.items && one.items[0]) kullanilan.push(one.items[0].n);
+    (one.items || []).forEach(x => kullanilan.push(x.n));
     out.push({
       slot: m.slot, saat: z.saat, etiket: z.etiket,
       neden: z.yer === 'cikis' ? 'okul çıkışı — antrenmandan önce' : 'teneffüse sığmalı, çatal bıçak istemez',
@@ -1293,14 +1371,14 @@ const NUT_TEMPLATES = {
     { protein: 'Süzme yoğurt', carb: 'Yulaf ezmesi', yag: 'Ceviz', ek: ['Muz', 'Bal'] },
     { protein: 'Yumurta', carb: 'Bazlama', yag: 'Zeytinyağı', ek: ['Beyaz peynir', 'Domates', 'Salatalık'] },
     { protein: 'Çökelek', carb: 'Tam buğday ekmek', yag: 'Ceviz', ek: ['Domates', 'Zeytin'] },
-    { protein: 'Süzme yoğurt', carb: 'Simit', yag: 'Fındık', ek: ['Bal', 'Domates'] },
+    { protein: 'Yumurta', carb: 'Kepekli ekmek', yag: 'Ceviz', ek: ['Beyaz peynir', 'Salatalık'] },
   ],
   // ⚠️ Capa PROTEIN YOGUN olmali — bkz. asagidaki kefir notu. Ilk denemede
   // buraya Kefir ve Sut capa yazilmisti (6 g/bardak) ve motor 90 kg'lik
   // profilde "4 bardak sut" uretti. Ayni hata, yeni ogunde tekrar etti.
   // Sut/kefir artik EK; capa yogun olan.
   ara: [
-    { protein: 'Süzme yoğurt', carb: 'Simit', yag: 'Fıstık ezmesi', ek: ['Elma'] },
+    { protein: 'Süzme yoğurt', carb: 'Granola', yag: 'Fıstık ezmesi', ek: ['Elma'] },
     { protein: 'Protein tozu', carb: 'Leblebi', yag: 'Badem', ek: ['Süt', 'Kuru üzüm'] },
     { protein: 'Ton balığı', carb: 'Tam buğday ekmek', yag: 'Zeytinyağı', ek: ['Domates'] },
     { protein: 'Süzme yoğurt', carb: 'Yulaf ezmesi', yag: 'Ceviz', ek: ['Kuru üzüm'] },
@@ -1312,7 +1390,7 @@ const NUT_TEMPLATES = {
     // porsiyon capayi hic alamiyordu. Hafif capa (yogurt 11 g/kase) o
     // butceyi ana ogune birakiyor. 20 Agu notunun "cozum oran degil SABLON
     // HAVUZU" tespiti buydu.
-    { protein: 'Cottage peyniri', carb: 'Simit', yag: 'Ceviz', ek: ['Elma'] },
+    { protein: 'Cottage peyniri', carb: 'Pirinç patlağı galeta', yag: 'Ceviz', ek: ['Elma'] },
   ],
   ogle: [
     { protein: 'Tavuk göğsü', carb: 'Bulgur pilavı', yag: 'Zeytinyağı', ek: ['Çoban salata', 'Ayran'] },
@@ -1434,7 +1512,17 @@ function nutTercih() {
     diyet: NUT_DIYET[t.diyet] ? t.diyet : 'yok',
     sevmem: Array.isArray(t.sevmem) ? t.sevmem.filter(x => typeof x === 'string') : [],
     favori: Array.isArray(t.favori) ? t.favori.filter(x => typeof x === 'string') : [],
+    // Kahvaltida kac yumurta yedigi (0 = motor karar verir, taban 2).
+    yumurta: nutYumurtaAdet(t.yumurta),
   };
+}
+
+/** Kahvalti yumurta sayisi: 0 (ayarsiz) ya da 2..NUT_YUMURTA_MAX tam sayi. */
+const NUT_YUMURTA_MAX = 8;
+function nutYumurtaAdet(v) {
+  const x = Math.round(Number(v));
+  if (!Number.isFinite(x) || x < 2) return 0;
+  return Math.min(NUT_YUMURTA_MAX, x);
 }
 
 // ⚠️ KACIS KAPISI. Bir slotun BUTUN sablonlari tercihe takilirsa o ogun
@@ -1500,7 +1588,7 @@ function nutHavuzBesinleri() {
 function setNutDiyet(tip) {
   const n = ensureNutrition();
   const tr = nutTercih();
-  n.tercih = { diyet: NUT_DIYET[tip] ? tip : 'yok', sevmem: tr.sevmem, favori: tr.favori };
+  n.tercih = { diyet: NUT_DIYET[tip] ? tip : 'yok', sevmem: tr.sevmem, favori: tr.favori, yumurta: tr.yumurta };
   save();
   renderNutrition();
 }
@@ -1520,10 +1608,26 @@ function nutTercihDongu(ad) {
     diyet: tr.diyet,
     favori: tr.favori.filter(x => x !== ad),
     sevmem: tr.sevmem.filter(x => x !== ad),
+    yumurta: tr.yumurta,
   };
   if (!fav && !sev) yeni.favori.push(ad);
   else if (fav) yeni.sevmem.push(ad);
   n.tercih = yeni;
+  save();
+  renderNutrition();
+}
+
+/**
+ * ⚠️ KAHVALTI YUMURTA SAYISI (25 Eyl 2026). Taban 2 herkes icin makul bir
+ * alt sinirdi ama Salim sabah 6 yumurta yiyor — "2 yumurta" yazan plan onun
+ * gercek kahvaltisini gostermiyordu. Bu bir aliskanlik ayari: motor onu
+ * DEGISTIRMEZ, gunun geri kalanini ona gore kurar (kahvalti proteini
+ * buyuyunce ara ogunler kuculur). Sert guvenlik siniri yine her seyden once.
+ */
+function setNutYumurta(v) {
+  const n = ensureNutrition();
+  const tr = nutTercih();
+  n.tercih = { diyet: tr.diyet, sevmem: tr.sevmem, favori: tr.favori, yumurta: nutYumurtaAdet(v) };
   save();
   renderNutrition();
 }
@@ -1572,6 +1676,32 @@ function nutFood(ad) {
 }
 
 /** Bir ogunu hedefe gore olcekle. Deterministik: sablon indeksi gunden turetilir. */
+/**
+ * ⚠️ GERCEKCI TABAK KURALLARI (24 Eyl 2026). Salim'in haftasi kurulup bir
+ * diyetisyen gozuyle okununca iki sey cikti; ikisi de makro toplamini
+ * bozmuyor ama plani UYGULANAMAZ yapiyordu:
+ *   1) Kahvalti "1 yumurta + 3 dilim ekmek": ekmegin tasidigi protein
+ *      yumurtayi 1'de tutuyordu. Salim sabah yumurta yiyor; kimse kahvaltida
+ *      tek yumurta yemez. Yumurta capa ise en az 2.
+ *   2) "3 adet muz" aksam yemeginin yaninda, "3 adet elma" kahvaltida:
+ *      dolgu/ek meyvesi tavana (3) kadar buyuyordu. Meyve tek ogunde en
+ *      fazla 2 — kalan acigi capa (patates/ekmek) ya da diger ogunler tasir.
+ */
+const NUT_CAPA_TABAN = { 'Yumurta': 2, 'Haşlanmış yumurta': 2 };
+const NUT_MEYVE = new Set(['Elma', 'Muz', 'Armut', 'Portakal', 'Mandalina', 'Şeftali', 'Kivi',
+  'Hurma', 'Kayısı', 'İncir', 'Erik', 'Ayva', 'Nar', 'Trabzon hurması', 'Greyfurt']);
+const NUT_MEYVE_TAVAN = 2;
+/** Capa tabani: kahvaltida kullanicinin yumurta sayisi varsa o, yoksa tablo. */
+function nutCapaTaban(slot, ad) {
+  const taban = NUT_CAPA_TABAN[ad] || 0;
+  if (!taban) return 0;
+  const y = slot === 'kahvalti' ? nutTercih().yumurta : 0;
+  return y > 0 ? y : taban;
+}
+function nutAdetTavan(kalem, taban) {
+  return (kalem && NUT_MEYVE.has(kalem.n)) ? Math.min(taban, NUT_MEYVE_TAVAN) : taban;
+}
+
 function nutBuildMeal(slot, hedefOgun, sablonIdx, anaTaban) {
   const list = NUT_TEMPLATES[slot] || [];
   if (!list.length) return null;
@@ -1643,9 +1773,9 @@ function nutBuildMeal(slot, hedefOgun, sablonIdx, anaTaban) {
     // ara ogun havuzunda hafif secenek var; tam porsiyon hedefe UYUYOR.
     // `anaTaban` cagri yerinden gelir: nutBuildDay once 1 ile dener, gun
     // sert tavani asarsa 0.5 ile yeniden kurar.
-    const pTaban = pf.u === 'porsiyon'
+    const pTaban = Math.max(nutCapaTaban(slot, pf.n), pf.u === 'porsiyon'
       ? (anaOgun ? Math.max(0.5, Number(anaTaban) || 0.5) : 0.5)
-      : 1;
+      : 1);
     pAdet = pf.p > 0 ? nutRound(gerekP / pf.p, pf.u) : 1;
     pAdet = Math.max(pTaban, Math.min(4, pAdet));
     // ⚠️ CAPA SIFIRA INEBILIR (18 Agu 2026). Hafif profillerde (50 kg) ogun
@@ -1662,6 +1792,9 @@ function nutBuildMeal(slot, hedefOgun, sablonIdx, anaTaban) {
     // yani kas protein sentezi esigi — coluyor.
     const eklerYeterli = ekP >= hedefOgun.protein * 0.5;
     pDip = (anaOgun || !eklerYeterli) ? pTaban : 0;
+    // Capa tabani (yumurta 2) KIRPMA adimlarina da gecer: yoksa gun proteini
+    // bandin ustundeyken denge adimi yumurtayi yine 1'e indiriyordu.
+    pDip = Math.max(pDip, nutCapaTaban(slot, pf.n));
     if (pDip === 0 && pf.p > 0 && gerekP < pf.p * pTaban * 0.6) pAdet = 0;
 
     // ⚠️ YAG CAPASI KARBONHIDRATTAN ONCE. Yag once konmazsa karbonhidrat
@@ -1735,6 +1868,16 @@ function nutBuildMeal(slot, hedefOgun, sablonIdx, anaTaban) {
  */
 function nutBalanceDay(meals, t, kg) {
   const capa = (m, rol) => (m.items || []).find(x => x.rol === rol);
+  // ⚠️ Kullanicinin sabitledigi kahvalti yumurtasi (tercih.yumurta) HICBIR
+  // kirpma adiminda azaltilmaz; kirpilacak protein once ara, sonra ana
+  // ogunlerden gelir. Once "en sona birak" denendi: diger ogunler dipte
+  // takilinca sert gecis yine yumurtaya donup 6'yi 4'e indirdi. Gerekce:
+  // 2.5 g/kg guvenlik degil azalan getiri noktasi (bkz. NUT_LIMITS notu) ve
+  // kullanici o yumurtayi zaten yiyor — plan gercegi gostermeli.
+  const yumurtaSabit = nutTercih().yumurta > 0;
+  const sabitMi = (m) => { if (!yumurtaSabit || m.slot !== 'kahvalti') return 0;
+    const c = capa(m, 'p'); return (c && NUT_CAPA_TABAN[c.n]) ? 1 : 0; };
+  const kirpSira = (a, b) => (sabitMi(a) - sabitMi(b)) || (b.protein - a.protein);
   const yenile = (m) => {
     const topla = (alan) => Math.round(m.items.reduce((a, x) => a + x.adet * x[alan], 0));
     m.kcal = topla('k'); m.protein = topla('p'); m.carb = topla('c'); m.fat = topla('f');
@@ -1832,8 +1975,8 @@ function nutBalanceDay(meals, t, kg) {
       // ver" hali, kirpilecek baska yer VARKEN bile ara ogunun protein
       // kaynagini siliyordu — "1 simit + 1 elma" oradan cikiyordu.
       const kucult = (kurallara) => {
-        for (const m of meals.slice().sort((a, b) => b.protein - a.protein)) {
-          if (m.ana) continue;
+        for (const m of meals.slice().sort(kirpSira)) {
+          if (m.ana || sabitMi(m)) continue;
           const c = capa(m, 'p');
           if (!c || c.adet <= 0) continue;
           const adim = adimi(c.u);
@@ -1841,6 +1984,10 @@ function nutBalanceDay(meals, t, kg) {
           // Yumusak gecis: ogun basi esigi (0.25 g/kg) korunur.
           // Sert gecis (guvenlik siniri asiliyor): yalniz 8 g korunur.
           if (m.protein - (c.adet - yeni) * c.p < (kurallara ? ogunDip : 8)) continue;
+          // Capa tabani (kahvaltida 2 yumurta) YUMUSAK gecisin kuralidir:
+          // bant ustu protein yuzunden kirpilmaz. Sert gecis (guvenlik
+          // siniri) yine kirpabilir — guvenlik her tabak kuralindan once gelir.
+          if (kurallara && yeni < nutCapaTaban(m.slot, c.n)) continue;
           if (yeni === 0 && kurallara) {
             const kalan = (m.items || []).filter(x => x.adet > 0 && x !== c);
             if (kalan.length < 3) continue;                      // tabak 3 kalemin altina inmez
@@ -1862,7 +2009,8 @@ function nutBalanceDay(meals, t, kg) {
       // tavanin ustunde bitiyordu. Guvenlik siniri her tabak kuralindan
       // once gelir — ama SIRA sonuncu, yani ancak baska care yokken.
       const anaKucult = () => {
-        for (const m of meals.slice().sort((a, b) => b.protein - a.protein)) {
+        for (const m of meals.slice().sort(kirpSira)) {
+          if (sabitMi(m)) continue;
           const c = capa(m, 'p');
           if (!c || c.adet <= 0) continue;
           const adim = adimi(c.u);
@@ -1958,7 +2106,7 @@ function nutBalanceDay(meals, t, kg) {
       const yagAcik = meals.reduce((a, m) => a + m.fat, 0) < t.fat;
       for (const rol of (yagDolu ? ['c', 'd'] : (yagAcik ? ['y', 'c', 'd'] : ['c', 'd', 'y']))) {
         const c = capa(m, rol);
-        if (!c || c.adet >= TAVAN[rol]) continue;
+        if (!c || c.adet >= nutAdetTavan(c, TAVAN[rol])) continue;
         if (!yagYeriVar(c)) continue;
         // ⚠️ DOLDURMA PROTEIN TAVANINI ASAMAZ (18 Agu 2026). Turk karbonhidrat
         // kaynaklari protein tasir (bulgur 5 g, pilav 4 g/porsiyon); kalori
@@ -2043,8 +2191,9 @@ function nutBalanceDay(meals, t, kg) {
     const cokGeri = geri.kcal < geri.hedef.kcal * 0.7;
     for (const c of adaylar) {
       if (!c) continue;
-      const tav = (c.rol === 'c' && cokGeri) ? 4 : TAVAN[c.rol];
+      const tav = nutAdetTavan(c, (c.rol === 'c' && cokGeri) ? 4 : TAVAN[c.rol]);
       if (c.rol !== 'ek' && c.adet >= tav) continue;
+      if (c.rol === 'ek' && c.adet >= nutAdetTavan(c, ekTavan)) continue;
       if (!yagYeriVar(c)) continue;
       const artis = adimi(c.u) * c.k;
       if (toplamK() + artis > tavan) continue;
@@ -2174,9 +2323,9 @@ function nutBalanceDay(meals, t, kg) {
   for (let tur = 0; tur < 30; tur++) {
     if (toplamP() <= proteinTavan) break;
     let yapildi = false;
-    for (const m of meals.slice().sort((a, b) => b.protein - a.protein)) {
+    for (const m of meals.slice().sort(kirpSira)) {
       const aday = (m.items || []).filter(x => x.adet > 0 && x.p > 0)
-        .filter(x => !(x.rol === 'p' && m.ana))
+        .filter(x => !(x.rol === 'p' && (m.ana || sabitMi(m))))
         .sort((a, b) => (b.p / (b.k || 1)) - (a.p / (a.k || 1)))[0];
       if (!aday) continue;
       const adim = adimi(aday.u);
@@ -2319,6 +2468,14 @@ function nutBuildDay(t, kg, sablonIdx) {
     if (nutTercih().favori.length) {
       sira.sort((a, b) => nutFavoriPuan(havuz[b]) - nutFavoriPuan(havuz[a]));
     }
+    // ⚠️ Kullanici kahvalti yumurta sayisini soylediyse kahvalti HER GUN
+    // yumurtali sablondan kurulur ve protein bandina bakilmaz: o bir
+    // aliskanlik, motorun pazarlik konusu degil. Gunun geri kalani uyar.
+    const yumurtaSabit = o.slot === 'kahvalti' && nutTercih().yumurta > 0 && nutIzinli('Yumurta');
+    if (yumurtaSabit) {
+      const yl = sira.filter(i => havuz[i] && havuz[i].protein === 'Yumurta');
+      if (yl.length) sira.splice(0, sira.length, ...yl);
+    }
     let m = null, secilen = null, enYakin = null, enYakinT = null, enYakinFark = Infinity;
     for (let k = 0; k < sira.length; k++) {
       const idx = sira[k];
@@ -2328,7 +2485,7 @@ function nutBuildDay(t, kg, sablonIdx) {
       if (!kurulan) continue;
       const fark = Math.abs(kurulan.protein - (o.protein || 0));
       if (fark < enYakinFark) { enYakinFark = fark; enYakin = kurulan; enYakinT = aday; }
-      if (bandaSigar(kurulan, o)) { m = kurulan; secilen = aday; break; }
+      if (yumurtaSabit || bandaSigar(kurulan, o)) { m = kurulan; secilen = aday; break; }
     }
     if (!m && enYakin) { m = enYakin; secilen = enYakinT; }
     // ⚠️ KACIS KAPISI: slotun butun sablonlari tercihe takildiysa ogun
@@ -2667,6 +2824,7 @@ function renderNutrition() {
     tercih.sevmem.length ? tercih.sevmem.length + ' sevmediğin' : '',
     tercih.favori.length ? tercih.favori.length + ' favorin' : '',
     tercih.diyet !== 'yok' ? NUT_DIYET[tercih.diyet].ad.toLocaleLowerCase('tr') : '',
+    tercih.yumurta ? 'kahvaltıda ' + tercih.yumurta + ' yumurta' : '',
   ].filter(Boolean).join(' · ') || 'hepsi serbest';
   const tercihDisiOgun = ogunler.filter(m => m.tercihDisi).map(m => nutSlotLabel(m.slot));
   const tercihHtml =
@@ -2682,10 +2840,18 @@ function renderNutrition() {
       '<button type="button" class="nut-chip' + (tercih.diyet === k ? ' on' : '') +
       '" onclick="setNutDiyet(\'' + k + '\')">' + escapeHtml(NUT_DIYET[k].ad) + '</button>').join('') +
     '</div>' +
+    // Kahvalti yumurta sayisi: − / + ; 0 = otomatik (motor 2'den baslar).
+    '<div class="nut-sub nut-yumurta">Kahvaltıda yumurta: ' +
+    '<button type="button" class="nut-mini" aria-label="Azalt" onclick="setNutYumurta(' +
+    (tercih.yumurta <= 2 ? 0 : tercih.yumurta - 1) + ')">−</button> <b>' +
+    (tercih.yumurta ? tercih.yumurta + ' adet' : 'otomatik') + '</b> ' +
+    '<button type="button" class="nut-mini" aria-label="Artır" onclick="setNutYumurta(' +
+    (tercih.yumurta ? Math.min(NUT_YUMURTA_MAX, tercih.yumurta + 1) : 3) + ')">+</button>' +
+    ' — her sabah bu kadar yumurta yazılır, günün geri kalanı buna göre kurulur.</div>' +
     Object.keys(havuz).map(slot =>
       '<div class="nt-slot"><b>' + escapeHtml(nutSlotLabel(slot)) + '</b>' +
       '<div class="nt-chips">' + havuz[slot].map(tercihChip).join('') + '</div></div>').join('') +
-    ((tercih.sevmem.length || tercih.favori.length || tercih.diyet !== 'yok')
+    ((tercih.sevmem.length || tercih.favori.length || tercih.diyet !== 'yok' || tercih.yumurta)
       ? '<button class="nut-mini" onclick="nutTercihSifirla()">Tercihleri sıfırla</button>' : '') +
     '</details>' +
     (tercihDisiOgun.length
@@ -2883,6 +3049,11 @@ function nutDuzenHtml(d, cakisma) {
       ? '<label class="nd-lbl">saat <input type="time" value="' + escapeHtml(d.yemekhaneSaat) +
         '" onchange="setNutDuzen(\'yemekhaneSaat\', this.value)"></label>'
       : '') +
+    (d.yemekhane
+      ? '<span class="nd-lbl">tepsi</span>' + Object.keys(NUT_TEPSI).map(k =>
+        '<button class="nut-chip' + (nutTepsi(d) === k ? ' on' : '') + '" ' +
+        'onclick="setNutDuzen(\'tepsi\', \'' + k + '\')">' + escapeHtml(NUT_TEPSI[k].ad) + '</button>').join('')
+      : '') +
     '<label class="nd-lbl">antrenman <input type="time" value="' + escapeHtml(d.antrenman || '') +
     '" onchange="setNutDuzen(\'antrenman\', this.value)"></label>' +
     '<label class="nd-lbl">kalkış <input type="time" value="' + escapeHtml(d.kalk) +
@@ -2912,7 +3083,13 @@ function nutYemekhaneHtml(m, z) {
         ? '<div class="nut-note">Protein ' + s.acik + ' g eksik → çantadan <b>' +
           escapeHtml(nutPortion(s.telafi.adet, s.telafi.u) + ' ' + s.telafi.n) +
           '</b> ekle: ' + s.telafiliKcal + ' kcal · ' + s.telafiliProtein + 'g P</div>'
-        : '<div class="nt-row nc-ok">Hedefi tek başına tutuyor — çantadan bir şey ekleme.</div>') +
+        : '') +
+      (s.cantaEk
+        ? '<div class="nut-note">Tepsi ' + s.kcalAcik + ' kcal eksik kalıyor (porsiyonu sen ' +
+          'seçmiyorsun) → çantadan <b>' + escapeHtml(s.cantaEk.items.map(x =>
+            nutPortion(x.adet, x.u) + ' ' + x.n).join(' + ')) + '</b> (' + s.cantaEk.kcal +
+          ' kcal · ' + s.cantaEk.protein + 'g P)</div>'
+        : (s.telafi ? '' : '<div class="nt-row nc-ok">Hedefi tek başına tutuyor — çantadan bir şey ekleme.</div>')) +
       '</div>').join('') +
     '</details></div>';
 }

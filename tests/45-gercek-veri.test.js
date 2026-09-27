@@ -193,3 +193,86 @@ describe('Ek ders / kurs (24 Eyl 2026)', () => {
     assert.strictEqual(ogle.disarida, true, 'hafta ici 13:00 yemekhane olmali');
   });
 });
+
+describe('Ders gunu gec ogun uyarisi', () => {
+  test('DINLENME gunu de ders yuzunden gec kalirsa uyari cikar', () => {
+    // Persembe: okul 19:00, ders 19:30-21:00, antrenman yok -> aksam 21:45.
+    // Eski kod yalniz antrenman gunlerine bakiyor, bu gun SESSIZ geciyordu.
+    A.evalIn('data.program = { days: [] }');
+    A.evalIn('data.diet.nut.duzen = ' + JSON.stringify({
+      okul: { '4': { bas: '09:00', bit: '19:00' } }, ders: { '4': { bas: '19:30', bit: '21:00' } },
+      yemekhane: true, yemekhaneSaat: '13:00', antrenman: '17:00', kalk: '07:00' }));
+    const c = J('nutDuzenCakisma(ensureNutDuzen(), data.program)');
+    const per = c.find(x => x.dow === 4);
+    assert.ok(per, 'ders gunu uyarisi yok');
+    assert.ok(/dersten ÖNCE \(19:00/.test(per.metin), per.metin);
+    assert.ok(/21:45/.test(per.metin));
+  });
+});
+
+describe('Tepsi porsiyonu (24 Eyl 2026)', () => {
+  // Salim: "yemekhanede yemekleri kendim secmiyorum, porsiyonlar cok buyuk
+  // degil ama genelde". Senaryolar "pilavi 2-2,5 porsiyon iste" diyordu:
+  // porsiyonu SEN belirlemiyorsan bu plan degil temenni.
+  const hedef = { kcal: 901, protein: 38 };
+  const kur = (tepsi) => A.evalIn('data.diet.nut.duzen = ' + JSON.stringify({
+    okul: { '1': { bas: '09:00', bit: '17:00' } }, ders: {}, yemekhane: true,
+    yemekhaneSaat: '13:00', antrenman: '17:00', kalk: '07:00', tepsi }));
+
+  test('serbest degilse garnitur tavani DUSER', () => {
+    kur('serbest');
+    const serbest = J('nutCafeSenaryo("etli", ' + JSON.stringify(hedef) + ')');
+    kur('kucuk');
+    const kucuk = J('nutCafeSenaryo("etli", ' + JSON.stringify(hedef) + ')');
+    const pilav = (s) => (s.items.find(x => x.n === 'Pilav') || {}).adet || 0;
+    assert.ok(pilav(serbest) > pilav(kucuk), 'tepsi ayari garnituru kismiyor');
+    assert.ok(pilav(kucuk) <= 1);
+  });
+
+  test('tepsi hedefi tutmuyorsa acik CANTADAN kapatiliyor', () => {
+    kur('kucuk');
+    const s = J('nutCafeSenaryo("etli", ' + JSON.stringify(hedef) + ')');
+    assert.ok(s.kcalAcik > 0, 'acik hesaplanmamis');
+    assert.ok(s.cantaEk && s.cantaEk.items.length, 'canta eki onerilmemis');
+    assert.ok(s.cantaEk.kcal >= s.kcalAcik * 0.6, 'canta eki acigi kapatmiyor');
+  });
+
+  test('tezgah kurali porsiyon secemeyene "2 porsiyon iste" demiyor', () => {
+    kur('normal');
+    const y = J('nutYemekhane(' + JSON.stringify(hedef) + ')');
+    assert.ok(!y.tezgah.some(x => /2 porsiyon iste/.test(x)), y.tezgah.join(' | '));
+    kur('serbest');
+    const y2 = J('nutYemekhane(' + JSON.stringify(hedef) + ')');
+    assert.ok(y2.tezgah.some(x => /porsiyon iste/.test(x)));
+  });
+});
+
+describe('Gercekci tabak (24 Eyl 2026 — diyetisyen gozuyle okuma)', () => {
+  const hafta = (kg) => [0, 1, 2, 3, 4, 5, 6].map(dow => {
+    const t = J('nutTargets({sex:"male",age:16,height:184,weight:' + kg + '}, "strength", "kas")');
+    return J('nutBuildDay(' + JSON.stringify(t) + ', ' + kg + ', ' + dow + ')');
+  });
+
+  test('yumurta capa ise kahvaltida EN AZ 2 yumurta', () => {
+    for (const kg of [55, 68.8, 85]) {
+      for (const gun of hafta(kg)) {
+        const y = gun[0].items.find(x => x.rol === 'p' && x.n === 'Yumurta');
+        if (y) assert.ok(y.adet >= 2, kg + ' kg: kahvaltida ' + y.adet + ' yumurta');
+      }
+    }
+  });
+
+  test('ayni meyveden tek ogunde en fazla 2 adet', () => {
+    for (const kg of [55, 68.8, 85]) {
+      for (const gun of hafta(kg)) {
+        for (const m of gun) {
+          for (const x of m.items) {
+            if (/^(Elma|Muz|Armut|Portakal|Mandalina)$/.test(x.n)) {
+              assert.ok(x.adet <= 2, kg + ' kg ' + m.slot + ': ' + x.adet + ' adet ' + x.n);
+            }
+          }
+        }
+      }
+    }
+  });
+});

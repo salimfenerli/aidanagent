@@ -4,6 +4,13 @@
 
 ## 🔴 GÜNCEL DURUM (özet — detaylı seans günlükleri: CHANGELOG.md)
 
+**🗄️ DB YETKİ DÜZELTMESİ (27 Eyl 2026 — migration `fix_grants_and_rls_initplan`).** Tablolarda GRANT eksikti, RLS doğru olsa bile istek reddediliyordu:
+- `aidan_backups`: authenticated'da INSERT yoktu → **haftalık yedek HİÇ alınmamıştı** (0 satır). İlk yedek elle alındı (id=1). Worker artık başarısız yedeği `console.error('backup fail:')` ile logluyor.
+- `aidan_stocks`: authenticated'da **hiç yetki yoktu** → Borsa bulut senkronu 14 Ağu'dan beri çalışmıyordu, veri sadece cihazda. Bayat bulut satırının `updated_at`'i `epoch`'a çekildi → istemci "bulut değişmiş" sanmaz, **yerel kazanır** ve buluta yazılır.
+- `service_role` hiçbir tabloda yetkisizdi (davet kodu kullanımı PATCH'i bozuk) → standart CRUD verildi.
+- 12 RLS politikası `(select auth.uid())` + `to authenticated` ile yeniden yazıldı; UPDATE'lere `with check` eklendi. Advisor: performans 0 uyarı.
+⚠️ **Yeni tablo açarken GRANT'ı unutma** — Supabase artık public tablolara otomatik yetki vermiyor. Kontrol: `has_table_privilege('authenticated','public.<t>','INSERT')`.
+
 
 
 **🔴 İKİ AYRI SİTE (14 Ağu 2026'dan beri):**
@@ -217,7 +224,43 @@ Salim: *"programi yapay zeka verdigimiz kurallara gore yazsa daha iyi olmaz mi"*
 
 **🔒 `tests/42-program-istek.test.js` (16 test).** Her testin senaryosu "model saçmaladı": tavan üstü gün, ara değer süre, uydurma yer/bölge, bozuk saat, yarım dövüş günü listesi, çöp girdi. Ayrıca **PRO yuzeyi 3'e çıktı** (`/diet-plan`, `/health-coach`, `/program-cfg`) — bilinçli maliyet kararı, Salim'in *"antrenman programi yaparken de pro kullansin"* isteği.
 
-## 📚 EK DERS / KURS KATMANI (24 Eyl 2026, v7-195)
+## 🥚 KAHVALTI YUMURTA SAYISI + SİMİT ÇIKTI (25 Eyl 2026, v7-199)
+
+Salim: *"2 yumurta az, ben 6 tane yiyorum"* · *"simit ne alaka"*.
+
+**1 — `tercih.yumurta` (2..8, 0 = otomatik).** Tercihlerim panelinde − / + ile ayarlanır. Ayar varsa kahvaltı **her gün yumurtalı şablondan** kurulur, protein bandına bakılmaz ve **hiçbir kırpma adımı o yumurtayı azaltmaz** (`kucult`, `anaKucult`, sert süpürge — `sabitMi`). Önce "en sona bırak" denendi: diğer öğünler dipte takılınca sert geçiş yine yumurtaya dönüp 6'yı 4'e indirdi. Gerekçe: 2,5 g/kg güvenlik değil azalan getiri noktası ve kullanıcı o yumurtayı zaten yiyor. Kırpılacak protein ara → ana öğünden gelir. `nutCapaTaban(slot, ad)` yalnız kahvaltıda kullanıcı sayısını döndürür. Tercih yazıcıları (`setNutDiyet`, `nutTercihDongu`) alanı korur.
+
+**2 — Simit varsayılan havuzdan çıktı.** Kahvaltı → Yumurta + Kepekli ekmek + Ceviz; ara → Süzme yoğurt + Granola, Cottage + Pirinç patlağı galeta; çanta karbonhidratı → Tam buğday ekmek. Çanta simitsiz büyük ara öğünde %30-40 eksik kalıyordu → açık 80 kcal'i geçerse **bir avuç kuruyemiş** eklenir (`NUT_TASINIR.yag`, tavan 2).
+
+**Salim'in hesabı:** `tercih.yumurta = 6`, `sevmem`'e Simit eklendi. Hafta: her gün 6 yumurta, protein 151-171 g.
+
+**🔒 `tests/46-kahvalti-yumurta.test.js` (7 test).**
+
+## 🧑‍⚕️ DİYETİSYEN GÖZÜYLE OKUMA (24 Eyl 2026, v7-198)
+
+Hafta çıktısı makro toplamı değil **tabak** olarak okundu. Makro toplamını bozmayan ama planı uygulanamaz yapan dört şey:
+
+1. **"1 yumurta + 3 dilim ekmek"**: ekmeğin proteini yumurtayı 1'de tutuyordu. `NUT_CAPA_TABAN = { Yumurta: 2 }` — hem `nutBuildMeal` tabanına hem `dipP`'ye hem de `kucult(true)` yumuşak kırpmasına işler. **Sert geçiş (güvenlik tavanı) yine kırpabilir** — güvenlik her tabak kuralından önce.
+2. **"3 adet muz" akşam, "3 adet elma" kahvaltı**: dolgu/ek meyvesi TAVAN'a (3) kadar büyüyordu. `NUT_MEYVE_TAVAN = 2` (`nutAdetTavan`) — denge adımlarında, ek kaldıracında ve çantada.
+3. **Çantada "3 avuç leblebi" + "2,5 avuç leblebi"** aynı gün (~200 g). Kuru atıştırmalık tavanı 2 avuç + aynı gün karbonhidrat tekrarı 60 kcal ceza.
+4. Çanta meyvesi de tavana tabi.
+
+Sonuç (Salim, kas hedefi): her gün kahvaltıda 2 yumurta, hiçbir öğünde 2'den fazla aynı meyve, gün toplamları hedefin %-2..0 bandında. Protein 148-171 g (Çar 171 = 2,49 g/kg, sert tavan 2,5'in hemen altında — bilinen zayıflık devam ediyor).
+
+## 🍴 TEPSİ PORSİYONU + KAHVALTI ÇAPASI (24 Eyl 2026, v7-197)
+
+Salim: *"sabah yumurta yiyorum normalde"* · *"yemekhanede yemekleri kendim seçmiyorum, porsiyonlar çok büyük değil ama genelde"*.
+
+**🔴 Senaryolar temenni yazıyordu.** Tezgah kuralı *"pilavı 1,5-2 porsiyon iste"* diyordu — porsiyonu SEN belirlemiyorsan bu bir plan değil. Kullanıcı planı uyguladığını sanıyor, günde 100-250 kcal sessizce eksik kalıyor (bulkta en pahalı hata).
+
+**`duzen.tepsi`** = `kucuk` · `normal` (varsayılan) · `serbest`. Garnitür ve ekmek tavanını belirler (1/1 · 1,5/2 · 3/3). Günlük düzen panelinde yemekhane açıkken çip olarak görünür.
+
+- **Açık artık çantadan kapanıyor:** senaryo hedefin 80 kcal'den fazla altında kalırsa `nutCantaOner` ile taşınabilir ek öneriliyor ("tepsi 98 kcal eksik → çantadan 0,5 cottage + 0,5 avuç kuru üzüm"). Eskiden yalnız **protein** açığına bakılıyordu; sabit porsiyonlu tepside aslında eksik olan **kalori**.
+- **Tezgah metni tepsiye göre**: serbest değilse "porsiyon iste" demiyor, "tepsiden çıkanı bitir, kalanı çantadan kapat" diyor.
+
+**Kahvaltı çapası:** Salim'in hesabına `tercih.favori = ["Yumurta"]` yazıldı; şablon seçimi favoriyi öne alıyor, kahvaltı artık yumurtalı geliyor. Sevmedikleri: zeytin, domates, armut, basmati.
+
+## 📚 EK DERS / KURS KATMANI (24 Eyl 2026, v7-195/196)
 
 Salim: *"pazartesi çıkış matematik dersim var, perşembe de okuldan sonra matematik"*. Okul saati tek başına yetmiyor: kurs da "dışarıdasın" demek.
 
@@ -226,6 +269,8 @@ Salim: *"pazartesi çıkış matematik dersim var, perşembe de okuldan sonra ma
 **Kural: ders okul gibi sayılır.** `nutOkulGun` artık okul ∪ ders birleşiğini döndürür (seans saati, öğün yeri, çanta buna bakar); **`nutOkulSaf`** saf okul penceresidir ve **yemekhane kararı ona bakar** — kursta yemekhane yok. `programGunPencere` aynı birleşimi kendi tarafında yapar (`duzen.ders`), yani iki motor yine aynı saati verir.
 
 **Salim'in gerçek düzeni hesabına yazıldı** (Supabase `aidan_data.data.diet.nut.duzen`): okul Pzt/Çar/Cum 09:00-17:00 · Sal/Per 09:00-19:00 · Cmt 09:00-14:00; ders Pzt 17:30-19:00, Per 19:30-21:00 (**bu iki saat varsayım** — uygulamadan düzeltilebilir); yemekhane 13:00 hafta içi; antrenman 17:00; kalkış 07:00.
+
+**v7-196 — dinlenme günü de geç kalabilir.** `nutDuzenCakisma` yalnız **antrenman günlerine** bakıyordu (`tip === 'rest'` → continue). Ders girince Perşembe dinlenme günü oluyor ama akşam yemeği yine 21:45'e kayıyor ve motor **hiç uyarmıyordu**. Artık ders günü için ayrı uyarı: "dersten ÖNCE 19:00 civarı doyurucu ara öğün, sonrasına hafif bırak". Uyarı metni de artık "okul X'de bitiyor" demiyor, günü kapatan **ders** ise onu yazıyor.
 
 **Sonuç (4 gün · 75 dk):** Pzt 19:30 (ders sonrası) · Sal 19:30 · Cum 17:30 · Paz 17:00; Per artık **seçilmiyor** (ders 21:00'e kadar). Kickboks Çar/Cmt.
 

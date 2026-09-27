@@ -8905,7 +8905,13 @@ export default {
     if (isWeekday && at(18, 30)) jobs.push(runPortfolioSummary(env));
 
     // Pazartesi 03:00 - haftalik veri yedegi (aidan_backups)
-    if (dow === 1 && at(3, 0)) jobs.push(runBackup(env));
+    // Sonuc LOGLANIR: 27 Eyl 2026'ya kadar INSERT yetkisi yoktu ve 5 hafta
+    // hic yedek alinmadigi kimse fark etmedi (hata results[] icinde yutuluyordu).
+    if (dow === 1 && at(3, 0)) jobs.push(runBackup(env).then(r => {
+      const bad = (r.results || []).filter(x => !x.ok);
+      if (bad.length) console.error('backup fail:', JSON.stringify(bad));
+      return r;
+    }));
 
     // allSettled: bir is patlarsa digerleri devam etsin (eskiden tek is vardi,
     // artik ayni turda birden fazla is olabilir).
