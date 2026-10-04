@@ -123,7 +123,8 @@ describe('enjeksiyon kapsamı — prose var, makine yok', () => {
     ['saglik kocu', "HEALTH_COACH_PROMPT(name) + instructionsBlock(data)"],
     // 28 Eyl 2026: hafıza bloğu araya girdi — talimat yine EN SONDA.
     ['gun plani', "planPrompt + memoryBlock(memory) + instructionsBlock(instructions)"],
-    ['portfoy yorumu', "pfPrompt + instructionsBlock(body.instructions)"],
+    // 4 Eki 2026: hafıza her uca bağlandı — talimat yine EN SONDA.
+    ['portfoy yorumu', "pfPrompt + memoryBlock(memItems, MEM_SCOPE.borsa) + instructionsBlock(body.instructions)"],
   ];
   for (const [ad, kalip] of PROSE) {
     test(ad + ' talimatı alıyor', () => {

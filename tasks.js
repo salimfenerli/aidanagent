@@ -66,7 +66,7 @@ async function showTab(name, btn) {
   }
   // ⚠️ Okul paneli artık school.js'te (tembel). Modül inmeden cagrilirsa
   // sessizce indirilip panel dolduruluyor — kritik yol beklemiyor.
-  if (name === 'tasks') { renderCountdowns(); ensureSchoolModule(); if (typeof renderDailyScore === 'function') renderDailyScore(); }
+  if (name === 'tasks') { renderCountdowns(); ensureSchoolModule(); ensureGoalsModule(); if (typeof renderDailyScore === 'function') renderDailyScore(); }
   if (name === 'chat') { renderChatMessages(); setTimeout(() => { const ci = document.getElementById('chatInput'); if (ci) ci.focus(); }, 60); }
   if (name === 'plan') renderDayPlan();
   if (name === 'diet') { _dietDate = null; renderDiet(); renderHealthCoach(); renderProgram(); renderNutrition(); }  // koç şeridi: uyku+spor+beslenme desenleri
@@ -359,6 +359,13 @@ function ensureMemoryModule() {
   if (typeof renderMemory === 'function') return renderMemory();
   return loadModule('hafiza')
     .then(() => { if (typeof renderMemory === 'function') renderMemory(); })
+    .catch(() => {});
+}
+// HEDEFLER kapısı (4 Eki 2026) — panel hedefler.js'te, TEMBEL iner.
+function ensureGoalsModule() {
+  if (typeof renderGoals === 'function') return renderGoals();
+  return loadModule('hedefler')
+    .then(() => { if (typeof renderGoals === 'function') renderGoals(); })
     .catch(() => {});
 }
 function ensureSchoolModule() {

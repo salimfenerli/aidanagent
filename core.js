@@ -10,7 +10,7 @@
 const LAZY_MODULES = { program: '/program.js',
   nutrition: '/nutrition.js', health: '/health.js', supabase: '/supabase.js',
   foods: '/foods.js', school: '/school.js', onboarding: '/onboarding.js', karne: '/karne.js',
-  hafiza: '/hafiza.js' };
+  hafiza: '/hafiza.js', hedefler: '/hedefler.js' };
 const _moduleLoads = {};
 function moduleLoaded(name) { return !!(_moduleLoads[name] && _moduleLoads[name]._done); }
 function loadModule(name) {

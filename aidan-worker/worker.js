@@ -246,6 +246,10 @@ const MEM_MAX_ITEMS = 60;
 const MEM_ITEM_MAX = 200;
 const MEM_ADD_MAX = 3;          // tek çıkarımda en fazla 3 yeni madde
 const MEM_MIN_MSG = 12;         // bundan kısa kullanıcı mesajı çıkarım tetiklemez
+// Sıkıştırma (4 Eki 2026): tavana dayanınca en eski bilgiyi SİLMEK yerine
+// benzer otomatik maddeler tek cümlede birleştirilir. Eşik tavanın altında ki
+// silme hiç devreye girmesin; tavan yalnız son güvenlik ağı olarak kalır.
+const MEM_COMPACT_AT = 48;
 const MEM_CATS = ['hedef', 'antrenman', 'beslenme', 'okul', 'borsa', 'tercih', 'genel'];
 const MEM_CAT_AD = {
   hedef: 'Hedefler', antrenman: 'Antrenman', beslenme: 'Beslenme',
@@ -286,9 +290,20 @@ function memoryClean(items) {
   return out;
 }
 
+// Kapsam (4 Eki 2026): her uç hafızanın TAMAMINI değil, işine yarayan
+// kategorileri görür. Borsa yorumu "6 yumurta" bilgisini taşımaz → hem token
+// tasarrufu hem alakasız kişiselleştirme yok. Kapsam verilmezse hepsi gider
+// (sohbet, sağlık koçu — eski davranış).
+const MEM_SCOPE = {
+  gun:       ['hedef', 'okul', 'antrenman', 'tercih', 'genel'],
+  borsa:     ['borsa', 'hedef', 'tercih'],
+  beslenme:  ['beslenme', 'antrenman', 'hedef', 'tercih'],
+  antrenman: ['antrenman', 'okul', 'hedef', 'tercih'],
+};
+
 /** Sistem promptuna giren blok. Boş hafıza = boş dize (tek token bile harcanmaz). */
-function memoryBlock(items) {
-  const arr = memoryClean(items);
+function memoryBlock(items, cats) {
+  const arr = memoryClean(items).filter(x => !Array.isArray(cats) || cats.indexOf(x.cat) >= 0);
   if (!arr.length) return '';
   const satirlar = [];
   for (const c of MEM_CATS) {
@@ -324,6 +339,24 @@ async function memoryFetch(env, userToken, userId) {
     const r = await fetch(
       `${env.SUPABASE_URL}/rest/v1/aidan_memory?user_id=eq.${userId}&select=items`,
       { headers: memHeaders(env, userToken) });
+    if (!r.ok) return [];
+    const rows = await r.json();
+    return memoryClean(rows && rows[0] && rows[0].items);
+  } catch (_) { return []; }
+}
+
+/**
+ * CRON yolu (4 Eki 2026): kullanıcı token'ı yok. Service key varsa onunla
+ * (multi-user), yoksa eski tek-kullanıcı token'ıyla (u._legacyToken) okur.
+ * ASLA fırlatmaz — hafıza okunamazsa brifing hafızasız gider, düşmez.
+ */
+async function memoryFetchForCron(env, u) {
+  if (!u || !u.userId || !env || !env.SUPABASE_URL) return [];
+  if (!hasServiceKey(env)) return memoryFetch(env, u._legacyToken, u.userId);
+  try {
+    const r = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/aidan_memory?user_id=eq.${u.userId}&select=items`,
+      { headers: { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` } });
     if (!r.ok) return [];
     const rows = await r.json();
     return memoryClean(rows && rows[0] && rows[0].items);
@@ -408,6 +441,74 @@ function memoryApply(items, ops, now) {
   return { items: arr, changed: JSON.stringify(arr) !== once };
 }
 
+const MEM_COMPACT_PROMPT = `Sen Aidan'ın hafıza düzenleyicisisin. Hafıza doldu; görevin AYNI KONUDAKİ maddeleri birleştirerek madde sayısını azaltmak.
+
+KURALLAR:
+- YALNIZ listede verilen maddeleri birleştir. Her grup en az 2 madde içermeli ve AYNI kategoride olmalı.
+- Birleşik cümle gruptaki BÜTÜN bilgiyi korumalı. Yeni bilgi ekleme, yorum yapma, tahmin yürütme.
+- Birbiriyle ÇELİŞEN maddeler varsa daha yeni tarihli olanı tut, eskisini gruba katıp at.
+- Türkçe, üçüncü şahıs, tek cümle, en fazla 200 karakter.
+- Birleştirilecek bir şey yoksa boş dizi döndür.
+
+YALNIZCA şu JSON'u döndür:
+{"birlestir":[{"ids":["...","..."],"text":"...","cat":"..."}]}`;
+
+/**
+ * Sıkıştırma çıktısını uygular. GÜVENLİK: yalnız 'auto' maddeler birleşir —
+ * elle girilen ve başlangıç maddeleri (user/seed) kullanıcının bilerek yazdığı
+ * şeydir, model onları değiştiremez. Bozuk çıktı = değişiklik yok.
+ */
+function memoryCompactApply(items, raw, now) {
+  const arr = memoryClean(items);
+  const sonuc = { items: arr, merged: 0 };
+  if (!raw) return sonuc;
+  let o;
+  try {
+    const m = String(raw).replace(/```(?:json)?/gi, '').match(/\{[\s\S]*\}/);
+    o = m ? JSON.parse(m[0]) : null;
+  } catch (_) { return sonuc; }
+  if (!o || !Array.isArray(o.birlestir)) return sonuc;
+  const tarih = (now || new Date()).toISOString().slice(0, 10);
+  const byId = new Map(arr.map(x => [x.id, x]));
+  const kullanildi = new Set();
+  const yeni = [];
+  let i = 0;
+  for (const g of o.birlestir.slice(0, 15)) {
+    const text = (g && typeof g.text === 'string') ? g.text.replace(/\s+/g, ' ').trim().slice(0, MEM_ITEM_MAX) : '';
+    if (text.length < 3 || !Array.isArray(g.ids)) continue;
+    const ids = [...new Set(g.ids.map(String))]
+      .filter(id => byId.has(id) && byId.get(id).src === 'auto' && !kullanildi.has(id));
+    if (ids.length < 2) continue;
+    const cat = byId.get(ids[0]).cat;
+    if (ids.some(id => byId.get(id).cat !== cat)) continue;   // kategori karışmaz
+    ids.forEach(id => kullanildi.add(id));
+    yeni.push({ id: 'c' + (now || new Date()).getTime().toString(36) + (i++), text, cat, at: tarih, src: 'auto' });
+  }
+  if (!yeni.length) return sonuc;
+  return { items: memoryClean(arr.filter(x => !kullanildi.has(x.id)).concat(yeni)), merged: kullanildi.size };
+}
+
+/** Eşik aşıldıysa light model ile birleştirir. ASLA fırlatmaz; başarısızsa liste aynen döner. */
+async function memoryCompact(env, items, now) {
+  const arr = memoryClean(items);
+  const auto = arr.filter(x => x.src === 'auto');
+  if (arr.length < MEM_COMPACT_AT || auto.length < 4) return { items: arr, merged: 0 };
+  try {
+    const liste = auto.map(x => `${x.id}: [${x.cat}] (${x.at || '?'}) ${x.text}`).join('\n');
+    const r = await aiRun(env, {
+      tier: 'light',
+      json: true,
+      messages: [
+        { role: 'system', content: MEM_COMPACT_PROMPT },
+        { role: 'user', content: `MADDELER:\n${liste}\n\nJSON:` },
+      ],
+      max_tokens: 1200,
+      temperature: 0.1,
+    });
+    return memoryCompactApply(arr, r && r.response, now);
+  } catch (_) { return { items: arr, merged: 0 }; }
+}
+
 /**
  * Sohbetten sonra ARKA PLANDA çalışır (ctx.waitUntil) — cevabı geciktirmez.
  * Hata sessizdir: hafıza kaydedilemedi diye sohbet bozulmamalı.
@@ -431,9 +532,16 @@ async function memoryExtract(env, userToken, userId, msgs, items) {
     temperature: 0.1,
   });
   const ops = memoryParseOps(r && r.response);
-  const sonuc = memoryApply(mevcut, ops, new Date());
-  if (sonuc.changed) await memorySave(env, userToken, userId, sonuc.items);
-  return { changed: sonuc.changed, ops };
+  const simdi = new Date();
+  const sonuc = memoryApply(mevcut, ops, simdi);
+  let merged = 0;
+  if (sonuc.changed) {
+    // Yalnız hafıza BÜYÜDÜĞÜNDE sıkıştır — her mesajda ikinci model çağrısı yok.
+    const c = await memoryCompact(env, sonuc.items, simdi);
+    merged = c.merged;
+    await memorySave(env, userToken, userId, merged ? c.items : sonuc.items);
+  }
+  return { changed: sonuc.changed, ops, merged };
 }
 
 async function aiRun(env, opts) {
@@ -959,7 +1067,7 @@ function buildMorning(data, autoSetMit) {
 
 // 🌅 Sabah AI brifingi — push bildirimini düz metin yerine kişisel AI yorumuyla yapar.
 // AI fail olursa eski buildMorning fallback'i ile kayıp olmaz.
-async function buildMorningAi(env, data, autoSetMit) {
+async function buildMorningAi(env, data, autoSetMit, memory) {
   const today = trToday();
   const tasks = data.tasks || [];
   const mit = tasks.filter(t => t.mitDate === today && !t.done);
@@ -1031,7 +1139,7 @@ Bunlardan yola çıkarak ${name}'e 3-4 cümlelik kişisel sabah brifingi yaz. Ma
   try {
     const r = await aiRun(env, {
       messages: [
-        { role: 'system', content: sysPrompt + instructionsBlock(data) },
+        { role: 'system', content: sysPrompt + memoryBlock(memory, MEM_SCOPE.gun) + instructionsBlock(data) },
         { role: 'user', content: context },
       ],
       max_tokens: 280,
@@ -1140,7 +1248,7 @@ function getWeekStartIso() {
   return d.toISOString().slice(0, 10);
 }
 
-async function buildWeekly(env, data) {
+async function buildWeekly(env, data, memory) {
   const today = trToday();
   const weekStart = getWeekStartIso();
   const tasks = data.tasks || [];
@@ -1206,7 +1314,7 @@ async function buildWeekly(env, data) {
   try {
     const r = await aiRun(env, {
       messages: [
-        { role: 'system', content: "Sen Aidan'sın, Salim'in ADHD asistanı. Hafta sonu özetinde KISA (2-3 cümle), TÜRKÇE, samimi, övgü öncelikli ama somut bir yorum yaz. Önce başarı (sayıyla), sonra 1 ince öneri. ASLA yargılayıcı/eleştirel olma. ASLA İngilizce yazma. ADHD'li için her bitirilen iş zaferdir." },
+        { role: 'system', content: "Sen Aidan'sın, Salim'in ADHD asistanı. Hafta sonu özetinde KISA (2-3 cümle), TÜRKÇE, samimi, övgü öncelikli ama somut bir yorum yaz. Önce başarı (sayıyla), sonra 1 ince öneri. ASLA yargılayıcı/eleştirel olma. ASLA İngilizce yazma. ADHD'li için her bitirilen iş zaferdir." + memoryBlock(memory, MEM_SCOPE.gun) },
         { role: 'user', content: `Bu haftanın özeti:\n${factsForAi}\n\nKısa hafta yorumu yaz (en fazla 3 cümle, sıcak ama somut).` },
       ],
       max_tokens: 220,
@@ -1436,7 +1544,7 @@ async function runCronJob(env, type) {
       let payload = null;
       switch (type) {
         case 'morning': {
-          payload = await buildMorningAi(env, u.data, autoSetMorningMit(u.data));
+          payload = await buildMorningAi(env, u.data, autoSetMorningMit(u.data), await memoryFetchForCron(env, u));
           const dsl = buildDailySummaryLine(u.data);
           if (payload && dsl) payload.message += `\n\n${dsl}`;
           break;
@@ -1444,7 +1552,7 @@ async function runCronJob(env, type) {
         case 'noon':     payload = buildNoon(u.data); break;
         case 'evening':  payload = buildEvening(u.data); break;
         case 'deadline': payload = buildDeadlineAlerts(u.data); break;
-        case 'weekly':   payload = await buildWeekly(env, u.data); break;
+        case 'weekly':   payload = await buildWeekly(env, u.data, await memoryFetchForCron(env, u)); break;
         case 'health':   payload = await buildHealthWeekly(env, u.data); break;
         default: throw new Error(`Bilinmeyen tip: ${type}`);
       }
@@ -3747,9 +3855,10 @@ ${text}
 
 3-4 cümle sıcak akşam yansıması yaz. TÜRKÇE, samimi, yargısız.`;
 
+    const memItems = await memoryFetch(env, userToken, user.id); // asla fırlatmaz
     const r = await aiRun(env, {
       messages: [
-        { role: 'system', content: sysPrompt + instructionsBlock(body.instructions) },
+        { role: 'system', content: sysPrompt + memoryBlock(memItems, MEM_SCOPE.gun) + instructionsBlock(body.instructions) },
         { role: 'user', content: userMsg },
       ],
       max_tokens: 320,
@@ -4320,9 +4429,10 @@ GÖREVİN: 3-5 cümle TÜRKÇE betimleyici özet. Sadece görüneni tarif et.
 📝 ÖRNEK ÇIKTI (referans):
 "Portföyün ağırlığı THYAO'da (%57.6) — yumurtaların çoğu tek sepette ${name}. GARAN ve ASELS kalan kısmı paylaşıyor. Günü genel olarak +%1.2 ile artıda kapamışsın. Toplam getiriniz +%8.4 — başlangıca göre öndesin."`;
 
+    const memItems = await memoryFetch(env, userToken, user.id); // asla fırlatmaz
     const r = await aiRun(env, {
       messages: [
-        { role: 'system', content: pfPrompt + instructionsBlock(body.instructions) },
+        { role: 'system', content: pfPrompt + memoryBlock(memItems, MEM_SCOPE.borsa) + instructionsBlock(body.instructions) },
         { role: 'user', content: `Portföy rakamları (PWA'dan, doğrulanmış):\n${facts}\n\nBetimleyici 3-5 cümlelik özet yaz. TÜRKÇE, tarafsız, karar verme.` },
       ],
       max_tokens: 400,
@@ -5502,10 +5612,11 @@ Yapı: ① tablonun genel hali + uyum skorunun ne dediği ② zaman dilimi uyumu
 🧱 BUFFETT KATMANI da verildi — ${isFund ? 'anlatının merkezine BUNU al' : 'analizin sonuna 2-3 cümlelik bir temel analiz paragrafı ekle'}: skorun ne dediği, hangi kriterden kırık aldığı ve o kriterin ne ölçtüğü. Teknik tabloyla temel tablonun aynı yöne mi ters yöne mi baktığını da söyle (ör. teknik güçlü ama iş kalitesi zayıf, ya da tersi) — bu bir tavsiye değil, iki farklı mercekten aynı şirkete bakmaktır.` : ''}`;
 
   try {
+    const memItems = await memoryFetch(env, userToken, user.id); // asla fırlatmaz
     const r = await aiRun(env, {
       tier: aiTierForUser(env, user, 'heavy'),
       messages: [
-        { role: 'system', content: sysPrompt + instructionsBlock(body.instructions) },
+        { role: 'system', content: sysPrompt + memoryBlock(memItems, MEM_SCOPE.borsa) + instructionsBlock(body.instructions) },
         { role: 'user', content: userMsg },
       ],
       max_tokens: isFund ? 1400 : (facts.buffett ? 1100 : 900),
@@ -5610,10 +5721,11 @@ ${lines}
 Bu verileri 4-7 cümlelik tarafsız taktik özete dök. Geçen göstergelerin ne anlama geldiğini kısaca açıkla (${name} öğreniyor). Hangisi alınır/satılır YOK.`;
 
   try {
+    const memItems = await memoryFetch(env, userToken, user.id); // asla fırlatmaz
     const r = await aiRun(env, {
       tier: aiTierForUser(env, user, 'heavy'),
       messages: [
-        { role: 'system', content: sysPrompt + instructionsBlock(body.instructions) },
+        { role: 'system', content: sysPrompt + memoryBlock(memItems, MEM_SCOPE.borsa) + instructionsBlock(body.instructions) },
         { role: 'user', content: userMsg },
       ],
       max_tokens: 450,
@@ -5730,9 +5842,10 @@ ${taskLines}
 Bunlardan TEK bir tanesini ${name}'e öner. SADECE JSON döndür.`;
 
   try {
+    const memItems = await memoryFetch(env, userToken, user.id); // asla fırlatmaz
     const r = await aiRun(env, {
       messages: [
-        { role: 'system', content: sysPrompt + instructionsBlock(body.instructions) },
+        { role: 'system', content: sysPrompt + memoryBlock(memItems, MEM_SCOPE.gun) + instructionsBlock(body.instructions) },
         { role: 'user', content: userMsg },
       ],
       max_tokens: 200,
@@ -6815,12 +6928,13 @@ SADECE şu JSON'u döndür, başka hiçbir açıklama/metin yazma:
   // adi maliyet kilidini delerdi.
   const tier = aiTierForUser(env, user, 'heavy');
   try {
+    const memItems = await memoryFetch(env, userToken, user.id); // asla fırlatmaz
     const r = await aiRun(env, {
       tier,
       model: tier === 'heavy' ? geminiModelPro(env) : undefined,
       json: true,
       messages: [
-        { role: 'system', content: sys },
+        { role: 'system', content: sys + memoryBlock(memItems, MEM_SCOPE.beslenme) },
         { role: 'user', content: usr },
       ],
       // ⚠️ Dusunme token'lari CIKIS butcesinden yenir. 7 gunluk ogun JSON'u
@@ -6948,12 +7062,13 @@ SADECE şu JSON'u döndür, başka hiçbir metin yazma:
   // engelleyen kilidi delerdi (teste bagli).
   const tier = aiTierForUser(env, user, 'heavy');
   try {
+    const memItems = await memoryFetch(env, userToken, user.id); // asla fırlatmaz
     const r = await aiRun(env, {
       tier,
       model: tier === 'heavy' ? geminiModelPro(env) : undefined,
       json: true,
       messages: [
-        { role: 'system', content: sys },
+        { role: 'system', content: sys + memoryBlock(memItems, MEM_SCOPE.antrenman) },
         { role: 'user', content: usr },
       ],
       max_tokens: 3000,
@@ -7591,6 +7706,293 @@ function sleepLine(data, forDate) {
   return '';
 }
 
+// ============================================================================
+// 🎯 HEDEF AJANI (4 Eki 2026)
+// ============================================================================
+// Muse karşılaştırması adım 2: sabit kural yerine HEDEF odaklı arka plan döngüsü.
+// Kullanıcı hedef koyar → her akşam ajan hedefi, hedefe bağlı görevlerin
+// durumunu ve hafızayı okur → en fazla 3 küçük adım ÖNERİR.
+//
+// ⚠️ ONAY KAPISI: worker görev EKLEMEZ. Öneriyi aidan_goals.agent'a yazar;
+// kullanıcı onaylarsa PWA görevi kendi verisine (goalId ile) ekler. Böylece
+// cron aidan_data blob'una yazmaz (senkron çakışması yok) ve kullanıcı
+// istemediği görevi listesinde görmez.
+//
+// DÖNGÜ: onaylanan görev goalId taşır → sonraki tur tamamlanıp
+// tamamlanmadığını görür → tempoyu ayarlar. Reddedilen öneri tekrar gelmez.
+// Cevaplanmamış öneri varken yenisi üretilmez (yığılma + boşa model çağrısı).
+const GOAL_MAX_ACTIVE = 5;
+const GOAL_MAX_PROPOSALS = 3;
+const GOAL_HISTORY_MAX = 8;
+const GOAL_REJECTED_MAX = 20;
+const GOAL_OPEN_LIMIT = 3;       // hedefin bu kadar açık görevi varsa yeni öneri yok
+const GOAL_PENDING_TTL = 3;      // cevapsız öneri bu kadar gün beklenir, sonra yenilenir
+const GOAL_STATUSES = ['yolunda', 'geride', 'risk', 'belirsiz'];
+
+const GOAL_PROMPT = `Sen Aidan'ın hedef koçusun. Kullanıcının bir hedefi var. Görevin: hedefi bir adım ileri taşıyacak EN FAZLA 3 küçük, somut adım önermek ve durumu kısaca değerlendirmek.
+
+KURALLAR:
+- Adımlar ADHD dostu: tek oturuşta biter (5-90 dk), eylem fiiliyle başlar, yapıldığı anlaşılır. "Çalış", "devam et", "odaklan" gibi muğlak adım YASAK.
+- Hedefin AÇIK görevi zaten 3 veya daha fazlaysa YENİ adım önerme: "oneriler" boş kalsın, notta açık olanı bitirmeye yönlendir.
+- REDDEDİLEN adımları ve AÇIK görevleri TEKRAR önerme, benzerini de önerme.
+- Son tarih yakınsa adımları sıklaştır; uzaksa haftada 2-3 adım yeter. Kullanıcının genel görev yükü yüksekse daha az öner.
+- Tamamlanan görevlere bak: ilerleme varsa notta SAYIYLA söyle. İlerleme yoksa suçlama, başlama eşiğini düşüren en küçük adımı öner.
+- Hedef ölçülemiyorsa "soru" alanında TEK kısa soru sor ve en fazla 1 adım öner.
+- Kullanıcı 16 yaşında bir lise öğrencisi: kalori kısıtlama, aşırı antrenman, tehlikeli aktivite önerme. Borsa hedeflerinde belirli hisse al/sat tavsiyesi YOK — öğrenme, analiz ve kayıt tutma adımları öner.
+- Türkçe, samimi, kısa. "Hafızama göre" gibi ifade kullanma.
+
+YALNIZCA şu JSON'u döndür:
+{"durum":"yolunda|geride|risk|belirsiz","not":"1-2 cümle","oneriler":[{"text":"...","dk":30,"gun":1}],"soru":"","sonraki_kontrol":2}
+- gun: bugünden kaç gün sonra yapılmalı (0-14)
+- sonraki_kontrol: kaç gün sonra tekrar bakayım (1-7)`;
+
+function goalAddDays(dateStr, n) {
+  const d = new Date(String(dateStr).slice(0, 10) + 'T12:00:00Z');
+  if (isNaN(d)) return null;
+  return new Date(d.getTime() + n * 86400000).toISOString().slice(0, 10);
+}
+function goalDaysBetween(a, b) {
+  const x = new Date(String(a).slice(0, 10) + 'T12:00:00Z'), y = new Date(String(b).slice(0, 10) + 'T12:00:00Z');
+  if (isNaN(x) || isNaN(y)) return null;
+  return Math.round((y - x) / 86400000);
+}
+function goalNorm(s) {
+  return String(s || '').toLocaleLowerCase('tr').replace(/[^\p{L}\p{N} ]+/gu, ' ').replace(/\s+/g, ' ').trim();
+}
+function goalAgentOf(goal) {
+  const a = (goal && goal.agent && typeof goal.agent === 'object') ? goal.agent : {};
+  return {
+    note: typeof a.note === 'string' ? a.note : '',
+    status: GOAL_STATUSES.indexOf(a.status) >= 0 ? a.status : '',
+    question: typeof a.question === 'string' ? a.question : '',
+    proposals: Array.isArray(a.proposals) ? a.proposals.filter(p => p && typeof p.text === 'string') : [],
+    rejected: Array.isArray(a.rejected) ? a.rejected.filter(x => typeof x === 'string').slice(-GOAL_REJECTED_MAX) : [],
+    history: Array.isArray(a.history) ? a.history.slice(-GOAL_HISTORY_MAX) : [],
+    lastRun: typeof a.lastRun === 'string' ? a.lastRun : '',
+    nextRun: typeof a.nextRun === 'string' ? a.nextRun : '',
+    manualAt: typeof a.manualAt === 'string' ? a.manualAt : '',
+  };
+}
+
+/** Bu tur düşünmeli mi? Zamanı gelmediyse ya da cevapsız taze öneri varsa HAYIR. */
+function goalShouldRun(goal, today) {
+  if (!goal || goal.status !== 'active') return false;
+  const a = goalAgentOf(goal);
+  if (a.nextRun && a.nextRun > today) return false;
+  const bekleyen = a.proposals.filter(p => p.status === 'pending');
+  if (bekleyen.length && a.lastRun && goalDaysBetween(a.lastRun, today) < GOAL_PENDING_TTL) return false;
+  return true;
+}
+
+/** Modelin göreceği bağlam metni. Saf fonksiyon — test edilir. */
+function goalContext(goal, tasks, today) {
+  const a = goalAgentOf(goal);
+  const all = Array.isArray(tasks) ? tasks : [];
+  const bagli = all.filter(t => t && t.goalId && String(t.goalId) === String(goal.id));
+  const acik = bagli.filter(t => !t.done);
+  const biten = bagli.filter(t => t.done && t.doneDate && goalDaysBetween(t.doneDate, today) <= 14);
+  const satir = [];
+  satir.push(`BUGÜN: ${today}`);
+  satir.push(`HEDEF: ${goal.title}`);
+  if (goal.why) satir.push(`NEDEN ÖNEMLİ: ${goal.why}`);
+  if (goal.deadline) {
+    const kalan = goalDaysBetween(today, goal.deadline);
+    satir.push(`SON TARİH: ${goal.deadline} (${kalan < 0 ? Math.abs(kalan) + ' gün GEÇTİ' : kalan + ' gün kaldı'})`);
+  } else satir.push('SON TARİH: yok');
+  satir.push(`\nSON 14 GÜNDE TAMAMLANAN (${biten.length}):`);
+  biten.slice(-10).forEach(t => satir.push(`- ${t.text} (${t.doneDate})`));
+  satir.push(`\nAÇIK GÖREVLER (${acik.length}):`);
+  acik.slice(0, 10).forEach(t => satir.push(`- ${t.text}${t.due ? ` (son: ${t.due}${t.due < today ? ', GECİKTİ' : ''})` : ''}`));
+  if (a.rejected.length) {
+    satir.push('\nREDDEDİLEN ÖNERİLER (tekrar önerme):');
+    a.rejected.slice(-10).forEach(x => satir.push(`- ${x}`));
+  }
+  if (a.history.length) {
+    satir.push('\nÖNCEKİ DEĞERLENDİRMELER:');
+    a.history.slice(-3).forEach(h => satir.push(`- ${h.at}: [${h.status}] ${h.note}`));
+  }
+  const genelAcik = all.filter(t => t && !t.done).length;
+  satir.push(`\nKULLANICININ TOPLAM AÇIK GÖREVİ: ${genelAcik}`);
+  return { text: satir.join('\n'), openCount: acik.length, doneCount: biten.length };
+}
+
+/** Model çıktısını güvenli yapıya çevirir. Bozuk çıktı = null (hiçbir şey yazılmaz). */
+function goalParseAgent(raw, goal, tasks, today) {
+  if (!raw) return null;
+  let o;
+  try {
+    const m = String(raw).replace(/```(?:json)?/gi, '').match(/\{[\s\S]*\}/);
+    o = m ? JSON.parse(m[0]) : null;
+  } catch (_) { return null; }
+  if (!o || typeof o !== 'object') return null;
+  const a = goalAgentOf(goal);
+  const str = (x, n) => (typeof x === 'string' ? x.replace(/\s+/g, ' ').trim().slice(0, n) : '');
+  const yasak = new Set(a.rejected.map(goalNorm));
+  (Array.isArray(tasks) ? tasks : []).filter(t => t && !t.done).forEach(t => yasak.add(goalNorm(t.text)));
+  const oneriler = [];
+  for (const x of (Array.isArray(o.oneriler) ? o.oneriler : [])) {
+    const text = str(x && x.text, 120);
+    if (text.length < 3) continue;
+    const k = goalNorm(text);
+    if (yasak.has(k)) continue;          // reddedilmiş ya da zaten açık görev
+    yasak.add(k);
+    const dk = Math.round(Number(x.dk));
+    const gun = Math.round(Number(x.gun));
+    oneriler.push({
+      text,
+      min: dk >= 5 && dk <= 180 ? dk : null,
+      due: goalAddDays(today, gun >= 0 && gun <= 14 ? gun : 1),
+    });
+    if (oneriler.length >= GOAL_MAX_PROPOSALS) break;
+  }
+  const sonraki = Math.round(Number(o.sonraki_kontrol));
+  return {
+    status: GOAL_STATUSES.indexOf(o.durum) >= 0 ? o.durum : 'belirsiz',
+    note: str(o.not, 300),
+    question: str(o.soru, 200),
+    proposals: oneriler,
+    nextIn: sonraki >= 1 && sonraki <= 7 ? sonraki : 2,
+  };
+}
+
+/** Yeni ajan durumunu kurar. Eski cevapsız öneriler düşer (süresi doldu). */
+function goalApplyAgent(goal, out, today, nowIso) {
+  const a = goalAgentOf(goal);
+  const stamp = String(nowIso || new Date().toISOString());
+  const yeni = out.proposals.map((p, i) => ({
+    id: 'p' + stamp.replace(/\D/g, '').slice(-10) + i,
+    text: p.text, min: p.min, due: p.due, status: 'pending', at: today,
+  }));
+  const history = a.history.concat(out.note ? [{ at: today, status: out.status, note: out.note }] : []).slice(-GOAL_HISTORY_MAX);
+  return {
+    note: out.note, status: out.status, question: out.question,
+    proposals: yeni, rejected: a.rejected, history,
+    lastRun: today, nextRun: goalAddDays(today, out.nextIn), manualAt: a.manualAt,
+  };
+}
+
+/** Tek hedef için düşünür. Bozuk model çıktısında null döner (eski durum korunur). */
+async function goalThink(env, goal, tasks, memItems, today, tier) {
+  const ctx = goalContext(goal, tasks, today);
+  const r = await aiRun(env, {
+    tier: tier || 'deep',
+    json: true,
+    messages: [
+      { role: 'system', content: GOAL_PROMPT + memoryBlock(memItems) },
+      { role: 'user', content: ctx.text + '\n\nJSON:' },
+    ],
+    max_tokens: 700,
+    temperature: 0.3,
+  });
+  const out = goalParseAgent(r && r.response, goal, tasks, today);
+  if (!out) return null;
+  // Kod kilidi: model kurala uymasa da açık görev yığılmışken yeni öneri eklenmez.
+  if (ctx.openCount >= GOAL_OPEN_LIMIT) out.proposals = [];
+  return goalApplyAgent(goal, out, today, new Date().toISOString());
+}
+
+function goalHeadersService(env) {
+  return { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`, 'Content-Type': 'application/json' };
+}
+async function goalsFetchActive(env, headers, userId) {
+  const r = await fetch(`${env.SUPABASE_URL}/rest/v1/aidan_goals?user_id=eq.${userId}&status=eq.active&select=*&order=created_at.asc&limit=${GOAL_MAX_ACTIVE}`, { headers });
+  if (!r.ok) throw new Error('goals fetch ' + r.status);
+  return await r.json();
+}
+async function goalSaveAgent(env, headers, goalId, agent) {
+  const r = await fetch(`${env.SUPABASE_URL}/rest/v1/aidan_goals?id=eq.${goalId}`, {
+    method: 'PATCH',
+    headers: Object.assign({}, headers, { 'Prefer': 'return=minimal' }),
+    body: JSON.stringify({ agent, updated_at: new Date().toISOString() }),
+  });
+  if (!r.ok) throw new Error('goal save ' + r.status);
+}
+
+/** CRON (her akşam 19:30): zamanı gelen hedefleri düşünür, yeni öneri varsa tek push atar. */
+async function runGoalAgent(env) {
+  const users = await fetchAllUsers(env);
+  const today = trToday();
+  const results = [];
+  for (const u of users) {
+    try {
+      let headers;
+      if (hasServiceKey(env)) headers = goalHeadersService(env);
+      else if (u._legacyToken) headers = memHeaders(env, u._legacyToken);
+      else { results.push({ userId: u.userId, skipped: 'auth-yok' }); continue; }
+      const goals = (await goalsFetchActive(env, headers, u.userId)).filter(g => goalShouldRun(g, today));
+      if (!goals.length) { results.push({ userId: u.userId, skipped: 'zamani-degil' }); continue; }
+      const mem = await memoryFetchForCron(env, u);
+      const tasks = (u.data && u.data.tasks) || [];
+      const yeniOneriler = [];
+      for (const g of goals) {
+        try {
+          // Maliyet: cron 'deep' (ücretsiz model). PRO yalnız kullanıcı düğmeye basınca.
+          const agent = await goalThink(env, g, tasks, mem, today, 'deep');
+          if (!agent) continue;
+          await goalSaveAgent(env, headers, g.id, agent);
+          agent.proposals.forEach(p => yeniOneriler.push({ goal: g.title, text: p.text }));
+        } catch (e) { console.error('goal think', g.id, e.message); }
+      }
+      if (yeniOneriler.length) {
+        const ilk = yeniOneriler.slice(0, 2).map(x => `• ${x.text}`).join('\n');
+        await sendPushToAll(env, u.data, {
+          title: '🎯 Hedeflerin için adım önerdim',
+          message: `${ilk}${yeniOneriler.length > 2 ? `\n+${yeniOneriler.length - 2} öneri daha` : ''}\nOnaylarsan görevlerine eklerim.`,
+          tag: 'aidan-goals',
+          url: '/#hedefler',
+        }, { userId: u.userId });
+      }
+      results.push({ userId: u.userId, goals: goals.length, proposals: yeniOneriler.length });
+    } catch (e) {
+      results.push({ userId: u.userId, error: e.message });
+    }
+  }
+  return { type: 'goals', results };
+}
+
+/** POST /goal-think {goalId} — kullanıcı "Şimdi düşün" dedi. Bekleyen öneri olsa da çalışır. */
+async function handleGoalThinkApi(request, env) {
+  const cors = {
+    'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors });
+  let body;
+  try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const goalId = String(body.goalId || '');
+  if (!/^[0-9a-f-]{36}$/i.test(goalId)) return jsonCors({ error: 'bad goal' }, 400, cors);
+
+  const userToken = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = await verifyUser(env, userToken);
+  if (!user) return jsonCors({ error: 'unauthorized' }, 401, cors);
+  if (!allowUser(env, user)) return jsonCors({ error: 'forbidden' }, 403, cors);
+
+  try {
+    // KULLANICI token'ıyla okunur → RLS başkasının hedefini zaten göstermez.
+    const headers = memHeaders(env, userToken);
+    const r = await fetch(`${env.SUPABASE_URL}/rest/v1/aidan_goals?id=eq.${goalId}&select=*`, { headers });
+    const rows = r.ok ? await r.json() : [];
+    const goal = rows[0];
+    if (!goal) return jsonCors({ error: 'not found' }, 404, cors);
+    const a = goalAgentOf(goal);
+    // Düğme spam'i = PRO faturası. Aynı hedefe 2 dakikada bir.
+    if (a.manualAt && Date.now() - Date.parse(a.manualAt) < 120000) return jsonCors({ error: 'too soon' }, 429, cors);
+    const [session, mem] = await Promise.all([fetchUserDataForApi(env, user), memoryFetch(env, userToken, user.id)]);
+    const tasks = (session.data && session.data.tasks) || [];
+    const agent = await goalThink(env, goal, tasks, mem, trToday(), aiTierForUser(env, user, 'heavy'));
+    if (!agent) return jsonCors({ error: 'ai-bozuk' }, 502, cors);
+    agent.manualAt = new Date().toISOString();
+    await goalSaveAgent(env, headers, goal.id, agent);
+    return jsonCors({ agent }, 200, cors);
+  } catch (e) {
+    return jsonCors({ error: e.message }, 500, cors);
+  }
+}
+// 🎯 HEDEF AJANI SONU
+
 async function runAutoPlan(env, opts = {}) {
   const users = await fetchAllUsers(env);
   const results = [];
@@ -7643,6 +8045,8 @@ async function runAutoPlanForUser(env, u, opts = {}) {
     now: '', // ileri tarih planlanabilir — "su an" kisiti yok
     busy: fixed.map(f => ({ label: f.label, start: f.start, end: f.end })),
     insight: profileLines(prof) + deadlineLines(data, forDate) + gymDayLine(data, forDate) + sleepLine(data, forDate),
+    // 4 Eki 2026: elle /plan hafızayı görüyordu, gece kurulan otomatik plan görmüyordu.
+    memory: await memoryFetchForCron(env, u),
   });
 
   let blocks = (raw || []).map(b => {
@@ -8891,6 +9295,11 @@ export default {
     }
 
     // AI görev bölücü (POST {text} → AI küçük adımlar dizisi, tool YOK)
+    // 🎯 Hedef ajanı — "Şimdi düşün" (POST {goalId} → öneriler, onay kapılı)
+    if (url.pathname === '/goal-think') {
+      return handleGoalThinkApi(request, env);
+    }
+
     if (url.pathname === '/split') {
       return handleSplitApi(request, env);
     }
@@ -9120,6 +9529,10 @@ export default {
     if (dow === 0 && at(21, 0)) jobs.push(
       runCronJob(env, 'weekly').then(() => runCronJob(env, 'health'))
     );
+
+    // 19:30 - HEDEF AJANI (4 Eki 2026): zamani gelen hedefleri dusunur,
+    // yeni oneri varsa tek push. Okul sonrasi, 21:00 aksam ozetinden once.
+    if (at(19, 30)) jobs.push(runGoalAgent(env));
 
     // Hafta ici 10:00-18:00 arasi, 30 dk'da bir - borsa alarm kontrolu
     if (isWeekday && nowMin >= 600 && nowMin < 1080 && nowMin % 30 < 5) {

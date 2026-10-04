@@ -4060,6 +4060,8 @@ restoreTimerState();
 renderCountdowns();
 // Okul paneli tembel (school.js) — ilk cizimi bekletmiyor, arkadan iniyor.
 if (typeof ensureSchoolModule === 'function') setTimeout(ensureSchoolModule, 0);
+// Hedefler paneli tembel (hedefler.js) — bulut oturumunu bekler, ilk cizimi bekletmez.
+if (typeof ensureGoalsModule === 'function') setTimeout(ensureGoalsModule, 0);
 // ⚠️ Tur onboarding.js'te (tembel). Modulu indirmeden ONCE ucuz kontrol:
 // bayrak varsa ya da zaten gorev varsa dosya HIC inmiyor — mevcut kullanici
 // bu 2.4 KB'i bir daha odemiyor.
