@@ -29,10 +29,12 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 
 **Aidan istemcisi** (`asistan.html` → Pages'te `/index.html`):
 - Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + `loadModule`) → `tasks.js` (sekmeler, gün planı, quick-capture) → `ui.js` (render, ayarlar, auth, sohbet; en altta İLK RENDER).
-- **Tembel modüller** (`core.js` → `LAZY_MODULES`): `supabase` · `program` · `nutrition` · `health` · `foods` · `school` · `onboarding` · `karne` · `hafiza` · `hedefler`.
+- **Tembel modüller** (`core.js` → `LAZY_MODULES`): `supabase` · `program` · `nutrition` · `health` · `foods` · `school` · `onboarding` · `karne` · `hafiza` (+ davet + yedek listesi) · `hedefler` · `ajan` · `hafta`.
 - ⚠️ **Yeni tembel modül = 7 yer:** `LAZY_MODULES` · `sw.js` ASSETS · `aidan-pages-deploy.py` INCLUDE · `.github/workflows/deploy.yml` paths · `.gitattributes` · `package.json` `check` · `tests/07-hygiene` + `tests/13-lazy` listeleri. Biri eksikse modül 404 olur ya da deploy tetiklenmez — **sessiz arıza**.
 - **İlk yükleme bütçesi** (`13-lazy`): dolu. Yeni özellik eşiği YÜKSELTEREK geçirilmez; nadir açılan kod tembel modüle taşınır, CSS modülün içine enjekte edilir (`hafiza.js`/`hedefler.js` deseni).
 - Veri: `localStorage 'aidan'` = Supabase `aidan_data.data` (tek JSON blob, debounced push + realtime pull). Şekil için `core.js` varsayılanlarına bak.
+
+**⚠️ TEK TAKVİM — hafta çekirdeği** (`hafta.js` ↔ `worker.js` İKİZ, `54-hafta`): `hfGun(d, tarih)` okul + kurs (`diet.nut.duzen`) + `fixedSchedule` + antrenman (`program.days`) + uyku (`settings.sleepGoal`) + sınav (`school.exams`) → bloklar, boş dk, **ödev kapasitesi**. `hfCakismalar` çapraz kurallar. Yeni bir özellik "o gün ne kadar boş / sınav var mı / antrenman var mı" soruyorsa BUNU çağırır, kendi hesabını yazmaz. Öncelik: **OKUL > UYKU > ANTRENMAN** (5 Eki, varsayılan). Kullananlar: ödev dağıtımı (`hwSpread` kapasite), gün planı (`fixedBlocksFor*`), sohbet ajanı bağlamı, sabah brifingi, Pazar 20:00 push, Haftam paneli.
 
 **Supabase** (`fluhzvzulrnfyqogrgfi`) tabloları: `aidan_data` (blob) · `aidan_stocks` · `aidan_backups` · `aidan_memory` · `aidan_goals` · davet tabloları.
 - ⚠️ **Yeni tablo = RLS + GRANT.** Supabase public tablolara otomatik yetki VERMİYOR (27 Eyl: yedek 5 hafta hiç alınmamıştı, borsa senkronu ölüydü). `authenticated` + `service_role`'a CRUD ver; doğrula: `has_table_privilege('authenticated','public.<t>','INSERT')`. Politikalar `(select auth.uid())` + `to authenticated`, UPDATE'te `with check`.
@@ -68,9 +70,9 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 
 ## ⚙️ Worker kuralları
 
-- ⚠️ **TEK cron:** `*/5 * * * *`. Cloudflare ücretsiz plan worker başına 3 cron kabul eder, fazlası **sessizce** düşer (Ağu'da 6 özellik aylarca ölüydü). Yeni zamanlı iş `wrangler.toml`'a DEĞİL, `scheduled()` içine `if (at(h, m)) jobs.push(...)` olarak (TR saati, 5 dk pencere). Takvim: 08:00 sabah brifingi+plan · 09:00 deadline · 12:00 öğle · 18:30 portföy (hafta içi) · 19:30 hedef ajanı · 21:00 akşam+Hevy+yarının planı · Pazar 21:00 haftalık+sağlık · Pzt 03:00 yedek · borsa alarmı hafta içi 10-18 her 30 dk · her tur sabit hatırlatıcı + plan blok bildirimi.
+- ⚠️ **TEK cron:** `*/5 * * * *`. Cloudflare ücretsiz plan worker başına 3 cron kabul eder, fazlası **sessizce** düşer (Ağu'da 6 özellik aylarca ölüydü). Yeni zamanlı iş `wrangler.toml`'a DEĞİL, `scheduled()` içine `if (at(h, m)) jobs.push(...)` olarak (TR saati, 5 dk pencere). Takvim: 08:00 sabah brifingi+plan+çakışma · 09:00 deadline · 12:00 öğle · 18:30 portföy (hafta içi) · 19:30 hedef ajanı · 21:00 akşam+Hevy+yarının planı · Pazar 20:00 Haftam çakışmaları · Pazar 21:00 haftalık+sağlık · Pzt 03:00 yedek · borsa alarmı hafta içi 10-18 her 30 dk · her tur sabit hatırlatıcı + plan blok bildirimi.
 - **AI katmanları** (`AI_TIERS`): `light` · `normal` · `deep` (ücretsiz model, derin düşünme) · `heavy` (PRO; `env.GEMINI_MODEL_PRO`).
-  - ⚠️ **PRO MALİYET KURALI:** `heavy` yalnız ① cron (günde sabit sayıda) ② kullanıcının düğmeye basmasıyla. Serbest akışlı özellik ASLA `heavy` almaz → `deep`. Kullanıcı ucunda çıplak `heavy` yok: `aiTierForUser(env, user, 'heavy')` (sahip dışı → `deep`). Model adını yalnız tier `heavy` kalırsa geç.
+  - ⚠️ **PRO MALİYET KURALI:** `heavy` yalnız ① cron (günde sabit sayıda) ② kullanıcının düğmeye basmasıyla ③ **sohbet — yalnız SAHİBE, günde `CHAT_PRO_DAILY` (40) tavanıyla** (5 Eki, Salim'in bilinçli kararı; sayaç `aidan_usage`, okunamazsa tavan dolu sayılır, yalnız gerçekten PRO yanıt verdiyse artar). Başka serbest akışlı özellik ASLA `heavy` almaz → `deep`. Kullanıcı ucunda çıplak `heavy` yok: `aiTierForUser(env, user, 'heavy')` (sahip dışı → `deep`). Model adını yalnız tier `heavy` kalırsa geç.
   - `geminiModelFor` bilerek eski davranışta: secret yoksa ücretsiz. Toplu ücretliye geçiş Salim'in vermediği maliyet kararıdır.
   - ⚠️ Düşünme token'ları ÇIKIŞ bütçesinden yenir → düşük `max_tokens` + yüksek düşünme = **boş cevap**. Katmanların `minOut` tabanı var, altına inme.
 - **Prompt sırası:** sistem prompt → `memoryBlock(...)` → `instructionsBlock(...)` (talimat EN SONDA). Talimat üslubu belirler, hafıza bağlamı; ikisi de güvenlik kurallarını ezemez.
@@ -96,6 +98,11 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 - Aynı ms'de çok görev üretirken `Date.now()` id'si çakışır → sayaç ekle.
 - Hızlı giriş: "her salı X" tekrar kuralıdır, yalın "hafta sonu" tarihtir; yazılmamış yıl yalnız tarih 30+ gün geride kalırsa ileri atlar.
 - `pruneOldData`: 180 günden eski BİTMİŞ görev + diyet günü, 60 günden eski sohbet atılır; sohbet "kayıtlar"ına dokunulmaz.
+
+**Sohbet ajanı** (5 Eki — `/chat` + `ajan.js`)
+- Araçlar: `odev_plani` (okul / özel ders ödevlerini tek pakette) · `gorev_ekle` · `gorev_tamamla` · `gorev_ertele`. Worker `agentSanitizeActions` ile temizler (uydurma görev id'si → eylem yok, geçmiş tarih → null); `actions` döner, blob'a YAZMAZ.
+- `ajan.js` kart çizer; **Uygula'ya basılmadan veri değişmez**. Ödev planı uygulama ANINDA `hwWorkDays`+`hwSpread` (school.js, ödev paketiyle aynı motor) ile yeniden hesaplanır. Bölünmüş ödev `seq` KULLANMAZ (`hwFixSeq` tüm seq'leri tek grup sayar) → `ajanFixParts`.
+- Bağlam: bugün+gün adı, açık görevler `[id]`, ders programı (`data.school.timetable`), sabit program (özel ders). Meta-öğrenme modunda araç yok.
 
 **Hafıza / hedef ajanı** (4 Eki)
 - `aidan_memory`: sohbetten `light` çıkarım (`ctx.waitUntil`, cevabı geciktirmez). Tavan 60; 48'de `auto` maddeler birleştirilir, `seed`/`user` dokunulmaz. Her uç `MEM_SCOPE` ile yalnız kendi kategorilerini görür. Cron okuyucu `memoryFetchForCron` asla fırlatmaz.
@@ -150,7 +157,7 @@ Mood/check-in · streak · hyperfocus uyarısı · hafta takvimi · rutinler sek
 
 ## ⏳ Açık işler
 
-- Muse planı: ✅ hafıza her yerde · ✅ hedef ajanı · ⏳ sohbete araç kullanma (görev ekle / öneri onayla) · ⏳ brifinge hedef satırı · ⏳ öneri kabul oranı (<%40 → önce prompt) · ⏳ web okuma (KAP, Cloudflare Browser Rendering, yalnız okuma).
+- Muse planı: ✅ hafıza her yerde · ✅ hedef ajanı · ✅ sohbet ajanı (ödev planı) · ✅ Haftam (tek takvim + çapraz kurallar + kapasiteli ödev dağıtımı) · ⏳ Haftam'dan antrenmanı tek dokunuşla hafiflet/kaydır · ⏳ Pazar Pro haftalık koç (geçen haftayı ölçüp 3 alana öneri) · ⏳ hedef önerisini sohbetten onayla · ⏳ brifinge hedef satırı · ⏳ öneri kabul oranı (<%40 → önce prompt) · ⏳ web okuma (KAP, Cloudflare Browser Rendering, yalnız okuma).
 - ⚠️ Haftalık yedek yalnız `aidan_data`'yı alıyor — `aidan_memory` + `aidan_goals` yedeklenmiyor.
 - Supabase "sızdırılmış şifre koruması" kapalı (panelden tek tık).
 - Antrenman kurulumunda "şu günler sabit" seçimi yok (serbest metin bunu `uygulanamayan`'a yazıyor).

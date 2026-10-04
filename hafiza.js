@@ -91,3 +91,149 @@ async function memAdd() {
   const yeni = _memItems.concat([{ id: 'u' + Date.now().toString(36), text, cat: 'genel', at: today(), src: 'user' }]).slice(-60);
   if (await memSave(yeni)) { _memItems = yeni; inp.value = ''; memDraw(); }
 }
+
+// ============================================================
+// AYARLAR TEMBEL EKLERİ (5 Eki 2026) — ui.js'ten TAŞINDI.
+// ⚠️ Neden: sohbet ajanı ilk yüklemeyi 186 KB'ye çıkardı (bütçe 185).
+// Davet kodları ve bulut yedek listesi YALNIZ Ayarlar'da görünüyor ve bu
+// modül zaten Ayarlar açılınca iniyor. Çağrı yerleri typeof ile korunuyor.
+// ============================================================
+async function loadInviteSection() {
+  const sec = document.getElementById('inviteSection');
+  const locked = document.getElementById('inviteLocked');
+  if (!sec || !locked) return;
+  if (!window._user) { sec.style.display = 'none'; locked.style.display = 'block'; return; }
+  // Login varsa bölümü göster, listeyi yükle
+  sec.style.display = 'block';
+  locked.style.display = 'none';
+  await refreshInviteList();
+}
+
+async function refreshInviteList() {
+  const list = document.getElementById('inviteList');
+  if (!list) return;
+  const token = await getSupaToken();
+  if (!token) { list.innerHTML = '<div class="fixedrem-empty">Önce giriş yap.</div>'; return; }
+  list.innerHTML = '<div class="fixedrem-empty">Yükleniyor…</div>';
+  try {
+    const r = await fetch(INVITE_LIST_ENDPOINT, { headers: { 'Authorization': `Bearer ${token}` } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { list.innerHTML = `<div class="fixedrem-empty">${escapeHtml(j.error || 'liste başarısız')}</div>`; return; }
+    if (!j.tableExists) {
+      list.innerHTML = '<div class="fixedrem-empty"><code>invite_codes</code> tablosu yok. Supabase SQL Editor\'da çalıştır (CLAUDE.md\'de SQL var).</div>';
+      return;
+    }
+    if (!j.codes || !j.codes.length) {
+      list.innerHTML = '<div class="fixedrem-empty">Henüz davet kodu üretmedin. Yukarıdaki butonla başla.</div>';
+      return;
+    }
+    list.innerHTML = j.codes.map(c => {
+      const used = !!c.used_by;
+      const created = new Date(c.created_at).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' });
+      const usedLine = used ? `<div class="countdown-row-meta">✓ kullanıldı · ${new Date(c.used_at).toLocaleDateString('tr-TR')}</div>` : '<div class="countdown-row-meta">kullanılmadı</div>';
+      const noteLine = c.note ? `<div class="countdown-row-meta">${escapeHtml(c.note)}</div>` : '';
+      return `
+        <div class="countdown-row" style="opacity:${used ? 0.6 : 1};">
+          <div class="countdown-row-info">
+            <div class="countdown-row-label" style="font-family: monospace; letter-spacing: 0.04em;">${escapeHtml(c.code)}</div>
+            ${noteLine}
+            <div class="countdown-row-meta">${created}</div>
+            ${usedLine}
+          </div>
+          ${!used ? `<button class="small secondary" onclick="copyInviteCode('${c.code}')" title="Kopyala"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>` : ''}
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = `<div class="fixedrem-empty">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function createInvite() {
+  const token = await getSupaToken();
+  if (!token) { showToast('Önce giriş yap', 'warning', 2500); return; }
+  const note = document.getElementById('inviteNote').value.trim();
+  try {
+    const r = await fetch(INVITE_CREATE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ note }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      showToast(j.error || `kod üretilemedi (${r.status})`, 'warning', 4000);
+      return;
+    }
+    document.getElementById('inviteNote').value = '';
+    showToast(`${j.code} — kopyalayıp arkadaşına yolla`, 'success', 4500);
+    await refreshInviteList();
+  } catch (e) { showToast('Hata: ' + e.message, 'warning', 3500); }
+}
+
+function copyInviteCode(code) {
+  navigator.clipboard.writeText(code).then(
+    () => showToast(`${code} kopyalandı`, 'success', 2000),
+    () => showToast('Kopyalama başarısız', 'warning', 2500)
+  );
+}
+
+async function loadBackupList() {
+  const el = document.getElementById('backupList');
+  if (!el) return;
+  if (!window._supa || !window._user) {
+    el.innerHTML = '<div class="fixedrem-empty">Önce Supabase\'e giriş yap.</div>';
+    return;
+  }
+  el.innerHTML = '<div class="fixedrem-empty">Yükleniyor…</div>';
+  try {
+    const { data: rows, error } = await window._supa
+      .from('aidan_backups')
+      .select('id, snapshot_at, data')
+      .order('snapshot_at', { ascending: false })
+      .limit(12);
+    if (error) {
+      const msg = String(error.message || error);
+      // Tablo yok → Salim'e nazik talimat
+      if (/relation .* does not exist|aidan_backups/i.test(msg) && /not exist|404/i.test(msg) || error.code === '42P01') {
+        el.innerHTML = '<div class="fixedrem-empty">Tablo henüz yok. Supabase → SQL Editor\'da <code>aidan_backups</code> SQL\'ini çalıştırdıktan sonra Pazartesi 03:00\'tan itibaren yedek alınır.</div>';
+        return;
+      }
+      throw error;
+    }
+    if (!rows || !rows.length) {
+      el.innerHTML = '<div class="fixedrem-empty">Henüz yedek yok. Worker ilk Pazartesi 03:00 TR\'de yazar (manuel test için <code>?type=backup&secret=...</code>).</div>';
+      return;
+    }
+    _backupCache = {};
+    rows.forEach(r => { _backupCache[r.id] = r.data; });
+    el.innerHTML = rows.map(r => {
+      const d = new Date(r.snapshot_at);
+      const dateStr = d.toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' });
+      const taskCount = Array.isArray(r.data?.tasks) ? r.data.tasks.length : 0;
+      const keyCount = Object.keys(r.data || {}).length;
+      return `
+        <div class="countdown-row">
+          <div class="countdown-row-info">
+            <div class="countdown-row-label">${escapeHtml(dateStr)}</div>
+            <div class="countdown-row-meta">${taskCount} görev · ${keyCount} alan</div>
+          </div>
+          <button class="small secondary" onclick="downloadBackup(${r.id}, '${isoLocal(d)}')" title="JSON indir">İndir</button>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = `<div class="fixedrem-empty">${escapeHtml(String(e.message || e))}</div>`;
+  }
+}
+
+function downloadBackup(id, dateLabel) {
+  const data = _backupCache && _backupCache[id];
+  if (!data) { showToast('Yedek bulunamadı — listeyi yenile', 'warning', 3000); return; }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `aidan-backup-${dateLabel || 'snapshot'}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}

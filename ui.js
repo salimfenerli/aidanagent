@@ -1920,66 +1920,6 @@ function exportData() {
 // ============ OTOMATİK YEDEKLER (Supabase aidan_backups) ============
 // Worker haftada bir snapshot atar. PWA listele + JSON indir.
 let _backupCache = null; // id → data (indirme için, listeyle birlikte gelir)
-async function loadBackupList() {
-  const el = document.getElementById('backupList');
-  if (!el) return;
-  if (!window._supa || !window._user) {
-    el.innerHTML = '<div class="fixedrem-empty">Önce Supabase\'e giriş yap.</div>';
-    return;
-  }
-  el.innerHTML = '<div class="fixedrem-empty">Yükleniyor…</div>';
-  try {
-    const { data: rows, error } = await window._supa
-      .from('aidan_backups')
-      .select('id, snapshot_at, data')
-      .order('snapshot_at', { ascending: false })
-      .limit(12);
-    if (error) {
-      const msg = String(error.message || error);
-      // Tablo yok → Salim'e nazik talimat
-      if (/relation .* does not exist|aidan_backups/i.test(msg) && /not exist|404/i.test(msg) || error.code === '42P01') {
-        el.innerHTML = '<div class="fixedrem-empty">Tablo henüz yok. Supabase → SQL Editor\'da <code>aidan_backups</code> SQL\'ini çalıştırdıktan sonra Pazartesi 03:00\'tan itibaren yedek alınır.</div>';
-        return;
-      }
-      throw error;
-    }
-    if (!rows || !rows.length) {
-      el.innerHTML = '<div class="fixedrem-empty">Henüz yedek yok. Worker ilk Pazartesi 03:00 TR\'de yazar (manuel test için <code>?type=backup&secret=...</code>).</div>';
-      return;
-    }
-    _backupCache = {};
-    rows.forEach(r => { _backupCache[r.id] = r.data; });
-    el.innerHTML = rows.map(r => {
-      const d = new Date(r.snapshot_at);
-      const dateStr = d.toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' });
-      const taskCount = Array.isArray(r.data?.tasks) ? r.data.tasks.length : 0;
-      const keyCount = Object.keys(r.data || {}).length;
-      return `
-        <div class="countdown-row">
-          <div class="countdown-row-info">
-            <div class="countdown-row-label">${escapeHtml(dateStr)}</div>
-            <div class="countdown-row-meta">${taskCount} görev · ${keyCount} alan</div>
-          </div>
-          <button class="small secondary" onclick="downloadBackup(${r.id}, '${isoLocal(d)}')" title="JSON indir">İndir</button>
-        </div>
-      `;
-    }).join('');
-  } catch (e) {
-    el.innerHTML = `<div class="fixedrem-empty">${escapeHtml(String(e.message || e))}</div>`;
-  }
-}
-
-function downloadBackup(id, dateLabel) {
-  const data = _backupCache && _backupCache[id];
-  if (!data) { showToast('Yedek bulunamadı — listeyi yenile', 'warning', 3000); return; }
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `aidan-backup-${dateLabel || 'snapshot'}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 function importData(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -3189,85 +3129,6 @@ async function getSupaToken() {
   return data?.session?.access_token || null;
 }
 
-async function loadInviteSection() {
-  const sec = document.getElementById('inviteSection');
-  const locked = document.getElementById('inviteLocked');
-  if (!sec || !locked) return;
-  if (!window._user) { sec.style.display = 'none'; locked.style.display = 'block'; return; }
-  // Login varsa bölümü göster, listeyi yükle
-  sec.style.display = 'block';
-  locked.style.display = 'none';
-  await refreshInviteList();
-}
-
-async function refreshInviteList() {
-  const list = document.getElementById('inviteList');
-  if (!list) return;
-  const token = await getSupaToken();
-  if (!token) { list.innerHTML = '<div class="fixedrem-empty">Önce giriş yap.</div>'; return; }
-  list.innerHTML = '<div class="fixedrem-empty">Yükleniyor…</div>';
-  try {
-    const r = await fetch(INVITE_LIST_ENDPOINT, { headers: { 'Authorization': `Bearer ${token}` } });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) { list.innerHTML = `<div class="fixedrem-empty">${escapeHtml(j.error || 'liste başarısız')}</div>`; return; }
-    if (!j.tableExists) {
-      list.innerHTML = '<div class="fixedrem-empty"><code>invite_codes</code> tablosu yok. Supabase SQL Editor\'da çalıştır (CLAUDE.md\'de SQL var).</div>';
-      return;
-    }
-    if (!j.codes || !j.codes.length) {
-      list.innerHTML = '<div class="fixedrem-empty">Henüz davet kodu üretmedin. Yukarıdaki butonla başla.</div>';
-      return;
-    }
-    list.innerHTML = j.codes.map(c => {
-      const used = !!c.used_by;
-      const created = new Date(c.created_at).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' });
-      const usedLine = used ? `<div class="countdown-row-meta">✓ kullanıldı · ${new Date(c.used_at).toLocaleDateString('tr-TR')}</div>` : '<div class="countdown-row-meta">kullanılmadı</div>';
-      const noteLine = c.note ? `<div class="countdown-row-meta">${escapeHtml(c.note)}</div>` : '';
-      return `
-        <div class="countdown-row" style="opacity:${used ? 0.6 : 1};">
-          <div class="countdown-row-info">
-            <div class="countdown-row-label" style="font-family: monospace; letter-spacing: 0.04em;">${escapeHtml(c.code)}</div>
-            ${noteLine}
-            <div class="countdown-row-meta">${created}</div>
-            ${usedLine}
-          </div>
-          ${!used ? `<button class="small secondary" onclick="copyInviteCode('${c.code}')" title="Kopyala"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>` : ''}
-        </div>
-      `;
-    }).join('');
-  } catch (e) {
-    list.innerHTML = `<div class="fixedrem-empty">${escapeHtml(e.message)}</div>`;
-  }
-}
-
-async function createInvite() {
-  const token = await getSupaToken();
-  if (!token) { showToast('Önce giriş yap', 'warning', 2500); return; }
-  const note = document.getElementById('inviteNote').value.trim();
-  try {
-    const r = await fetch(INVITE_CREATE_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ note }),
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      showToast(j.error || `kod üretilemedi (${r.status})`, 'warning', 4000);
-      return;
-    }
-    document.getElementById('inviteNote').value = '';
-    showToast(`${j.code} — kopyalayıp arkadaşına yolla`, 'success', 4500);
-    await refreshInviteList();
-  } catch (e) { showToast('Hata: ' + e.message, 'warning', 3500); }
-}
-
-function copyInviteCode(code) {
-  navigator.clipboard.writeText(code).then(
-    () => showToast(`${code} kopyalandı`, 'success', 2000),
-    () => showToast('Kopyalama başarısız', 'warning', 2500)
-  );
-}
-
 async function signUpUser() {
   if (!window._supa && !(await supaReady())) { showSupaStatus('Önce Supabase\'e bağlan.', 'uyari'); return; }
   const email = document.getElementById('loginEmail').value.trim();
@@ -4197,6 +4058,7 @@ function renderChatMessages() {
       inner += '<div class="chat-imgdrop">fotograf (yer kazanmak icin silindi)</div>';
     }
     if (m.content) inner += m.role === 'user' ? escapeHtml(m.content).replace(/\n/g, '<br>') : chatFormat(m.content);
+    if (Array.isArray(m.actions) && m.actions.length) inner += '<div class="chat-ajan" data-i="' + i + '"></div>';
     div.innerHTML = inner;
     wrap.appendChild(div);
     const acts = document.createElement('div');
@@ -4204,10 +4066,12 @@ function renderChatMessages() {
     let html = '';
     if (m.role === 'assistant') html += '<button type="button" onclick="openSaveNote(' + i + ')">Kaydet</button>';
     html += '<button type="button" onclick="deleteChatMsg(' + i + ')">Sil</button>';
+    if (m.pro) html += '<span>Pro</span>';
     acts.innerHTML = html;
     wrap.appendChild(acts);
     box.appendChild(wrap);
   });
+  if (box.querySelector('.chat-ajan')) (typeof renderChatActions === 'function' ? Promise.resolve() : loadModule('ajan')).then(() => renderChatActions()).catch(() => {});
   if (_chatBusy) {
     const t = document.createElement('div');
     t.className = 'chat-typing';
@@ -4268,7 +4132,9 @@ async function sendChat() {
     if (!r.ok || !j.reply) {
       chatPush({ role: 'assistant', content: 'Bir sorun oldu (' + (j.error || ('http ' + r.status)) + '). Tekrar dener misin?' });
     } else {
-      chatPush({ role: 'assistant', content: j.reply });
+      // 🤖 Ajan eylemleri (5 Eki) — kart ajan.js'te, UYGULA'ya basılmadan hiçbir şey değişmez.
+      chatPush(Object.assign({ role: 'assistant', content: j.reply }, j.actions && j.actions.length ? { actions: j.actions } : null, j.pro ? { pro: 1 } : null));
+      if (j.proLeft === 5) showToast('Bugün 5 Pro mesaj kaldı', 'info');
     }
     _chatHistory = ensureChat();
     renderChatMessages();

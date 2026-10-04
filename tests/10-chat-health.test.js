@@ -129,16 +129,20 @@ test('tam blok okuma kurallari (eksik-log, yagsiz kutle) mevcut', () => {
   assert.ok(/En fazla 2 öneri/.test(WK), 'ADHD oneri siniri yok');
 });
 
-test('sohbet varsayilani hala UCRETSIZ katman (maliyet kurali)', () => {
-  // Kalici kural: serbest akisli hicbir yol ucretli modele gidemez.
+test('sohbet PRO yalniz SAHIBE ve GUNLUK TAVANLA (maliyet kurali, 5 Eki 2026)', () => {
+  // 5 Eki 2026: Salim sohbette PRO'yu aktif istedi (bilincli maliyet karari).
+  // Kural "serbest akis ucretsiz" yerine "sahip + gunluk tavan" oldu:
+  // sahip olmayan ASLA heavy almaz, sahip CHAT_PRO_DAILY'den fazla alamaz.
   // extractDecl `async function` yakalamiyor — kaynaktan dilimle
   const i = WK.indexOf('async function handleChatApi');
   assert.ok(i > 0, 'handleChatApi bulunamadi');
   const j = WK.indexOf('async function ', i + 30);
   const fn = WK.slice(i, j > 0 ? j : i + 20000);
-  assert.ok(/proOnce \? aiTierForUser\(env, user, 'heavy'\)/.test(fn),
-    'heavy sadece /pro ile gelmeli — serbest akis ucretsiz kalmali');
+  assert.ok(/const sahipPro = aiTierForUser\(env, user, 'heavy'\) === 'heavy';/.test(fn), 'sahip kontrolu yok');
+  assert.ok(/const proOk = sahipPro && proUsed < CHAT_PRO_DAILY;/.test(fn), 'gunluk tavan yok');
+  assert.ok(/proOnce \? aiTierForUser\(env, user, 'heavy'\)/.test(fn), '/pro sahip disinda heavy vermemeli');
   assert.ok(!/tier: 'heavy'/.test(fn), 'chat sabit heavy olmus — fatura tavani kalkar');
+  assert.ok(/const CHAT_PRO_DAILY = \d+;/.test(WK), 'tavan sabiti yok');
   assert.ok(/healthFull \? 900 : 700/.test(fn), 'tam blokta cevap alani genisletilmemis');
 });
 

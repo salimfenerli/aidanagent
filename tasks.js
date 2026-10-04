@@ -52,7 +52,6 @@ async function showTab(name, btn) {
     renderMuteState();
     renderFixedReminders();
     renderCountdownManage();
-    loadInviteSection();
     renderCalendarSync();
     renderStorageInfo();   // depolama doluluk çubuğu (8 Ağu 2026)
     renderInstructions();  // kalıcı AI talimatları (9 Ağu 2026)
@@ -61,7 +60,7 @@ async function showTab(name, btn) {
     const bd = document.getElementById('backupDetails');
     if (bd && !bd._hooked) {
       bd._hooked = true;
-      bd.addEventListener('toggle', () => { if (bd.open) loadBackupList(); });
+      bd.addEventListener('toggle', () => { if (bd.open && typeof loadBackupList === 'function') loadBackupList(); });
     }
   }
   // ⚠️ Okul paneli artık school.js'te (tembel). Modül inmeden cagrilirsa
@@ -355,14 +354,18 @@ const AI_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/ai';
  * `<details>`, açılmadan fark edilmez; ağ dönünce kendi doluyor.
  */
 // HAFIZA kapısı — ekran hafiza.js'te ve TEMBEL iniyor (ilk yükleme bütçesi).
+// ⚠️ 5 Eki 2026: davet bölümü + yedek listesi de bu modülde (ilk yükleme bütçesi).
 function ensureMemoryModule() {
-  if (typeof renderMemory === 'function') return renderMemory();
+  if (typeof renderMemory === 'function') { loadInviteSection(); return renderMemory(); }
   return loadModule('hafiza')
-    .then(() => { if (typeof renderMemory === 'function') renderMemory(); })
+    .then(() => { if (typeof renderMemory === 'function') { loadInviteSection(); renderMemory(); } })
     .catch(() => {});
 }
 // HEDEFLER kapısı (4 Eki 2026) — panel hedefler.js'te, TEMBEL iner.
 function ensureGoalsModule() {
+  // Haftam paneli (hafta.js) aynı anda iner — ikisi de Görevler sekmesinde.
+  if (typeof renderHafta === 'function') renderHafta();
+  else loadModule('hafta').then(() => { if (typeof renderHafta === 'function') renderHafta(); }).catch(() => {});
   if (typeof renderGoals === 'function') return renderGoals();
   return loadModule('hedefler')
     .then(() => { if (typeof renderGoals === 'function') renderGoals(); })
@@ -807,6 +810,9 @@ function fixedBlocksForDate(dateStr) {
       start: f.start, end: f.end,
       kind: 'fixed', taskId: null, done: false, fixedId: f.id,
     }))
+    // 5 Eki: okul/kurs/antrenman da meşgul (hafta.js — worker fixedBlocksFor ikizi)
+    .concat(typeof hfPlanBloklari === 'function' ? hfPlanBloklari(data, dateStr).map((b, k) => Object.assign(b, { id: Date.now() + 950000 + k, taskId: null, done: false, fixedId: null })) : [])
+    .filter((b, i, arr) => b.fixedId != null || !arr.some(s => s.fixedId != null && blocksOverlap(s, b)))
     .sort((a, b) => hmToMin(a.start) - hmToMin(b.start));
 }
 function blocksOverlap(a, b) {

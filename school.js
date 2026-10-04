@@ -67,6 +67,13 @@ function hwWorkDays(startISO, endISO, skipWeekends) {
  */
 function hwSpread(items, days) {
   const yuk = {}; days.forEach(d => { yuk[d] = hwDayLoad(d); });
+  // 5 Eki 2026 — KAPASİTE: hafta.js indiyse her günün GERÇEK ödev kapasitesi
+  // (okul/kurs/antrenman/uyku sonrası kalan) bilinir; en çok yer kalan güne koy.
+  // Modül yoksa eski davranış: en az yüklü gün (kapasite herkese eşit sayılır).
+  const kap = {};
+  const kapVar = typeof hfGun === 'function';
+  if (kapVar) days.forEach(d => { kap[d] = hfGun(data, d).odevKap; });
+  const skor = d => kapVar ? (kap[d] - yuk[d]) : -yuk[d];
   const yerlesim = {}; days.forEach(d => { yerlesim[d] = []; });
   const sirali = items.map((it, i) => ({ it, i }))
     .sort((a, b) => ((b.it.estimateMin || HW_DEFAULT_MIN) - (a.it.estimateMin || HW_DEFAULT_MIN)) || (a.i - b.i));
@@ -75,7 +82,7 @@ function hwSpread(items, days) {
     let hedef = (it.due && days.includes(it.due)) ? it.due : null;
     if (!hedef) {
       hedef = days[0];
-      for (const d of days) if (yuk[d] < yuk[hedef]) hedef = d;   // eşitlikte erken gün
+      for (const d of days) if (skor(d) > skor(hedef)) hedef = d;   // eşitlikte erken gün
     }
     yuk[hedef] += (it.estimateMin || HW_DEFAULT_MIN);
     yerlesim[hedef].push({ it, i });
@@ -83,6 +90,7 @@ function hwSpread(items, days) {
   const plan = days.map(d => ({
     date: d,
     min: yuk[d],
+    kap: kapVar ? kap[d] : null,
     items: yerlesim[d].sort((a, b) => a.i - b.i).map(x => x.it),
   }));
   return hwFixSeq(plan);
@@ -179,15 +187,16 @@ function hwPreview() {
   _hwPlan = { days: plan, items };
 
   const dolu = plan.filter(d => d.items.length);
-  const asan = plan.filter(d => d.min > HW_DAY_CAP_MIN).length;
+  const sinir = d => (d.kap != null ? d.kap : HW_DAY_CAP_MIN);
+  const asan = plan.filter(d => d.min > sinir(d)).length;
   const toplam = items.reduce((s, it) => s + (it.estimateMin || HW_DEFAULT_MIN), 0);
 
   el.innerHTML =
     `<div class="hw-sum">${items.length} ödev · ${dolu.length} güne · toplam ~${toplam} dk` +
-      (asan ? ` · <span class="hw-warn">${asan} gün ${HW_DAY_CAP_MIN} dk'yı aşıyor</span>` : '') + '</div>' +
+      (asan ? ` · <span class="hw-warn">${asan} gün ${plan.some(d => d.kap != null) ? 'boş zamanı' : HW_DAY_CAP_MIN + " dk'yı"} aşıyor</span>` : '') + '</div>' +
     dolu.map(d => {
       const gunAd = fmtDayLabel ? fmtDayLabel(d.date) : d.date;
-      return `<div class="hw-day${d.min > HW_DAY_CAP_MIN ? ' over' : ''}">` +
+      return `<div class="hw-day${d.min > sinir(d) ? ' over' : ''}">` +
         `<div class="hw-day-head"><span>${escapeHtml(gunAd)}</span><span class="hw-day-min">${d.min} dk</span></div>` +
         d.items.map(it => `<div class="hw-item">${escapeHtml(it.text)}${it.estimateMin ? ` <span class="hw-item-min">${it.estimateMin} dk</span>` : ''}</div>`).join('') +
         '</div>';

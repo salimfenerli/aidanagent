@@ -164,7 +164,9 @@ describe('worker guvenlik sozlesmesi', () => {
     // MALIYET karari, sessizce alinamaz.
     assert.ok(/function geminiModelPro\(env\)/.test(WK), 'geminiModelPro silinmis');
     const kullanim = (WK.match(/geminiModelPro\(env\)/g) || []).length;
-    assert.ok(kullanim >= 2 && kullanim <= 5,
+    // 5 Eki 2026: sohbet ajani PRO'yu sahibe GUNLUK TAVANLA kullaniyor (Salim'in
+    // bilincli maliyet karari) — yuzey bir arttı. Sohbetteki tavan 10-chat-health'te kilitli.
+    assert.ok(kullanim >= 2 && kullanim <= 6,
       'PRO adi beklenmedik sayida yerde geciyor (' + kullanim + ') — maliyet yuzeyi genislemis');
     // geminiModelFor eski davranista: secret yoksa ucretsiz.
     assert.ok(/t\.pro && env && \(env\.GEMINI_MODEL_PRO \|\| ''\)\.trim\(\)/.test(WK),

@@ -1,3 +1,15 @@
+# 🗓️ 5 Eki 2026 — HAFTAM: TEK TAKVİM + ÇAPRAZ KURALLAR (v7-205)
+
+Salim: "ana odaklarım okul, spor, beslenme — bütün olarak inceleyip programlamalı". Takvim iki yerdeydi (duzen ↔ fixedSchedule); ödev dağıtımı okul/antrenman/sınavı bilmiyordu. hafta.js ↔ worker.js ikiz çekirdek (hfGun/hfCakismalar/hfPlanBloklari), kapasiteli hwSpread, gün planına okul/kurs/antrenman blokları, sohbet ajanına BU HAFTA tablosu, sabah brifingine çakışma satırı, Pazar 20:00 push, Haftam paneli. Öncelik soruldu, Salim tercih belirtmedi → OKUL > UYKU > ANTRENMAN varsayıldı. Testler 54-hafta (23). 1486/1486 yeşil.
+
+---
+
+# 🤖 5 Eki 2026 — SOHBET AJANI (v7-204)
+
+Salim: "muse tarzı — okuldan haftalık ödev, özel ders hocası da veriyor, düzenleyebilsin; gemini pro'yu aktif kullan". Sohbete 4 araç (odev_plani, gorev_ekle, gorev_tamamla, gorev_ertele), onay kapılı Uygula kartları (ajan.js), sahibe günlük 40 PRO tavanı (aidan_usage tablosu). İlk yükleme 186 KB'ye çıktı → davet bölümü + yedek listesi ui.js'ten hafiza.js'e taşındı (184 KB). Testler: 53-sohbet-ajani, 10/06 maliyet testleri güncellendi. 1462/1462 yeşil.
+
+---
+
 # 📦 ESKİ CLAUDE.md — TAM ARŞİV (5 Eki 2026)
 
 CLAUDE.md 347 KB olmuştu ve her oturumda bağlama yükleniyordu. Kalıcı kurallar yeni CLAUDE.md'ye damıtıldı; aşağıda eski dosyanın HİÇBİR ŞEY SİLİNMEDEN tam hali duruyor (Temmuz–Ekim 2026 seans günlükleri, eski mimari notları). Bir kararın gerekçesi lazımsa buradan Grep'le.

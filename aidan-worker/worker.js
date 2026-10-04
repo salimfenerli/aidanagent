@@ -1547,6 +1547,9 @@ async function runCronJob(env, type) {
           payload = await buildMorningAi(env, u.data, autoSetMorningMit(u.data), await memoryFetchForCron(env, u));
           const dsl = buildDailySummaryLine(u.data);
           if (payload && dsl) payload.message += `\n\n${dsl}`;
+          // 5 Eki 2026 — Haftam: bugün/yarın için çapraz çakışma (sınav + ağır antrenman, ödev aşımı, geç seans)
+          const hcak = hfCakismalar(u.data, trToday(), 2).filter(c => c.seviye !== 'bilgi').slice(0, 2);
+          if (payload && hcak.length) payload.message += '\n\n' + hcak.map(c => `⚠️ ${c.mesaj} ${c.oneri}`).join('\n');
           break;
         }
         case 'noon':     payload = buildNoon(u.data); break;
@@ -4031,6 +4034,224 @@ function chatHealthShort(data) {
   return out.length ? ` Sağlık: ${out.join(' · ')}.` : '';
 }
 
+// ============================================================================
+// 🤖 SOHBET AJANI (5 Eki 2026)
+// ============================================================================
+// Muse planı: sohbet artık iş YAPABİLİR — okuldan/özel ders hocasından gelen
+// ödevleri günlere dağıtan plan, tek görev ekleme, tamamlama, erteleme.
+//
+// ⚠️ ONAY KAPISI: araç çağrısı hiçbir şeyi DEĞİŞTİRMEZ. Worker temizlenmiş
+// `actions` döndürür; PWA (ajan.js) "Uygula" kartı çizer, kullanıcı basınca
+// istemci kendi verisine uygular (ödev dağıtımı school.js'teki aynı LPT
+// motoruyla). Böylece worker aidan_data blob'una yazmaz.
+//
+// 💸 PRO (Salim'in kararı, 5 Eki): sahibin sohbeti PRO modelle çalışır, günde
+// CHAT_PRO_DAILY çağrı tavanıyla (aidan_usage sayacı). Tavan dolunca ücretsiz
+// modele düşer. Sahip olmayan kullanıcı ASLA PRO almaz (aiTierForUser).
+const CHAT_PRO_DAILY = 40;
+const AGENT_MAX_ACTIONS = 5;
+const AGENT_MAX_HW = 30;
+const AGENT_CATS = ['odev', 'ders', 'ev', 'kisisel'];
+
+const AGENT_TOOLS = [
+  {
+    name: 'odev_plani',
+    description: 'Okuldan ya da özel ders hocasından gelen BİRDEN FAZLA ödevi tek pakette toplar; uygulama bunları son tarihe kadar günlere, her günün mevcut yüküne bakarak dağıtır. Kullanıcı onaylayınca uygulanır.',
+    parameters: {
+      type: 'object',
+      properties: {
+        baslik: { type: 'string', description: 'Paket adı, örn. "Okul ödevleri · 6-10 Eki" ya da "Matematik özel ders ödevi"' },
+        kaynak: { type: 'string', enum: ['okul', 'ozel_ders'] },
+        son_tarih: { type: 'string', description: 'YYYY-MM-DD — en geç bu güne kadar bitmeli' },
+        hafta_sonu_dahil: { type: 'boolean' },
+        bugun_dahil: { type: 'boolean', description: 'Bugün de çalışılabilir mi' },
+        odevler: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              ders: { type: 'string' },
+              text: { type: 'string', description: 'Kısa, eylemli: "Paragraf testi 2 (40 soru)"' },
+              dk: { type: 'integer', description: 'Tahmini dakika' },
+              tarih: { type: 'string', description: 'YYYY-MM-DD — yalnız ödevin KENDİ teslim günü belliyse' },
+              parca: { type: 'integer', description: 'Büyük ödevi kaç güne bölmeli (1-6)' },
+            },
+            required: ['text'],
+          },
+        },
+      },
+      required: ['odevler'],
+    },
+  },
+  {
+    name: 'gorev_ekle',
+    description: 'Tek bir görev ekler (ödev paketi DEĞİL). Kullanıcı onaylayınca uygulanır.',
+    parameters: {
+      type: 'object',
+      properties: {
+        text: { type: 'string' },
+        tarih: { type: 'string', description: 'YYYY-MM-DD' },
+        dk: { type: 'integer' },
+        kategori: { type: 'string', enum: AGENT_CATS },
+        acil: { type: 'boolean' },
+      },
+      required: ['text'],
+    },
+  },
+  {
+    name: 'gorev_tamamla',
+    description: 'Listede [id] ile verilen açık görevi tamamlandı işaretler.',
+    parameters: { type: 'object', properties: { gorev_id: { type: 'string' } }, required: ['gorev_id'] },
+  },
+  {
+    name: 'gorev_ertele',
+    description: 'Listede [id] ile verilen açık görevin tarihini değiştirir.',
+    parameters: {
+      type: 'object',
+      properties: { gorev_id: { type: 'string' }, yeni_tarih: { type: 'string', description: 'YYYY-MM-DD' } },
+      required: ['gorev_id', 'yeni_tarih'],
+    },
+  },
+];
+
+const AGENT_PROMPT = `
+
+ARAÇLAR — AJAN MODU:
+- Görev/ödev EKLEME, TAMAMLAMA, ERTELEME isteklerinde ARAÇ ÇAĞIR. Araç hiçbir şeyi hemen değiştirmez: kullanıcının ekranına "Uygula" kartı çıkar. Bu yüzden "ekledim" DEME — "hazırladım, kontrol edip Uygula'ya bas" de.
+- Birden fazla ödev (okulun haftalık ödevleri, özel ders hocasının verdikleri) → TEK "odev_plani" çağrısı, her ödev ayrı kalem, ders adıyla. kaynak: okul ya da ozel_ders.
+- Fotoğrafta ödev listesi varsa (tahta, defter, WhatsApp, Classroom) her kalemi oku. Okuyamadığın kalemi UYDURMA — cevapta sor.
+- Süre yazılmamışsa makul tahmin et (10 soru ~15 dk, 1 sayfa okuma ~5 dk, kompozisyon ~45 dk). 60 dk'yı aşan ödevi "parca" ile böl.
+- Son tarih söylenmediyse: ders programında o dersin bir SONRAKİ gününden önceki gün; özel ders ödevi için bir sonraki özel ders gününden önceki gün; hiçbiri bilinmiyorsa bu haftanın cuması. Tarihleri BUGÜN'e göre hesapla.
+- Tek iş → "gorev_ekle". Tamamlama/erteleme → yalnız AÇIK GÖREVLER listesindeki [id] ile; listede yoksa sor.
+- BU HAFTA tablosunu kullan: son tarih seçerken ödev kapasitesi dolu günleri ve SINAV günlerini gözet; sınavdan önceki güne yeni ödev yığma.
+- Öncelik OKUL > UYKU > ANTRENMAN. ÇAKIŞMALAR varsa ve konu açılırsa söyle. Antrenman programını sen değiştiremezsin — Diyet sekmesindeki programdan hafifletilmesini öner.
+- Sadece sohbet, soru ya da ders anlatımıysa araç ÇAĞIRMA.
+- Araç çağırdığında cevap metnin 1-2 cümle: ne hazırladığını ve varsa dikkat edilecek şeyi söyle (ör. "perşembe 2 saati aşıyor").`;
+
+function agentDateOk(s, today, maxDays) {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(s + 'T12:00:00Z');
+  if (isNaN(d) || d.toISOString().slice(0, 10) !== s) return null;
+  if (s < today) return null;
+  const t = new Date(today + 'T12:00:00Z');
+  if ((d - t) / 86400000 > (maxDays || 90)) return null;
+  return s;
+}
+function agentInt(x, lo, hi) {
+  const n = Math.round(Number(x));
+  return Number.isFinite(n) && n >= lo && n <= hi ? n : null;
+}
+function agentStr(x, n) {
+  return typeof x === 'string' ? x.replace(/\s+/g, ' ').trim().slice(0, n) : '';
+}
+
+/**
+ * Modelin araç çağrılarını güvenli eylemlere çevirir. Saf fonksiyon — test edilir.
+ * Geçersiz alan düşer; kimliği bilinmeyen görev için eylem ÜRETİLMEZ (uydurma id).
+ */
+function agentSanitizeActions(toolCalls, ctx) {
+  const today = ctx.today;
+  const ids = new Set((ctx.taskIds || []).map(String));
+  const out = [];
+  for (const tc of (Array.isArray(toolCalls) ? toolCalls : [])) {
+    if (out.length >= AGENT_MAX_ACTIONS) break;
+    const a = (tc && tc.arguments && typeof tc.arguments === 'object') ? tc.arguments : {};
+    if (tc.name === 'odev_plani') {
+      const items = [];
+      for (const o of (Array.isArray(a.odevler) ? a.odevler : []).slice(0, AGENT_MAX_HW)) {
+        const ders = agentStr(o && o.ders, 40);
+        let text = agentStr(o && o.text, 120);
+        if (text.length < 2) continue;
+        if (ders && text.toLocaleLowerCase('tr').indexOf(ders.toLocaleLowerCase('tr')) < 0) text = `${ders}: ${text}`.slice(0, 140);
+        items.push({ text, dk: agentInt(o.dk, 5, 240), tarih: agentDateOk(o.tarih, today, 60), parca: agentInt(o.parca, 1, 6) || 1 });
+      }
+      if (!items.length) continue;
+      const kaynak = a.kaynak === 'ozel_ders' ? 'ozel_ders' : 'okul';
+      out.push({
+        type: 'odev_plani', kaynak,
+        baslik: agentStr(a.baslik, 60) || (kaynak === 'ozel_ders' ? 'Özel ders ödevleri' : 'Okul ödevleri'),
+        sonTarih: agentDateOk(a.son_tarih, today, 60),
+        haftaSonu: a.hafta_sonu_dahil === true,
+        bugun: a.bugun_dahil === true,
+        items,
+      });
+    } else if (tc.name === 'gorev_ekle') {
+      const text = agentStr(a.text, 140);
+      if (text.length < 2) continue;
+      out.push({
+        type: 'gorev_ekle', text, tarih: agentDateOk(a.tarih, today, 365), dk: agentInt(a.dk, 5, 240),
+        kategori: AGENT_CATS.indexOf(a.kategori) >= 0 ? a.kategori : null, acil: a.acil === true,
+      });
+    } else if (tc.name === 'gorev_tamamla') {
+      const id = String(a.gorev_id || '').replace(/[^\d]/g, '');
+      if (!id || !ids.has(id)) continue;
+      out.push({ type: 'gorev_tamamla', gorevId: id });
+    } else if (tc.name === 'gorev_ertele') {
+      const id = String(a.gorev_id || '').replace(/[^\d]/g, '');
+      const tarih = agentDateOk(a.yeni_tarih, today, 365);
+      if (!id || !ids.has(id) || !tarih) continue;
+      out.push({ type: 'gorev_ertele', gorevId: id, tarih });
+    }
+  }
+  return out;
+}
+
+/** Ajanın göreceği bağlam: bugün, açık görevler ([id] ile), ders programı, sabit program. */
+function agentContext(d, today) {
+  const GUN = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+  const KISA = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+  const dow = new Date(today + 'T12:00:00Z').getUTCDay();
+  const lines = [`\n\n[AJAN BAĞLAMI]\nBUGÜN: ${today} ${GUN[dow]}`];
+  const acik = (d.tasks || []).filter(t => t && !t.done)
+    .sort((x, y) => String(x.due || '9999').localeCompare(String(y.due || '9999'))).slice(0, 30);
+  lines.push(`AÇIK GÖREVLER (${acik.length}):`);
+  acik.forEach(t => lines.push(`[${t.id}] ${String(t.text || '').slice(0, 80)}${t.due ? ` (son: ${t.due})` : ''}${t.estimateMin ? ` ~${t.estimateMin}dk` : ''}`));
+  const tt = d.school && d.school.timetable;
+  if (tt && typeof tt === 'object') {
+    const satir = ['1', '2', '3', '4', '5'].filter(k => Array.isArray(tt[k]) && tt[k].length)
+      .map(k => `${KISA[Number(k)]}: ${tt[k].map(x => String((x && (x.name || x.ders || x.subject)) || x)).filter(Boolean).slice(0, 10).join(', ')}`);
+    if (satir.length) lines.push('OKUL DERS PROGRAMI: ' + satir.join(' · '));
+  }
+  const fx = (d.fixedSchedule || []).filter(f => f && f.enabled !== false && Array.isArray(f.days) && f.days.length).slice(0, 10);
+  if (fx.length) lines.push('SABİT PROGRAM (özel ders, kurs, antrenman): ' + fx.map(f => `${String(f.label || '').slice(0, 30)} ${f.days.map(x => KISA[x]).join('/')} ${f.start || ''}-${f.end || ''}`).join(' · '));
+  // 5 Eki 2026 — Haftam: okul + kurs + antrenman + sınav + ödev kapasitesi tek tabloda.
+  if (typeof hfGun === 'function') {
+    lines.push('BU HAFTA (ödev X/Y dk = o güne tarihli mevcut ödev / o gün ödeve ayrılabilecek süre):');
+    for (let i = 0; i < 7; i++) {
+      const t = hfEkle(today, i);
+      const g = hfGun(d, t);
+      const bits = g.bloklar.filter(b => b.tur !== 'antrenman').map(b => `${b.label} ${hfSaat(b.bas)}-${hfSaat(b.bit)}`);
+      if (g.antrenman) bits.push(`${g.antrenman.ad} ${hfSaat(g.antrenman.bas)}-${hfSaat(g.antrenman.bit)}${g.antrenman.agir ? ' (ağır)' : ''}`);
+      if (g.sinav.length) bits.push('SINAV: ' + g.sinav.join(', '));
+      lines.push(`${t} ${KISA[g.dow]}: ${bits.join(', ') || 'serbest'} · ödev ${hfOdevYuk(d, t)}/${g.odevKap} dk`);
+    }
+    const cak = hfCakismalar(d, today, 7).filter(c => c.seviye !== 'bilgi');
+    if (cak.length) lines.push('ÇAKIŞMALAR: ' + cak.map(c => `${c.tarih} ${c.mesaj}`).join(' | '));
+  }
+  return lines.join('\n');
+}
+
+/** Bugünün PRO sayacı. ASLA fırlatmaz; okunamazsa tavan dolu sayılır (fatura güvenli taraf). */
+async function chatProUsed(env, userToken, userId, day) {
+  try {
+    const r = await fetch(`${env.SUPABASE_URL}/rest/v1/aidan_usage?user_id=eq.${userId}&day=eq.${day}&select=pro_calls`,
+      { headers: memHeaders(env, userToken) });
+    if (!r.ok) return CHAT_PRO_DAILY;
+    const rows = await r.json();
+    return (rows[0] && rows[0].pro_calls) || 0;
+  } catch (_) { return CHAT_PRO_DAILY; }
+}
+async function chatProCount(env, userToken, userId, day, used) {
+  try {
+    await fetch(`${env.SUPABASE_URL}/rest/v1/aidan_usage?on_conflict=user_id,day`, {
+      method: 'POST',
+      headers: Object.assign(memHeaders(env, userToken), { 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+      body: JSON.stringify({ user_id: userId, day, pro_calls: used + 1, updated_at: new Date().toISOString() }),
+    });
+  } catch (_) {}
+}
+// 🤖 SOHBET AJANI SONU
+
 async function handleChatApi(request, env, ctx) {
   const cors = {
     'Access-Control-Allow-Origin': allowOrigin(request), 'Vary': 'Origin',
@@ -4111,7 +4332,9 @@ async function handleChatApi(request, env, ctx) {
     const healthGuard = (healthShort || healthFull) ? CHAT_HEALTH_GUARD(name) : '';
     const healthRules = healthFull ? CHAT_HEALTH_RULES : '';
 
-    const ctx = `[BAĞLAM — ${name} durumu] Açık görev: ${openCount}. Bugün biten: ${doneToday}.${overdue ? ` Gecikmiş: ${overdue}.` : ''}${mitStr}${healthShort}${healthFull}${healthGuard}${healthRules}`;
+    // Ajan: meta-öğrenme modunda araç yok (ders içeriği, iş değil).
+    const agentOn = !metaMode;
+    const ctx = `[BAĞLAM — ${name} durumu] Açık görev: ${openCount}. Bugün biten: ${doneToday}.${overdue ? ` Gecikmiş: ${overdue}.` : ''}${mitStr}${healthShort}${healthFull}${healthGuard}${healthRules}${agentOn ? agentContext(d, todayStr) + AGENT_PROMPT : ''}`;
 
     const sysPrompt = `Sen Aidan'sın — ${name}'in ADHD asistanı ve düşünme ortağı. ${name} 16 yaşında, lise öğrencisi, satranç/strateji seviyor, borsada işlem yapıyor.
 
@@ -4119,7 +4342,7 @@ ROLÜN: Sohbet et, düşündür, planlamaya yardım et. Bir akıl hocası gibi �
 
 KURALLAR:
 - TÜRKÇE konuş. Kısa ve net ol (ADHD beyni uzun duvarı okumaz). Gerekirse madde işareti kullan.
-- Görev EKLEYEMEZSİN/SİLEMEZSİN — sadece konuşursun. "Şunu ekledim" deme. İstese bile "bunu üst bardaki AI butonuyla ekleyebilirsin" de.
+- Görev/ödev değişikliği yalnız ARAÇLA önerilir (aşağıda); kendin "ekledim/sildim" deme.
 - Boş klişe YOK ("harika soru", "yardımcı olmaktan mutluluk"). Direkt cevaba gir.
 - Borsa: betimleyici konuş, AMA "al/sat/tut" yatırım tavsiyesi VERME, fiyat tahmini yapma.
 - Emin değilsen "emin değilim" de, uydurma.
@@ -4140,13 +4363,27 @@ ${ctx}${modeBlock}${proOnce ? '\n\n[/pro] Kullanıcı bu mesaj için DETAYLI cev
       };
     }
 
+    // 💸 PRO (5 Eki, Salim'in kararı): SAHİP için sohbet PRO — günde CHAT_PRO_DAILY
+    // tavanıyla. Sahip olmayan aiTierForUser'dan 'deep' alır, sayaç okunmaz.
+    // Tavan dolunca ya da sayaç okunamazsa ücretsiz katmana düşer.
+    const sahipPro = aiTierForUser(env, user, 'heavy') === 'heavy';
+    const proUsed = sahipPro ? await chatProUsed(env, userToken, user.id, todayStr) : CHAT_PRO_DAILY;
+    const proOk = sahipPro && proUsed < CHAT_PRO_DAILY;
+    const tier = proOk ? 'heavy' : (proOnce ? aiTierForUser(env, user, 'heavy') : (metaMode ? 'deep' : 'normal'));
+    const proModel = tier === 'heavy' ? geminiModelPro(env) : undefined;
     const r = await aiRun(env, {
       messages: [{ role: 'system', content: sysPrompt }, ...aiMsgs],
-      tier: proOnce ? aiTierForUser(env, user, 'heavy') : (metaMode ? 'deep' : 'normal'),
-      max_tokens: proOnce ? 2200 : (chatImgs.length ? 1100 : (healthFull ? 900 : 700)),
+      tier,
+      model: proModel,
+      tools: agentOn ? AGENT_TOOLS : undefined,
+      max_tokens: proOnce ? 2200 : (agentOn ? 1600 : (chatImgs.length ? 1100 : (healthFull ? 900 : 700))),
       temperature: metaMode ? 0.35 : 0.5,
     });
+    const usedPro = !!proModel && r.model === proModel;
+    if (usedPro) await chatProCount(env, userToken, user.id, todayStr, proUsed);
+    const actions = agentOn ? agentSanitizeActions(r.tool_calls, { today: todayStr, taskIds: tasks.filter(t => !t.done).map(t => t.id) }) : [];
     let reply = (r.response || '').trim();
+    if (!reply && actions.length) reply = 'Hazırladım — kontrol edip Uygula\'ya bas.';
     if (!reply || /^i'?m sorry|^as an ai|your input is not/i.test(reply)) {
       reply = 'Şu an net bir cevap üretemedim, biraz daha açar mısın?';
     }
@@ -4156,7 +4393,7 @@ ${ctx}${modeBlock}${proOnce ? '\n\n[/pro] Kullanıcı bu mesaj için DETAYLI cev
       ctx.waitUntil(memoryExtract(env, userToken, user.id, msgs, memItems)
         .catch(e => console.error('memory extract', e && e.message)));
     }
-    return jsonCors({ reply }, 200, cors);
+    return jsonCors({ reply, actions, pro: usedPro, proLeft: sahipPro ? Math.max(0, CHAT_PRO_DAILY - proUsed - (usedPro ? 1 : 0)) : null }, 200, cors);
   } catch (e) {
     return jsonCors({ error: e.message }, 500, cors);
   }
@@ -7521,9 +7758,171 @@ function planTasksForAi(data, forDate, ratio) {
 
 // Bir tarihe ait sabit program bloklari (okul/ders/antrenman).
 // data.fixedSchedule = [{id, label, days:[0..6 JS getDay], start, end, enabled}]
+// ===== HAFTA ÇEKİRDEĞİ (5 Eki 2026) — hafta.js ↔ worker.js İKİZ =====
+// Okul + kurs + sabit program + antrenman + uyku + sınav TEK yerden hesaplanır.
+// Önceden takvim iki yerdeydi: diyet/antrenman `diet.nut.duzen`'i, gün planı /
+// ödev dağıtımı / sohbet ajanı `fixedSchedule`'ı okuyordu → ödev dağıtıcı
+// okulun 19:00'da bittiğini, o akşam antrenman olduğunu bilmiyordu.
+// ⚠️ SAF: global okumaz (parametre `d`). İki dosyaya da AYNI yaz (54-hafta).
+// Öncelik (Salim, 5 Eki — varsayılan): OKUL > UYKU > ANTRENMAN.
+const HAFTA_KURAL = {
+  hazirlikDk: 30,       // okul/kurs çıkışı → sonraki iş (PROGRAM_DUZEN.hazirlikDk ile aynı)
+  yatisOncesiDk: 60,    // yatıştan önceki son saat ödev/antrenman için sayılmaz (uyku)
+  serbestBas: 600,      // okulsuz gün 10:00'da başlar
+  odevPayi: 0.6,        // boş zamanın en fazla %60'ı ödev (yemek, dinlenme payı kalır)
+  odevTavan: 180,       // günde en fazla 3 saat ödev
+  varsayilanSeans: 1020,
+  varsayilanDk: 60,
+  dovusDk: 90,
+  gecBitisPayi: 120,    // antrenman yatıştan 2 saat önce bitmeli (akşam yemeği + uyku)
+  varsayilanGorevDk: 30,
+};
+
+function hfDk(s) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '').trim());
+  if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2]);
+  return (h < 24 && mi < 60) ? h * 60 + mi : null;
+}
+
+function hfSaat(dk) {
+  const v = ((Math.round(dk) % 1440) + 1440) % 1440;
+  return String(Math.floor(v / 60)).padStart(2, '0') + ':' + String(v % 60).padStart(2, '0');
+}
+
+function hfEkle(tarih, n) {
+  return new Date(Date.parse(tarih + 'T12:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+}
+
+/** Bir günün tam resmi: bloklar, antrenman, uyku penceresi, boş dakika, ödev kapasitesi, sınav. */
+function hfGun(d, tarih) {
+  const K = HAFTA_KURAL;
+  const dow = new Date(tarih + 'T12:00:00Z').getUTCDay();
+  const duzen = (d && d.diet && d.diet.nut && d.diet.nut.duzen) || {};
+  const bloklar = [];
+  const ekle = (tur, label, bas, bit) => {
+    if (bas != null && bit != null && bit > bas) bloklar.push({ tur, label, bas, bit });
+  };
+  const okul = duzen.okul && duzen.okul[String(dow)];
+  if (okul) ekle('okul', 'Okul', hfDk(okul.bas), hfDk(okul.bit));
+  const kurs = duzen.ders && duzen.ders[String(dow)];
+  if (kurs) ekle('ders', 'Ek ders / kurs', hfDk(kurs.bas), hfDk(kurs.bit));
+  const disari = () => bloklar.filter(x => x.tur === 'okul' || x.tur === 'ders');
+  for (const f of ((d && d.fixedSchedule) || [])) {
+    if (!f || f.enabled === false || !Array.isArray(f.days) || f.days.indexOf(dow) < 0) continue;
+    const b = hfDk(f.start), e = hfDk(f.end);
+    if (b == null || e == null || e <= b) continue;
+    // Okul/kurs bloğunun İÇİNDE kalan sabit blok aynı şeyin kopyasıdır.
+    if (disari().some(x => b >= x.bas && e <= x.bit)) continue;
+    ekle('sabit', String(f.label || 'Sabit').slice(0, 40), b, e);
+  }
+  let antrenman = null;
+  const p = d && d.program;
+  const g = (p && Array.isArray(p.days)) ? p.days.find(x => x && x.dow === dow) : null;
+  if (g) {
+    const dovus = g.type === 'fight';
+    antrenman = { tip: dovus ? 'dovus' : 'guc', ad: String(g.name || (dovus ? 'Dövüş antrenmanı' : 'Antrenman')).slice(0, 40), agir: dovus || !!g.agirBacak, bas: null, bit: null, dk: 0 };
+    const dovusBlok = dovus ? bloklar.find(x => x.tur === 'sabit' && /kick|boks|dövüş|dovus|mma|muay|güreş|gures|bjj|jiu/i.test(x.label)) : null;
+    if (dovusBlok) {
+      dovusBlok.tur = 'antrenman';
+      antrenman.bas = dovusBlok.bas; antrenman.bit = dovusBlok.bit;
+    } else {
+      const cikis = disari().reduce((m, x) => Math.max(m, x.bit), -1);
+      let bas = hfDk(g.bas);
+      if (bas == null) {
+        bas = hfDk(duzen.antrenman);
+        if (bas == null) bas = K.varsayilanSeans;
+        if (cikis >= 0 && bas < cikis + K.hazirlikDk) bas = cikis + K.hazirlikDk;
+      }
+      antrenman.bas = bas;
+      antrenman.bit = bas + (dovus ? K.dovusDk : (Number(g.hedefDk) || K.varsayilanDk));
+      ekle('antrenman', antrenman.ad, antrenman.bas, antrenman.bit);
+    }
+    antrenman.dk = antrenman.bit - antrenman.bas;
+  }
+  bloklar.sort((a, b) => a.bas - b.bas);
+  const sg = (d && d.settings && d.settings.sleepGoal) || {};
+  let kalk = hfDk(sg.wake);
+  if (kalk == null) kalk = hfDk(duzen.kalk);
+  if (kalk == null) kalk = 420;
+  const uykuDk = Math.round((Number(sg.targetH) || 8) * 60);
+  const yatis = kalk - uykuDk + (kalk - uykuDk < 0 ? 1440 : 0);
+  const cikisSon = disari().reduce((m, x) => Math.max(m, x.bit), -1);
+  const pBas = cikisSon >= 0 ? cikisSon + K.hazirlikDk : K.serbestBas;
+  const pBit = yatis - K.yatisOncesiDk;
+  let dolu = 0;
+  for (const b of bloklar) dolu += Math.max(0, Math.min(b.bit, pBit) - Math.max(b.bas, pBas));
+  const bosDk = Math.max(0, pBit - pBas - dolu);
+  const sinav = (((d && d.school && d.school.exams) || []).filter(e => e && e.date === tarih))
+    .map(e => String(e.subject || 'Sınav').slice(0, 40));
+  return {
+    tarih, dow, bloklar, antrenman, kalk, yatis,
+    pencere: { bas: pBas, bit: pBit }, bosDk,
+    odevKap: Math.min(K.odevTavan, Math.round(bosDk * K.odevPayi)),
+    sinav,
+  };
+}
+
+/** O güne tarihli, bitmemiş görevlerin toplam tahmini süresi. */
+function hfOdevYuk(d, tarih) {
+  return (((d && d.tasks) || []).filter(t => t && !t.done && t.due === tarih))
+    .reduce((s, t) => s + (Number(t.estimateMin) || HAFTA_KURAL.varsayilanGorevDk), 0);
+}
+
+/**
+ * Çapraz kurallar — okul, antrenman, ödev yükü, uyku AYNI terazide.
+ * seviye: yuksek | orta | bilgi. Kod kuralıdır, AI'a bırakılmaz.
+ */
+function hfCakismalar(d, bas, n) {
+  const K = HAFTA_KURAL;
+  const out = [];
+  const gunler = [];
+  for (let i = 0; i < n; i++) gunler.push(hfGun(d, hfEkle(bas, i)));
+  const sinavSay = gunler.reduce((s, g) => s + g.sinav.length, 0);
+  if (sinavSay >= 2) {
+    out.push({ tarih: bas, kod: 'sinav-haftasi', seviye: 'orta',
+      mesaj: 'Bu dönemde ' + sinavSay + ' sınav var.',
+      oneri: 'Antrenman günlerini koru ama hacmi ~%30 düşür (her harekette 1 set eksik). Yatış saatini kaydırma.' });
+  }
+  for (const g of gunler) {
+    const yarin = hfGun(d, hfEkle(g.tarih, 1));
+    const sinavlar = g.sinav.concat(yarin.sinav);
+    if (g.antrenman && g.antrenman.agir && sinavlar.length) {
+      out.push({ tarih: g.tarih, kod: 'sinav-agir', seviye: 'yuksek',
+        mesaj: (g.sinav.length ? 'Bugün' : 'Yarın') + ' ' + sinavlar[0] + ' sınavı var; ' + g.antrenman.ad + ' ağır bir seans.',
+        oneri: 'Okul önce: seansı hafiflet (yarı hacim, ağır set yok) ya da dinlenmeye al. Sınav sonrası güne kaydırabilirsin.' });
+    }
+    const yuk = hfOdevYuk(d, g.tarih);
+    if (yuk > g.odevKap && yuk > 0) {
+      out.push({ tarih: g.tarih, kod: 'odev-asim', seviye: yuk > g.odevKap + 60 ? 'yuksek' : 'orta',
+        mesaj: 'Ödev yükü ' + yuk + ' dk, o gün ödeve ayrılabilecek zaman ~' + g.odevKap + ' dk.',
+        oneri: 'Bir kısmını daha boş bir güne kaydır — sohbette "ödevleri dengele" de.' });
+    }
+    if (g.antrenman && g.antrenman.bit > g.yatis - K.gecBitisPayi) {
+      out.push({ tarih: g.tarih, kod: 'gec-antrenman', seviye: 'orta',
+        mesaj: 'Antrenman ' + hfSaat(g.antrenman.bit) + "'te bitiyor, hedef yatış " + hfSaat(g.yatis) + '.',
+        oneri: 'Uyku önce: akşam yemeğinin büyük kısmını antrenmandan önce ye ya da seansı kısalt.' });
+    }
+    if (g.sinav.length) {
+      out.push({ tarih: g.tarih, kod: 'sinav-gunu', seviye: 'bilgi',
+        mesaj: g.sinav.join(', ') + ' sınavı.',
+        oneri: 'Kahvaltıyı atlama; önceki akşam hedef yatış saatinde yat.' });
+    }
+  }
+  return out;
+}
+
+/** Gün planı için okul/kurs/antrenman blokları (sabit program blokları zaten ayrıca geliyor). */
+function hfPlanBloklari(d, tarih) {
+  return hfGun(d, tarih).bloklar
+    .filter(b => b.tur !== 'sabit')
+    .map(b => ({ label: b.label, start: hfSaat(b.bas), end: hfSaat(b.bit), kind: 'fixed', tur: b.tur }));
+}
+// ===== HAFTA ÇEKİRDEĞİ SONU =====
+
 function fixedBlocksFor(data, dateStr) {
   const dayIdx = new Date(dateStr + 'T12:00:00Z').getUTCDay();
-  return (data.fixedSchedule || [])
+  const sabit = (data.fixedSchedule || [])
     .filter(f => f && f.enabled !== false && Array.isArray(f.days) && f.days.includes(dayIdx)
       && hmMin(f.start) >= 0 && hmMin(f.end) > hmMin(f.start))
     .map((f, k) => ({
@@ -7532,8 +7931,19 @@ function fixedBlocksFor(data, dateStr) {
       start: f.start, end: f.end,
       kind: 'fixed', taskId: null, done: false,
       fixedId: f.id,
-    }))
-    .sort((a, b) => hmMin(a.start) - hmMin(b.start));
+    }));
+  // 5 Eki 2026: okul / kurs / antrenman da meşgul (hafta çekirdeği). Planlayıcı
+  // eskiden yalnız fixedSchedule'ı biliyordu → okul saatine görev koyabiliyordu.
+  // Sabit programla çakışan kopya eklenmez.
+  const ek = hfPlanBloklari(data, dateStr)
+    .filter(b => !sabit.some(s => blocksOverlap(s, b)))
+    .map((b, k) => ({
+      id: Date.now() + 950000 + k,
+      label: String(b.label).slice(0, 100),
+      start: b.start, end: b.end,
+      kind: 'fixed', taskId: null, done: false, fixedId: null,
+    }));
+  return sabit.concat(ek).sort((a, b) => hmMin(a.start) - hmMin(b.start));
 }
 
 function blocksOverlap(a, b) {
@@ -7906,6 +8316,29 @@ async function goalSaveAgent(env, headers, goalId, agent) {
     body: JSON.stringify({ agent, updated_at: new Date().toISOString() }),
   });
   if (!r.ok) throw new Error('goal save ' + r.status);
+}
+
+/** CRON (Pazar 20:00): önümüzdeki haftanın çakışmaları — varsa tek push, yoksa sessiz. */
+async function runHaftaOzet(env) {
+  const users = await fetchAllUsers(env);
+  const bas = trDate(1);
+  const results = [];
+  for (const u of users) {
+    try {
+      const cak = hfCakismalar(u.data, bas, 7).filter(c => c.seviye !== 'bilgi');
+      if (!cak.length) { results.push({ userId: u.userId, cakisma: 0 }); continue; }
+      await sendPushToAll(env, u.data, {
+        title: '🗓️ Haftan: ' + cak.length + ' çakışma',
+        message: cak.slice(0, 2).map(c => '• ' + c.mesaj).join('\n') + (cak.length > 2 ? '\n+' + (cak.length - 2) + ' tane daha' : ''),
+        tag: 'aidan-hafta',
+        url: '/#hafta',
+      }, { userId: u.userId });
+      results.push({ userId: u.userId, cakisma: cak.length });
+    } catch (e) {
+      results.push({ userId: u.userId, error: e.message });
+    }
+  }
+  return { type: 'hafta', results };
 }
 
 /** CRON (her akşam 19:30): zamanı gelen hedefleri düşünür, yeni öneri varsa tek push atar. */
@@ -9529,6 +9962,9 @@ export default {
     if (dow === 0 && at(21, 0)) jobs.push(
       runCronJob(env, 'weekly').then(() => runCronJob(env, 'health'))
     );
+
+    // Pazar 20:00 - HAFTAM ozeti (5 Eki 2026): onumuzdeki 7 gunun capraz cakismalari
+    if (dow === 0 && at(20, 0)) jobs.push(runHaftaOzet(env));
 
     // 19:30 - HEDEF AJANI (4 Eki 2026): zamani gelen hedefleri dusunur,
     // yeni oneri varsa tek push. Okul sonrasi, 21:00 aksam ozetinden once.

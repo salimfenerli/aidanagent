@@ -17,6 +17,8 @@ on:
       - 'karne.js'
       - 'hafiza.js'
       - 'hedefler.js'
+      - 'ajan.js'
+      - 'hafta.js'
       - 'supabase.js'
       - 'html5-qrcode.min.js'
       - 'styles.css'
