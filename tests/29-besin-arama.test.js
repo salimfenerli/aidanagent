@@ -144,7 +144,7 @@ describe('hizli ekleme (+)', () => {
     assert.strictEqual(m.length, once + 1);
     const son = m[m.length - 1];
     assert.strictEqual(son.name, 'Basmati pirinç');
-    assert.strictEqual(son.kcal, 190);
+    assert.strictEqual(son.kcal, 186);  // 27 Eyl: etiketten türetildi (347/2,8 × 1,5)
     assert.strictEqual(son.slot, 'ogle');
   });
 

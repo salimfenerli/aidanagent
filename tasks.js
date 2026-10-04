@@ -56,6 +56,7 @@ async function showTab(name, btn) {
     renderCalendarSync();
     renderStorageInfo();   // depolama doluluk çubuğu (8 Ağu 2026)
     renderInstructions();  // kalıcı AI talimatları (9 Ağu 2026)
+    ensureMemoryModule();  // uzun süreli hafıza (28 Eyl 2026) — tembel modül
     // Yedek details açıldığında otomatik yükle (bir kez bağlanır)
     const bd = document.getElementById('backupDetails');
     if (bd && !bd._hooked) {
@@ -353,6 +354,13 @@ const AI_ENDPOINT = 'https://aidan-pusher.fenerlisalim04.workers.dev/ai';
  * Hata yutulmuyor ama kullanıcıyı da rahatsız etmiyor: panel kapalı bir
  * `<details>`, açılmadan fark edilmez; ağ dönünce kendi doluyor.
  */
+// HAFIZA kapısı — ekran hafiza.js'te ve TEMBEL iniyor (ilk yükleme bütçesi).
+function ensureMemoryModule() {
+  if (typeof renderMemory === 'function') return renderMemory();
+  return loadModule('hafiza')
+    .then(() => { if (typeof renderMemory === 'function') renderMemory(); })
+    .catch(() => {});
+}
 function ensureSchoolModule() {
   if (typeof renderSchool === 'function') { renderSchool(); return Promise.resolve(); }
   return loadModule('school')

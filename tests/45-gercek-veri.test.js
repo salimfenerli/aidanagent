@@ -231,8 +231,12 @@ describe('Tepsi porsiyonu (24 Eyl 2026)', () => {
 
   test('tepsi hedefi tutmuyorsa acik CANTADAN kapatiliyor', () => {
     kur('kucuk');
-    const s = J('nutCafeSenaryo("etli", ' + JSON.stringify(hedef) + ')');
-    assert.ok(s.kcalAcik > 0, 'acik hesaplanmamis');
+    // 27 Eyl 2026: pilav tariften turetilince (tereyagi + sivi yag) kucuk tepsi
+    // 901 kcal hedefin %3 yakinina geliyor ve canta gereksiz — dogru davranis.
+    // Bu test ACIK VARKEN cantanin devreye girdigini olcer; acigi garanti eden
+    // hedefle kurulur.
+    const s = J('nutCafeSenaryo("etli", ' + JSON.stringify({ kcal: 1050, protein: 38 }) + ')');
+    assert.ok(s.kcalAcik > 80, 'acik hesaplanmamis');
     assert.ok(s.cantaEk && s.cantaEk.items.length, 'canta eki onerilmemis');
     assert.ok(s.cantaEk.kcal >= s.kcalAcik * 0.6, 'canta eki acigi kapatmiyor');
   });

@@ -35,6 +35,7 @@ const TURK_FOODS = [
   { n: 'Ayran', u: 'bardak', g: 200, k: 76, p: 4, c: 5.6, f: 4.2 },
   { n: 'Tereyağı', u: 'kaşık', g: 10, k: 72, p: 0.1, c: 0, f: 8.1 },
   { n: 'Zeytinyağı', u: 'kaşık', g: 13.5, k: 119, p: 0, c: 0, f: 13.5 },
+  { n: 'Ayçiçek yağı', u: 'kaşık', g: 13.5, k: 119, p: 0.0, c: 0.0, f: 13.5, a: ['sıvı yağ', 'ayçiçeği yağı', 'bitkisel yağ'] },
   { n: 'Bal', u: 'kaşık', g: 21, k: 64, p: 0.1, c: 17.3, f: 0 },
   { n: 'Reçel', u: 'kaşık', g: 20, k: 50, p: 0.1, c: 13, f: 0 },
   { n: 'Pekmez', u: 'kaşık', g: 20, k: 59, p: 0.2, c: 14.8, f: 0 },
@@ -42,7 +43,7 @@ const TURK_FOODS = [
   { n: 'Kaymak', u: 'kaşık', g: 15, k: 68, p: 0.5, c: 0.5, f: 7.1 },
   { n: 'Zeytin', u: '5 adet', g: 20, k: 23, p: 0.2, c: 1.3, f: 2.1 },
   { n: 'Ekmek', u: 'dilim', g: 30, k: 80, p: 2.7, c: 14.7, f: 1 },
-  { n: 'Tam buğday ekmek', u: 'dilim', g: 30, k: 74, p: 3.9, c: 12.3, f: 1 },
+  { n: 'Tam buğday ekmek', u: 'dilim', g: 30, k: 67, p: 3.5, c: 11.8, f: 0.1, a: ['tam buğday ekmeği', 'tam bugday ekmek'] },
   { n: 'Simit', u: 'adet', g: 110, k: 352, p: 11, c: 63.8, f: 5.5 },
   { n: 'Poğaça', u: 'adet', g: 70, k: 245, p: 4.9, c: 28, f: 12.6 },
   { n: 'Açma', u: 'adet', g: 80, k: 264, p: 6, c: 35.2, f: 11.2 },
@@ -78,7 +79,8 @@ const TURK_FOODS = [
   { n: 'Şiş kebap', u: 'porsiyon', g: 180, k: 360, p: 48.6, c: 1.8, f: 18 },
   { n: 'Köfte', u: 'adet', g: 35, k: 81, p: 6, c: 1.1, f: 5.6 },
   { n: 'İzgara köfte', u: 'porsiyon', g: 150, k: 323, p: 27, c: 5.3, f: 21 },
-  { n: 'Dana bonfile', u: 'porsiyon', g: 150, k: 318, p: 45, c: 0, f: 14.7 },
+  { n: 'Dana bonfile', u: 'porsiyon', g: 150, k: 315, p: 45.9, c: 0.0, f: 13.4, a: ['bonfile', 'bonfile ızgara', 'ızgara bonfile'] },
+  { n: 'Dana bonfile (çiğ)', u: '100 g', g: 100, k: 151, p: 21.5, c: 0.0, f: 7.1, a: ['çiğ bonfile', 'bonfile çiğ'] },
   { n: 'Dana kıyma', u: 'porsiyon', g: 120, k: 300, p: 31.2, c: 0, f: 18, a: ['kıyma', 'ground beef'] },
   { n: 'Kuzu pirzola', u: 'porsiyon', g: 150, k: 441, p: 37.5, c: 0, f: 31.5 },
   { n: 'Kavurma', u: 'porsiyon', g: 100, k: 320, p: 28, c: 1, f: 23 },
@@ -94,7 +96,7 @@ const TURK_FOODS = [
   { n: 'Tavuk nugget', u: 'adet', g: 17, k: 50, p: 2.6, c: 3.1, f: 3.1 },
   { n: 'Schnitzel', u: 'porsiyon', g: 180, k: 441, p: 32.4, c: 27, f: 21.6 },
   // --- Tahıl / baklagil / makarna ---
-  { n: 'Pilav', u: 'porsiyon', g: 150, k: 255, p: 4.8, c: 48, f: 4.5, a: ['pirinç', 'beyaz pirinç', 'pirinç pilavı', 'tereyağlı pilav'] },
+  { n: 'Pilav', u: 'porsiyon', g: 150, k: 245, p: 3.7, c: 40.4, f: 7.3, a: ['pirinç pilavı', 'tereyağlı pilav', 'beyaz pilav'] },
   { n: 'Bulgur pilavı', u: 'porsiyon', g: 150, k: 200, p: 5.7, c: 36, f: 3.8, a: ['bulgur'] },
   { n: 'Sebzeli bulgur', u: 'porsiyon', g: 150, k: 188, p: 5.3, c: 33, f: 3.8 },
   { n: 'Makarna', u: 'porsiyon', g: 180, k: 284, p: 10.4, c: 55.6, f: 1.6, a: ['spagetti', 'penne', 'pasta', 'erişte'] },
@@ -236,7 +238,7 @@ const TURK_FOODS = [
   { n: 'Palamut', u: 'porsiyon', g: 150, k: 293, p: 36, c: 0, f: 15.8 },
   { n: 'Tavuk haşlama', u: 'porsiyon', g: 150, k: 248, p: 46.5, c: 0, f: 5.4 },
   { n: 'Kinoa', u: 'porsiyon', g: 150, k: 180, p: 6.6, c: 32, f: 2.9, a: ['quinoa'] },
-  { n: 'Kahverengi pilav', u: 'porsiyon', g: 150, k: 185, p: 4.1, c: 38.4, f: 1.5, a: ['esmer pirinç', 'kahverengi pirinç', 'brown rice', 'tam tahıllı pirinç'] },
+  { n: 'Kahverengi pilav', u: 'porsiyon', g: 150, k: 234, p: 3.6, c: 36.5, f: 8.1, a: ['esmer pilav', 'esmer pirinç pilavı', 'kahverengi pirinç pilavı'] },
   { n: 'Tam buğday makarna', u: 'porsiyon', g: 180, k: 223, p: 9.5, c: 47.7, f: 0.9, a: ['kepekli makarna', 'whole wheat pasta'] },
   { n: 'Kuskus', u: 'porsiyon', g: 150, k: 168, p: 5.7, c: 34.8, f: 0.3 },
   { n: 'Fırın makarna', u: 'porsiyon', g: 250, k: 438, p: 20, c: 50, f: 17.5 },
@@ -493,14 +495,18 @@ const TURK_FOODS = [
   // --- Pirinç ailesi (pişmiş, 1 porsiyon = 150 g; ham ölçüm için "Pirinç (çiğ)") ---
   // Pilav ile farkı: bunlar SADE haşlanmış, yağ eklenmemiş. 'Pilav' tereyağlı.
   { n: 'Pirinç', u: 'porsiyon', g: 150, k: 195, p: 4, c: 42, f: 0, a: ['sade pirinç', 'beyaz pirinç', 'haşlanmış pirinç', 'pişmiş pirinç', 'white rice'] },
-  { n: 'Basmati pirinç', u: 'porsiyon', g: 150, k: 190, p: 4, c: 41, f: 0, a: ['basmati', 'hint pirinci'] },
+  { n: 'Basmati pirinç', u: 'porsiyon', g: 150, k: 186, p: 4.9, c: 40.7, f: 0.5, a: ['basmati', 'hint pirinci', 'haşlanmış basmati', 'sade basmati'] },
+  { n: 'Basmati pilavı', u: 'porsiyon', g: 150, k: 238, p: 4.7, c: 38.6, f: 7.5, a: ['basmati pilav', 'basmati pirinç pilavı'] },
+  { n: 'Basmati pirinç (çiğ)', u: 'su bardağı', g: 180, k: 625, p: 16.6, c: 136.6, f: 1.8, a: ['çiğ basmati', 'kuru basmati', 'pişmemiş basmati'] },
   { n: 'Yasemin pirinç', u: 'porsiyon', g: 150, k: 200, p: 4, c: 44, f: 0, a: ['jasmine', 'jasmine rice', 'tayland pirinci'] },
-  { n: 'Esmer pirinç', u: 'porsiyon', g: 150, k: 165, p: 4, c: 34, f: 1, a: ['kahverengi pirinç', 'brown rice', 'tam tahıl pirinç'] },
+  { n: 'Esmer pirinç', u: 'porsiyon', g: 150, k: 184, p: 4.1, c: 38.4, f: 1.5, a: ['kahverengi pirinç', 'brown rice', 'tam tahıl pirinç'] },
   { n: 'Kırmızı pirinç', u: 'porsiyon', g: 150, k: 170, p: 4, c: 35, f: 1, a: ['red rice', 'kızıl pirinç'] },
   { n: 'Siyah pirinç', u: 'porsiyon', g: 150, k: 180, p: 5, c: 36, f: 1, a: ['black rice', 'yasak pirinç', 'forbidden rice'] },
   { n: 'Yabani pirinç', u: 'porsiyon', g: 150, k: 150, p: 6, c: 32, f: 1, a: ['wild rice', 'vahşi pirinç'] },
   { n: 'Arborio pirinç', u: 'porsiyon', g: 150, k: 200, p: 4, c: 44, f: 0, a: ['risotto pirinci', 'italyan pirinci'] },
-  { n: 'Baldo pirinç', u: 'porsiyon', g: 150, k: 195, p: 4, c: 43, f: 0, a: ['baldo'] },
+  { n: 'Baldo pirinç', u: 'porsiyon', g: 150, k: 186, p: 3.8, c: 40.3, f: 0.8, a: ['baldo', 'haşlanmış baldo', 'sade baldo'] },
+  { n: 'Baldo pilavı', u: 'porsiyon', g: 150, k: 238, p: 3.6, c: 38.2, f: 7.8, a: ['baldo pilav', 'baldo pirinç pilavı'] },
+  { n: 'Baldo pirinç (çiğ)', u: 'su bardağı', g: 180, k: 625, p: 12.6, c: 135.4, f: 2.7, a: ['çiğ baldo', 'kuru baldo', 'pişmemiş baldo'] },
   { n: 'Osmancık pirinç', u: 'porsiyon', g: 150, k: 195, p: 4, c: 43, f: 0, a: ['osmancık', 'türk pirinci'] },
   { n: 'Sushi pirinci', u: 'porsiyon', g: 150, k: 210, p: 4, c: 46, f: 0, a: ['sushi rice', 'yapışkan pirinç'] },
   { n: 'Risotto', u: 'porsiyon', g: 220, k: 363, p: 8.8, c: 48.4, f: 14.3, a: ['mantarlı risotto'] },
@@ -1808,3 +1814,155 @@ function recentFoodSearch(q) {
   renderLocalMatches();
 }
 
+
+// ===== Plan alternatifleri (29 Eyl 2026) =====
+// Salim: "patates yerine şu kadar pilav da yiyebilirsin desin". Plandaki kalem
+// aynı ROLDEKİ besinle değiştirilir; miktar ROLÜN ANA MAKROSU eşitlenerek hesaplanır
+// (karbonhidrat kalemi karbonhidratla, protein kalemi proteinle, yağ yağla).
+// Kalori farkı gösterilir ama eşitlenmez: 540 g patates yerine pilav yenirse
+// karbonhidrat aynı kalır, tereyağı yüzünden kalori biraz artar — gizlenmez.
+// ⚠️ Yemekhane satırları alternatif ALMAZ: tepsiyi kullanıcı seçmiyor.
+// ⚠️ Yumurta grupta YOK: 6 yumurta kullanıcının kendi sabit tercihi.
+const PLAN_ALT_GROUPS = [
+  { m: 'c', ad: ['Haşlanmış patates', 'Baldo pilavı', 'Basmati pilavı', 'Pilav', 'Bulgur pilavı', 'Makarna', 'Tam buğday makarna', 'Esmer pirinç', 'Tatlı patates', 'Kinoa'] },
+  { m: 'c', ad: ['Tam buğday ekmek', 'Yulaf ezmesi', 'Lavaş'] },
+  { m: 'c', ad: ['Muz', 'Pirinç patlağı galeta', 'Kuru üzüm', 'Hurma', 'Kuru kayısı', 'Elma'] },
+  { m: 'c', ad: ['Bal', 'Pekmez', 'Reçel'] },
+  { m: 'p', ad: ['Tavuk göğsü', 'Dana bonfile', 'Levrek', 'Somon', 'Ton balığı (suda)'] },
+  { m: 'f', ad: ['Zeytinyağı', 'Tereyağı', 'Fıstık ezmesi', 'Badem', 'Ceviz'] },
+  { m: 'k', ad: ['Süt', 'Kefir', 'Ayran'] },
+];
+let _planAltOpen = null;
+
+/** "19:30 · Haşlanmış patates — 4 adet (540 g)" → {saat, ad, gram}. Çözülemezse null. */
+function planAltParse(name) {
+  const s = String(name || '');
+  if (/Yemekhane/i.test(s)) return null;
+  const sm = s.match(/^(\d{1,2}:\d{2})\s*·\s*/);
+  const govde = sm ? s.slice(sm[0].length) : s;
+  const i = govde.indexOf(' — ');
+  if (i < 0) return null;
+  const ad = govde.slice(0, i).trim();
+  const miktar = govde.slice(i + 3);
+  const gm = miktar.match(/\((\d+(?:[.,]\d+)?)\s*(?:g|ml)\)/) || miktar.match(/^(\d+(?:[.,]\d+)?)\s*(?:g|ml)\b/);
+  if (!gm) return null;
+  const gram = parseFloat(gm[1].replace(',', '.'));
+  return gram > 0 ? { saat: sm ? sm[1] : '', ad, gram } : null;
+}
+
+/** Plandaki kalem için eşdeğer miktarlar. Sevmediği besin listelenmez. */
+function planAltList(it) {
+  const pr = planAltParse(it && it.name);
+  if (!pr || typeof TURK_FOODS === 'undefined') return [];
+  const grup = PLAN_ALT_GROUPS.find(g => g.ad.indexOf(pr.ad) >= 0);
+  if (!grup) return [];
+  const bul = (n) => TURK_FOODS.find(f => f.n === n);
+  const kok = bul(pr.ad);
+  if (!kok) return [];
+  const per = (f, key) => (f[key] || 0) / f.g;              // gram başına
+  const hedef = per(kok, grup.m) * pr.gram;                  // korunacak makro miktarı
+  const tr = (data.diet && data.diet.nut && data.diet.nut.tercih) || {};
+  const sevmem = Array.isArray(tr.sevmem) ? tr.sevmem : [];
+  const out = [];
+  for (const ad of grup.ad) {
+    if (ad === pr.ad || sevmem.indexOf(ad) >= 0) continue;
+    const f = bul(ad);
+    if (!f || !(per(f, grup.m) > 0)) continue;
+    let gram = hedef / per(f, grup.m);
+    gram = gram >= 100 ? Math.round(gram / 10) * 10 : Math.max(5, Math.round(gram / 5) * 5);
+    const oran = gram / f.g;
+    const r1 = (x) => Math.round(x * 10) / 10;
+    let birim = '';
+    if (f.u !== 'porsiyon' && f.u !== 'kase') {
+      const n = Math.round(oran * 2) / 2;
+      if (n >= 0.5) birim = String(n).replace('.', ',') + ' ' + f.u + ' ';
+    }
+    out.push({ ad, gram, etiket: `${birim}(${gram} g)`.trim(),
+      kcal: Math.round(f.k * oran), protein: r1(f.p * oran), carb: r1(f.c * oran), fat: r1(f.f * oran) });
+  }
+  return out;
+}
+
+/** core.js renderDietPlan her plan kalemi için çağırır; foods.js inmediyse hiç çağrılmaz. */
+function planAltHtml(it) {
+  const alts = planAltList(it);
+  if (!alts.length) return '';
+  const acik = _planAltOpen === it.id;
+  const log = (dietDay(false).meals || []).find(m => m.planId === it.id);
+  const pr = planAltParse(it.name);
+  const yerine = log && pr && log.name.indexOf(pr.ad) < 0 ? `<span class="plan-alt-yerine">yerine: ${escapeHtml(log.name.replace(/^\d{1,2}:\d{2}\s*·\s*/, ''))}</span>` : '';
+  let h = `${yerine}<button class="plan-alt-btn${acik ? ' on' : ''}" onclick="planAltToggle(${it.id})" aria-expanded="${acik}" aria-label="Alternatifler">Değiştir</button>`;
+  if (acik) {
+    h += '<div class="plan-alt"><div class="plan-alt-head">Bunun yerine, aynı ' +
+      ({ c: 'karbonhidratla', p: 'proteinle', f: 'yağla', k: 'kaloriyle' })[PLAN_ALT_GROUPS.find(g => g.ad.indexOf(pr.ad) >= 0).m] + ':</div>';
+    alts.forEach((a, i) => {
+      const fark = a.kcal - (Number(it.kcal) || 0);
+      h += `<button class="plan-alt-row" onclick="planAltPick(${it.id},${i})"><span>${escapeHtml(a.ad)} · ${escapeHtml(a.etiket)}</span>` +
+        `<span class="plan-alt-k">${a.kcal} kcal${fark ? ` (${fark > 0 ? '+' : ''}${fark})` : ''} · P${a.protein}</span></button>`;
+    });
+    h += '<div class="plan-alt-not">Dokununca bugün bunu yedin diye işaretler.</div></div>';
+  }
+  return h;
+}
+function planAltToggle(id) { _planAltOpen = _planAltOpen === id ? null : id; renderDiet(); }
+
+/** Alternatifi yenmiş olarak işaretle: plan kalemi "yendi" sayılır, günlüğe alternatifin makrosu yazılır. */
+function planAltPick(planId, idx) {
+  ensureDiet();
+  const it = planMealsForDate(dietKey()).find(x => x.id === planId);
+  if (!it) return;
+  const a = planAltList(it)[idx];
+  if (!a) return;
+  const pr = planAltParse(it.name);
+  const day = dietDay();
+  day.meals = (day.meals || []).filter(m => m.planId !== planId);
+  day.meals.push({ id: _mealId(), slot: it.slot, name: `${pr.saat ? pr.saat + ' · ' : ''}${a.ad} — ${a.etiket}`,
+    kcal: a.kcal, protein: a.protein, carb: a.carb, fat: a.fat, planId, at: mealNow() });
+  _planAltOpen = null;
+  save(); renderDiet();
+  showToast(`${a.ad} yazıldı`, 'success');
+}
+
+(function planAltStyle() {
+  if (typeof document === 'undefined' || document.getElementById('planAltStyle')) return;
+  const st = document.createElement('style');
+  st.id = 'planAltStyle';
+  st.textContent = '.plan-item:has(.plan-alt){flex-wrap:wrap}' +
+    '.plan-alt-btn{flex:none;position:relative;background:none;border:1px solid var(--border);border-radius:8px;padding:3px 8px;font-size:12.5px;color:var(--text-muted);cursor:pointer}' +
+    '.plan-alt-btn::after{content:"";position:absolute;inset:-10px -4px}' +
+    '.plan-alt-btn.on{color:var(--text);border-color:var(--text-muted)}' +
+    '.plan-alt-yerine{flex-basis:100%;order:9;font-size:12.5px;color:var(--text-muted)}' +
+    '.plan-alt{flex-basis:100%;order:10;display:flex;flex-direction:column;gap:6px;margin-top:6px}' +
+    '.plan-alt-head,.plan-alt-not{font-size:12.5px;color:var(--text-muted)}' +
+    '.plan-alt-row{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:44px;padding:8px 10px;text-align:left;' +
+    'background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;cursor:pointer;transition:border-color .18s ease-out}' +
+    '.plan-alt-row:hover{border-color:var(--text-muted)}' +
+    '.plan-alt-k{flex:none;font-size:12.5px;color:var(--text-muted);font-variant-numeric:tabular-nums}' +
+    '@media (prefers-reduced-motion:reduce){.plan-alt-row{transition:none}}';
+  document.head.appendChild(st);
+})();
+
+// ===== Plan yönetimi (core.js'ten taşındı, 29 Eyl 2026) =====
+// Düğmeler yalnız Diyet sekmesindeki plan düzenleyicide; o sekme foods.js'i bekliyor.
+function newPlan() {
+  aidanPrompt('Yeni plan', 'Plan adı (örn. Cut, Bulk)', '', false).then(name => {
+    name = (name || '').trim(); if (!name) return;
+    ensureDiet();
+    const pl = { id: Date.now(), name, weekly: false, meals: emptyPlanMeals() };
+    data.diet.plans.push(pl); data.diet.activePlanId = pl.id; _planEditDay = 'all';
+    save(); renderDiet();
+  });
+}
+function renamePlan() {
+  const p = activePlan(); if (!p) return;
+  aidanPrompt('Planı yeniden adlandır', 'Ad', p.name, false).then(name => {
+    name = (name || '').trim(); if (!name) return; p.name = name; save(); renderDiet();
+  });
+}
+function deletePlan() {
+  ensureDiet(); const d = data.diet;
+  if ((d.plans || []).length <= 1) { showToast('En az bir plan kalmalı', 'info'); return; }
+  const p = activePlan(); if (!p) return;
+  d.plans = d.plans.filter(x => x.id !== p.id); d.activePlanId = d.plans[0].id; _planEditDay = 'all';
+  save(); renderDiet(); showToast('Plan silindi', 'success');
+}

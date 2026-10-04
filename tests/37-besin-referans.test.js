@@ -59,7 +59,8 @@ const REF = {
   'Fıstık ezmesi':                            [588, 25, 20, 50, 43, 1.9, 0, 6],
   'Bal':                            [304, 0.3, 82.4, 0, 6, 0.42, 0, 0.2],
   'Ekmek':                            [265, 9, 49, 3.2, 40, 2.7, 0, 2.7],
-  'Tam buğday ekmek':                            [252, 12.3, 43.1, 3.5, 50, 2.5, 0, 6.8],
+  // Uno Tam Buğday etiketi (%100 tam buğday unu) — 27 Eyl 2026
+  'Tam buğday ekmek':                            [223, 11.8, 39.2, 0.3, 57, 2.7, 0, 7.9],
   'Kepekli ekmek':                            [250, 10, 44, 3, 50, 2.5, 0, 6],
   'Çavdar ekmeği':                            [259, 8.5, 48.3, 3.3, 73, 2.83, 0, 5.8],
   'Simit':                            [320, 10, 58, 5, 80, 2.3, 0, 3],
@@ -86,10 +87,10 @@ const REF = {
   'Keten tohumu':                            [534, 18.3, 28.9, 42.2, 255, 5.73, 0, 27.3],
   'Chia tohumu':                            [486, 16.5, 42.1, 30.7, 631, 7.72, 0, 34.4],
   'Şekersiz kakao':                            [228, 19.6, 57.9, 13.7, 128, 13.9, 0, 37],
-  'Pilav':                            [170, 3.2, 32, 3, 6, 0.5, 0, 0.5],
+  'Pilav':                            [164, 2.5, 26.9, 4.9, 6, 0.5, 0, 0.5],  // tarif: tests/47
   'Pirinç':                            [130, 2.7, 28, 0.3, 10, 0.2, 0, 0.4],
   'Pirinç (çiğ)':                            [365, 7.1, 80, 0.66, 28, 0.8, 0, 1.3],
-  'Esmer pirinç':                            [112, 2.6, 23.5, 0.9, 10, 0.4, 0, 1.6],
+  'Esmer pirinç':                            [123, 2.7, 25.6, 1.0, 10, 0.4, 0, 1.6],  // FDC 169704
   'Bulgur pilavı':                            [133, 3.8, 24, 2.5, 10, 0.96, 0, 4.5],
   'Makarna':                            [158, 5.8, 30.9, 0.9, 7, 0.5, 0, 1.8],
   'Tam buğday makarna':                            [124, 5.3, 26.5, 0.5, 15, 1.1, 0, 4.5],
@@ -151,7 +152,12 @@ const REF = {
   'Tavuk göğsü':                            [165, 31, 0, 3.6, 15, 1.04, 4, 0],
   'Tavuk but':                            [209, 26, 0, 10.9, 12, 1.26, 5, 0],
   'Hindi eti':                            [135, 30, 0, 0.7, 19, 1.4, 3, 0],
-  'Dana bonfile':                            [212, 30, 0, 9.8, 9, 2.6, 3, 0],
+  'Dana bonfile':                            [210, 30.6, 0, 8.9, 9, 3.3, 3, 0],  // FDC 170237 ızgara
+  'Dana bonfile (çiğ)':                            [151, 21.5, 0, 7.1, 14, 2.6, 4, 0],  // FDC 173989
+  // Etiket ortalamaları: Duru+Migros Baldo · Duru+Yayla Basmati (27 Eyl 2026)
+  'Baldo pirinç (çiğ)':                            [347, 7.0, 75.2, 1.5, 28, 0.8, 0, 1.5],
+  'Basmati pirinç (çiğ)':                            [347, 9.2, 75.9, 1.0, 28, 0.8, 0, 1.0],
+  'Ayçiçek yağı':                            [884, 0, 0, 100, 0, 0, 0, 0],
   'Dana kıyma':                            [250, 26, 0, 15, 18, 2.5, 3, 0],
   'Kuzu pirzola':                            [294, 25, 0, 21, 16, 1.8, 2, 0],
   'Somon':                            [206, 22.1, 0, 12.4, 15, 0.34, 526, 0],
@@ -279,6 +285,8 @@ describe('Besin veritabani — dis referansla dogrulama', () => {
       'Pirinç = Baldo pirinç',
       'Pirinç = Osmancık pirinç',
       'Esmer pirinç = Kırmızı pirinç',
+      // Bitkisel yağlar 100 g'da ayırt edilemez (884 kcal, %100 yağ); ayrı ürün, ayrı ad.
+      'Zeytinyağı = Ayçiçek yağı',
     ]);
     const beklenmeyen = ciftler.filter((c) => !muaf.has(c));
     assert.deepStrictEqual(beklenmeyen, [],

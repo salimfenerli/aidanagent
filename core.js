@@ -9,7 +9,8 @@
 // yoldan cikarir. Ilk cizim beklemez; auth birkac yuz ms sonra oturur.
 const LAZY_MODULES = { program: '/program.js',
   nutrition: '/nutrition.js', health: '/health.js', supabase: '/supabase.js',
-  foods: '/foods.js', school: '/school.js', onboarding: '/onboarding.js', karne: '/karne.js' };
+  foods: '/foods.js', school: '/school.js', onboarding: '/onboarding.js', karne: '/karne.js',
+  hafiza: '/hafiza.js' };
 const _moduleLoads = {};
 function moduleLoaded(name) { return !!(_moduleLoads[name] && _moduleLoads[name]._done); }
 function loadModule(name) {
@@ -1175,28 +1176,6 @@ let _planEditDay = 'all';
 function selectPlanEditDay(k) { _planEditDay = k; renderPlanEditor(); }
 function switchPlan(id) { ensureDiet(); data.diet.activePlanId = id; _planEditDay = 'all'; save(); renderDiet(); }
 function togglePlanWeekly(on) { const p = activePlan(); if (!p) return; p.weekly = !!on; if (!on) _planEditDay = 'all'; save(); renderDiet(); }
-function newPlan() {
-  aidanPrompt('Yeni plan', 'Plan adı (örn. Cut, Bulk)', '', false).then(name => {
-    name = (name || '').trim(); if (!name) return;
-    ensureDiet();
-    const pl = { id: Date.now(), name, weekly: false, meals: emptyPlanMeals() };
-    data.diet.plans.push(pl); data.diet.activePlanId = pl.id; _planEditDay = 'all';
-    save(); renderDiet();
-  });
-}
-function renamePlan() {
-  const p = activePlan(); if (!p) return;
-  aidanPrompt('Planı yeniden adlandır', 'Ad', p.name, false).then(name => {
-    name = (name || '').trim(); if (!name) return; p.name = name; save(); renderDiet();
-  });
-}
-function deletePlan() {
-  ensureDiet(); const d = data.diet;
-  if ((d.plans || []).length <= 1) { showToast('En az bir plan kalmalı', 'info'); return; }
-  const p = activePlan(); if (!p) return;
-  d.plans = d.plans.filter(x => x.id !== p.id); d.activePlanId = d.plans[0].id; _planEditDay = 'all';
-  save(); renderDiet(); showToast('Plan silindi', 'success');
-}
 function renderPlanEditor() {
   const host = document.getElementById('planEditor'); if (!host) return;
   ensureDiet();
@@ -1257,7 +1236,7 @@ function renderDietPlan() {
         `<button class="plan-check${eaten ? ' on' : ''}" onclick="togglePlanEaten(${it.id})" title="${eaten ? 'işareti kaldır' : 'yedim'}" aria-label="yedim">${eaten ? '✓' : ''}</button>` +
         `<span class="plan-name">${escapeHtml(it.name)}</span>` +
         `<span class="meal-kcal-tag">${it.kcal != null ? it.kcal + ' kcal' : ''}${mt}</span>` +
-        `</div>`;
+        (typeof planAltHtml === 'function' ? planAltHtml(it) : '') + `</div>`;
     });
     html += '</div>';
   });

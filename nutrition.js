@@ -109,7 +109,7 @@ const NUT_MICRO_DATA = {
   'Sahanda yumurta':  { ca: 22,  fe: 0.8, d: 33,  lif: 0 },
   // --- Kirmizi et: demirin en iyi emilen formu (hem demir) ---
   'Dana kıyma':       { ca: 13,  fe: 2.9, d: 4,   lif: 0 },
-  'Dana bonfile':     { ca: 13,  fe: 3.9, d: 5,   lif: 0 },
+  'Dana bonfile':     { ca: 13,  fe: 5.0, d: 5,   lif: 0 },
   'Kuzu pirzola':     { ca: 15,  fe: 2.6, d: 3,   lif: 0 },
   'Kavurma':          { ca: 11,  fe: 2.6, d: 3,   lif: 0 },
   'İzgara köfte':     { ca: 28,  fe: 3,   d: 4,   lif: 0.5 },
@@ -127,7 +127,7 @@ const NUT_MICRO_DATA = {
   'Sardalya':         { ca: 300, fe: 2.4, d: 200, lif: 0 },
   'Hamsi tava':       { ca: 200, fe: 2.2, d: 400, lif: 0.5 },
   'Palamut':          { ca: 33,  fe: 2.1, d: 457, lif: 0 },
-  'Ton balığı':       { ca: 11,  fe: 1.1, d: 183, lif: 0 },
+  'Ton balığı':       { ca: 11,  fe: 1.1, d: 123, lif: 0 },
   'Balık ızgara':     { ca: 60,  fe: 1.9, d: 484, lif: 0 },
   'Levrek':           { ca: 30,  fe: 0.8, d: 225, lif: 0 },
   // --- Baklagil: demir + lifin birlikte geldigi yer ---
@@ -141,7 +141,7 @@ const NUT_MICRO_DATA = {
   'Humus':            { ca: 30,  fe: 1.95, d: 0,  lif: 4.8 },
   'Piyaz':            { ca: 31,  fe: 1.1, d: 0,   lif: 3.1 },
   // --- Tahil ---
-  'Tam buğday ekmek': { ca: 17,  fe: 0.8, d: 0,   lif: 2.3 },
+  'Tam buğday ekmek': { ca: 17,  fe: 0.8, d: 0,   lif: 2.4 },
   'Ekmek':            { ca: 13,  fe: 0.8, d: 0,   lif: 0.9 },
   'Simit':            { ca: 91,  fe: 2.5, d: 0,   lif: 3.4 },
   // 22 Eyl 2026: Yulaf ezmesi artik 50 g KURU yulaf (eskiden 200 g lapa). USDA 173904: Ca 52, Fe 4.3, lif 10.1 /100 g.
@@ -150,6 +150,13 @@ const NUT_MICRO_DATA = {
   'Bulgur pilavı':    { ca: 16,  fe: 1.3, d: 0,   lif: 6 },
   'Sebzeli bulgur':   { ca: 25,  fe: 1.4, d: 0,   lif: 6.3 },
   'Pilav':            { ca: 9,   fe: 0.7, d: 0,   lif: 0.8 },
+  // 27 Eyl 2026 — çekirdek besinler. Pilav satırları tariften türetildi
+  // (150 g pilavda ~51 g çiğ pirinç: Ca 28 · Fe 0,8 /100 g çiğ, tereyağından D).
+  'Baldo pilavı':     { ca: 14,  fe: 0.4, d: 2,   lif: 0.8 },
+  'Basmati pilavı':   { ca: 14,  fe: 0.4, d: 2,   lif: 0.5 },
+  'Baldo pirinç (çiğ)':   { ca: 50,  fe: 1.4, d: 0, lif: 2.7 },
+  'Basmati pirinç (çiğ)': { ca: 50,  fe: 1.4, d: 0, lif: 1.8 },
+  'Dana bonfile (çiğ)':   { ca: 14,  fe: 2.6, d: 4, lif: 0 },
   'Makarna':          { ca: 12,  fe: 0.9, d: 0,   lif: 3.2 },
   'Tam buğday makarna': { ca: 27,  fe: 2,   d: 0,   lif: 8.1 },
   'Kinoa':            { ca: 25,  fe: 1.9, d: 0,   lif: 3.8 },

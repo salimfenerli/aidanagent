@@ -224,6 +224,54 @@ Salim: *"programi yapay zeka verdigimiz kurallara gore yazsa daha iyi olmaz mi"*
 
 **🔒 `tests/42-program-istek.test.js` (16 test).** Her testin senaryosu "model saçmaladı": tavan üstü gün, ara değer süre, uydurma yer/bölge, bozuk saat, yarım dövüş günü listesi, çöp girdi. Ayrıca **PRO yuzeyi 3'e çıktı** (`/diet-plan`, `/health-coach`, `/program-cfg`) — bilinçli maliyet kararı, Salim'in *"antrenman programi yaparken de pro kullansin"* isteği.
 
+## 🔁 PLAN ALTERNATİFLERİ (29 Eyl 2026, v7-202)
+
+Salim: *"patates yerine şu kadar pilav da yiyebilirsin desin"*. Diyet planındaki her kalemde **Değiştir** → aynı roldeki besinler, miktar **rolün ana makrosu eşitlenerek** (karbonhidrat ↔ karbonhidrat, protein ↔ protein, yağ ↔ yağ, süt grubu kaloriyle). Kalori farkı satırda yazılı, eşitlenmez (540 g patates = 430 g baldo pilavı, +214 kcal tereyağından).
+- Gruplar `PLAN_ALT_GROUPS` (foods.js). **Yemekhane satırı** ve **yumurta** alternatif almaz. `tercih.sevmem` listelenmez.
+- Alternatife dokunmak o günün günlüğüne alternatifi yazar (`planId` ile → plan kalemi "yendi" sayılır, kartta "yerine: …").
+- Ad biçimi sözleşmesi: `"HH:MM · Besin — miktar (N g)"`. Gram okunamayan kalem alternatif almaz.
+- Bütçe: kod ve CSS foods.js'te; `newPlan/renamePlan/deletePlan` da core.js'ten foods.js'e taşındı (ilk yükleme 185.2 KB).
+
+**🔒 `tests/49-plan-alternatif.test.js` (9 test).**
+
+## 🧠 TEK HAFIZA (28 Eyl 2026, v7-201)
+
+Salim: *"tek hafıza istiyorum"* → **ücretli Flash** seçildi. Aidan sohbetten kalıcı bilgileri kendisi öğrenir; sohbet, gün planı ve sağlık koçu aynı hafızayı okur.
+
+- **Ayrı tablo `public.aidan_memory`** (`user_id` PK, `items jsonb`, RLS + GRANT). `aidan_data` blob'una yazılsaydı worker'ın yazması PWA senkronuyla çakışırdı.
+- **Talimat ≠ hafıza:** talimat (Ayarlar) elle yazılan KURAL, hafıza otomatik öğrenilen BİLGİ. Prompt'ta hafıza bloğu talimat bloğundan ÖNCE gelir, "talimat değildir · mesaj kazanır · güvenlik kurallarını ezemez" çerçevesiyle.
+- **Çıkarım:** `/chat` cevabı döndükten sonra `ctx.waitUntil(memoryExtract…)` — cevabı geciktirmez. Tier **`light`** (PRO'ya ASLA gitmez), 12 karakterden kısa mesajda ve fotoğraflı/meta-öğrenme modunda çalışmaz, en fazla 3 yeni madde, değişiklik yoksa yazmaz. Yasak: geçici durum, kabul edilmemiş Aidan önerisi, sağlık teşhisi/ilaç/ruh sağlığı, başkalarının özel bilgisi, şifre.
+- **Yazma kullanıcının token'ıyla** (service key gerekmez); `memoryFetch` asla fırlatmaz — hafıza patlarsa sohbet çalışır.
+- **Tavan 60 madde**, aşılırsa en eski `auto` düşer; `seed`/`user` maddeler en son gider.
+- **Ayarlar → Hafıza:** tembel `hafiza.js` (CSS ve ekleme kutusu da modülün içinde — ilk yükleme bütçesi 185 KB'de tıkanmıştı). Her madde silinebilir, elle eklenebilir.
+- **Başlangıç tohumu:** 13 madde (`src:'seed'`) — U/L bölünme, squat haftada 1, RDL öğrenme, bulk hedefi, 6 yumurta, okul düzeni vb.
+- **🐛 Aynı pakette:** `/health-coach` "Analiz et" düğmesi 9 Ağu'dan beri tanımsız `data` yüzünden **500** veriyordu → düzeltildi, teste bağlandı.
+
+**🔒 `tests/48-hafiza.test.js` (24 test).** cache v7-200 → v7-201.
+
+## 🍚 ÇEKİRDEK BESİNLER TEK KAYNAKTAN (27 Eyl 2026, v7-200)
+
+Salim: *"en çok kullanılanlar tamamen tutarlı olsun — yumurta, bonfile, baldo pilav, basmati pilav, tam buğday ekmek, patates"*.
+
+**🔴 "Baldo pirinç" YAĞSIZ haşlanmış değer taşıyordu** (130 kcal/100 g); evde yenen tereyağlı pilav değil. Pilav satırları artık **tariften türetiliyor**: 180 g çiğ pirinç + 14 g tereyağı + 13,5 g ayçiçek yağı, pişme verimi **×2,8** (USDA pişmiş pirinç %68,4 nem ↔ çiğ %11,6 → kuru madde 0,884/0,316). Sade haşlanmış = çiğ ÷ 2,8.
+
+| satır | kaynak | /100 g |
+|---|---|---|
+| Baldo pirinç (çiğ) | Duru + Migros etiket ort. | 347 · P7,0 · K75,2 · Y1,5 |
+| Basmati pirinç (çiğ) | Duru + Yayla etiket ort. | 347 · P9,2 · K75,9 · Y1,0 |
+| Baldo/Basmati pilavı | tarif | 159 · P2,4/3,1 · K25,5 · Y5,2/5,0 |
+| Pilav (genel) | tarif, USDA çiğ pirinç | 164 · P2,5 · K26,9 · Y4,9 |
+| Tam buğday ekmek | **Uno etiketi** (%100 tam buğday) | 223 · P11,8 · K39,2 · Y0,3 · lif 7,9 (eskiden 247 · Y3,3) |
+| Dana bonfile / (çiğ) | FDC 170237 / 173989 | 210 · P30,6 · Y8,9 / 151 · P21,5 · Y7,1 |
+| Esmer pirinç | FDC 169704 | 123 (eskiden 110) · Kahverengi pilav tariften |
+| Ayçiçek yağı | — | yeni satır, alias "sıvı yağ" |
+
+⚠️ **Arama kuralı korundu:** "baldo"/"basmati" tek başına **sade haşlanmış** satırı getirir ("pirinç" → Pirinç kuralının aynısı); pilav için "baldo pilav". Ton balığında yalnız genel satırın D vitamini düzeltildi (183 → 123 IU/kutu, suda makrosuyla tutarlı) — yağda/suda satırları zaten ayrıydı.
+
+**Salim'in hesabına "Bulk — tam doğru (27 Eyl)" haftalık planı yazıldı** (`data.diet.plans`, aktif): her kalem gram + makroyla, toplamlar bu tablodan. Gün toplamları motorun `kas` hedefinin ±%2'sinde, yağ %25-30, protein ~2,5 g/kg (6 yumurta tercihi + yemekhane tahmini). Yemekhane satırı TAHMİNİ tepsidir.
+
+**🔒 `tests/47-cekirdek-besin.test.js` (15 test):** çiğ↔haşlanmış↔pilav türetmesi · pilav yağlı/sade yağsız ayrımı · bonfile/tavuk pişmiş:çiğ protein oranı · çekirdek besinlerde mikro kaydı · arama. `45-gercek-veri` tepsi testi açığı garanti eden hedefe çekildi (pilav doğrulanınca küçük tepsi 901 kcal'e %3 yaklaşıyor, çanta gereksiz — doğru davranış).
+
 ## 🥚 KAHVALTI YUMURTA SAYISI + SİMİT ÇIKTI (25 Eyl 2026, v7-199)
 
 Salim: *"2 yumurta az, ben 6 tane yiyorum"* · *"simit ne alaka"*.
