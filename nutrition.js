@@ -2761,7 +2761,8 @@ function renderNutrition() {
   }
 
   const bugun = new Date().getDay();
-  const tip = nutDayType(bugun, data.program);
+  // 5 Eki 2026: Haftam'da dinlenmeye alınan / kaydırılan gün beslenmeye de yansır.
+  const tip = (typeof hfGunTipi === 'function') ? hfGunTipi(data, today()) : nutDayType(bugun, data.program);
   const t = nutTargets(prof, tip, n.hedef);
   if (!t) { el.innerHTML = ''; return; }
   nutSyncDietGoals(t);
@@ -3274,7 +3275,7 @@ function nutOrnekPlana() {
   const prof = nutProfile();
   if (!prof) { showToast('Önce boy ve kilonu gir', 'info'); return; }
   const n = ensureNutrition();
-  const tip = nutDayType(new Date().getDay(), (typeof data !== 'undefined' ? data.program : null));
+  const tip = (typeof hfGunTipi === 'function' && typeof data !== 'undefined') ? hfGunTipi(data, today()) : nutDayType(new Date().getDay(), (typeof data !== 'undefined' ? data.program : null));
   const t = nutTargets(prof, tip, n.hedef);
   if (!t) return;
   const dow = new Date().getDay();

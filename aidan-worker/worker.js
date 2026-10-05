@@ -47,7 +47,11 @@ function allowOrigin(request) {
 // cikti { response: string, tool_calls?: [{name, arguments}] }. Boylece tum cagri
 // noktalari degismeden calisir. Parali modele gecis = env.GEMINI_MODEL ayarla.
 // ============================================================
-const GEMINI_MODEL_DEFAULT = 'gemini-3.5-flash'; // ucretsiz katman; env.GEMINI_MODEL ile ezilebilir (or. gemini-3.5-pro)
+// ⚠️ 5 Eki 2026 MODEL KARARI (Salim): Flash = gemini-3.8-flash (3.5-flash "legacy" ve
+// 2 kat pahaliydi: $1.50/$9 vs $0.75/$3.75). Pro = gemini-3.1-pro-preview —
+// eski varsayilan (3.5-pro) Google'da YOK: her PRO istegi 404 alip sessizce
+// ucretsize dusuyordu. Cloudflare'de GEMINI_MODEL / GEMINI_MODEL_PRO tanimliysa ONLAR kazanir.
+const GEMINI_MODEL_DEFAULT = 'gemini-3.8-flash';
 function geminiModel(env) { return (env && env.GEMINI_MODEL) || GEMINI_MODEL_DEFAULT; }
 function geminiEndpoint(model) {
   return 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';
@@ -174,7 +178,55 @@ function aiTierForUser(env, user, wanted) {
 // beslenme programi (kullanici dugmeye basar, ayda birkac kez calisir,
 // cikti dogrudan uygulanir) bu adi ACIKCA ister.
 // Ad gecersizse / bakiye bitmisse aiRun 404/429/402/403'te ucretsize duser.
-const GEMINI_MODEL_PRO_DEFAULT = 'gemini-3.5-pro';
+const GEMINI_MODEL_PRO_DEFAULT = 'gemini-3.1-pro-preview';
+
+// ============================================================================
+// 💵 AI MALİYET SAYACI (5 Eki 2026) — tahmin değil ÖLÇÜM
+// ============================================================================
+// Gemini her yanıtta usageMetadata döndürür (girdi + çıktı + düşünme token'ı).
+// aiRun her çağrıdan sonra gün + model başına aidan_ai_cost'a ekler (RPC
+// ai_cost_add — tablo doğrudan yazılamaz, değerler sınırlı). Fiyat ÜCRETLİ tarife
+// üzerinden; anahtar ücretsiz katmandaysa gerçek fatura 0 olabilir.
+// Fiyat değişirse yalnız bu tablo güncellenir ($ / 1M token: [girdi, çıktı]).
+const AI_FIYAT = {
+  'gemini-3.1-pro-preview': [2.00, 12.00],
+  'gemini-3.8-flash': [0.75, 3.75],
+  'gemini-3.7-flash': [0.75, 3.75],
+  'gemini-3.6-flash': [0.75, 3.75],
+  'gemini-3.5-flash': [1.50, 9.00],
+  'gemini-3.5-flash-lite': [0.30, 2.50],
+};
+const AI_FIYAT_BILINMEYEN = [2.00, 12.00];   // bilinmeyen model = Pro gibi say (düşük göstermesin)
+
+/** usageMetadata → {in, out, usd}. Saf fonksiyon — test edilir. */
+function aiCostOf(model, usage) {
+  const u = usage || {};
+  const inTok = Math.max(0, Number(u.promptTokenCount) || 0);
+  const outTok = Math.max(0, (Number(u.candidatesTokenCount) || 0) + (Number(u.thoughtsTokenCount) || 0));
+  const f = AI_FIYAT[String(model || '').replace(/^models\//, '')] || AI_FIYAT_BILINMEYEN;
+  return { in: inTok, out: outTok, usd: Math.round(((inTok * f[0] + outTok * f[1]) / 1e6) * 1e6) / 1e6 };
+}
+
+let _aiCostTok = null;   // service key yoksa sahibin token'ı (50 dk önbellek)
+/** Sayaca yazar. ASLA fırlatmaz — sayaç yazılamadı diye AI cevabı kaybolmamalı. */
+async function aiCostLog(env, model, usage) {
+  try {
+    if (!env || !env.SUPABASE_URL || !usage) return;
+    const c = aiCostOf(model, usage);
+    if (!c.in && !c.out) return;
+    let auth;
+    if (hasServiceKey(env)) auth = env.SUPABASE_SERVICE_KEY;
+    else if (env.AIDAN_EMAIL && env.AIDAN_PASSWORD) {
+      if (!_aiCostTok || Date.now() - _aiCostTok.at > 50 * 60000) _aiCostTok = { tok: (await login(env)).token, at: Date.now() };
+      auth = _aiCostTok.tok;
+    } else return;
+    await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/ai_cost_add`, {
+      method: 'POST',
+      headers: { 'apikey': hasServiceKey(env) ? env.SUPABASE_SERVICE_KEY : env.SUPABASE_KEY, 'Authorization': `Bearer ${auth}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_day: trToday(), p_model: String(model || '?').slice(0, 80), p_in: c.in, p_out: c.out, p_usd: c.usd }),
+    });
+  } catch (_) {}
+}
 function geminiModelPro(env) {
   return ((env && env.GEMINI_MODEL_PRO) || '').trim() || GEMINI_MODEL_PRO_DEFAULT;
 }
@@ -640,10 +692,11 @@ async function aiRun(env, opts) {
       if (pp && typeof pp.text === 'string') text += pp.text;
       if (pp && pp.functionCall) toolCalls.push({ name: pp.functionCall.name, arguments: pp.functionCall.args || {} });
     }
-    return { text, toolCalls, finish: cand && cand.finishReason };
+    return { text, toolCalls, finish: cand && cand.finishReason, usage: j && j.usageMetadata };
   };
 
   let out = parseOut(await resp.json());
+  await aiCostLog(env, usedModel, out.usage);   // 💵 her yanıt ölçülür
   // Düşünme bütçeyi yemiş olabilir (finishReason MAX_TOKENS + boş metin) -> düşük thinking ile tek tekrar
   if (!out.text && !out.toolCalls.length && thinking !== 'low' && thinking !== 'minimal') {
     const fb = JSON.parse(JSON.stringify(body));
@@ -651,6 +704,7 @@ async function aiRun(env, opts) {
     const r3 = await call(fb);
     if (r3.ok) {
       const o3 = parseOut(await r3.json());
+      await aiCostLog(env, usedModel, o3.usage);
       if (o3.text || o3.toolCalls.length) out = o3;
     }
   }
@@ -4223,10 +4277,12 @@ function agentContext(d, today) {
       const bits = g.bloklar.filter(b => b.tur !== 'antrenman').map(b => `${b.label} ${hfSaat(b.bas)}-${hfSaat(b.bit)}`);
       if (g.antrenman) bits.push(`${g.antrenman.ad} ${hfSaat(g.antrenman.bas)}-${hfSaat(g.antrenman.bit)}${g.antrenman.agir ? ' (ağır)' : ''}`);
       if (g.sinav.length) bits.push('SINAV: ' + g.sinav.join(', '));
-      lines.push(`${t} ${KISA[g.dow]}: ${bits.join(', ') || 'serbest'} · ödev ${hfOdevYuk(d, t)}/${g.odevKap} dk`);
+      lines.push(`${t} ${KISA[g.dow]}: ${bits.join(', ') || 'serbest'} · ödev ${hfOdevYuk(d, t)}/${g.odevKap} dk${g.tekrar ? ` · yarınki sınavlara tekrar ${g.tekrar.dk} dk (${g.tekrar.dersler.join(', ')})` : ''}`);
     }
     const cak = hfCakismalar(d, today, 7).filter(c => c.seviye !== 'bilgi');
     if (cak.length) lines.push('ÇAKIŞMALAR: ' + cak.map(c => `${c.tarih} ${c.mesaj}`).join(' | '));
+    const koc = d.haftaKoc;
+    if (koc && koc.metin && koc.at >= hfEkle(today, -8)) lines.push(`HAFTALIK KOÇ NOTU (${koc.at}): ${String(koc.metin).slice(0, 600)}`);
   }
   return lines.join('\n');
 }
@@ -7776,6 +7832,10 @@ const HAFTA_KURAL = {
   dovusDk: 90,
   gecBitisPayi: 120,    // antrenman yatıştan 2 saat önce bitmeli (akşam yemeği + uyku)
   varsayilanGorevDk: 30,
+  tekrarDkDers: 20,     // haftalık sınavda ders başına önceki akşam tekrar
+  tekrarDkSinav: 45,    // tek seferlik (yazılı) sınav başına önceki akşam tekrar
+  hafifOran: 0.6,       // "hafiflet" seansı ~%60 süre, ağır set yok
+  azUykuPay: 1.5,       // hedef uykudan 1.5 saat az = az uyku
 };
 
 function hfDk(s) {
@@ -7807,7 +7867,15 @@ function hfGun(d, tarih) {
   if (okul) ekle('okul', 'Okul', hfDk(okul.bas), hfDk(okul.bit));
   const kurs = duzen.ders && duzen.ders[String(dow)];
   if (kurs) ekle('ders', 'Ek ders / kurs', hfDk(kurs.bas), hfDk(kurs.bit));
-  const disari = () => bloklar.filter(x => x.tur === 'okul' || x.tur === 'ders');
+  // 5 Eki 2026 — HAFTALIK SINAV (Salim: her Salı/Perşembe 17:25-19:05 okulda).
+  // Rutin: her hafta tekrarlar → sınav haftası / ağır antrenman alarmı ÜRETMEZ
+  // (her hafta çalan alarm gürültüdür); önceki akşama TEKRAR süresi ayırır.
+  const hs = (d && d.school && d.school.haftalikSinav) || {};
+  const bugunHs = hs[String(dow)];
+  if (bugunHs && Array.isArray(bugunHs.dersler) && bugunHs.dersler.length) {
+    ekle('sinav', 'Sınav: ' + bugunHs.dersler.slice(0, 6).join(', '), hfDk(bugunHs.bas), hfDk(bugunHs.bit));
+  }
+  const disari = () => bloklar.filter(x => x.tur === 'okul' || x.tur === 'ders' || x.tur === 'sinav');
   for (const f of ((d && d.fixedSchedule) || [])) {
     if (!f || f.enabled === false || !Array.isArray(f.days) || f.days.indexOf(dow) < 0) continue;
     const b = hfDk(f.start), e = hfDk(f.end);
@@ -7818,10 +7886,27 @@ function hfGun(d, tarih) {
   }
   let antrenman = null;
   const p = d && d.program;
-  const g = (p && Array.isArray(p.days)) ? p.days.find(x => x && x.dow === dow) : null;
+  const sablon = (p && Array.isArray(p.days)) ? p.days : [];
+  // HAFTALIK AYAR (Haftam'dan "hafiflet / dinlenmeye al / kaydır"): şablon
+  // (program.days) DEĞİŞMEZ, yalnız o TARİH etkilenir. Beslenme gün tipi,
+  // gün planı ve brifing de bu hesaptan okur → hepsi aynı anda uyar.
+  const ayarlar = (p && p.ayarlar && typeof p.ayarlar === 'object') ? p.ayarlar : {};
+  const ayar = ayarlar[tarih] || null;
+  let g = sablon.find(x => x && x.dow === dow) || null;
+  if (ayar && (ayar.mod === 'dinlen' || ayar.mod === 'kaydir')) g = null;
+  if (!g) {
+    for (const k in ayarlar) {
+      const a = ayarlar[k];
+      if (!a || a.mod !== 'kaydir' || a.hedef !== tarih) continue;
+      const kaynak = sablon.find(x => x && x.dow === new Date(k + 'T12:00:00Z').getUTCDay());
+      if (kaynak) { g = Object.assign({}, kaynak, { bas: null }); break; }
+    }
+  }
+  const hafif = !!(g && ayar && ayar.mod === 'hafif');
   if (g) {
     const dovus = g.type === 'fight';
-    antrenman = { tip: dovus ? 'dovus' : 'guc', ad: String(g.name || (dovus ? 'Dövüş antrenmanı' : 'Antrenman')).slice(0, 40), agir: dovus || !!g.agirBacak, bas: null, bit: null, dk: 0 };
+    antrenman = { tip: dovus ? 'dovus' : 'guc', ad: String(g.name || (dovus ? 'Dövüş antrenmanı' : 'Antrenman')).slice(0, 40), agir: (dovus || !!g.agirBacak) && !hafif, hafif, bas: null, bit: null, dk: 0 };
+    if (hafif) antrenman.ad = (antrenman.ad + ' (hafif)').slice(0, 48);
     const dovusBlok = dovus ? bloklar.find(x => x.tur === 'sabit' && /kick|boks|dövüş|dovus|mma|muay|güreş|gures|bjj|jiu/i.test(x.label)) : null;
     if (dovusBlok) {
       dovusBlok.tur = 'antrenman';
@@ -7835,7 +7920,7 @@ function hfGun(d, tarih) {
         if (cikis >= 0 && bas < cikis + K.hazirlikDk) bas = cikis + K.hazirlikDk;
       }
       antrenman.bas = bas;
-      antrenman.bit = bas + (dovus ? K.dovusDk : (Number(g.hedefDk) || K.varsayilanDk));
+      antrenman.bit = bas + Math.round((dovus ? K.dovusDk : (Number(g.hedefDk) || K.varsayilanDk)) * (hafif ? K.hafifOran : 1));
       ekle('antrenman', antrenman.ad, antrenman.bas, antrenman.bit);
     }
     antrenman.dk = antrenman.bit - antrenman.bas;
@@ -7855,10 +7940,19 @@ function hfGun(d, tarih) {
   const bosDk = Math.max(0, pBit - pBas - dolu);
   const sinav = (((d && d.school && d.school.exams) || []).filter(e => e && e.date === tarih))
     .map(e => String(e.subject || 'Sınav').slice(0, 40));
+  // Yarının sınavları için bu akşam tekrar — ödev kapasitesinden DÜŞER (ikisi de okul işi).
+  const yarin = hfEkle(tarih, 1);
+  const yarinHs = hs[String((dow + 1) % 7)];
+  const tDers = (yarinHs && Array.isArray(yarinHs.dersler)) ? yarinHs.dersler.slice(0, 6).map(x => String(x).slice(0, 30)) : [];
+  const tSinav = (((d && d.school && d.school.exams) || []).filter(e => e && e.date === yarin)).map(e => String(e.subject || 'Sınav').slice(0, 40));
+  const tekrarDk = tDers.length * K.tekrarDkDers + tSinav.length * K.tekrarDkSinav;
+  const hamKap = Math.min(K.odevTavan, Math.round(bosDk * K.odevPayi));
   return {
     tarih, dow, bloklar, antrenman, kalk, yatis,
     pencere: { bas: pBas, bit: pBit }, bosDk,
-    odevKap: Math.min(K.odevTavan, Math.round(bosDk * K.odevPayi)),
+    hamKap,
+    odevKap: Math.max(0, hamKap - tekrarDk),
+    tekrar: tekrarDk ? { dk: tekrarDk, dersler: tDers.concat(tSinav) } : null,
     sinav,
   };
 }
@@ -7890,18 +7984,43 @@ function hfCakismalar(d, bas, n) {
     if (g.antrenman && g.antrenman.agir && sinavlar.length) {
       out.push({ tarih: g.tarih, kod: 'sinav-agir', seviye: 'yuksek',
         mesaj: (g.sinav.length ? 'Bugün' : 'Yarın') + ' ' + sinavlar[0] + ' sınavı var; ' + g.antrenman.ad + ' ağır bir seans.',
-        oneri: 'Okul önce: seansı hafiflet (yarı hacim, ağır set yok) ya da dinlenmeye al. Sınav sonrası güne kaydırabilirsin.' });
+        oneri: 'Okul önce: seansı hafiflet (yarı hacim, ağır set yok) ya da dinlenmeye al. Sınav sonrası güne kaydırabilirsin.',
+        eylemler: ['hafif', 'dinlen', 'kaydir'] });
+    }
+    if (g.tarih === bas && g.antrenman && g.antrenman.agir) {
+      const uy = ((d && d.sleep) || []).find(s => s && s.date === g.tarih);
+      const hedefH = Number(((d && d.settings && d.settings.sleepGoal) || {}).targetH) || 8;
+      const az = uy && ((uy.hours != null && Number(uy.hours) < hedefH - K.azUykuPay) || (uy.hours == null && uy.quality === 'bad'));
+      if (az) {
+        out.push({ tarih: g.tarih, kod: 'az-uyku', seviye: 'yuksek',
+          mesaj: 'Dün gece ' + (uy.hours != null ? uy.hours + ' saat' : 'kötü') + ' uyudun; bugün ' + g.antrenman.ad + ' ağır bir seans.',
+          oneri: 'Uyku önce: seansı hafiflet — az uykuyla ağır set hem sakatlık riski hem düşük kazanım.',
+          eylemler: ['hafif', 'dinlen'] });
+      }
     }
     const yuk = hfOdevYuk(d, g.tarih);
     if (yuk > g.odevKap && yuk > 0) {
       out.push({ tarih: g.tarih, kod: 'odev-asim', seviye: yuk > g.odevKap + 60 ? 'yuksek' : 'orta',
         mesaj: 'Ödev yükü ' + yuk + ' dk, o gün ödeve ayrılabilecek zaman ~' + g.odevKap + ' dk.',
-        oneri: 'Bir kısmını daha boş bir güne kaydır — sohbette "ödevleri dengele" de.' });
+        oneri: 'Bir kısmını daha önceki, boş bir güne al.',
+        eylemler: ['dengele'] });
     }
     if (g.antrenman && g.antrenman.bit > g.yatis - K.gecBitisPayi) {
       out.push({ tarih: g.tarih, kod: 'gec-antrenman', seviye: 'orta',
         mesaj: 'Antrenman ' + hfSaat(g.antrenman.bit) + "'te bitiyor, hedef yatış " + hfSaat(g.yatis) + '.',
-        oneri: 'Uyku önce: akşam yemeğinin büyük kısmını antrenmandan önce ye ya da seansı kısalt.' });
+        oneri: 'Uyku önce: seansı kısalt ya da başka güne al. Her hafta tekrarlıyorsa programı yeniden kur.',
+        eylemler: ['hafif', 'kaydir', 'yeniden'] });
+    }
+    if (g.tekrar) {
+      const kalan = g.hamKap - yuk;
+      out.push(kalan < g.tekrar.dk
+        ? { tarih: g.tarih, kod: 'tekrar-sigmiyor', seviye: 'orta',
+            mesaj: 'Yarınki sınavlar (' + g.tekrar.dersler.join(', ') + ') için ~' + g.tekrar.dk + ' dk tekrar gerekiyor, ödevden sonra kalan ~' + Math.max(0, kalan) + ' dk.',
+            oneri: 'Okul önce: bu akşamki ödevin bir kısmını önceki güne al ya da antrenmanı hafiflet.',
+            eylemler: g.antrenman ? ['dengele', 'hafif'] : ['dengele'] }
+        : { tarih: g.tarih, kod: 'tekrar', seviye: 'bilgi',
+            mesaj: 'Yarınki sınavlar için ~' + g.tekrar.dk + ' dk tekrar: ' + g.tekrar.dersler.join(', ') + '.',
+            oneri: 'Ders başına kısa tekrar — kendini test et, okuyup geçme.' });
     }
     if (g.sinav.length) {
       out.push({ tarih: g.tarih, kod: 'sinav-gunu', seviye: 'bilgi',
@@ -7910,6 +8029,13 @@ function hfCakismalar(d, bas, n) {
     }
   }
   return out;
+}
+
+/** Beslenme gün tipi — haftalık ayar dahil (dinlenmeye alınan gün 'rest', kaydırılan hedef gün antrenman). */
+function hfGunTipi(d, tarih) {
+  const a = hfGun(d, tarih).antrenman;
+  if (!a) return 'rest';
+  return a.tip === 'dovus' ? 'fight' : 'strength';
 }
 
 /** Gün planı için okul/kurs/antrenman blokları (sabit program blokları zaten ayrıca geliyor). */
@@ -8074,6 +8200,16 @@ function profileLines(prof) {
 // Hevy sadece GECMISI verir — gelecek programi bilmez. Bu yuzden "aynı haftanın
 // aynı gününde son 3 haftada antrenman var mı" desenine bakiyoruz.
 function gymDayLine(data, forDate) {
+  // 5 Eki 2026: önce PROGRAM (+ Haftam ayarı) — tahmin değil, plan. Program varsa
+  // ve o gün seans yoksa (dinlenme / başka güne alındı) Hevy tahmini de YAPILMAZ.
+  const p = data && data.program;
+  if (p && Array.isArray(p.days) && p.days.length) {
+    const ant = hfGun(data, forDate).antrenman;
+    if (!ant) return '';
+    return `
+
+💪 Bu gün ANTRENMAN GÜNÜ: ${ant.ad} ${hfSaat(ant.bas)}-${hfSaat(ant.bit)}${ant.agir ? ' (ağır)' : ''}. Bu saatleri boş bırak, öncesine ağır zihinsel iş yığma.`;
+  }
   const ws = (data.hevy && data.hevy.workouts) || [];
   if (ws.length < 4) return '';
   const dayIdx = new Date(forDate + 'T12:00:00Z').getUTCDay();
@@ -8149,6 +8285,7 @@ KURALLAR:
 - Tamamlanan görevlere bak: ilerleme varsa notta SAYIYLA söyle. İlerleme yoksa suçlama, başlama eşiğini düşüren en küçük adımı öner.
 - Hedef ölçülemiyorsa "soru" alanında TEK kısa soru sor ve en fazla 1 adım öner.
 - Kullanıcı 16 yaşında bir lise öğrencisi: kalori kısıtlama, aşırı antrenman, tehlikeli aktivite önerme. Borsa hedeflerinde belirli hisse al/sat tavsiyesi YOK — öğrenme, analiz ve kayıt tutma adımları öner.
+- ÖNÜMÜZDEKİ 7 GÜN verildiyse "gun" seçerken boş dakikası olan günü seç; SINAV ve sınav tekrarı günlerine adım koyma. Öncelik OKUL > UYKU > ANTRENMAN > diğer hedefler.
 - Türkçe, samimi, kısa. "Hafızama göre" gibi ifade kullanma.
 
 YALNIZCA şu JSON'u döndür:
@@ -8195,7 +8332,17 @@ function goalShouldRun(goal, today) {
 }
 
 /** Modelin göreceği bağlam metni. Saf fonksiyon — test edilir. */
-function goalContext(goal, tasks, today) {
+/** Hedef adımının tarihini KAPASİTESİ olan güne iter (en fazla 6 gün ileri). Kod kilidi. */
+function goalFitDue(d, due, min) {
+  if (!d || !due) return due;
+  for (let k = 0; k <= 6; k++) {
+    const t = hfEkle(due, k);
+    if (hfGun(d, t).odevKap - hfOdevYuk(d, t) >= (min || 30)) return t;
+  }
+  return due;
+}
+
+function goalContext(goal, tasks, today, d) {
   const a = goalAgentOf(goal);
   const all = Array.isArray(tasks) ? tasks : [];
   const bagli = all.filter(t => t && t.goalId && String(t.goalId) === String(goal.id));
@@ -8223,6 +8370,16 @@ function goalContext(goal, tasks, today) {
   }
   const genelAcik = all.filter(t => t && !t.done).length;
   satir.push(`\nKULLANICININ TOPLAM AÇIK GÖREVİ: ${genelAcik}`);
+  // 5 Eki 2026 — Haftam: okul/antrenman/sınav yüzünden dolu günleri bilsin.
+  if (d) {
+    satir.push('\nÖNÜMÜZDEKİ 7 GÜN (ödeve/kişisel işe kalan dk · sınav · antrenman):');
+    for (let i = 0; i < 7; i++) {
+      const t = hfEkle(today, i);
+      const gg = hfGun(d, t);
+      const kalan = Math.max(0, gg.odevKap - hfOdevYuk(d, t));
+      satir.push(`- ${t}: ~${kalan} dk${gg.sinav.length ? ' · SINAV' : ''}${gg.tekrar ? ' · sınav tekrarı' : ''}${gg.antrenman ? ' · ' + gg.antrenman.ad : ''}`);
+    }
+  }
   return { text: satir.join('\n'), openCount: acik.length, doneCount: biten.length };
 }
 
@@ -8282,10 +8439,13 @@ function goalApplyAgent(goal, out, today, nowIso) {
 }
 
 /** Tek hedef için düşünür. Bozuk model çıktısında null döner (eski durum korunur). */
-async function goalThink(env, goal, tasks, memItems, today, tier) {
-  const ctx = goalContext(goal, tasks, today);
+async function goalThink(env, goal, tasks, memItems, today, tier, d) {
+  const ctx = goalContext(goal, tasks, today, d);
+  const t = tier || 'deep';
   const r = await aiRun(env, {
-    tier: tier || 'deep',
+    tier: t,
+    // 5 Eki 2026 model kararı: hedef ajanı PRO (günde 1-5 çağrı, muhakeme işi).
+    model: t === 'heavy' ? geminiModelPro(env) : undefined,
     json: true,
     messages: [
       { role: 'system', content: GOAL_PROMPT + memoryBlock(memItems) },
@@ -8298,6 +8458,8 @@ async function goalThink(env, goal, tasks, memItems, today, tier) {
   if (!out) return null;
   // Kod kilidi: model kurala uymasa da açık görev yığılmışken yeni öneri eklenmez.
   if (ctx.openCount >= GOAL_OPEN_LIMIT) out.proposals = [];
+  // Kod kilidi: model dolu güne koysa da adım kapasitesi olan güne itilir.
+  if (d) out.proposals.forEach(p => { p.due = goalFitDue(d, p.due, p.min || 30); });
   return goalApplyAgent(goal, out, today, new Date().toISOString());
 }
 
@@ -8318,22 +8480,91 @@ async function goalSaveAgent(env, headers, goalId, agent) {
   if (!r.ok) throw new Error('goal save ' + r.status);
 }
 
-/** CRON (Pazar 20:00): önümüzdeki haftanın çakışmaları — varsa tek push, yoksa sessiz. */
+// ============================================================================
+// 🧭 HAFTALIK KOÇ (5 Eki 2026) — okul + spor + beslenme + uyku BİRLİKTE
+// ============================================================================
+// Döngüyü kapatan parça: plan → gerçekleşen → ölçüm → öneri. Pazar 20:00'de
+// geçen 7 günü ÖLÇER (biten ödev, yapılan antrenman, beslenme, uyku — sayılar
+// uygulamadan, AI uydurmaz), gelecek haftanın tablosu + çakışmalarıyla birlikte
+// PRO modele verir; en fazla 3 öneri. Cron = haftada 1 çağrı (maliyet kuralı ①).
+const HAFTA_KOC_PROMPT = (name) => `Sen Aidan'ın haftalık koçusun. ${name}'in hayatının üç ana odağı: OKUL, SPOR, BESLENME (+ uyku). Bunları AYRI AYRI değil BİRLİKTE değerlendir.
+
+GÖREV:
+1. Geçen haftayı 1-2 cümlede SAYIYLA özetle (ödev, antrenman, beslenme kaydı, uyku). Sadece verilen sayıları kullan, UYDURMA; veri yoksa "kayıt yok" de.
+2. Gelecek haftanın en büyük riskini söyle (tablodaki sınav, dolu gün, çakışma).
+3. EN FAZLA 3 öneri: her biri tek cümle, somut eylem, alanları birbirine bağlayan (ör. "Çarşamba 80 dk tekrar var — o gün dövüşten sonra ödev değil sadece tekrar yap").
+
+KURALLAR:
+- Öncelik OKUL > UYKU > ANTRENMAN.
+- ${name} 16 yaşında: kalori kısıtlama, kilo verme diyeti, aşırı antrenman, teşhis, ilaç/takviye önerme. Vücut görünümü yorumlama.
+- Türkçe, kısa, madde işareti "• " ile. Toplam en fazla 7 satır. Klişe yok.`;
+
+/** Koçun göreceği ölçümler — saf, test edilir. */
+function haftaKocFacts(d, bugun) {
+  const L = [];
+  const gecen = hfEkle(bugun, -7);
+  const tasks = (d && d.tasks) || [];
+  const biten = tasks.filter(t => t && t.done && t.doneDate && t.doneDate > gecen && t.doneDate <= bugun);
+  const okulBiten = biten.filter(t => t.category === 'odev' || t.category === 'ders');
+  const geciken = tasks.filter(t => t && !t.done && t.due && t.due < bugun);
+  L.push(`OKUL/GÖREV (son 7 gün): biten görev ${biten.length} (ödev/özel ders ${okulBiten.length}, ~${okulBiten.reduce((s, t) => s + (Number(t.actualMin) || Number(t.estimateMin) || 0), 0)} dk), şu an gecikmiş ${geciken.length}.`);
+  const plan = ((d && d.program && d.program.days) || []).length;
+  const ws = ((d && d.hevy && d.hevy.workouts) || []).filter(w => w && w.date > gecen && w.date <= bugun);
+  L.push(`ANTRENMAN: programda haftada ${plan} gün; Hevy'de son 7 günde ${ws.length} kayıtlı antrenman.`);
+  const uy = ((d && d.sleep) || []).filter(s => s && s.date > gecen && s.date <= bugun && s.hours != null);
+  const hedefH = Number(((d && d.settings && d.settings.sleepGoal) || {}).targetH) || 8;
+  L.push(uy.length ? `UYKU: ${uy.length} gece kayıtlı, ortalama ${(uy.reduce((s, x) => s + Number(x.hours), 0) / uy.length).toFixed(1)} saat (hedef ${hedefH}).` : 'UYKU: kayıt yok.');
+  const gunler = (d && d.diet && d.diet.days) || {};
+  const kayitli = Object.keys(gunler).filter(k => k > gecen && k <= bugun && Array.isArray(gunler[k].meals) && gunler[k].meals.length);
+  L.push(`BESLENME: son 7 günün ${kayitli.length}'inde öğün kaydı var.`);
+  try { L.push('\n[SAĞLIK/ANTRENMAN/BESLENME DETAYI — uygulama hesapladı]\n' + String(buildHealthFactsSrv(d, 7)).slice(0, 3000)); } catch (_) {}
+  L.push('\nGELECEK HAFTA:');
+  const bas = hfEkle(bugun, 1);
+  for (let i = 0; i < 7; i++) {
+    const t = hfEkle(bas, i);
+    const g = hfGun(d, t);
+    L.push(`- ${t}: ${g.bloklar.map(b => b.label + ' ' + hfSaat(b.bas) + '-' + hfSaat(b.bit)).join(', ') || 'serbest'} · ödev kapasitesi ~${g.odevKap} dk${g.tekrar ? ' · sınav tekrarı ' + g.tekrar.dk + ' dk' : ''}`);
+  }
+  const cak = hfCakismalar(d, bas, 7).filter(c => c.seviye !== 'bilgi');
+  if (cak.length) L.push('ÇAKIŞMALAR: ' + cak.map(c => c.tarih + ' ' + c.mesaj).join(' | '));
+  return { metin: L.join('\n'), cakisma: cak };
+}
+
+/** CRON (Pazar 20:00): haftalık koç + gelecek haftanın çakışmaları → tek push. */
 async function runHaftaOzet(env) {
   const users = await fetchAllUsers(env);
-  const bas = trDate(1);
+  const bugun = trToday();
   const results = [];
   for (const u of users) {
     try {
-      const cak = hfCakismalar(u.data, bas, 7).filter(c => c.seviye !== 'bilgi');
-      if (!cak.length) { results.push({ userId: u.userId, cakisma: 0 }); continue; }
-      await sendPushToAll(env, u.data, {
-        title: '🗓️ Haftan: ' + cak.length + ' çakışma',
-        message: cak.slice(0, 2).map(c => '• ' + c.mesaj).join('\n') + (cak.length > 2 ? '\n+' + (cak.length - 2) + ' tane daha' : ''),
+      const d = u.data || {};
+      const f = haftaKocFacts(d, bugun);
+      let koc = '';
+      try {
+        const proModel = geminiModelPro(env);
+        const r = await aiRun(env, {
+          tier: 'heavy', model: proModel,
+          messages: [
+            { role: 'system', content: HAFTA_KOC_PROMPT(getUserDisplayName(d, null) || 'Kullanıcı') + instructionsBlock(d) },
+            { role: 'user', content: f.metin },
+          ],
+          max_tokens: 900, temperature: 0.4,
+        });
+        koc = String((r && r.response) || '').trim().slice(0, 1200);
+      } catch (e) { console.error('hafta koc', e.message); }
+      if (!koc && !f.cakisma.length) { results.push({ userId: u.userId, sent: false }); continue; }
+      if (koc) {
+        d.haftaKoc = { at: bugun, metin: koc };
+        try { await saveUserData(env, u.userId, d); } catch (e) { console.error('hafta koc save', e.message); }
+      }
+      const ilk = koc ? koc.split('\n').filter(Boolean).slice(0, 3).join('\n') : f.cakisma.slice(0, 2).map(c => '• ' + c.mesaj).join('\n');
+      await sendPushToAll(env, d, {
+        title: '🧭 Haftalık koç' + (f.cakisma.length ? ' · ' + f.cakisma.length + ' çakışma' : ''),
+        message: ilk,
         tag: 'aidan-hafta',
         url: '/#hafta',
       }, { userId: u.userId });
-      results.push({ userId: u.userId, cakisma: cak.length });
+      results.push({ userId: u.userId, sent: true, koc: !!koc, cakisma: f.cakisma.length });
     } catch (e) {
       results.push({ userId: u.userId, error: e.message });
     }
@@ -8359,8 +8590,10 @@ async function runGoalAgent(env) {
       const yeniOneriler = [];
       for (const g of goals) {
         try {
-          // Maliyet: cron 'deep' (ücretsiz model). PRO yalnız kullanıcı düğmeye basınca.
-          const agent = await goalThink(env, g, tasks, mem, today, 'deep');
+          // 5 Eki 2026 model kararı: cron da PRO (kural ① — günde sabit, az çağrı;
+          // cevapsız öneri varken model hiç çağrılmıyor). Tek kullanıcı = sahip;
+          // davetli kullanıcılar varken kimse PRO almaz ('deep') — fatura sahibin.
+          const agent = await goalThink(env, g, tasks, mem, today, users.length === 1 ? 'heavy' : 'deep', u.data);
           if (!agent) continue;
           await goalSaveAgent(env, headers, g.id, agent);
           agent.proposals.forEach(p => yeniOneriler.push({ goal: g.title, text: p.text }));
@@ -8415,7 +8648,7 @@ async function handleGoalThinkApi(request, env) {
     if (a.manualAt && Date.now() - Date.parse(a.manualAt) < 120000) return jsonCors({ error: 'too soon' }, 429, cors);
     const [session, mem] = await Promise.all([fetchUserDataForApi(env, user), memoryFetch(env, userToken, user.id)]);
     const tasks = (session.data && session.data.tasks) || [];
-    const agent = await goalThink(env, goal, tasks, mem, trToday(), aiTierForUser(env, user, 'heavy'));
+    const agent = await goalThink(env, goal, tasks, mem, trToday(), aiTierForUser(env, user, 'heavy'), session.data);
     if (!agent) return jsonCors({ error: 'ai-bozuk' }, 502, cors);
     agent.manualAt = new Date().toISOString();
     await goalSaveAgent(env, headers, goal.id, agent);

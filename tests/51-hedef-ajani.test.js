@@ -156,8 +156,8 @@ describe('hedef ajanı — bağlantılar, maliyet, güvenlik', () => {
     assert.ok(!/saveUserData|saveUserDataForApi|saveAidan/.test(api), 'uç görev listesine yazıyor');
     assert.match(run, /goalSaveAgent\(/);
   });
-  test("MALİYET: cron 'deep', PRO yalnız kullanıcı düğmesinde", () => {
-    assert.match(run, /goalThink\(env, g, tasks, mem, today, 'deep'\)/);
+  test("MALİYET: cron PRO yalnız tek kullanıcılı kurulumda (sahip); çok kullanıcıda 'deep'", () => {
+    assert.match(run, /goalThink\(env, g, tasks, mem, today, users\.length === 1 \? 'heavy' : 'deep', u\.data\)/);
     assert.match(api, /aiTierForUser\(env, user, 'heavy'\)/);
   });
   test('19:30 cron\'a bağlı, /goal-think yönlendirmesi var', () => {

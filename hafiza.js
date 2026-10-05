@@ -52,6 +52,38 @@ async function renderMemory() {
   if (error) { el.innerHTML = '<div class="settings-help">Hafıza okunamadı: ' + escapeHtml(error.message) + '</div>'; return; }
   _memItems = (row && Array.isArray(row.items)) ? row.items : [];
   memDraw();
+  renderAiCost();
+}
+
+// ===== AI MALİYETİ (5 Eki 2026) — worker her Gemini yanıtını ölçer (aidan_ai_cost) =====
+const AI_MODEL_AD = { 'gemini-3.1-pro-preview': 'Pro', 'gemini-3.8-flash': 'Flash' };
+async function renderAiCost() {
+  const slot = document.getElementById('memAddSlot');
+  if (!slot || !slot.parentNode || !window._supa) return;
+  let box = document.getElementById('aiCostBox');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'aiCostBox';
+    box.className = 'settings-help';
+    box.style.marginTop = '14px';
+    slot.parentNode.insertBefore(box, slot.nextSibling);
+  }
+  const ay = today().slice(0, 8) + '01';
+  const { data: rows, error } = await window._supa.from('aidan_ai_cost').select('day,model,calls,usd').gte('day', ay);
+  if (error) { box.textContent = 'AI maliyeti okunamadı: ' + error.message; return; }
+  const r = rows || [];
+  const top = r.reduce((s, x) => s + Number(x.usd || 0), 0);
+  const bugun = r.filter(x => x.day === today()).reduce((s, x) => s + Number(x.usd || 0), 0);
+  const cagri = r.reduce((s, x) => s + Number(x.calls || 0), 0);
+  const gecenGun = Math.max(1, Number(today().slice(8, 10)));
+  const tahmin = top / gecenGun * 30;
+  const modeller = {};
+  r.forEach(x => { const k = AI_MODEL_AD[x.model] || x.model; modeller[k] = (modeller[k] || 0) + Number(x.usd || 0); });
+  const $ = v => '$' + v.toFixed(2);
+  box.innerHTML = '<b>AI maliyeti (bu ay, ölçülen)</b><br>' +
+    escapeHtml($(top) + ' · bugün ' + $(bugun) + ' · ' + cagri + ' çağrı · ay sonu tahmini ~' + $(tahmin)) + '<br>' +
+    escapeHtml(Object.keys(modeller).map(k => k + ' ' + $(modeller[k])).join(' · ') || 'Henüz çağrı yok') +
+    '<br><span style="opacity:.75">Ücretli tarife fiyatıyla hesaplanır; anahtar ücretsiz katmandaysa gerçek fatura daha düşüktür.</span>';
 }
 function memDraw() {
   const el = document.getElementById('memList');

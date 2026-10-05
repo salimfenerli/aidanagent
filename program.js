@@ -2703,6 +2703,7 @@ function renderProgram() {
         b.kullanilan + ' temas. Kickboks zaten plyometrik iş — bütçeden düşülüyor.</div>' +
         '</div>';
     })() : '') +
+    programHaftaAyarHtml(p) +
     '<div class="prog-volume">' + hacimHtml + '</div>' +
     (p.conditioning ? '<div class="prog-cond"><b>Kondisyon</b> ' +
       escapeHtml(p.conditioning.not) + '</div>' : '') +
@@ -2719,6 +2720,20 @@ function renderProgram() {
     'kişiye özel antrenörlük değildir. Ağrı hissedersen dur. Maksimum tekrar (1RM) denemesi ' +
     'önerilmez — ağırlıklar tahminden hesaplanır.</div>' +
     '</div>';
+}
+
+/** Haftam'dan yapılan ayarlar (5 Eki 2026) — şablon değişmedi, yalnız bu tarihler. */
+function programHaftaAyarHtml(p) {
+  const a = (p && p.ayarlar && typeof p.ayarlar === 'object') ? p.ayarlar : {};
+  const bugun = typeof today === 'function' ? today() : '';
+  const GN = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+  const gun = t => GN[new Date(t + 'T12:00:00').getDay()] + ' ' + t.slice(8, 10) + '.' + t.slice(5, 7);
+  const satir = Object.keys(a).filter(k => k >= bugun && a[k]).sort().map(k => {
+    const x = a[k];
+    return gun(k) + ': ' + (x.mod === 'hafif' ? 'hafif' : x.mod === 'dinlen' ? 'dinlenme' : x.mod === 'kaydir' && x.hedef ? gun(x.hedef) + ' gününe alındı' : '');
+  }).filter(s => !/: $/.test(s));
+  if (!satir.length) return '';
+  return '<div class="prog-cond"><b>Bu hafta (Haftam)</b> ' + escapeHtml(satir.join(' · ')) + '</div>';
 }
 
 // ---------- Aksiyonlar ----------

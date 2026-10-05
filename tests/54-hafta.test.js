@@ -21,7 +21,7 @@ const { loadApp } = require('./helpers/load');
 
 const HJ = readText('hafta.js');
 const WK = readText('aidan-worker/worker.js');
-const IKIZ = ['HAFTA_KURAL', 'hfDk', 'hfSaat', 'hfEkle', 'hfGun', 'hfOdevYuk', 'hfCakismalar', 'hfPlanBloklari'];
+const IKIZ = ['HAFTA_KURAL', 'hfDk', 'hfSaat', 'hfEkle', 'hfGun', 'hfOdevYuk', 'hfCakismalar', 'hfGunTipi', 'hfPlanBloklari'];
 
 function cekirdek() {
   const ctx = { Date, JSON, Math, String, Array, Object, Number, isNaN };
@@ -134,6 +134,114 @@ describe('çapraz kurallar', () => {
   });
 });
 
+describe('haftalık sınav (Salı Mat+Sosyal, Perşembe Tr+Fiz+Kim+Biy, 17:25-19:05)', () => {
+  const HS = () => { const v = VERI(); v.school.haftalikSinav = {
+    2: { bas: '17:25', bit: '19:05', dersler: ['Matematik', 'Sosyal'] },
+    4: { bas: '17:25', bit: '19:05', dersler: ['Türkçe', 'Fizik', 'Kimya', 'Biyoloji'] } }; return v; };
+  test('sınav günü okul çıkışını 19:05\'e uzatır (okul 19:00 yazılı olsa bile)', () => {
+    const g = js(M.hfGun(HS(), '2026-10-06'));
+    assert.ok(g.bloklar.some(b => b.tur === 'sinav' && /Matematik, Sosyal/.test(b.label)));
+    assert.strictEqual(g.pencere.bas, 19 * 60 + 5 + 30);
+  });
+  test('önceki akşama tekrar ayrılır, ödev kapasitesinden düşer (Çarşamba 4 ders = 80 dk)', () => {
+    const car = js(M.hfGun(HS(), '2026-10-07'));
+    assert.strictEqual(car.tekrar.dk, 80);
+    assert.deepStrictEqual(car.tekrar.dersler, ['Türkçe', 'Fizik', 'Kimya', 'Biyoloji']);
+    assert.strictEqual(car.odevKap, Math.max(0, car.hamKap - 80));
+    assert.strictEqual(js(M.hfGun(HS(), '2026-10-09')).tekrar, null, 'Cuma ertesi sınav yok');
+  });
+  test('🔒 rutin haftalık sınav "sınav haftası" ya da "ağır antrenman" alarmı ÜRETMEZ (her hafta çalan alarm gürültü)', () => {
+    const c = js(M.hfCakismalar(HS(), PZT, 7));
+    assert.ok(!c.some(x => x.kod === 'sinav-haftasi' || x.kod === 'sinav-agir'));
+    assert.ok(c.some(x => x.tarih === PZT && (x.kod === 'tekrar' || x.kod === 'tekrar-sigmiyor')), 'Pazartesi tekrar notu');
+  });
+  test('tekrar sığmıyorsa ORTA uyarı', () => {
+    const v = HS(); v.tasks = [{ text: 'ödev', due: '2026-10-07', estimateMin: 120 }];
+    const c = js(M.hfCakismalar(v, '2026-10-07', 1)).find(x => x.kod === 'tekrar-sigmiyor');
+    assert.ok(c);
+    assert.match(c.oneri, /Okul önce/);
+  });
+});
+
+describe('hepsi birbirine bakar — haftalık ayar, uyku, koç, hedef', () => {
+  const AY = (ayarlar) => { const v = VERI(); v.program.ayarlar = ayarlar; return v; };
+  test('hafiflet: süre ~%60, ağır değil, beslenme günü yine antrenman', () => {
+    const g = js(M.hfGun(AY({ [PZT]: { mod: 'hafif' } }), PZT));
+    assert.strictEqual(g.antrenman.dk, 45);
+    assert.strictEqual(g.antrenman.agir, false);
+    assert.match(g.antrenman.ad, /hafif/);
+    assert.strictEqual(M.hfGunTipi(AY({ [PZT]: { mod: 'hafif' } }), PZT), 'strength');
+  });
+  test('dinlenmeye al: o gün seans yok → beslenme REST, gün planında antrenman bloğu yok', () => {
+    const v = AY({ [PZT]: { mod: 'dinlen' } });
+    assert.strictEqual(M.hfGun(v, PZT).antrenman, null);
+    assert.strictEqual(M.hfGunTipi(v, PZT), 'rest');
+    assert.ok(!js(M.hfPlanBloklari(v, PZT)).some(b => b.tur === 'antrenman'));
+  });
+  test('kaydır: kaynak gün boşalır, hedef güne AYNI seans gelir (okul çıkışına göre saat)', () => {
+    const v = AY({ [PZT]: { mod: 'kaydir', hedef: '2026-10-11' } });
+    assert.strictEqual(M.hfGun(v, PZT).antrenman, null);
+    const paz = js(M.hfGun(v, '2026-10-11'));
+    assert.strictEqual(paz.antrenman.ad, 'Alt Vücut A');
+    assert.strictEqual(M.hfGunTipi(v, '2026-10-11'), 'strength');
+    assert.strictEqual(js(M.hfGun(VERI(), '2026-10-11')).antrenman, null, 'ayarsız Pazar boş');
+  });
+  test('🔒 ayar şablonu DEĞİŞTİRMEZ — bir sonraki Pazartesi yine ağır bacak', () => {
+    const g = js(M.hfGun(AY({ [PZT]: { mod: 'dinlen' } }), '2026-10-12'));
+    assert.ok(g.antrenman && g.antrenman.agir);
+  });
+  test('az uyku (hedef 8, 5.5 saat) + bugün ağır → YÜKSEK, hafiflet/dinlen eylemli; yeterli uykuda yok', () => {
+    const v = VERI(); v.sleep = [{ date: PZT, hours: 5.5 }];
+    const c = js(M.hfCakismalar(v, PZT, 1)).find(x => x.kod === 'az-uyku');
+    assert.ok(c);
+    assert.deepStrictEqual(c.eylemler, ['hafif', 'dinlen']);
+    v.sleep = [{ date: PZT, hours: 7.5 }];
+    assert.ok(!M.hfCakismalar(v, PZT, 1).some(x => x.kod === 'az-uyku'));
+  });
+  test('her uyarının düzeltme eylemi var', () => {
+    const v = VERI(); v.program.days[0].bas = '20:00'; v.school.exams = [{ subject: 'Mat', date: '2026-10-06' }];
+    v.tasks = [{ text: 'x', due: PZT, estimateMin: 200 }];
+    for (const c of js(M.hfCakismalar(v, PZT, 2)).filter(x => x.seviye !== 'bilgi' && x.kod !== 'sinav-haftasi')) {
+      assert.ok(Array.isArray(c.eylemler) && c.eylemler.length, c.kod + ' eylemsiz');
+    }
+  });
+
+  // worker tarafı: koç ölçümleri + hedef kapasitesi
+  const W = WK.replace(/\r\n/g, '\n');
+  const wctx = { Date, JSON, Math, String, Array, Object, Number, isNaN, buildHealthFactsSrv: () => 'DETAY' };
+  vm.createContext(wctx);
+  vm.runInContext(IKIZ.map(n => extractDecl(W, n)).join('\n') + '\n' + extractDecl(W, 'haftaKocFacts') + '\n' + extractDecl(W, 'goalFitDue') +
+    '\nthis.haftaKocFacts = haftaKocFacts; this.goalFitDue = goalFitDue;', wctx);
+  test('koç ölçümü: ödev/antrenman/uyku/beslenme SAYILARI + gelecek hafta tablosu', () => {
+    const v = VERI();
+    v.tasks = [{ text: 'Mat', category: 'odev', done: true, doneDate: '2026-10-03', estimateMin: 40 }, { text: 'eski', due: '2026-10-01' }];
+    v.hevy = { workouts: [{ date: '2026-10-02' }, { date: '2026-09-01' }] };
+    v.sleep = [{ date: '2026-10-04', hours: 7 }, { date: '2026-10-03', hours: 6 }];
+    v.diet.days = { '2026-10-04': { meals: [{ kcal: 500 }] } };
+    const f = wctx.haftaKocFacts(v, '2026-10-04');
+    assert.match(f.metin, /ödev\/özel ders 1, ~40 dk/);
+    assert.match(f.metin, /gecikmiş 1/);
+    assert.match(f.metin, /Hevy'de son 7 günde 1/);
+    assert.match(f.metin, /ortalama 6\.5 saat/);
+    assert.match(f.metin, /7 günün 1'inde öğün/);
+    assert.match(f.metin, /GELECEK HAFTA:/);
+  });
+  test('🔒 hedef adımı dolu güne düşmez (kapasiteli güne itilir)', () => {
+    // Pazartesi kapasite 45 → 60 dk'lık adım Salı'ya (antrenmansız, ~90 dk) itilir
+    assert.strictEqual(wctx.goalFitDue(VERI(), PZT, 60), '2026-10-06');
+    assert.strictEqual(wctx.goalFitDue(VERI(), PZT, 30), PZT);
+    assert.strictEqual(wctx.goalFitDue(null, PZT, 30), PZT);
+  });
+  test('worker: gymDayLine programı + haftalık ayarı izler; Pazar 20:00 PRO koç', () => {
+    const gym = extractDecl(W, 'gymDayLine');
+    assert.match(gym, /hfGun\(data, forDate\)\.antrenman/);
+    const run = W.slice(W.indexOf('async function runHaftaOzet'), W.indexOf('/** CRON (her akşam 19:30)'));
+    assert.match(run, /tier: 'heavy', model: proModel/);
+    assert.match(run, /d\.haftaKoc = \{ at: bugun, metin: koc \}/);
+    assert.match(W, /goalThink\(env, goal, tasks, mem, trToday\(\), aiTierForUser\(env, user, 'heavy'\), session\.data\)/);
+  });
+});
+
 describe('bağlantılar', () => {
   test('worker: gün planı okul/kurs/antrenmanı meşgul sayar', () => {
     const f = extractDecl(WK, 'fixedBlocksFor');
@@ -173,6 +281,40 @@ describe('PWA: kapasiteye göre ödev dağıtımı + panel', () => {
     assert.deepStrictEqual(pzt, ['Okul 09:00', 'Ek ders / kurs 17:30', 'Alt Vücut A 19:30']);
     const car = JSON.parse(A.evalIn(`JSON.stringify(fixedBlocksForDate('2026-10-07').map(b => b.label))`));
     assert.strictEqual(car.filter(x => /Kickboks/.test(x)).length, 1);
+  });
+  test('okul paneli: haftalık sınav eklenir/silinir, XSS kaçışlı', () => {
+    kur();
+    A.evalIn(`renderSchool();
+      document.getElementById('wexDay').value = '4';
+      document.getElementById('wexDers').value = 'Türkçe, Fizik, <b>x</b>';
+      addWeeklyExam();`);
+    assert.deepStrictEqual(JSON.parse(A.evalIn('JSON.stringify(data.school.haftalikSinav["4"].dersler)')), ['Türkçe', 'Fizik', '<b>x</b>']);
+    const el = A.window.document.getElementById('schoolWeekly');
+    assert.ok(el && /Per/.test(el.textContent));
+    assert.strictEqual(el.querySelector('b'), null, 'XSS');
+    A.evalIn(`deleteWeeklyExam('4')`);
+    assert.strictEqual(A.evalIn('data.school.haftalikSinav["4"]'), undefined);
+  });
+  test('Haftam eylemi: hafiflet → program.ayarlar + beslenme gün tipi aynı anda; geri al', async () => {
+    kur();
+    A.evalIn(`data.program.days.forEach(d => { d.dow = new Date(today() + 'T12:00:00').getDay(); }); data.program.days = [data.program.days[0]];`);
+    await A.evalIn(`haftaEylem(today(), 'dinlen')`);
+    assert.strictEqual(A.evalIn('data.program.ayarlar[today()].mod'), 'dinlen');
+    assert.strictEqual(A.evalIn('hfGunTipi(data, today())'), 'rest');
+    await A.evalIn(`haftaEylem(today(), 'hafif')`);
+    assert.strictEqual(A.evalIn('hfGun(data, today()).antrenman.agir'), false);
+  });
+  test('ödevleri dengele: aşan günün işi ÖNCEKİ boş güne alınır, son tarih geçilmez', () => {
+    kur();
+    A.evalIn(`data.program = null; data.diet.nut.duzen = {};
+      const t2 = shiftDateStr(today(), 2);
+      data.tasks = [makeTask({ text: 'a', due: t2, estimateMin: 150 }), makeTask({ text: 'b', due: t2, estimateMin: 60 })];
+      data.tasks[1].id = 77;`);
+    const n = A.evalIn(`haftaDengele(shiftDateStr(today(), 2)).length`);
+    assert.ok(n >= 1);
+    const dues = JSON.parse(A.evalIn('JSON.stringify(data.tasks.map(t => t.due))'));
+    assert.ok(dues.every(x => x <= A.evalIn('shiftDateStr(today(), 2)')), 'son tarih geçildi');
+    assert.ok(dues.some(x => x < A.evalIn('shiftDateStr(today(), 2)')), 'hiçbiri öne alınmadı');
   });
   test('Haftam paneli: 7 gün, çakışma rozeti, XSS kaçışlı', () => {
     kur();

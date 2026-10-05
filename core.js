@@ -1084,7 +1084,7 @@ function calcGoals() {
   // Motor kazanir; burasi PROFIL toplar.
   const nut = (typeof nutTargets === 'function' && typeof nutDayType === 'function')
     ? nutTargets({ sex: _calcSex, age, height: cm, weight: kg },
-                 nutDayType(new Date().getDay(), data.program),
+                 (typeof hfGunTipi === 'function' ? hfGunTipi(data, today()) : nutDayType(new Date().getDay(), data.program)),
                  (data.diet.nut && data.diet.nut.hedef) || (_calcGoal === 'gain' ? 'kas' : 'koru'))
     : null;
 

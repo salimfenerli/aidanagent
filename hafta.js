@@ -27,6 +27,10 @@ const HAFTA_KURAL = {
   dovusDk: 90,
   gecBitisPayi: 120,    // antrenman yatıştan 2 saat önce bitmeli (akşam yemeği + uyku)
   varsayilanGorevDk: 30,
+  tekrarDkDers: 20,     // haftalık sınavda ders başına önceki akşam tekrar
+  tekrarDkSinav: 45,    // tek seferlik (yazılı) sınav başına önceki akşam tekrar
+  hafifOran: 0.6,       // "hafiflet" seansı ~%60 süre, ağır set yok
+  azUykuPay: 1.5,       // hedef uykudan 1.5 saat az = az uyku
 };
 
 function hfDk(s) {
@@ -58,7 +62,15 @@ function hfGun(d, tarih) {
   if (okul) ekle('okul', 'Okul', hfDk(okul.bas), hfDk(okul.bit));
   const kurs = duzen.ders && duzen.ders[String(dow)];
   if (kurs) ekle('ders', 'Ek ders / kurs', hfDk(kurs.bas), hfDk(kurs.bit));
-  const disari = () => bloklar.filter(x => x.tur === 'okul' || x.tur === 'ders');
+  // 5 Eki 2026 — HAFTALIK SINAV (Salim: her Salı/Perşembe 17:25-19:05 okulda).
+  // Rutin: her hafta tekrarlar → sınav haftası / ağır antrenman alarmı ÜRETMEZ
+  // (her hafta çalan alarm gürültüdür); önceki akşama TEKRAR süresi ayırır.
+  const hs = (d && d.school && d.school.haftalikSinav) || {};
+  const bugunHs = hs[String(dow)];
+  if (bugunHs && Array.isArray(bugunHs.dersler) && bugunHs.dersler.length) {
+    ekle('sinav', 'Sınav: ' + bugunHs.dersler.slice(0, 6).join(', '), hfDk(bugunHs.bas), hfDk(bugunHs.bit));
+  }
+  const disari = () => bloklar.filter(x => x.tur === 'okul' || x.tur === 'ders' || x.tur === 'sinav');
   for (const f of ((d && d.fixedSchedule) || [])) {
     if (!f || f.enabled === false || !Array.isArray(f.days) || f.days.indexOf(dow) < 0) continue;
     const b = hfDk(f.start), e = hfDk(f.end);
@@ -69,10 +81,27 @@ function hfGun(d, tarih) {
   }
   let antrenman = null;
   const p = d && d.program;
-  const g = (p && Array.isArray(p.days)) ? p.days.find(x => x && x.dow === dow) : null;
+  const sablon = (p && Array.isArray(p.days)) ? p.days : [];
+  // HAFTALIK AYAR (Haftam'dan "hafiflet / dinlenmeye al / kaydır"): şablon
+  // (program.days) DEĞİŞMEZ, yalnız o TARİH etkilenir. Beslenme gün tipi,
+  // gün planı ve brifing de bu hesaptan okur → hepsi aynı anda uyar.
+  const ayarlar = (p && p.ayarlar && typeof p.ayarlar === 'object') ? p.ayarlar : {};
+  const ayar = ayarlar[tarih] || null;
+  let g = sablon.find(x => x && x.dow === dow) || null;
+  if (ayar && (ayar.mod === 'dinlen' || ayar.mod === 'kaydir')) g = null;
+  if (!g) {
+    for (const k in ayarlar) {
+      const a = ayarlar[k];
+      if (!a || a.mod !== 'kaydir' || a.hedef !== tarih) continue;
+      const kaynak = sablon.find(x => x && x.dow === new Date(k + 'T12:00:00Z').getUTCDay());
+      if (kaynak) { g = Object.assign({}, kaynak, { bas: null }); break; }
+    }
+  }
+  const hafif = !!(g && ayar && ayar.mod === 'hafif');
   if (g) {
     const dovus = g.type === 'fight';
-    antrenman = { tip: dovus ? 'dovus' : 'guc', ad: String(g.name || (dovus ? 'Dövüş antrenmanı' : 'Antrenman')).slice(0, 40), agir: dovus || !!g.agirBacak, bas: null, bit: null, dk: 0 };
+    antrenman = { tip: dovus ? 'dovus' : 'guc', ad: String(g.name || (dovus ? 'Dövüş antrenmanı' : 'Antrenman')).slice(0, 40), agir: (dovus || !!g.agirBacak) && !hafif, hafif, bas: null, bit: null, dk: 0 };
+    if (hafif) antrenman.ad = (antrenman.ad + ' (hafif)').slice(0, 48);
     const dovusBlok = dovus ? bloklar.find(x => x.tur === 'sabit' && /kick|boks|dövüş|dovus|mma|muay|güreş|gures|bjj|jiu/i.test(x.label)) : null;
     if (dovusBlok) {
       dovusBlok.tur = 'antrenman';
@@ -86,7 +115,7 @@ function hfGun(d, tarih) {
         if (cikis >= 0 && bas < cikis + K.hazirlikDk) bas = cikis + K.hazirlikDk;
       }
       antrenman.bas = bas;
-      antrenman.bit = bas + (dovus ? K.dovusDk : (Number(g.hedefDk) || K.varsayilanDk));
+      antrenman.bit = bas + Math.round((dovus ? K.dovusDk : (Number(g.hedefDk) || K.varsayilanDk)) * (hafif ? K.hafifOran : 1));
       ekle('antrenman', antrenman.ad, antrenman.bas, antrenman.bit);
     }
     antrenman.dk = antrenman.bit - antrenman.bas;
@@ -106,10 +135,19 @@ function hfGun(d, tarih) {
   const bosDk = Math.max(0, pBit - pBas - dolu);
   const sinav = (((d && d.school && d.school.exams) || []).filter(e => e && e.date === tarih))
     .map(e => String(e.subject || 'Sınav').slice(0, 40));
+  // Yarının sınavları için bu akşam tekrar — ödev kapasitesinden DÜŞER (ikisi de okul işi).
+  const yarin = hfEkle(tarih, 1);
+  const yarinHs = hs[String((dow + 1) % 7)];
+  const tDers = (yarinHs && Array.isArray(yarinHs.dersler)) ? yarinHs.dersler.slice(0, 6).map(x => String(x).slice(0, 30)) : [];
+  const tSinav = (((d && d.school && d.school.exams) || []).filter(e => e && e.date === yarin)).map(e => String(e.subject || 'Sınav').slice(0, 40));
+  const tekrarDk = tDers.length * K.tekrarDkDers + tSinav.length * K.tekrarDkSinav;
+  const hamKap = Math.min(K.odevTavan, Math.round(bosDk * K.odevPayi));
   return {
     tarih, dow, bloklar, antrenman, kalk, yatis,
     pencere: { bas: pBas, bit: pBit }, bosDk,
-    odevKap: Math.min(K.odevTavan, Math.round(bosDk * K.odevPayi)),
+    hamKap,
+    odevKap: Math.max(0, hamKap - tekrarDk),
+    tekrar: tekrarDk ? { dk: tekrarDk, dersler: tDers.concat(tSinav) } : null,
     sinav,
   };
 }
@@ -141,18 +179,43 @@ function hfCakismalar(d, bas, n) {
     if (g.antrenman && g.antrenman.agir && sinavlar.length) {
       out.push({ tarih: g.tarih, kod: 'sinav-agir', seviye: 'yuksek',
         mesaj: (g.sinav.length ? 'Bugün' : 'Yarın') + ' ' + sinavlar[0] + ' sınavı var; ' + g.antrenman.ad + ' ağır bir seans.',
-        oneri: 'Okul önce: seansı hafiflet (yarı hacim, ağır set yok) ya da dinlenmeye al. Sınav sonrası güne kaydırabilirsin.' });
+        oneri: 'Okul önce: seansı hafiflet (yarı hacim, ağır set yok) ya da dinlenmeye al. Sınav sonrası güne kaydırabilirsin.',
+        eylemler: ['hafif', 'dinlen', 'kaydir'] });
+    }
+    if (g.tarih === bas && g.antrenman && g.antrenman.agir) {
+      const uy = ((d && d.sleep) || []).find(s => s && s.date === g.tarih);
+      const hedefH = Number(((d && d.settings && d.settings.sleepGoal) || {}).targetH) || 8;
+      const az = uy && ((uy.hours != null && Number(uy.hours) < hedefH - K.azUykuPay) || (uy.hours == null && uy.quality === 'bad'));
+      if (az) {
+        out.push({ tarih: g.tarih, kod: 'az-uyku', seviye: 'yuksek',
+          mesaj: 'Dün gece ' + (uy.hours != null ? uy.hours + ' saat' : 'kötü') + ' uyudun; bugün ' + g.antrenman.ad + ' ağır bir seans.',
+          oneri: 'Uyku önce: seansı hafiflet — az uykuyla ağır set hem sakatlık riski hem düşük kazanım.',
+          eylemler: ['hafif', 'dinlen'] });
+      }
     }
     const yuk = hfOdevYuk(d, g.tarih);
     if (yuk > g.odevKap && yuk > 0) {
       out.push({ tarih: g.tarih, kod: 'odev-asim', seviye: yuk > g.odevKap + 60 ? 'yuksek' : 'orta',
         mesaj: 'Ödev yükü ' + yuk + ' dk, o gün ödeve ayrılabilecek zaman ~' + g.odevKap + ' dk.',
-        oneri: 'Bir kısmını daha boş bir güne kaydır — sohbette "ödevleri dengele" de.' });
+        oneri: 'Bir kısmını daha önceki, boş bir güne al.',
+        eylemler: ['dengele'] });
     }
     if (g.antrenman && g.antrenman.bit > g.yatis - K.gecBitisPayi) {
       out.push({ tarih: g.tarih, kod: 'gec-antrenman', seviye: 'orta',
         mesaj: 'Antrenman ' + hfSaat(g.antrenman.bit) + "'te bitiyor, hedef yatış " + hfSaat(g.yatis) + '.',
-        oneri: 'Uyku önce: akşam yemeğinin büyük kısmını antrenmandan önce ye ya da seansı kısalt.' });
+        oneri: 'Uyku önce: seansı kısalt ya da başka güne al. Her hafta tekrarlıyorsa programı yeniden kur.',
+        eylemler: ['hafif', 'kaydir', 'yeniden'] });
+    }
+    if (g.tekrar) {
+      const kalan = g.hamKap - yuk;
+      out.push(kalan < g.tekrar.dk
+        ? { tarih: g.tarih, kod: 'tekrar-sigmiyor', seviye: 'orta',
+            mesaj: 'Yarınki sınavlar (' + g.tekrar.dersler.join(', ') + ') için ~' + g.tekrar.dk + ' dk tekrar gerekiyor, ödevden sonra kalan ~' + Math.max(0, kalan) + ' dk.',
+            oneri: 'Okul önce: bu akşamki ödevin bir kısmını önceki güne al ya da antrenmanı hafiflet.',
+            eylemler: g.antrenman ? ['dengele', 'hafif'] : ['dengele'] }
+        : { tarih: g.tarih, kod: 'tekrar', seviye: 'bilgi',
+            mesaj: 'Yarınki sınavlar için ~' + g.tekrar.dk + ' dk tekrar: ' + g.tekrar.dersler.join(', ') + '.',
+            oneri: 'Ders başına kısa tekrar — kendini test et, okuyup geçme.' });
     }
     if (g.sinav.length) {
       out.push({ tarih: g.tarih, kod: 'sinav-gunu', seviye: 'bilgi',
@@ -161,6 +224,13 @@ function hfCakismalar(d, bas, n) {
     }
   }
   return out;
+}
+
+/** Beslenme gün tipi — haftalık ayar dahil (dinlenmeye alınan gün 'rest', kaydırılan hedef gün antrenman). */
+function hfGunTipi(d, tarih) {
+  const a = hfGun(d, tarih).antrenman;
+  if (!a) return 'rest';
+  return a.tip === 'dovus' ? 'fight' : 'strength';
 }
 
 /** Gün planı için okul/kurs/antrenman blokları (sabit program blokları zaten ayrıca geliyor). */
@@ -189,20 +259,115 @@ const HAFTA_SEVIYE_AD = { yuksek: 'Önemli', orta: 'Dikkat', bilgi: 'Not' };
     '.hafta-uy{margin-top:6px;padding:7px 10px;border-radius:10px;font-size:13px;line-height:1.45;background:var(--bg-elev,#131419);border:1px solid var(--border,#2f323c)}' +
     '.hafta-uy .sv{font-weight:700;margin-right:6px}.hafta-uy.yuksek .sv{color:var(--danger,#ea5a52)}.hafta-uy.orta .sv{color:var(--warning,#e5a117)}.hafta-uy.bilgi .sv{color:var(--text-muted,#9a9389)}' +
     '.hafta-uy small{display:block;color:var(--text-muted,#9a9389);margin-top:2px}' +
-    '.hafta-not{font-size:12.5px;color:var(--text-muted,#9a9389)}';
+    '.hafta-not{font-size:12.5px;color:var(--text-muted,#9a9389)}' +
+    '.hafta-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.hafta-btns button{min-height:34px}' +
+    '.hafta-koc{border:1px solid var(--border,#2f323c);border-radius:12px;padding:10px 12px;font-size:13.5px;line-height:1.55;color:var(--text,#e5e1d9)}' +
+    '.hafta-koc b{display:block;margin-bottom:4px}';
   document.head.appendChild(st);
 })();
 
 function haftaGunAd(tarih, i) {
+  if (i < 0) { const t = today(); i = tarih === t ? 0 : (tarih === hfEkle(t, 1) ? 1 : 9); }
   if (i === 0) return 'Bugün';
   if (i === 1) return 'Yarın';
   const p = tarih.split('-');
   return HAFTA_GUN[new Date(tarih + 'T12:00:00').getDay()] + ' ' + Number(p[2]) + '.' + p[1];
 }
 
+const HAFTA_EYLEM_AD = { hafif: 'Hafiflet', dinlen: 'Dinlenmeye al', kaydir: 'Başka güne al', yeniden: 'Programı yeniden kur', dengele: 'Ödevleri dengele' };
+
 function haftaUyariHtml(c) {
+  const btn = (c.eylemler || []).map(e => '<button class="small secondary" data-t="' + escapeHtml(c.tarih) + '" data-e="' + escapeHtml(e) +
+    '" onclick="haftaEylem(this.dataset.t, this.dataset.e)">' + escapeHtml(HAFTA_EYLEM_AD[e] || e) + '</button>').join('');
   return '<div class="hafta-uy ' + escapeHtml(c.seviye) + '"><span class="sv">' + escapeHtml(HAFTA_SEVIYE_AD[c.seviye] || '') + '</span>' +
-    escapeHtml(c.mesaj) + '<small>' + escapeHtml(c.oneri) + '</small></div>';
+    escapeHtml(c.mesaj) + '<small>' + escapeHtml(c.oneri) + '</small>' +
+    (btn ? '<div class="hafta-btns">' + btn + '</div>' : '') + '</div>';
+}
+
+// ===== EYLEMLER (5 Eki 2026) — "hepsi birbirine baksın" =====
+// Haftam yalnız uyarmıyor, DÜZELTİYOR. Antrenman ayarı program.ayarlar[tarih]'e
+// yazılır (şablon değişmez); hafta çekirdeği okuduğu için beslenme gün tipi,
+// gün planı, brifing ve sohbet ajanı AYNI ANDA uyar. Her eylem geri alınabilir.
+function haftaAyarlar() {
+  if (!data.program || typeof data.program !== 'object') return null;
+  const a = (data.program.ayarlar && typeof data.program.ayarlar === 'object') ? data.program.ayarlar : {};
+  const sinir = hfEkle(today(), -14);
+  Object.keys(a).forEach(k => { if (k < sinir) delete a[k]; });   // eski ayarlar birikmesin
+  data.program.ayarlar = a;
+  return a;
+}
+
+/** Seansı taşımak için en uygun gün: ±3 gün, antrenmansız, ertesi gün sınav/tekrar olmayan, en boş. */
+function haftaKaydirHedef(tarih) {
+  const bugun = today();
+  let en = null, enBos = -1;
+  for (const k of [1, 2, 3, -1, -2]) {
+    const t = hfEkle(tarih, k);
+    if (t < bugun) continue;
+    const g = hfGun(data, t);
+    if (g.antrenman || g.tekrar || g.sinav.length) continue;
+    if (g.bosDk > enBos) { en = t; enBos = g.bosDk; }
+  }
+  return en;
+}
+
+/** Aşan günün ödevini ÖNCEKİ günlere alır (son tarihi geçirmez). Taşınan görev sayısını döndürür. */
+function haftaDengele(tarih) {
+  const bugun = today();
+  const g = hfGun(data, tarih);
+  let fazla = hfOdevYuk(data, tarih) - g.odevKap;
+  const gorevler = (data.tasks || []).filter(t => t && !t.done && t.due === tarih)
+    .sort((a, b) => (a.estimateMin || 30) - (b.estimateMin || 30));
+  const tasinan = [];
+  for (const t of gorevler) {
+    if (fazla <= 0) break;
+    const dk = t.estimateMin || HAFTA_KURAL.varsayilanGorevDk;
+    let hedef = null, enBos = -1;
+    for (let k = 1; k <= 6; k++) {
+      const x = hfEkle(tarih, -k);
+      if (x < bugun) break;
+      const bos = hfGun(data, x).odevKap - hfOdevYuk(data, x);
+      if (bos >= dk && bos > enBos) { hedef = x; enBos = bos; }
+    }
+    if (!hedef) continue;
+    tasinan.push({ t, eski: t.due });
+    t.due = hedef;
+    fazla -= dk;
+  }
+  return tasinan;
+}
+
+async function haftaEylem(tarih, eylem) {
+  if (eylem === 'yeniden') {
+    if (typeof showTab === 'function') await showTab('diet', document.querySelector('[data-tab=diet]'));
+    if (typeof openProgramSetup === 'function') openProgramSetup();
+    return;
+  }
+  if (eylem === 'dengele') {
+    const tasinan = haftaDengele(tarih);
+    if (!tasinan.length) { showToast('Önceki günlerde yer yok — o günün antrenmanını hafifletmeyi dene.', 'warning', 4000); return; }
+    save(); if (typeof renderTasks === 'function') renderTasks(); renderHafta();
+    const geri = () => { tasinan.forEach(x => { x.t.due = x.eski; }); save(); if (typeof renderTasks === 'function') renderTasks(); renderHafta(); };
+    if (typeof showUndoToast === 'function') showUndoToast(tasinan.length + ' görev öne alındı', geri, 6000);
+    return;
+  }
+  const a = haftaAyarlar();
+  if (!a) { showToast('Önce antrenman programı kur', 'warning'); return; }
+  let mesaj;
+  if (eylem === 'kaydir') {
+    const hedef = haftaKaydirHedef(tarih);
+    if (!hedef) { showToast('Yakın günlerde uygun gün yok — hafifletmeyi dene.', 'warning', 4000); return; }
+    a[tarih] = { mod: 'kaydir', hedef, at: today() };
+    mesaj = 'Seans ' + haftaGunAd(hedef, -1) + ' gününe alındı';
+  } else if (eylem === 'hafif' || eylem === 'dinlen') {
+    a[tarih] = { mod: eylem, at: today() };
+    mesaj = eylem === 'hafif' ? 'Seans hafifletildi (~%60 süre, ağır set yok)' : 'Dinlenme gününe alındı';
+  } else return;
+  save(); renderHafta();
+  if (typeof renderProgram === 'function') { try { renderProgram(); } catch (_) {} }
+  const geri = () => { delete a[tarih]; save(); renderHafta(); if (typeof renderProgram === 'function') { try { renderProgram(); } catch (_) {} } };
+  if (typeof showUndoToast === 'function') showUndoToast(mesaj, geri, 6000);
+  else showToast(mesaj, 'success');
 }
 
 function renderHafta() {
@@ -216,6 +381,11 @@ function renderHafta() {
   const duzenVar = !!(data.diet && data.diet.nut && data.diet.nut.duzen && data.diet.nut.duzen.okul);
   let h = '';
   if (!duzenVar) h += '<div class="hafta-not">Okul saatlerini Diyet → Günlük düzen bölümüne girersen boş zaman ve ödev kapasitesi gerçek düzenine göre hesaplanır.</div>';
+  // Haftalık Pro koç (Pazar 20:00, worker) — son 8 gün içindeyse en üstte.
+  const koc = data.haftaKoc;
+  if (koc && koc.metin && koc.at && koc.at >= hfEkle(bas, -8)) {
+    h += '<div class="hafta-koc"><b>Haftalık koç · ' + escapeHtml(koc.at) + '</b>' + escapeHtml(koc.metin).replace(/\n/g, '<br>') + '</div>';
+  }
   const genel = cak.filter(c => c.kod === 'sinav-haftasi');
   genel.forEach(c => { h += haftaUyariHtml(c); });
   for (let i = 0; i < 7; i++) {

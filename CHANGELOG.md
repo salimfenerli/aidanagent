@@ -1,3 +1,21 @@
+# 🤖 6 Eki 2026 — MODEL KARARI + MALİYET SAYACI
+
+Google listesinde gemini-3.5-pro YOK → PRO istekleri 404 + sessiz ücretsiz düşüş. Pro = gemini-3.1-pro-preview, Flash = gemini-3.8-flash (3.5-flash legacy, 2 kat pahalı). Hedef ajanı PRO (tek kullanıcıda cron dahil). aidan_ai_cost + ai_cost_add (SECURITY DEFINER, sınırlı değer) + Ayarlar maliyet kutusu. Perşembe 19:30-21:00 kurs YOK → verden silindi. 1511/1511 yeşil.
+
+---
+
+# 🔗 5 Eki 2026 — HEPSİ BİRBİRİNE BAKIYOR (v7-205)
+
+Salim: "hepsi birbirine baksın işte düzelt". Haftam düğmeleri (hafiflet / dinlenmeye al / başka güne al / ödevleri dengele / programı yeniden kur) → program.ayarlar[tarih]; beslenme gün tipi hfGunTipi ile ayarı izliyor; az uyku (hedef−1.5 saat) + bugün ağır → yüksek uyarı; hedef ajanı 7 günlük kapasiteyi görüyor + goalFitDue kilidi; gymDayLine programdan; Pazar 20:00 haftalık PRO koç (geçen 7 gün ölçümü + gelecek hafta + çakışmalar → 3 öneri, data.haftaKoc, panel + sohbet bağlamı). 1503/1503 yeşil.
+
+---
+
+# 📝 5 Eki 2026 — HAFTALIK SINAV (v7-205)
+
+Salim: her Salı (Mat, Sosyal) ve Perşembe (Türkçe, Fizik, Kimya, Biyoloji) 17:25-19:05 okulda sınav; o günler okul 19:05'te bitiyor. `school.haftalikSinav` + okul paneli düzenleyicisi; hfGun sınav bloğu + önceki akşama tekrar (ders başı 20 dk, yazılı başı 45 dk) ödev kapasitesinden düşülüyor; rutin sınav alarm üretmez. Salim'in verisine yazıldı (Supabase) + Sal/Per okul bitişi 19:05. 1491/1491 yeşil.
+
+---
+
 # 🗓️ 5 Eki 2026 — HAFTAM: TEK TAKVİM + ÇAPRAZ KURALLAR (v7-205)
 
 Salim: "ana odaklarım okul, spor, beslenme — bütün olarak inceleyip programlamalı". Takvim iki yerdeydi (duzen ↔ fixedSchedule); ödev dağıtımı okul/antrenman/sınavı bilmiyordu. hafta.js ↔ worker.js ikiz çekirdek (hfGun/hfCakismalar/hfPlanBloklari), kapasiteli hwSpread, gün planına okul/kurs/antrenman blokları, sohbet ajanına BU HAFTA tablosu, sabah brifingine çakışma satırı, Pazar 20:00 push, Haftam paneli. Öncelik soruldu, Salim tercih belirtmedi → OKUL > UYKU > ANTRENMAN varsayıldı. Testler 54-hafta (23). 1486/1486 yeşil.

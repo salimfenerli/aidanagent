@@ -489,6 +489,7 @@ function renderSchool() {
       </div>`;
     }).join('');
   }
+  renderWeeklyExams(examEl);
   // Rozet: bugünün ders sayısı + yaklaşan sınav (7 gün)
   const badge = document.getElementById('schoolBadge');
   if (badge) {
@@ -542,6 +543,57 @@ function addExam() {
   renderSchool();
   showToast(`"${subj}" sınavı eklendi`, 'success', 2500);
 }
+// ===== HAFTALIK SINAVLAR (5 Eki 2026) =====
+// data.school.haftalikSinav = { "<dow>": { bas, bit, dersler:[...] } } — her hafta
+// aynı gün/saatte tekrar eden sınavlar (Salim: Salı Mat+Sosyal, Perşembe
+// Türkçe+Fizik+Kimya+Biyoloji, 17:25-19:05). Hafta çekirdeği (hfGun) okur:
+// o günün okul çıkışını uzatır, önceki akşama tekrar süresi ayırır.
+const WEX_GUN = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+function renderWeeklyExams(examEl) {
+  if (!examEl || !examEl.parentNode) return;
+  let el = document.getElementById('schoolWeekly');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'schoolWeekly';
+    examEl.parentNode.insertBefore(el, examEl.nextSibling);
+  }
+  const hs = (ensureSchool().haftalikSinav) || {};
+  const gunler = Object.keys(hs).filter(k => hs[k] && Array.isArray(hs[k].dersler)).sort((a, b) => ((+a + 6) % 7) - ((+b + 6) % 7));
+  el.innerHTML = '<div class="school-exam-meta" style="margin:10px 0 6px;font-weight:600">Her hafta tekrar eden sınavlar</div>' +
+    (gunler.length ? gunler.map(k => `<div class="school-exam"><div class="school-exam-days">${WEX_GUN[+k]}</div>
+      <div class="school-exam-info"><div class="school-exam-subj">${escapeHtml(hs[k].dersler.join(', '))}</div>
+      <div class="school-exam-meta">${escapeHtml(hs[k].bas || '')}–${escapeHtml(hs[k].bit || '')} · her hafta</div></div>
+      <button class="del-btn" onclick="deleteWeeklyExam('${k}')" title="Sil">✕</button></div>`).join('')
+      : '<div class="school-exam-empty">Yok.</div>') +
+    '<div class="school-wex-add" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">' +
+    '<select id="wexDay" aria-label="Gün">' + [1, 2, 3, 4, 5, 6, 0].map(i => `<option value="${i}">${WEX_GUN[i]}</option>`).join('') + '</select>' +
+    '<input type="time" id="wexBas" value="17:25" aria-label="Başlangıç"><input type="time" id="wexBit" value="19:05" aria-label="Bitiş">' +
+    '<input type="text" id="wexDers" maxlength="120" placeholder="Dersler: Matematik, Sosyal" style="flex:1;min-width:160px">' +
+    '<button class="small" onclick="addWeeklyExam()">Ekle</button></div>';
+}
+function addWeeklyExam() {
+  const g = (id) => (document.getElementById(id) || {}).value || '';
+  const dow = String(parseInt(g('wexDay'), 10));
+  const dersler = g('wexDers').split(/[,;\n]+/).map(x => x.trim()).filter(Boolean).slice(0, 6);
+  if (!/^[0-6]$/.test(dow) || !dersler.length) { showToast('Gün ve en az bir ders yaz.', 'warning'); return; }
+  const bas = g('wexBas'), bit = g('wexBit');
+  if (!bas || !bit || bit <= bas) { showToast('Saatleri kontrol et.', 'warning'); return; }
+  const s = ensureSchool();
+  s.haftalikSinav = Object.assign({}, s.haftalikSinav || {}, { [dow]: { bas, bit, dersler } });
+  save(); renderSchool();
+  if (typeof renderHafta === 'function') renderHafta();
+  showToast(WEX_GUN[+dow] + ' sınavı eklendi — önceki akşama tekrar süresi ayrılacak.', 'success', 3000);
+}
+function deleteWeeklyExam(dow) {
+  const s = ensureSchool();
+  if (!s.haftalikSinav || !s.haftalikSinav[dow]) return;
+  const kopya = Object.assign({}, s.haftalikSinav);
+  delete kopya[dow];
+  s.haftalikSinav = kopya;
+  save(); renderSchool();
+  if (typeof renderHafta === 'function') renderHafta();
+}
+
 function deleteExam(id) {
   const s = ensureSchool();
   s.exams = (s.exams || []).filter(x => x.id !== id);
