@@ -9861,6 +9861,20 @@ function srvUpsertSleep(data, entry) {
   return ex;
 }
 
+// Tarihsiz nabız bayat mı? Bugünden ÖNCEKİ en yeni nabız kaydıyla aynı değerse evet.
+// Gerçekten iki gün aynı nabız olabilir — bir günü kaybetmek, bayat veriyle
+// tabanı bozmaktan iyidir ("bayat ölçüm veri yok'tan kötüdür").
+function srvNabizBayat(health, rhr, date) {
+  const v = srvBodyNum(rhr, 30, 130, 0);
+  if (v == null || !Array.isArray(health)) return false;
+  let son = null;
+  for (const h of health) {
+    if (!h || h.rhr == null || !h.date || h.date >= date) continue;
+    if (!son || h.date > son.date) son = h;
+  }
+  return !!son && son.rhr === v;
+}
+
 // data.health = [{date,steps,rhr,hrv,kcalOut}] — yeni dizi, gunde tek kayit.
 // Sinirlar insan araligi: disinda kalan deger sessizce duser, sacma veri kayda girmez.
 function srvUpsertHealth(data, entry) {
@@ -9997,11 +10011,12 @@ async function handleHealthApi(request, env) {
     data.diet = data.diet || {};
     for (const w of tartilar) if (srvUpsertBody(data.diet, w)) bodyN++;
   }
-  let sleepN = 0, healthN = 0, lastSleep = null, lastHealth = null, lastDate = null;
+  let sleepN = 0, healthN = 0, bayatN = 0, lastSleep = null, lastHealth = null, lastDate = null;
   for (let it of raw) {
     if (!it || typeof it !== 'object') continue;
     const uy = srvUykuParca(it);          // uyku parçaları → tek gece (8 Eki)
     if (uy) it = Object.assign({}, it, uy);
+    else if (it.bedtime != null && srvClock(it.wake) == null && it.hours == null) it = Object.assign({}, it, { bedtime: null });
     // TEK KISAYOL tartısı: ölçümün KENDİ tarihi (kgDate) şart. Yoksa yazılmaz —
     // bayat örnek bugüne damgalanmasın (6 Eyl dersi).
     if (it.kg != null || it.fat != null) {
@@ -10016,11 +10031,17 @@ async function handleHealthApi(request, env) {
     const date = srvTarih(it.date) || srvTarih(it.wake) || trToday();
     const s = srvUpsertSleep(data, { ...it, date });
     if (s) { sleepN++; lastSleep = s; }
-    const h = srvUpsertHealth(data, { ...it, date });
+    // NABIZ TARİHİ (8 Eki): kısayol nabzın kendi tarihini yollamıyordu → dünkü
+    // örnek her gün bugüne damgalanıyordu (7 ve 8 Eki ikisi de 69). rhrDate varsa
+    // o gün; yoksa son kayıttakiyle aynı değer BAYAT sayılır, yazılmaz.
+    const hd = srvTarih(it.rhrDate) || srvTarih(it.date);
+    let hIt = { ...it, date: hd || date };
+    if (!hd && it.rhr != null && srvNabizBayat(data.health, it.rhr, date)) { hIt = { ...hIt, rhr: null }; bayatN++; }
+    const h = srvUpsertHealth(data, hIt);
     if (h) { healthN++; lastHealth = h; }
     if (s || h) lastDate = date;
   }
-  if (!sleepN && !healthN && !bodyN) {
+  if (!sleepN && !healthN && !bodyN && !bayatN) {
     return jsonCors({ ok: false, saved: 0, error: 'gecerli olcum yok' }, 422, cors);
   }
   const degisti = JSON.stringify([data.sleep || [], data.health || [], (data.diet || {}).weights || []]) !== onceki;
@@ -10033,6 +10054,7 @@ async function handleHealthApi(request, env) {
   if (lastHealth && lastHealth.rhr != null) bits.push(lastHealth.rhr + ' bpm');
   if (lastHealth && lastHealth.hrv != null) bits.push('HRV ' + lastHealth.hrv);
   if (bodyN) bits.push('tartı');
+  if (bayatN) bits.push('nabız değişmemiş, yazılmadı');
   if (!degisti) bits.push('zaten güncel');
   const n = Math.max(sleepN, healthN, bodyN);
   const summary = n > 1

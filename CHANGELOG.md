@@ -1,3 +1,9 @@
+# 💓 8 Eki 2026 — NABIZ TARİHİ
+
+Şüphe doğrulandı: kısayol nabzı tarihsiz yolluyordu, sunucu trToday() basıyordu → data.health'te 7 ve 8 Eki ikisi de 69. srvNabizBayat: tarihsiz nabız bugünden ÖNCEKİ en yeni kayıtla aynıysa yazılmaz (gerçek tekrar günü kaybı kabul — bayat taban daha kötü); rhrDate alanı gelirse o güne yazılır (rehbere 8. alan). Yalnız bayat nabız geldiğinde 422 değil "nabız değişmemiş" (her WhatsApp açılışında hata bildirimi çıkmasın). Ayrıca 75af54c'de push edilmemiş kalan "kalkışsız tek yatış yazılmaz" satırı eklendi → o commit'in kırmızı CI'ı yeşile döndü. Mevcut 8 Eki 69 kaydı bırakıldı (hangisinin gerçek olduğu bilinmiyor). 1532/1532.
+
+---
+
 # 😴 8 Eki 2026 — UYKU PARÇALARI
 
 Ölçüm: tek kısayol çalıştı (nabız 69 geldi) ama uyku = yatış 23:00, kalkış boş — "Sınır: 1" Apple Sağlık'ın gece parçalarından (Yatakta/Çekirdek/Derin/REM/Uyanık) yalnız birini alıyordu. srvUykuParca: bedtime/wake/stage listeleri (alt alta metin ya da dizi) eşlenir, YALNIZ son gece (16-18 sa pencere), Yatakta/Uyanık hariç parçaların birleşimi = süre (çakışma iki kez sayılmaz), ilk uyuma = yatış, son uyuma = kalkış, tarih = uyanılan gün. Tek değer → null (eski yol aynen). Kısayol: 3.+4. adım tek adım (Limit kapalı) + `stage` alanı. 31-odev-paketi dengesi adet yerine dakikayla (Perşembe çalışınca kırılıyordu). 1528/1528. Ek (8 Eki akşam): Salim kısayolu düzenleyemedi → kalkışsız tek yatış (uyku programı 23:00) artık YAZILMAZ; uyku elle Aidan uyku kartından, kısayol yalnız tartı + nabız.

@@ -17,7 +17,7 @@ Kısayollar → **+** → her adımda **Eylem Ekle** → aramaya yaz:
 4. **Sağlık Örneklerini Bul** → Tür: **Dinlenme Nabzı** · En Yeni Önce · Limit **1**
 5. **URL'nin İçeriğini Al**
    - URL: `https://aidan-pusher.fenerlisalim04.workers.dev/health?secret=GİZLİ_ANAHTAR`
-   - ▾ Daha Fazla → Yöntem: **POST** · İstek Gövdesi: **JSON** · **Yeni Alan** (7 tane, hepsi *Metin*):
+   - ▾ Daha Fazla → Yöntem: **POST** · İstek Gövdesi: **JSON** · **Yeni Alan** (8 tane, hepsi *Metin*):
 
    | Alan | Değer (değişkene dokun → özelliği seç) |
    |---|---|
@@ -28,6 +28,7 @@ Kısayollar → **+** → her adımda **Eylem Ekle** → aramaya yaz:
    | `wake` | 3. adımın çıktısı → **Bitiş Tarihi** |
    | `stage` | 3. adımın çıktısı → **Değer** (Çekirdek/Derin/Uyanık… — uyunan süreyi ayırır) |
    | `rhr` | 4. adımın çıktısı → **Değer** |
+   | `rhrDate` | 4. adımın çıktısı → **Başlangıç Tarihi** (8 Eki: yoksa dünkü nabız bugüne yazılıyordu) |
 
    Değişken eklerken: alanın değer kutusuna dokun → klavyenin üstündeki çubuktan ilgili "Sağlık Örnekleri"ni seç → eklenen mavi kutuya tekrar dokun → **Değer / Başlangıç Tarihi / Bitiş Tarihi**. Tarih **biçimlendirmene gerek yok**.
 6. (İsteğe bağlı) **Bildirim Göster** → içerik: 5. adımın çıktısı — ilk denemede ne döndüğünü görürsün.

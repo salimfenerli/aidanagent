@@ -19,8 +19,8 @@ const { readText, extractDecl } = require('./helpers/src');
 const W = readText('aidan-worker/worker.js').replace(/\r\n/g, '\n');
 const ctx = { Math, Number, String, Object, Array, isFinite, JSON };
 vm.createContext(ctx);
-vm.runInContext(['haeToItems', 'SRV_AY', 'srvTarih', 'srvBodyNum', 'srvClock', 'srvZamanlar', 'srvUykuParca', 'srvSleepHours', 'srvUpsertSleep', 'srvUpsertHealth', 'srvUpsertBody']
-  .map(n => extractDecl(W, n)).join('\n') + '\nthis.tarih = srvTarih; this.saat = srvClock; this.hae = haeToItems; this.S = srvUpsertSleep; this.H = srvUpsertHealth; this.B = srvUpsertBody; this.U = srvUykuParca;', ctx);
+vm.runInContext(['haeToItems', 'SRV_AY', 'srvTarih', 'srvBodyNum', 'srvClock', 'srvZamanlar', 'srvUykuParca', 'srvSleepHours', 'srvUpsertSleep', 'srvUpsertHealth', 'srvUpsertBody', 'srvNabizBayat']
+  .map(n => extractDecl(W, n)).join('\n') + '\nthis.tarih = srvTarih; this.saat = srvClock; this.hae = haeToItems; this.S = srvUpsertSleep; this.H = srvUpsertHealth; this.B = srvUpsertBody; this.U = srvUykuParca; this.NB = srvNabizBayat;', ctx);
 const js = (x) => JSON.parse(JSON.stringify(x));
 
 const ORNEK = { data: { metrics: [
@@ -150,6 +150,31 @@ describe('uyku parçaları (8 Eki — tek parça 23:00 / kalkış boş geliyordu
     assert.ok(h.indexOf('srvUykuParca(it)') < h.indexOf('srvTarih(it.date)'));
     // kalkışsız tek yatış (uyku programı hedefi) kayda girmez
     assert.match(h, /else if \(it\.bedtime != null && srvClock\(it\.wake\) == null && it\.hours == null\) it = Object\.assign\(\{\}, it, \{ bedtime: null \}\);/);
+  });
+});
+
+describe('nabız tarihi (8 Eki — 69 her gün bugünün tarihiyle geliyordu)', () => {
+  const H = [{ date: '2026-10-07', rhr: 69 }, { date: '2026-10-05', rhr: 61 }, { date: '2026-10-06', steps: 5000 }];
+  test('önceki en yeni nabızla aynı değer → bayat', () => {
+    assert.strictEqual(ctx.NB(H, 69, '2026-10-08'), true);
+    assert.strictEqual(ctx.NB(H, '69', '2026-10-08'), true, 'metin de çözülür');
+  });
+  test('farklı değer, ilk kayıt, saçma değer → bayat DEĞİL', () => {
+    assert.strictEqual(ctx.NB(H, 64, '2026-10-08'), false);
+    assert.strictEqual(ctx.NB([], 69, '2026-10-08'), false);
+    assert.strictEqual(ctx.NB(undefined, 69, '2026-10-08'), false);
+    assert.strictEqual(ctx.NB(H, 400, '2026-10-08'), false);
+  });
+  test('yalnız BUGÜNDEN ÖNCEKİ kayda bakar (aynı gün tekrar gönderim kıyas değil)', () => {
+    assert.strictEqual(ctx.NB([{ date: '2026-10-08', rhr: 69 }], 69, '2026-10-08'), false);
+    assert.strictEqual(ctx.NB([{ date: '2026-10-08', rhr: 69 }, { date: '2026-10-07', rhr: 61 }], 69, '2026-10-08'), false);
+  });
+  test('uç: rhrDate varsa o güne yazar; tarihsiz bayat nabız yazılmaz ama hata da dönmez', () => {
+    const h = W.slice(W.indexOf('async function handleHealthApi('), W.indexOf('async function handleBodyApi('));
+    assert.match(h, /const hd = srvTarih\(it\.rhrDate\) \|\| srvTarih\(it\.date\);/);
+    assert.match(h, /if \(!hd && it\.rhr != null && srvNabizBayat\(data\.health, it\.rhr, date\)\) \{ hIt = \{ \.\.\.hIt, rhr: null \}; bayatN\+\+; \}/);
+    assert.match(h, /const h = srvUpsertHealth\(data, hIt\);/);
+    assert.match(h, /if \(!sleepN && !healthN && !bodyN && !bayatN\)/, 'yalnız bayat nabız → 422 değil');
   });
 });
 
