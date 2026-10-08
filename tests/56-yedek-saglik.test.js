@@ -148,6 +148,8 @@ describe('uyku parçaları (8 Eki — tek parça 23:00 / kalkış boş geliyordu
     const h = W.slice(W.indexOf('async function handleHealthApi('), W.indexOf('async function handleBodyApi('));
     assert.match(h, /const uy = srvUykuParca\(it\);[^\n]*\n\s+if \(uy\) it = Object\.assign\(\{\}, it, uy\);/);
     assert.ok(h.indexOf('srvUykuParca(it)') < h.indexOf('srvTarih(it.date)'));
+    // kalkışsız tek yatış (uyku programı hedefi) kayda girmez
+    assert.match(h, /else if \(it\.bedtime != null && srvClock\(it\.wake\) == null && it\.hours == null\) it = Object\.assign\(\{\}, it, \{ bedtime: null \}\);/);
   });
 });
 

@@ -1,6 +1,6 @@
 # 😴 8 Eki 2026 — UYKU PARÇALARI
 
-Ölçüm: tek kısayol çalıştı (nabız 69 geldi) ama uyku = yatış 23:00, kalkış boş — "Sınır: 1" Apple Sağlık'ın gece parçalarından (Yatakta/Çekirdek/Derin/REM/Uyanık) yalnız birini alıyordu. srvUykuParca: bedtime/wake/stage listeleri (alt alta metin ya da dizi) eşlenir, YALNIZ son gece (16-18 sa pencere), Yatakta/Uyanık hariç parçaların birleşimi = süre (çakışma iki kez sayılmaz), ilk uyuma = yatış, son uyuma = kalkış, tarih = uyanılan gün. Tek değer → null (eski yol aynen). Kısayol: 3.+4. adım tek adım (Limit kapalı) + `stage` alanı. 31-odev-paketi dengesi adet yerine dakikayla (Perşembe çalışınca kırılıyordu). 1528/1528.
+Ölçüm: tek kısayol çalıştı (nabız 69 geldi) ama uyku = yatış 23:00, kalkış boş — "Sınır: 1" Apple Sağlık'ın gece parçalarından (Yatakta/Çekirdek/Derin/REM/Uyanık) yalnız birini alıyordu. srvUykuParca: bedtime/wake/stage listeleri (alt alta metin ya da dizi) eşlenir, YALNIZ son gece (16-18 sa pencere), Yatakta/Uyanık hariç parçaların birleşimi = süre (çakışma iki kez sayılmaz), ilk uyuma = yatış, son uyuma = kalkış, tarih = uyanılan gün. Tek değer → null (eski yol aynen). Kısayol: 3.+4. adım tek adım (Limit kapalı) + `stage` alanı. 31-odev-paketi dengesi adet yerine dakikayla (Perşembe çalışınca kırılıyordu). 1528/1528. Ek (8 Eki akşam): Salim kısayolu düzenleyemedi → kalkışsız tek yatış (uyku programı 23:00) artık YAZILMAZ; uyku elle Aidan uyku kartından, kısayol yalnız tartı + nabız.
 
 ---
 
