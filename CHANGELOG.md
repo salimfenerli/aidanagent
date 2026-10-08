@@ -1,3 +1,21 @@
+# 😴 8 Eki 2026 — UYKU PARÇALARI
+
+Ölçüm: tek kısayol çalıştı (nabız 69 geldi) ama uyku = yatış 23:00, kalkış boş — "Sınır: 1" Apple Sağlık'ın gece parçalarından (Yatakta/Çekirdek/Derin/REM/Uyanık) yalnız birini alıyordu. srvUykuParca: bedtime/wake/stage listeleri (alt alta metin ya da dizi) eşlenir, YALNIZ son gece (16-18 sa pencere), Yatakta/Uyanık hariç parçaların birleşimi = süre (çakışma iki kez sayılmaz), ilk uyuma = yatış, son uyuma = kalkış, tarih = uyanılan gün. Tek değer → null (eski yol aynen). Kısayol: 3.+4. adım tek adım (Limit kapalı) + `stage` alanı. 31-odev-paketi dengesi adet yerine dakikayla (Perşembe çalışınca kırılıyordu). 1528/1528.
+
+---
+
+# 📲 7 Eki 2026 — TEK KISAYOL (ücretsiz)
+
+Salim tartı kısayolunu da bozmuştu (son kilo 28 Eyl). Tek kısayol: /health?secret= ile kg+kgDate+fat+bedtime+wake+rhr. Sunucu ham tarih/saat metnini çözer (srvTarih: ISO / "7 Eki 2026" / "Oct 7, 2026" / 07.10.2026; srvClock AM/PM), tartı yalnız kgDate ile yazılır (bayat örnek bugüne düşmez), değişmeyen gönderim blob'a yazılmaz (WhatsApp açılışı tetikli otomasyon). Rehber ios-shortcuts.md başında. 1522/1522.
+
+---
+
+# 💾 6 Eki 2026 — YEDEK EKLERİ + HEALTH AUTO EXPORT
+
+Yedek: hafıza + hedefler __yedekEk olarak haftalık yedeğe girer (veri 37 KB, 12 yedek ~0.5 MB). Ölçüm: data.sleep ve data.health 0 kayıt — Kısayol yolu hiç çalışmamıştı. /health artık Health Auto Export JSON biçimini tanıyor (haeToItems: toplu/parça uyku, kJ→kcal, lb→kg, günlük toplam/ortalama) + tartı (srvUpsertBody; 26-saglik-ucu yetki testi diet.weights ile sınırlandı). Kurulum ios-shortcuts.md başında. 1519 test.
+
+---
+
 # 🤖 6 Eki 2026 — MODEL KARARI + MALİYET SAYACI
 
 Google listesinde gemini-3.5-pro YOK → PRO istekleri 404 + sessiz ücretsiz düşüş. Pro = gemini-3.1-pro-preview, Flash = gemini-3.8-flash (3.5-flash legacy, 2 kat pahalı). Hedef ajanı PRO (tek kullanıcıda cron dahil). aidan_ai_cost + ai_cost_add (SECURITY DEFINER, sınırlı değer) + Ayarlar maliyet kutusu. Perşembe 19:30-21:00 kurs YOK → verden silindi. 1511/1511 yeşil.

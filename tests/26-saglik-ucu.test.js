@@ -154,10 +154,16 @@ describe('ucun cikisi analize baglaniyor', () => {
     assert.ok(bas > 0, 'handleHealthApi bulunamadi');
     const bit = WK.indexOf('\nasync function', bas + 10);
     const blok = WK.slice(bas, bit > 0 ? bit : WK.length);
-    for (const yasak of ['data.tasks', 'data.diet', 'data.portfolioHistory', 'data.settings']) {
+    // 6 Eki 2026: Health Auto Export tartıyı da aynı istekte yolluyor. /body ile
+    // AYNI secret'ı paylaştığı için ayrı uç yetki tavanını düşürmüyordu; izin
+    // yalnız srvUpsertBody (diet.weights) — diyetin başka alanı YASAK.
+    for (const yasak of ['data.tasks', 'data.diet.days', 'data.diet.nut', 'data.diet.plan', 'data.portfolioHistory', 'data.settings']) {
       assert.ok(!blok.includes(yasak),
         '/health ucu ' + yasak + ' alanina yaziyor — yetki tavani asilmis');
     }
+    const dietYazim = (blok.match(/data\.diet[^\s;,)]*/g) || []).filter(x => x !== 'data.diet');
+    assert.deepStrictEqual(dietYazim, [], '/health diyetin baska alanina dokunuyor: ' + dietYazim.join(', '));
+    assert.match(blok, /srvUpsertBody\(data\.diet, w\)/);
     assert.ok(/WEBHOOK_SECRET/.test(blok), 'secret kontrolu yok');
   });
 });

@@ -1927,6 +1927,7 @@ function importData(e) {
   reader.onload = ev => {
     try {
       const imported = JSON.parse(ev.target.result);
+      if (imported) delete imported.__yedekEk;   // bulut yedeğinin ek tabloları (hafıza/hedef) blob'a girmez
       if (!confirm('Mevcut verilerin üzerine yazılacak. Devam?')) return;
       data = imported;
       save();

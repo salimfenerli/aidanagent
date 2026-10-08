@@ -1,3 +1,69 @@
+# ⭐⭐ TEK KISAYOL — tartı + uyku + nabız (7 Eki 2026, ÜCRETSİZ, ÖNERİLEN)
+
+Eski iki kısayolun (tartı + sağlık) yerine **tek kısayol**. Tarih biçimlendirme, başlık (header),
+uyku süresi hesabı **yok** — hepsini sunucu yapıyor. 5 eylem + 1 otomasyon.
+
+**Önce:** eski "Tartımı Aidan'a gönder" kısayolunu ve ona bağlı otomasyonu SİL (karışmasın).
+Xiaomi Home → Apple Sağlık ve Google Health → Apple Sağlık bağlantıları açık olsun.
+
+## Kısayol: "Aidan Sağlık"
+Kısayollar → **+** → her adımda **Eylem Ekle** → aramaya yaz:
+
+1. **Sağlık Örneklerini Bul** → Tür: **Kilo** · Sırala: Başlangıç Tarihi · **En Yeni Önce** · Limit: **1**
+2. **Sağlık Örneklerini Bul** → Tür: **Vücut Yağ Yüzdesi** · En Yeni Önce · Limit **1**
+3. **Sağlık Örneklerini Bul** → Tür: **Uyku Analizi** (aramada "uyku" yaz) · Filtre: **Başlangıç Tarihi → son 1 gün içinde** · Sırala: Başlangıç Tarihi · **En Eski Önce** · **Limit KAPALI**
+   ⚠️ 8 Eki dersi: Sağlık bir geceyi onlarca parçaya böler (Yatakta, Çekirdek, Derin, REM, Uyanık). Limit 1 → tek parça gelir
+   (yatış 23:00 = uyku programı, kalkış boş). Limit kapalı → TÜM parçalar gider, gerçek yatış/kalkış/süreyi sunucu çıkarır.
+4. **Sağlık Örneklerini Bul** → Tür: **Dinlenme Nabzı** · En Yeni Önce · Limit **1**
+5. **URL'nin İçeriğini Al**
+   - URL: `https://aidan-pusher.fenerlisalim04.workers.dev/health?secret=GİZLİ_ANAHTAR`
+   - ▾ Daha Fazla → Yöntem: **POST** · İstek Gövdesi: **JSON** · **Yeni Alan** (7 tane, hepsi *Metin*):
+
+   | Alan | Değer (değişkene dokun → özelliği seç) |
+   |---|---|
+   | `kg` | 1. adımın çıktısı → **Değer** |
+   | `kgDate` | 1. adımın çıktısı → **Başlangıç Tarihi** |
+   | `fat` | 2. adımın çıktısı → **Değer** |
+   | `bedtime` | 3. adımın çıktısı → **Başlangıç Tarihi** |
+   | `wake` | 3. adımın çıktısı → **Bitiş Tarihi** |
+   | `stage` | 3. adımın çıktısı → **Değer** (Çekirdek/Derin/Uyanık… — uyunan süreyi ayırır) |
+   | `rhr` | 4. adımın çıktısı → **Değer** |
+
+   Değişken eklerken: alanın değer kutusuna dokun → klavyenin üstündeki çubuktan ilgili "Sağlık Örnekleri"ni seç → eklenen mavi kutuya tekrar dokun → **Değer / Başlangıç Tarihi / Bitiş Tarihi**. Tarih **biçimlendirmene gerek yok**.
+6. (İsteğe bağlı) **Bildirim Göster** → içerik: 5. adımın çıktısı — ilk denemede ne döndüğünü görürsün.
+
+**Test:** ▶︎'e bas → bildirimde `"ok":true` ve `"summary"` görmelisin. Hata görürsen ekran görüntüsünü Claude'a at.
+
+## Otomasyon: kendi kendine çalışsın
+Kısayollar → **Otomasyon** → **+** → **Uygulama** → **WhatsApp** (ya da her sabah açtığın bir uygulama) → **Açıldığında** ✓ → **Hemen Çalıştır** · Çalıştığında Bildir: kapalı → kısayol: **Aidan Sağlık**.
+
+⚠️ **Saate bağlama** ("her gün 08:00"): Apple telefon KİLİTLİYKEN sağlık verisini okutmuyor → boş veri gider.
+Uygulama açılınca tetiklenirse telefon açıktır. Her açılışta çalışması sorun değil: değişiklik yoksa sunucu hiçbir şey yazmaz.
+
+---
+
+# ⭐ KISAYOLSUZ YOL — Health Auto Export (6 Eki 2026, ÖNERİLEN)
+
+Kısayol kurmak yerine **Health Auto Export** uygulaması Apple Sağlık'ı kendisi okuyup Aidan'a yollar.
+Zincir: **Fitbit → Google Health (v5.05+) → Apple Sağlık → Health Auto Export → Aidan**
+
+**Gerekli:** App Store → "Health Auto Export - JSON+CSV" · otomasyon için **Premium** (aylık $1.99 / yıllık $6.99 / ömür boyu $24.99).
+
+1. **Google Health** uygulamasında Apple Sağlık bağlantısı AÇIK olsun (uyku, adım, nabız, HRV yazsın).
+2. Health Auto Export'u aç → Apple Sağlık izinlerinin hepsine **İzin ver**.
+3. **Automations → yeni otomasyon → REST API**
+4. **URL:** `https://aidan-pusher.fenerlisalim04.workers.dev/health?secret=GİZLİ_ANAHTAR`
+   (GİZLİ_ANAHTAR = Cloudflare → aidan-pusher → Settings → Variables → `WEBHOOK_SECRET`; tartı kısayolundakiyle aynı)
+5. **Data type:** Health Metrics · **Format:** JSON · **Aggregate / Time grouping:** Day (günlük)
+6. **Metrikler:** Step Count · Active Energy · Resting Heart Rate · Heart Rate Variability · Sleep Analysis · (istersen) Weight & Body Fat Percentage
+7. **Date range:** son 2 gün · **Sıklık:** saatte bir (uygulama arka planda çalışır)
+8. **Manual export** ile bir kez dene → Aidan → Diyet sekmesinde uyku kartı dolmalı.
+
+Menü adları sürüme göre biraz farklı olabilir; mantık aynı: REST API + JSON + günlük toplam.
+Uç biçimi otomatik tanır (`haeToItems`); eski Kısayol yolu da çalışmaya devam eder.
+
+---
+
 # 📱 iPhone Kısayolları — Tartı verisini Aidan'a otomatik gönder
 
 Amaç: her sabah tartıya çıkacaksın, **sen hiçbir şey yapmadan** kilo ve yağ oranı Aidan'a düşecek.

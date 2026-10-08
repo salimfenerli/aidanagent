@@ -129,9 +129,11 @@ describe('dagitim motoru', () => {
     const plan = kur(Array.from({ length: 8 }, (_, i) => `odev${i} 20dk`).join('\n'), { son: kaydir(5) });
     const dolu = plan.days.filter(g => g.items.length);
     assert.ok(dolu.length >= 3, 'odevler tek gune yigildi');
-    const enCok = Math.max(...dolu.map(g => g.items.length));
-    const enAz = Math.min(...dolu.map(g => g.items.length));
-    assert.ok(enCok - enAz <= 2, `dengesiz dagilim: ${enAz}-${enCok}`);
+    // DAKİKA ile ölç, adetle değil: güne önceden düşmüş görev (fixture'da yarına
+    // 45 dk) varsa o güne daha az ödev gitmesi DOĞRU (8 Eki: Perşembe çalışınca 1-4 adet, 65-80 dk).
+    const enCok = Math.max(...dolu.map(g => g.min));
+    const enAz = Math.min(...dolu.map(g => g.min));
+    assert.ok(enCok - enAz <= 40, `dengesiz dagilim: ${enAz}-${enCok} dk`);
   });
 });
 

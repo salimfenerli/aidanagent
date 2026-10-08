@@ -125,7 +125,7 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 - Kurulum kutuları kalıcı (`data.progIstek` 600 ms gecikmeli) — form her çip tıklamasında yeniden çiziliyor, DOM'da duran metin kaybolur.
 
 **Sağlık / uyku**
-- Fitbit verisi: Google Health → Apple Sağlık → iOS Kısayol → `POST /health`. ⚠️ Fitbit/Google Health API'sine dönme (restricted scope, CASA denetimi) — tekrar araştırma.
+- Fitbit verisi: Google Health → Apple Sağlık → **Health Auto Export** (önerilen, `haeToItems` biçimi otomatik tanır) ya da iOS Kısayol → `POST /health`. `/health` yalnız sleep + health + `diet.weights` yazar. ⚠️ Fitbit/Google Health API'sine dönme (restricted scope, CASA denetimi) — tekrar araştırma.
 - Toparlanma skorları kişisel tabana göre (medyan+MAD); 14 gün taban oturmadan skor yok. Dinlenme nabzında işaret ters.
 - Bayat tartı: ardışık 2+ gün aynı değer → uyarı; toplu dolgu ve tarihli gönderim muaf. İçe aktarma ile `/health` doğrulama aralıkları birebir aynı (`28-saglik-import`). Apple `export.xml` DOMParser'sız (100 MB+).
 
@@ -159,7 +159,6 @@ Mood/check-in · streak · hyperfocus uyarısı · hafta takvimi · rutinler sek
 ## ⏳ Açık işler
 
 - Muse planı: ✅ hafıza her yerde · ✅ hedef ajanı · ✅ sohbet ajanı (ödev planı) · ✅ Haftam (tek takvim, çapraz kurallar, tek dokunuşla düzeltme, uyku→antrenman, haftalık PRO koç) · ⏳ Pazar 21:00 haftalık + sağlık push'ları koçla birleşsin (Pazar 3 bildirim çok) · ⏳ toparlanma skoru (`hcRecovery`) da az-uyku kuralına girsin · ⏳ hedef önerisini sohbetten onayla · ⏳ brifinge hedef satırı · ⏳ öneri kabul oranı (<%40 → önce prompt) · ⏳ web okuma (KAP, Cloudflare Browser Rendering, yalnız okuma).
-- ⚠️ Haftalık yedek yalnız `aidan_data`'yı alıyor — `aidan_memory` + `aidan_goals` yedeklenmiyor.
 - Supabase "sızdırılmış şifre koruması" kapalı (panelden tek tık).
 - Antrenman kurulumunda "şu günler sabit" seçimi yok (serbest metin bunu `uygulanamayan`'a yazıyor).
 - Görev karnesi aylık görünüm · fotoğraftan öğün ekleme (altyapı hazır: `resizeImageToDataUrl` + `visionRun` + `/food-macros`).

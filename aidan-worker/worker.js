@@ -9465,6 +9465,20 @@ async function runHevySyncForUser(env, u) {
 //     for insert with check (auth.uid() = user_id);
 //   create policy "users delete own backups" on aidan_backups
 //     for delete using (auth.uid() = user_id);
+/** Yedeğe eklenen ayrı tablolar. ASLA fırlatmaz — ek okunamazsa ana yedek yine alınır. */
+async function yedekEk(env, u) {
+  const ek = { at: new Date().toISOString(), aidan_memory: [], aidan_goals: [] };
+  try { ek.aidan_memory = await memoryFetchForCron(env, u); } catch (_) {}
+  try {
+    const headers = hasServiceKey(env) ? goalHeadersService(env) : (u._legacyToken ? memHeaders(env, u._legacyToken) : null);
+    if (headers) {
+      const r = await fetch(`${env.SUPABASE_URL}/rest/v1/aidan_goals?user_id=eq.${u.userId}&select=*`, { headers });
+      if (r.ok) ek.aidan_goals = await r.json();
+    }
+  } catch (_) {}
+  return ek;
+}
+
 async function runBackup(env) {
   const KEEP = 12;
   const users = await fetchAllUsers(env);
@@ -9473,7 +9487,10 @@ async function runBackup(env) {
     try {
       const dataKeys = Object.keys(u.data || {}).length;
       const tasksLen = Array.isArray(u.data?.tasks) ? u.data.tasks.length : 0;
-      const ins = await insertBackup(env, u.userId, u.data);
+      // 6 Eki 2026: hafıza + hedefler AYRI tablolarda — yedeğe ek olarak girer.
+      // Boyut: birkaç KB (veri ~37 KB, 12 yedek ~0.5 MB; ücretsiz kota 500 MB).
+      const ek = await yedekEk(env, u);
+      const ins = await insertBackup(env, u.userId, Object.assign({}, u.data, { __yedekEk: ek }));
       if (!ins.ok) {
         const msg = await ins.text().catch(() => '');
         if (ins.status === 404 || (msg.includes('aidan_backups') && msg.includes('not exist'))) {
@@ -9717,16 +9734,99 @@ function srvUpsertBody(diet, entry) {
    gorev/diyet/borsa verisine dokunamaz (secret sizsa zarar tavani bu).
    =================================================================== */
 
+/**
+ * 7 Eki 2026 — TEK KISAYOL: Salim kısayolda "Tarihi Biçimlendir" adımlarında
+ * takılıyordu. Kısayol tarih değişkenini HAM yollar ("7 Eki 2026 23:40",
+ * "Oct 7, 2026 at 11:40 PM", "07.10.2026", ISO) — biçimlendirme sunucuda.
+ * Tanınmazsa null (çağıran güvenli varsayılana düşer).
+ */
+const SRV_AY = { oca: 1, jan: 1, şub: 2, sub: 2, feb: 2, mar: 3, nis: 4, apr: 4, may: 5, haz: 6, jun: 6, tem: 7, jul: 7,
+  ağu: 8, agu: 8, aug: 8, eyl: 9, sep: 9, eki: 10, oct: 10, kas: 11, nov: 11, ara: 12, dec: 12 };
+function srvTarih(v) {
+  const s = String(v == null ? '' : v).trim().toLocaleLowerCase('tr');
+  if (!s) return null;
+  const iki = (n) => String(n).padStart(2, '0');
+  const kur = (y, m, d) => (y >= 2020 && y <= 2100 && m >= 1 && m <= 12 && d >= 1 && d <= 31) ? y + '-' + iki(m) + '-' + iki(d) : null;
+  let m = /(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) return kur(+m[1], +m[2], +m[3]);
+  m = /(\d{1,2})[./](\d{1,2})[./](\d{4})/.exec(s);
+  if (m) return kur(+m[3], +m[2], +m[1]);
+  m = /(\d{1,2})\s+([a-zçğıöşü]{3})[a-zçğıöşü.]*\s+(\d{4})/.exec(s);          // 7 Eki 2026
+  if (m && SRV_AY[m[2]]) return kur(+m[3], SRV_AY[m[2]], +m[1]);
+  m = /([a-z]{3})[a-z.]*\s+(\d{1,2}),?\s+(\d{4})/.exec(s);                      // Oct 7, 2026
+  if (m && SRV_AY[m[1]]) return kur(+m[3], SRV_AY[m[1]], +m[2]);
+  return null;
+}
+
 // Kisayol saati "23:40" ya da tam ISO damgasi olarak yollayabilir — ikisi de kabul.
+// 7 Eki: ham İngilizce biçim "11:40 PM" da (12 saat) çevrilir.
 function srvClock(v) {
   if (v == null || v === '') return null;
-  const m = /(\d{1,2}):(\d{2})/.exec(String(v));
+  const s = String(v);
+  const m = /(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?/.exec(s);
   if (!m) return null;
-  if (+m[1] > 23 || +m[2] > 59) return null;
-  return String(+m[1]).padStart(2, '0') + ':' + m[2];
+  let h = +m[1];
+  if (m[3]) { const pm = /p/i.test(m[3]); if (h === 12) h = pm ? 12 : 0; else if (pm) h += 12; }
+  if (h > 23 || +m[2] > 59) return null;
+  return String(h).padStart(2, '0') + ':' + m[2];
 }
 
 // Yatis->kalkis farki — core.js sleepHours() ile ayni kural (gece yarisi gecisi, 16s tavani).
+/**
+ * 8 Eki 2026 — UYKU PARÇALARI. Apple Sağlık bir geceyi onlarca parçaya böler
+ * (Yatakta / Çekirdek / Derin / REM / Uyanık). Kısayol "Sınır: 1" ile tek parça
+ * alınca yatış 23:00 (uyku programının "Yatakta"sı), kalkış boş geldi (ölçüm 7 Eki).
+ * Artık kısayol TÜM parçaları yollar: bedtime = başlangıçlar, wake = bitişler,
+ * stage = değerler (alt alta metin ya da dizi). Gece BURADA birleştirilir:
+ * uyuma parçalarının birleşimi = süre, ilk uyuma = yatış, son uyuma = kalkış.
+ * Tek değer gelirse null → eski yol aynen çalışır.
+ */
+function srvZamanlar(v) {
+  const satir = Array.isArray(v) ? v : String(v == null ? '' : v).split(/\r?\n/);
+  return satir.map(x => {
+    const t = srvTarih(x), c = srvClock(x);
+    return (t && c) ? Date.parse(t + 'T' + c + ':00Z') / 60000 : null;
+  });
+}
+function srvUykuParca(it) {
+  if (!it || (it.bedtime == null && it.wake == null)) return null;
+  const bas = srvZamanlar(it.bedtime), bit = srvZamanlar(it.wake);
+  if (bas.length < 2 && bit.length < 2 && it.stage == null) return null;
+  const evre = it.stage == null ? null
+    : (Array.isArray(it.stage) ? it.stage : String(it.stage).split(/\r?\n/)).map(x => String(x == null ? '' : x));
+  const parca = [];
+  if (bas.length === bit.length) {
+    for (let i = 0; i < bas.length; i++) {
+      if (bas[i] == null || bit[i] == null || bit[i] <= bas[i]) continue;
+      const e = evre && evre.length === bas.length ? evre[i] : '';
+      parca.push({ b: bas[i], e: bit[i], uyku: !!e && !/yatak|in ?bed|uyan|awake/i.test(e) });
+    }
+  }
+  const saat = (m) => new Date(m * 60000).toISOString().slice(11, 16);
+  const sonuc = (b, e, hours) => ({ bedtime: saat(b), wake: saat(e), hours,
+    date: new Date(e * 60000).toISOString().slice(0, 10) });
+  if (!parca.length) {
+    // Eşleşmeyen listeler: en geç bitiş = kalkış, ondan önceki 16 saatte en erken başlangıç = yatış.
+    const e = Math.max.apply(null, bit.filter(x => x != null));
+    if (!isFinite(e)) return null;
+    const bs = bas.filter(x => x != null && x < e && x >= e - 960);
+    return bs.length ? sonuc(Math.min.apply(null, bs), e, null) : null;
+  }
+  const son = Math.max.apply(null, parca.map(x => x.e));
+  const gece = parca.filter(x => x.e > son - 960 && x.b >= son - 1080); // yalnız SON gece
+  const uyku = gece.filter(x => x.uyku);
+  const kume = uyku.length ? uyku : gece;
+  kume.sort((a, b) => a.b - b.b);
+  let top = 0, cb = null, ce = null;
+  for (const x of kume) {               // çakışan parçalar (Çekirdek ⊂ Uykuda) iki kez sayılmaz
+    if (ce == null || x.b > ce) { if (ce != null) top += ce - cb; cb = x.b; ce = x.e; }
+    else if (x.e > ce) ce = x.e;
+  }
+  top += ce - cb;
+  const b = kume[0].b, e = Math.max.apply(null, kume.map(x => x.e));
+  return sonuc(b, e, uyku.length ? Math.round(top / 60 * 100) / 100 : null);
+}
+
 function srvSleepHours(bedtime, wake) {
   if (!bedtime || !wake) return null;
   const b = /^(\d{2}):(\d{2})$/.exec(bedtime), w = /^(\d{2}):(\d{2})$/.exec(wake);
@@ -9783,6 +9883,84 @@ function srvUpsertHealth(data, entry) {
   return ex;
 }
 
+
+/* ===================================================================
+   HEALTH AUTO EXPORT BİÇİMİ (6 Eki 2026)
+   Salim: "kısayollardan yapması zor". Health Auto Export (iOS) "REST API"
+   otomasyonu Apple Sağlık'ı KENDİSİ okuyup buraya POST eder — Kısayol yok.
+   Zincir: Fitbit → Google Health (v5.05+) → Apple Sağlık → HAE → /health?secret=
+   Biçim: {data:{metrics:[{name, units, data:[{date:"yyyy-MM-dd HH:mm:ss Z", qty}]}]}}
+   Bu fonksiyon onu mevcut kayıt biçimine çevirir; doğrulama yine
+   srvUpsertSleep / srvUpsertHealth / srvUpsertBody sınırlarından geçer.
+   =================================================================== */
+function haeToItems(body) {
+  const metrics = (body && body.data && Array.isArray(body.data.metrics)) ? body.data.metrics : null;
+  if (!metrics) return null;
+  const gunu = (t) => { const k = String(t || '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(k) ? k : null; };
+  const sayi = (v) => { const n = Number(v); return isFinite(n) ? n : null; };
+  const gunler = {};
+  const tarti = {};
+  const al = (k) => (gunler[k] = gunler[k] || { date: k, steps: 0, kcal: 0, rhr: [], hrv: [], uyku: 0, yat: null, kalk: null, seg: false, ham: false });
+  for (const m of metrics.slice(0, 40)) {
+    if (!m || !Array.isArray(m.data)) continue;
+    const ad = String(m.name || '').toLowerCase();
+    const birim = String(m.units || '').toLowerCase();
+    for (const e of m.data.slice(0, 3000)) {
+      if (!e || typeof e !== 'object') continue;
+      if (ad === 'sleep_analysis') {
+        // Toplu (aggregated) gece: totalSleep/asleep + sleepStart/sleepEnd
+        const toplam = sayi(e.totalSleep) || sayi(e.asleep) ||
+          (((sayi(e.core) || 0) + (sayi(e.deep) || 0) + (sayi(e.rem) || 0)) || null);
+        if (toplam != null || e.sleepEnd || e.inBedEnd) {
+          const k = gunu(e.sleepEnd) || gunu(e.inBedEnd) || gunu(e.date);
+          if (!k) continue;
+          const r = al(k);
+          r.ham = true;
+          r.uyku = toplam != null ? toplam : (sayi(e.inBed) || 0);
+          r.yat = e.sleepStart || e.inBedStart || r.yat;
+          r.kalk = e.sleepEnd || e.inBedEnd || r.kalk;
+          continue;
+        }
+        // Parça parça (ham) örnekler: {startDate, endDate, value:'Core'|'Deep'|'REM'|'Awake'|'In Bed', qty}
+        const k = gunu(e.endDate) || gunu(e.date);
+        if (!k) continue;
+        const r = al(k);
+        const v = String(e.value || '').toLowerCase();
+        if (r.ham) continue;   // aynı gece için toplu kayıt varsa parçalar sayılmaz
+        r.seg = true;
+        if (v && v !== 'awake' && v !== 'in bed' && v !== 'inbed') r.uyku += sayi(e.qty) || 0;
+        if (e.startDate && (!r.yat || String(e.startDate) < String(r.yat))) r.yat = e.startDate;
+        if (e.endDate && (!r.kalk || String(e.endDate) > String(r.kalk))) r.kalk = e.endDate;
+        continue;
+      }
+      const k = gunu(e.date);
+      const q = sayi(e.qty);
+      if (!k || q == null) continue;
+      if (ad === 'step_count') al(k).steps += q;
+      else if (ad === 'active_energy') al(k).kcal += (birim === 'kj' ? q / 4.184 : q);
+      else if (ad === 'resting_heart_rate') al(k).rhr.push(q);
+      else if (ad === 'heart_rate_variability') al(k).hrv.push(q);
+      else if (ad === 'weight_body_mass') (tarti[k] = tarti[k] || { date: k }).kg = (birim === 'lb' || birim === 'lbs') ? q * 0.45359237 : q;
+      else if (ad === 'body_fat_percentage') (tarti[k] = tarti[k] || { date: k }).fat = q;
+    }
+  }
+  const ort = (a) => a.length ? a.reduce((s, x) => s + x, 0) / a.length : null;
+  const items = Object.keys(gunler).sort().map(k => {
+    const r = gunler[k];
+    const it = { date: k, src: 'hae' };
+    if (r.steps > 0) it.steps = Math.round(r.steps);
+    if (r.kcal > 0) it.kcalOut = Math.round(r.kcal);
+    if (r.rhr.length) it.rhr = Math.round(ort(r.rhr));
+    if (r.hrv.length) it.hrv = Math.round(ort(r.hrv) * 10) / 10;
+    if (r.uyku > 0) it.hours = Math.round(r.uyku * 100) / 100;
+    if (r.yat) it.bedtime = r.yat;
+    if (r.kalk) it.wake = r.kalk;
+    return it;
+  });
+  const weights = Object.keys(tarti).sort().map(k => Object.assign({ src: 'hae' }, tarti[k]));
+  return { items, weights };
+}
+
 async function handleHealthApi(request, env) {
   const cors = {
     'Access-Control-Allow-Origin': '*',
@@ -9802,28 +9980,51 @@ async function handleHealthApi(request, env) {
 
   let body;
   try { body = await request.json(); } catch { return jsonCors({ error: 'bad json' }, 400, cors); }
-  const raw = Array.isArray(body.items) ? body.items : [body];
-  if (!raw.length || raw.length > 400) return jsonCors({ error: 'bad size' }, 400, cors);
+  // 6 Eki 2026: Health Auto Export biçimi otomatik tanınır (Kısayol gerekmez).
+  const hae = haeToItems(body);
+  const raw = hae ? hae.items : (Array.isArray(body.items) ? body.items : [body]);
+  const tartilar = hae ? hae.weights : [];
+  if ((!raw.length && !tartilar.length) || raw.length > 400 || tartilar.length > 400) return jsonCors({ error: 'bad size' }, 400, cors);
 
   const session = await fetchAidan(env);
   const data = session.data;
 
+  // Değişmeyen gönderimde YAZMA: tek kısayol her WhatsApp açılışında çalışıyor —
+  // her seferinde blob yazmak PWA senkronunu boşuna dürter (çakışma riski).
+  const onceki = JSON.stringify([data.sleep || [], data.health || [], (data.diet || {}).weights || []]);
+  let bodyN = 0;
+  if (tartilar.length) {
+    data.diet = data.diet || {};
+    for (const w of tartilar) if (srvUpsertBody(data.diet, w)) bodyN++;
+  }
   let sleepN = 0, healthN = 0, lastSleep = null, lastHealth = null, lastDate = null;
-  for (const it of raw) {
+  for (let it of raw) {
     if (!it || typeof it !== 'object') continue;
+    const uy = srvUykuParca(it);          // uyku parçaları → tek gece (8 Eki)
+    if (uy) it = Object.assign({}, it, uy);
+    // TEK KISAYOL tartısı: ölçümün KENDİ tarihi (kgDate) şart. Yoksa yazılmaz —
+    // bayat örnek bugüne damgalanmasın (6 Eyl dersi).
+    if (it.kg != null || it.fat != null) {
+      const kd = srvTarih(it.kgDate);
+      if (kd) {
+        data.diet = data.diet || {};
+        if (srvUpsertBody(data.diet, { date: kd, kg: it.kg, fat: it.fat, src: 'kisayol' })) bodyN++;
+      }
+    }
     // Tarih = UYANDIGIN gun (Apple Saglik uyku orneginin bitis tarihi). Gelmezse bugun.
-    const date = (typeof it.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(it.date.slice(0, 10)))
-      ? it.date.slice(0, 10) : trToday();
+    // 7 Eki: ham tarih metni de kabul ("7 Eki 2026 07:05" → wake'in tarihi).
+    const date = srvTarih(it.date) || srvTarih(it.wake) || trToday();
     const s = srvUpsertSleep(data, { ...it, date });
     if (s) { sleepN++; lastSleep = s; }
     const h = srvUpsertHealth(data, { ...it, date });
     if (h) { healthN++; lastHealth = h; }
     if (s || h) lastDate = date;
   }
-  if (!sleepN && !healthN) {
+  if (!sleepN && !healthN && !bodyN) {
     return jsonCors({ ok: false, saved: 0, error: 'gecerli olcum yok' }, 422, cors);
   }
-  await saveAidan(env, data, session);
+  const degisti = JSON.stringify([data.sleep || [], data.health || [], (data.diet || {}).weights || []]) !== onceki;
+  if (degisti) await saveAidan(env, data, session);
 
   // Ozet Kisayol bildiriminde gorunur — sessiz basari = fark edilmeyen ariza
   const bits = [];
@@ -9831,13 +10032,15 @@ async function handleHealthApi(request, env) {
   if (lastHealth && lastHealth.steps != null) bits.push(lastHealth.steps + ' adim');
   if (lastHealth && lastHealth.rhr != null) bits.push(lastHealth.rhr + ' bpm');
   if (lastHealth && lastHealth.hrv != null) bits.push('HRV ' + lastHealth.hrv);
-  const n = Math.max(sleepN, healthN);
+  if (bodyN) bits.push('tartı');
+  if (!degisti) bits.push('zaten güncel');
+  const n = Math.max(sleepN, healthN, bodyN);
   const summary = n > 1
     ? n + ' gun kaydedildi (son: ' + lastDate + ')'
     : (lastDate || '') + ': ' + (bits.join(' \u00b7 ') || 'kayit guncellendi');
 
   return jsonCors({
-    ok: true, saved: n, sleep: sleepN, health: healthN,
+    ok: true, saved: n, sleep: sleepN, health: healthN, body: bodyN, format: hae ? 'hae' : 'kisayol', changed: degisti,
     last: { sleep: lastSleep, health: lastHealth }, summary,
   }, 200, cors);
 }
