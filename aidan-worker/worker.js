@@ -4240,7 +4240,7 @@ ARAÇLAR — AJAN MODU:
 - Sayı UYDURMA: tutarı ve kiloyu kullanıcının yazdığı gibi geçir; kalori, makro, kategori dışı sayı yazma — uygulama hesaplar. Öğün belirtilmediyse saatine göre seç (05-11 kahvalti, 11-16 ogle, 16-22 aksam, gerisi atistirma).
 - "dün" denirse tarih = BUGÜN'den bir önceki gün. Uyku tarihi = uyanılan gün.
 - Kilo/vücut hakkında yorum, hedef ya da diyet önerisi YAPMA; sadece kaydet.
-- KAYIT SORULARI ("bu hafta yemeğe ne harcadım", "dün kaç saat uyudum", "bu hafta kaç antrenman yaptım") → yalnız [KAYITLAR] bölümündeki HESAPLANMIŞ sayılarla cevap ver; orada yoksa "kaydı yok" de, tahmin etme.
+- KAYIT SORULARI ("bu hafta yemeğe ne harcadım", "dün kaç saat uyudum", "bu hafta kaç antrenman yaptım", "bugün bilgisayarda ne kadar YouTube") → yalnız [KAYITLAR] bölümündeki HESAPLANMIŞ sayılarla cevap ver; orada yoksa "kaydı yok" de, tahmin etme.
 - Sadece sohbet, soru ya da ders anlatımıysa araç ÇAĞIRMA.
 - Araç çağırdığında cevap metnin 1-2 cümle: ne hazırladığını ve varsa dikkat edilecek şeyi söyle (ör. "perşembe 2 saati aşıyor").`;
 
@@ -4412,6 +4412,21 @@ function agentKayitlar(d, today) {
   const A = ((d.hevy && Array.isArray(d.hevy.workouts)) ? d.hevy.workouts : []).filter(w => w && w.date >= gun7 && w.date <= today)
     .sort((a, b) => (a.date < b.date ? -1 : 1));
   L.push('ANTRENMAN (Hevy, son 7 gün): ' + (A.length ? A.length + ' antrenman — ' + A.map(w => w.date.slice(5) + ' ' + String(w.title || '').slice(0, 24) + (w.setCount ? ' ' + w.setCount + ' set' : '')).join(', ') : 'kayıt yok'));
+  // Bilgisayar ekran süresi (aidan_screen — ActivityWatch). Yalnız aktif (AFK hariç) süre.
+  const E = (Array.isArray(d.__ekran) ? d.__ekran : []).filter(e => e && e.day && e.day >= gun7 && e.day <= today && e.data);
+  if (E.length) {
+    const sa = (sn) => (Math.round(sn / 360) / 10) + ' sa';
+    const top = (key) => {
+      const k = {};
+      E.forEach(e => (e.data[key] || []).forEach(x => { k[x.ad] = (k[x.ad] || 0) + x.sn; }));
+      return Object.keys(k).sort((a, b) => k[b] - k[a]).slice(0, 6).map(x => x + ' ' + sa(k[x])).join(', ');
+    };
+    const bug = E.find(e => e.day === today);
+    const top7 = E.reduce((t, e) => t + (e.data.toplamSn || 0), 0);
+    L.push('BİLGİSAYAR (aktif süre): bugün ' + (bug ? sa(bug.data.toplamSn || 0) + ' [' + (bug.data.apps || []).slice(0, 4).map(x => x.ad + ' ' + sa(x.sn)).join(', ') + ']' : 'kayıt yok') +
+      ' · son 7 gün ' + sa(top7) + ' (' + E.length + ' gün, günlük ort. ' + sa(top7 / E.length) + ')' +
+      ' · en çok program: ' + top('apps') + (top('sites') ? ' · en çok site: ' + top('sites') : ''));
+  } else L.push('BİLGİSAYAR: kayıt yok (ActivityWatch bağlı değil ya da veri gelmedi)');
   // Görev
   const T = (d.tasks || []).filter(t => t && t.done && t.doneDate && t.doneDate >= gun7 && t.doneDate <= today);
   L.push('BİTEN GÖREV (son 7 gün): ' + T.length + (T.length ? ' — ' + T.slice(-6).map(t => String(t.text || '').slice(0, 30)).join(', ') : ''));
@@ -4523,12 +4538,14 @@ async function handleChatApi(request, env, ctx) {
   try {
     // Hafif görev context'i — Aidan kullanıcının gününü bilsin.
     // Hafıza PARALEL okunur: sohbet gecikmesine eklenmez.
-    const [session, memItems] = await Promise.all([
+    const todayStr = trToday();
+    const [session, memItems, ekranRows] = await Promise.all([
       fetchUserDataForApi(env, user),
       memoryFetch(env, userToken, user.id),
+      ekranOku(env, userToken, user.id, todayStr),
     ]);
     const d = session.data || {};
-    const todayStr = trToday();
+    d.__ekran = ekranRows;   // yalnız bağlam için — blob'a YAZILMAZ (worker sohbette blob yazmaz)
     const tasks = d.tasks || [];
     const openCount = tasks.filter(t => !t.done).length;
     const doneToday = tasks.filter(t => t.doneDate === todayStr).length;
@@ -10244,6 +10261,82 @@ async function handleHealthApi(request, env) {
   }, 200, cors);
 }
 
+/* ===================================================================
+   BİLGİSAYAR EKRAN SÜRESİ (11 Eki 2026)
+   Salim: "aidana bilgisayar ekran süresi şeyini yapalım". iPhone ekran süresi
+   Apple kuralı gereği dışarı çıkamıyor; Windows'ta ActivityWatch yerel olarak
+   kaydediyor, pc/aidan-ekran.ps1 günün özetini buraya yollar.
+   ⚠️ Blob'a DEĞİL aidan_screen tablosuna (yarım saatte bir yazım — senkron çakışması).
+   Aynı gün tekrar gelirse ÜZERİNE YAZILIR (ActivityWatch günün tamamını yeniden sayar).
+   =================================================================== */
+const EKRAN_MAX_KALEM = 25;
+
+/** Saf doğrulama — test edilir. Saçma veri kayda girmez. */
+function srvEkranTemizle(body, today) {
+  if (!body || typeof body !== 'object') return null;
+  const date = typeof body.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : null;
+  if (!date || date > today) return null;
+  const t = new Date(today + 'T12:00:00Z'), d = new Date(date + 'T12:00:00Z');
+  if (isNaN(d) || (t - d) / 86400000 > 7) return null;
+  const liste = (arr) => {
+    const out = [];
+    for (const x of (Array.isArray(arr) ? arr : [])) {
+      if (!x || typeof x !== 'object') continue;
+      const ad = String(x.ad == null ? '' : x.ad).replace(/[\u0000-\u001f]/g, '').replace(/\.exe$/i, '').trim().slice(0, 60);
+      const sn = Math.round(Number(x.sn));
+      if (!ad || !Number.isFinite(sn) || sn < 60 || sn > 86400) continue;   // 1 dk altı gürültü
+      out.push({ ad, sn });
+    }
+    return out.sort((a, b) => b.sn - a.sn);
+  };
+  const tumApps = liste(body.apps);
+  const apps = tumApps.slice(0, EKRAN_MAX_KALEM), sites = liste(body.sites).slice(0, EKRAN_MAX_KALEM);
+  let toplam = Math.round(Number(body.toplamSn));
+  // Toplam gelmediyse KESİLMEMİŞ listeden: 25'ten sonraki kalemlerin süresi kaybolmasın
+  if (!Number.isFinite(toplam) || toplam < 0) toplam = tumApps.reduce((s, x) => s + x.sn, 0);
+  if (toplam > 86400) return null;
+  if (!apps.length && !toplam) return null;
+  return { date, toplamSn: toplam, apps, sites };
+}
+
+async function handleScreenApi(request, env) {
+  // CORS YOK (bilinçli): bu ucu tarayıcı değil, Windows'taki PowerShell çağırır.
+  const cors = {};
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+  const url = new URL(request.url);
+  const given = request.headers.get('X-Aidan-Secret') || url.searchParams.get('secret') || '';
+  // Yanlış secret'ta 404 — /health ile aynı: ucun varlığını sızdırma
+  if (!env.WEBHOOK_SECRET || given !== env.WEBHOOK_SECRET) return new Response('Not found', { status: 404, headers: cors });
+  let body;
+  try { body = await request.json(); } catch (_) { return jsonCors({ error: 'bad json' }, 400, cors); }
+  const temiz = srvEkranTemizle(body, trToday());
+  if (!temiz) return jsonCors({ ok: false, error: 'gecerli veri yok' }, 422, cors);
+  try {
+    const { token, userId } = await login(env);
+    const r = await fetch(`${env.SUPABASE_URL}/rest/v1/aidan_screen?on_conflict=user_id,day,cihaz`, {
+      method: 'POST',
+      headers: { 'apikey': env.SUPABASE_KEY, 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ user_id: userId, day: temiz.date, cihaz: 'pc', data: temiz, updated_at: new Date().toISOString() }),
+    });
+    if (!r.ok) return jsonCors({ ok: false, error: 'kayit ' + r.status }, 502, cors);
+  } catch (e) {
+    return jsonCors({ ok: false, error: e.message }, 500, cors);
+  }
+  const sa = (sn) => Math.floor(sn / 3600) + 's ' + Math.round((sn % 3600) / 60) + 'dk';
+  return jsonCors({ ok: true, summary: temiz.date + ': ' + sa(temiz.toplamSn) + (temiz.apps[0] ? ' · en çok ' + temiz.apps[0].ad : '') }, 200, cors);
+}
+
+/** Sohbet bağlamı için son 7 günün ekran kayıtları. ASLA fırlatmaz. */
+async function ekranOku(env, userToken, userId, today) {
+  try {
+    const bas = new Date(today + 'T12:00:00Z'); bas.setUTCDate(bas.getUTCDate() - 6);
+    const r = await fetch(`${env.SUPABASE_URL}/rest/v1/aidan_screen?user_id=eq.${userId}&day=gte.${bas.toISOString().slice(0, 10)}&select=day,data&order=day.desc`,
+      { headers: memHeaders(env, userToken) });
+    if (!r.ok) return [];
+    return await r.json();
+  } catch (_) { return []; }
+}
+
 async function handleBodyApi(request, env) {
   const cors = {
     'Access-Control-Allow-Origin': '*',
@@ -10473,6 +10566,10 @@ export default {
     // Uyku + gunluk saglik metrikleri - Apple Saglik'tan Kisayol POST eder
     if (url.pathname === '/health') {
       return handleHealthApi(request, env);
+    }
+    // 💻 Bilgisayar ekran süresi — Windows görevi (pc/aidan-ekran.ps1) yarım saatte bir POST eder
+    if (url.pathname === '/screen') {
+      return handleScreenApi(request, env);
     }
     if (url.pathname === '/stock-news') {
       return handleStockNewsApi(request, env);

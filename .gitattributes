@@ -50,6 +50,9 @@ styles.css      text eol=lf
 # --- borsa/ klasorunde TUM dosyalar LF (proje kurali) ---
 #     Bu blok yukaridakilerden SONRA: borsa/sw.js ve borsa/styles.css
 #     yukaridaki `sw.js`/`styles.css` desenlerine takilmasin diye.
+# 11 Eki 2026: pc/ Windows betikleri — CRLF sart (.bat LF ile calismaz)
+pc/**          text eol=crlf
+
 borsa/**        text eol=lf
 
 # --- Ikili dosyalar: git EOL'e dokunmasin ---

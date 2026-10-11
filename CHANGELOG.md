@@ -1,3 +1,9 @@
+# 💻 11 Eki 2026 — BİLGİSAYAR EKRAN SÜRESİ (Faz 1 devamı, yeni ekran YOK)
+
+Salim: "aidana bilgisayar ekran süresi şeyini yapalım". iPhone ekran süresi dışarı çıkamıyor (Apple DeviceActivityReport sandbox); Windows'ta ActivityWatch yerel kaydediyor. pc/: aidan-ekran.ps1 (AW query2: AFK hariç pencere süresi app başı + web eklentisi varsa $domain başı; dün+bugün; 1 dk altı atılır) · gizli-calistir.vbs (pencere açmadan) · kur.bat/kur.ps1 (AW kontrolü, gizli anahtar → ayar.txt, schtasks 30 dk, ilk gönderim) · kaldir.bat · KURULUM.md. Worker /screen (secret, srvEkranTemizle: ≤7 gün geri, ≤24 sa, ≤25 kalem, toplam kesilmemiş listeden) → aidan_screen tablosu (RLS+GRANT, blob'a DEĞİL). Sohbet ekranOku paralel + agentKayitlar BİLGİSAYAR satırı. Betik pwsh 7 + sahte AW/worker ile uçtan uca denendi (gönderim, AW kapalı, 404, ayar yok). 60-pc-ekran (14). Not: Faz kuralına uygun — yeni panel yok, yalnız veri → sohbet.
+
+---
+
 # 🚪 11 Eki 2026 — FAZ 1: SOHBET TEK GİRİŞ KAPISI (v7-210)
 
 Salim: "isteğim otomatik olarak bilgilerin düşmesi — ele girme friction oluşturuyor"; "sohbeti denedim, AI verileri işleyemedi". Teşhis: sohbet yalnız görev sayısını görüyordu (son mesajı "uygulamaya yahoo verisi geliyor, bakamaz mısın" → "çekemiyorum"); harcama/öğün/uyku/kilo aracı yoktu. Yeni araçlar harcama_ekle / ogun_ekle / uyku_kaydet / kilo_kaydet (AGENT_MAX_ACTIONS 5→12). Sayı kodla: agentNum (Türk biçimi, eksi/tavan reddi), uyku süresi iki saatten kodla, kilo upsertBody sınırları, kayıt tarihi ≤7 gün geri, öğün kalorisi modelden HİÇ gelmez (ajanYemekCoz → foods.js seed/custom, 5000 kcal tavanı, eşleşmezse null). Bağlama [KAYITLAR] (agentKayitlar: harcama bugün/7 gün kategorili/ay+limit, öğün, uyku ort., son kilo, Hevy son 7 gün, biten görev) + TR saati (öğün seçimi). ajan.js: 4 kart, "Hepsini uygula" + tek Geri al (eski uyku/kilo kaydı aynen geri gelir). Model: sahibe Gemini 3.1 Pro (günde 40), ~$0,05/mesaj. 59-tek-giris (15) + 53 güncellendi.

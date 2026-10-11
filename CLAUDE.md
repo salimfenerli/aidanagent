@@ -37,7 +37,7 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 **⚠️ TEK TAKVİM — hafta çekirdeği** (`hafta.js` ↔ `worker.js` İKİZ, `54-hafta`): `hfGun(d, tarih)` okul + kurs (`diet.nut.duzen`) + `fixedSchedule` + antrenman (`program.days`) + uyku (`settings.sleepGoal`) + sınav (`school.exams` tek seferlik, `school.haftalikSinav` her hafta) → bloklar, boş dk, **ödev kapasitesi** (yarının sınavına tekrar süresi düşülmüş). ⚠️ Haftalık (rutin) sınav "sınav haftası"/"ağır antrenman" alarmı ÜRETMEZ — her hafta çalan alarm gürültüdür; yalnız tekrar süresi ayırır. `hfCakismalar` çapraz kurallar. Yeni bir özellik "o gün ne kadar boş / sınav var mı / antrenman var mı" soruyorsa BUNU çağırır, kendi hesabını yazmaz. Öncelik: **OKUL > UYKU > ANTRENMAN** (5 Eki, varsayılan). Kullananlar: ödev dağıtımı (`hwSpread` kapasite), gün planı (`fixedBlocksFor*`, `gymDayLine`), beslenme bugünün gün tipi (`hfGunTipi`), hedef ajanı (`goalFitDue` kapasite kilidi), sohbet ajanı, sabah brifingi, Pazar 20:00 **haftalık PRO koç** (`runHaftaOzet` → `data.haftaKoc`), Haftam paneli.
 - **Haftalık ayar** `program.ayarlar[tarih] = {mod:'hafif'|'dinlen'|'kaydir', hedef}` — Haftam'daki düğmeler yazar; ŞABLON (`program.days`) değişmez, yalnız o tarih. Hafta çekirdeği okuduğu için beslenme/plan/brifing aynı anda uyar. 14 günden eski ayar silinir. Her uyarının `eylemler` listesi var (hafif/dinlen/kaydir/yeniden/dengele); "dengele" ödevi yalnız ÖNCEKİ günlere alır (son tarih geçilmez).
 
-**Supabase** (`fluhzvzulrnfyqogrgfi`) tabloları: `aidan_data` (blob) · `aidan_stocks` · `aidan_backups` · `aidan_memory` · `aidan_goals` · davet tabloları.
+**Supabase** (`fluhzvzulrnfyqogrgfi`) tabloları: `aidan_data` (blob) · `aidan_stocks` · `aidan_backups` · `aidan_memory` · `aidan_goals` · `aidan_screen` (PC ekran süresi, gün+cihaz başı tek satır) · davet tabloları.
 - ⚠️ **Yeni tablo = RLS + GRANT.** Supabase public tablolara otomatik yetki VERMİYOR (27 Eyl: yedek 5 hafta hiç alınmamıştı, borsa senkronu ölüydü). `authenticated` + `service_role`'a CRUD ver; doğrula: `has_table_privilege('authenticated','public.<t>','INSERT')`. Politikalar `(select auth.uid())` + `to authenticated`, UPDATE'te `with check`.
 - ⚠️ **Worker cron'u `aidan_data` blob'una yazarsa PWA senkronuyla çakışabilir.** Worker'ın sık yazacağı veri AYRI tabloya (`aidan_memory`, `aidan_goals` deseni).
 
@@ -79,7 +79,7 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 - **Prompt sırası:** sistem prompt → `memoryBlock(...)` → `instructionsBlock(...)` (talimat EN SONDA). Talimat üslubu belirler, hafıza bağlamı; ikisi de güvenlik kurallarını ezemez.
 - ⚠️ **Makine sözleşmeli çağrılar talimat ALMAZ** (`/split`, `/food-macros`, `/ai` tool-use, görsel OCR, haber sınıflama, hedef ajanı JSON'u) — "madde madde yaz" JSON'u bozar. `splitPrompt` hafıza da almaz.
 - **CORS:** `allowOrigin(request)` + `Vary: Origin` (iki origin var; sabit origin diğerini bloklar).
-- **Auth:** her uç Supabase token (`verifyUser` + `allowUser`) ya da secret ister. Bilinçli istisnalar: `/config` (zaten public değerler), `/signup` (davet kodu doğrulamalı). `/body` ve `/health` iOS Kısayol için `X-Aidan-Secret` (yanlışta 404).
+- **Auth:** her uç Supabase token (`verifyUser` + `allowUser`) ya da secret ister. Bilinçli istisnalar: `/config` (zaten public değerler), `/signup` (davet kodu doğrulamalı). `/body` ve `/health` iOS Kısayol, `/screen` Windows görevi için `X-Aidan-Secret` (yanlışta 404).
 - Kullanıcı ucunda kullanıcının KENDİ token'ıyla oku (RLS korur). Service key yalnız cron'da (`hasServiceKey`); yoksa `AIDAN_EMAIL` tek-kullanıcı fallback (`u._legacyToken`).
 - Uç listesi: `worker.js` → `fetch()` yönlendirmesi (`url.pathname === ...`). Burada kopyalanmaz.
 
@@ -127,6 +127,7 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 
 **Sağlık / uyku**
 - Fitbit verisi: Google Health → Apple Sağlık → **Health Auto Export** (önerilen, `haeToItems` biçimi otomatik tanır) ya da iOS Kısayol → `POST /health`. `/health` yalnız sleep + health + `diet.weights` yazar. ⚠️ Fitbit/Google Health API'sine dönme (restricted scope, CASA denetimi) — tekrar araştırma.
+- **PC ekran süresi (11 Eki):** ActivityWatch (yerel, AFK sayılmaz) → `pc/aidan-ekran.ps1` (Görev Zamanlayıcı 30 dk, `kur.bat` kurar) → `/screen` → `aidan_screen` → sohbet [KAYITLAR]. ⚠️ `pc/` betikleri ASCII + CRLF (PowerShell 5.1 BOM'suz dosyayı ANSI okur); `/pc/ayar.txt` gizli anahtar, `.gitignore`'da. iPhone ekran süresi Apple kuralı gereği ÇEKİLEMEZ — tekrar araştırma.
 - Toparlanma skorları kişisel tabana göre (medyan+MAD); 14 gün taban oturmadan skor yok. Dinlenme nabzında işaret ters.
 - Bayat tartı: ardışık 2+ gün aynı değer → uyarı; toplu dolgu ve tarihli gönderim muaf. İçe aktarma ile `/health` doğrulama aralıkları birebir aynı (`28-saglik-import`). Apple `export.xml` DOMParser'sız (100 MB+).
 
