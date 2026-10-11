@@ -810,7 +810,7 @@
     display: none;
     align-items: center; gap: 12px;
     padding: 12px 16px 14px;
-    margin: 0 -20px 18px;                 /* body'nin 20px yatay padding'ini taşar = tam genişlik */
+    margin: 0 -18px 18px;                 /* body'nin yatay padding'i kadar taşar = tam genişlik (≤600px'te -14px, aşağıda) */
     border-bottom: 1px solid var(--border-soft);
     position: sticky; top: 0; z-index: 40;
     background: rgba(9,11,15,0.96); backdrop-filter: blur(8px);
@@ -1133,6 +1133,7 @@
   }
   .quick-capture input {
     flex: 1;
+    min-width: 0;   /* 11 Eki: yoksa input daralamıyor, sağdaki düğme 390px'te ekrandan taşıyordu */
     background: transparent;
     border: none;
     color: var(--text);
@@ -2727,6 +2728,7 @@
   /* Mobile responsive tweaks */
   @media (max-width: 600px) {
     body { padding: 16px 14px 96px; }
+    .app-header { margin-left: -14px; margin-right: -14px; }   /* body padding'iyle aynı — fazlası yatay taşma */
     h1 { font-size: 26px; line-height: 32px; }
     .timer-ring { width: 230px; height: 230px; }
     .timer-inner { width: 206px; height: 206px; }

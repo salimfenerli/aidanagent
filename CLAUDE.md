@@ -158,6 +158,7 @@ Mood/check-in · streak · hyperfocus uyarısı · hafta takvimi · rutinler sek
 
 ## ⏳ Açık işler
 
+- **YOL HARİTASI (11 Eki, Salim onayı — ayrıntı CHANGELOG):** Faz 1 sohbet = tek giriş kapısı (harcama/öğün/uyku/kilo/görev bitti, tek kart + Uygula) + Health Auto Export · Faz 2 tek "Bugün" ekranı · Faz 3 sabah/akşam tek bildirim + ders bloğu uygulama engeli (Kısayol) · Faz 5 iPhone köprü uygulaması (yalnız kullanım kanıtlanırsa). ⚠️ Faz 1-2 bitmeden YENİ MODÜL YOK — fikir listeye yazılır.
 - Muse planı: ✅ hafıza her yerde · ✅ hedef ajanı · ✅ sohbet ajanı (ödev planı) · ✅ Haftam (tek takvim, çapraz kurallar, tek dokunuşla düzeltme, uyku→antrenman, haftalık PRO koç) · ⏳ Pazar 21:00 haftalık + sağlık push'ları koçla birleşsin (Pazar 3 bildirim çok) · ⏳ toparlanma skoru (`hcRecovery`) da az-uyku kuralına girsin · ⏳ hedef önerisini sohbetten onayla · ⏳ brifinge hedef satırı · ⏳ öneri kabul oranı (<%40 → önce prompt) · ⏳ web okuma (KAP, Cloudflare Browser Rendering, yalnız okuma).
 - Supabase "sızdırılmış şifre koruması" kapalı (panelden tek tık).
 - Antrenman kurulumunda "şu günler sabit" seçimi yok (serbest metin bunu `uygulanamayan`'a yazıyor).

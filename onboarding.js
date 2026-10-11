@@ -42,26 +42,18 @@ function renderOnboard() {
   const act = document.getElementById('onboardActions');
   if (act) {
     if (!last) act.innerHTML = `<button class="secondary" onclick="finishOnboard(false)">Geç</button><button onclick="obNext()">Devam →</button>`;
-    else act.innerHTML = `<button class="secondary" onclick="finishOnboard(false)">Boş başla</button><button onclick="finishOnboard(true)">Örnek görevlerle başla</button>`;
+    else act.innerHTML = `<button onclick="finishOnboard()">Başla</button>`;
   }
 }
 function obNext() { if (_obStep < ONBOARD_STEPS.length - 1) { _obStep++; renderOnboard(); } }
 
-function finishOnboard(addSamples) {
+// ⚠️ 11 Eki 2026: örnek görev düğmesi KALDIRILDI. Tur her YENİ cihazda/tarayıcıda
+// yeniden açılıyordu (bayrak localStorage'da); her seferinde 3 örnek görev GERÇEK veriye
+// eklenip buluta gitti → Salim'in listesinde 3 kopya demo görev birikti ve gün planı
+// onları "Bugünün 3'ü" seçti. Tur artık yalnız ipucu gösterir, veriye HİÇBİR ŞEY yazmaz.
+function finishOnboard() {
   try { localStorage.setItem('aidan_onboarded', '1'); } catch (e) {}
   const m = document.getElementById('onboardModal');
   if (m) m.classList.remove('active');
-  if (addSamples && typeof makeTask === 'function') {
-    const t1 = makeTask({ text: 'Matematik ödevini bitir', category: 'odev', priority: 'urgent', estimateMin: 30 });
-    t1.mitDate = today();
-    const t2 = makeTask({ text: 'Odayı topla', category: 'ev', estimateMin: 15 });
-    const t3 = makeTask({ text: '10 dakika kitap oku', category: 'kisisel', estimateMin: 10 });
-    data.tasks = data.tasks || [];
-    data.tasks.push(t1, t2, t3);
-    save();
-    renderTasks();
-    showToast('3 örnek görev eklendi — istediğini sil ya da düzenle', 'success', 4000);
-  } else {
-    showToast('Hazırsın — üstteki kutuya ilk görevini yaz', 'info', 3500);
-  }
+  showToast('Hazırsın — üstteki kutuya ilk görevini yaz', 'info', 3500);
 }

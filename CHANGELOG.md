@@ -1,3 +1,11 @@
+# 🧹 11 Eki 2026 — FAZ 0 TEMİZLİK (v7-209)
+
+Değerlendirme: 10 açık görevin 7'si tanıtım turunun örnek görevi (3 cihaz → 3 kopya, gün planı "Bugünün 3'ü" diye onları seçiyordu), bitirilmiş görev 0. Veri (SQL, elle yedek aidan_backups #7 önce alındı): tasks → [], kalkışsız 2 uyku kaydı, watchlist/portfolioHistory/trades/checkins/routines silindi; updated_at=now() → cihazlar sürümle çeker. Kod: onboarding.js örnek görev düğmesi kaldırıldı (tur veriye hiç yazmaz); .quick-capture input min-width:0 (390px'te + düğmesi taşıyordu); .app-header marjı body padding'iyle eşlendi (-18 / ≤600 -14). 58-faz0 (7 test, kapılar dahil). 1561/1561.
+
+PLAN (Salim onayladı): Faz 1 sohbet tek giriş kapısı (Pro okur, kod hesaplar, Uygula kapısı) + Health Auto Export aylık · Faz 2 tek "Bugün" ekranı · Faz 3 sabah/akşam 1 bildirim, Pazar tek özet, Yol A (ders bloğunda uygulama açılınca Kısayol → Aidan'a sor → ana ekrana at) · Faz 5 Aidan Köprü (iPhone uygulaması: HealthKit + Family Controls, $99/yıl) yalnız 14 günün 10'unda kullanım olursa. Kural: Faz 1-2 bitmeden yeni modül yok. Ekran süresi sınırlama: iOS Ekran Süresi + başkasının şifresi (Opal'a gerek yok); ekran süresi verisi Apple kuralı gereği otomatik çekilemez (ekran görüntüsü → sohbet).
+
+---
+
 # 📉 11 Eki 2026 — BORSA AIDAN'DAN ÇIKTI (v7-208)
 
 Salim: "borsayı çıkaralım, çok karışık yapıyor uygulamayı" → seçim: Aidan'dan çıkar, aidanborsa.pages.dev kalsın. Worker: hafta içi 10-18 fiyat alarmı + 18:30 portföy özeti cron'dan çıktı (fonksiyonlar duruyor, ?type=stocks elle). Sohbet kimliğinden "borsada işlem yapıyor" çıktı (borsa güvenlik kuralı KALDI — 16 yaş kilidi). Tanıtım/ayar/arama metinlerinden borsa çıktı. Blob'daki eski watchlist/portfolioHistory/trades kopyası core.js init'te siliniyor (aidan_stocks'ta aynı 6 hisse doğrulandı + haftalık yedek). Not: aidan_stocks updated_at hâlâ epoch → borsa sitesi 27 Eyl'den beri hiç senkron olmamış.
