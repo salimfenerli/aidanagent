@@ -1,3 +1,9 @@
+# 📉 11 Eki 2026 — BORSA AIDAN'DAN ÇIKTI (v7-208)
+
+Salim: "borsayı çıkaralım, çok karışık yapıyor uygulamayı" → seçim: Aidan'dan çıkar, aidanborsa.pages.dev kalsın. Worker: hafta içi 10-18 fiyat alarmı + 18:30 portföy özeti cron'dan çıktı (fonksiyonlar duruyor, ?type=stocks elle). Sohbet kimliğinden "borsada işlem yapıyor" çıktı (borsa güvenlik kuralı KALDI — 16 yaş kilidi). Tanıtım/ayar/arama metinlerinden borsa çıktı. Blob'daki eski watchlist/portfolioHistory/trades kopyası core.js init'te siliniyor (aidan_stocks'ta aynı 6 hisse doğrulandı + haftalık yedek). Not: aidan_stocks updated_at hâlâ epoch → borsa sitesi 27 Eyl'den beri hiç senkron olmamış.
+
+---
+
 # ✍️ 11 Eki 2026 — HARCAMA GİRİŞİ GELİŞTİRİLDİ (v7-207)
 
 Salim: "harcama kaydetme yerini iyice geliştir". Giriş kartı: büyük kutu (17px — iOS odak yakınlaştırması yok) + CANLI ÖNİZLEME (ne kaydedileceği, tutarsız parça sarı) · tek seferde çoklu giriş "85 yemek, 40 otobüs" (hrcBol: rakam ARASI virgül ondalık, ; + yeni satır "… ve 40" ayırır; tutarsız parça kutuda kalır) · Bugün/Dün/başka gün çipleri + seçili günün toplamı · kategori çipleri (Otomatik + 7, en sık önce; partiye uygulanır) · Kaydet düğmesi adet+toplamı yazar · Sık kullanılanlar (son 60 günde ≥2 kez aynı not+tutar → tek dokunuş, hrcSik) · satıra dokun → düzenle/Güncelle · sil + ekle "Geri al" (onay penceresi kalktı). 57-harcama 21 test.

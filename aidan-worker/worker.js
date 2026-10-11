@@ -4392,7 +4392,7 @@ async function handleChatApi(request, env, ctx) {
     const agentOn = !metaMode;
     const ctx = `[BAĞLAM — ${name} durumu] Açık görev: ${openCount}. Bugün biten: ${doneToday}.${overdue ? ` Gecikmiş: ${overdue}.` : ''}${mitStr}${healthShort}${healthFull}${healthGuard}${healthRules}${agentOn ? agentContext(d, todayStr) + AGENT_PROMPT : ''}`;
 
-    const sysPrompt = `Sen Aidan'sın — ${name}'in ADHD asistanı ve düşünme ortağı. ${name} 16 yaşında, lise öğrencisi, satranç/strateji seviyor, borsada işlem yapıyor.
+    const sysPrompt = `Sen Aidan'sın — ${name}'in ADHD asistanı ve düşünme ortağı. ${name} 16 yaşında, lise öğrencisi, satranç/strateji seviyor. Ana odakları: okul, spor, beslenme.
 
 ROLÜN: Sohbet et, düşündür, planlamaya yardım et. Bir akıl hocası gibi — net, somut, yargısız.
 
@@ -10428,13 +10428,11 @@ export default {
     // yeni oneri varsa tek push. Okul sonrasi, 21:00 aksam ozetinden once.
     if (at(19, 30)) jobs.push(runGoalAgent(env));
 
-    // Hafta ici 10:00-18:00 arasi, 30 dk'da bir - borsa alarm kontrolu
-    if (isWeekday && nowMin >= 600 && nowMin < 1080 && nowMin % 30 < 5) {
-      jobs.push(runStockCheck(env));
-    }
-
-    // Hafta ici 18:30 - BIST kapanisi sonrasi portfoy ozeti
-    if (isWeekday && at(18, 30)) jobs.push(runPortfolioSummary(env));
+    // ⛔ BORSA BİLDİRİMLERİ KAPALI (11 Eki 2026, Salim: "borsayı çıkaralım, uygulamayı
+    // çok karışık yapıyor"). Eskiden: hafta içi 10-18 her 30 dk fiyat alarmı +
+    // 18:30 portföy özeti. Borsa sitesi (aidanborsa.pages.dev) ayrı çalışmaya devam
+    // ediyor; runStockCheck / runPortfolioSummary silinmedi (?type=stocks elle test).
+    // Geri açmak = Salim'in kararı; buraya cron satırı geri eklenir.
 
     // Pazartesi 03:00 - haftalik veri yedegi (aidan_backups)
     // Sonuc LOGLANIR: 27 Eyl 2026'ya kadar INSERT yetkisi yoktu ve 5 hafta

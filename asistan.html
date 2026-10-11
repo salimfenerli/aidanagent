@@ -19,7 +19,7 @@
 </head>
 <body>
 <div class="container">
-  <!-- GLOBAL APP-BAR — her sekmede sol üstte hamburger + başlık + saat (borsa modu hariç) -->
+  <!-- GLOBAL APP-BAR — her sekmede sol üstte hamburger + başlık + saat -->
   <header class="app-header" id="appHeader">
     <button type="button" class="app-menu-btn" onclick="toggleAppMenu()" aria-label="Menü" title="Menü">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
@@ -549,14 +549,14 @@
     <div class="settings-row">
       <label>Aidan sana nasıl seslensin?</label>
       <input type="text" id="displayName" placeholder="Örn: Salim, Ahmet…" maxlength="24" onchange="saveDisplayName()" style="max-width:240px;">
-      <div class="settings-help">Boş bırakırsan email'inden tahmin eder. AI senle bu isimle konuşur (AI butonu, akşam günlüğü, portföy yorumu).</div>
+      <div class="settings-help">Boş bırakırsan email'inden tahmin eder. AI senle bu isimle konuşur (AI butonu, akşam günlüğü, sohbet).</div>
     </div>
 
     <div class="settings-row">
       <label>Talimatlar</label>
       <div class="settings-help" style="margin-bottom:8px;">
         Aidan'ın her cevabında uyacağı kalıcı kurallar. Sohbet, gün planı, sağlık koçu,
-        borsa yorumu — hepsi bunu okur. Serbest yaz.
+        haftalık koç — hepsi bunu okur. Serbest yaz.
       </div>
       <textarea id="aiInstructions" class="instr-box" rows="7" maxlength="2000"
         placeholder="Örnek:&#10;- Kısa yaz, klişe giriş cümlesi kurma&#10;- Önce sonucu söyle, gerekçeyi sonra&#10;- Emin değilsen 'emin değilim' de&#10;- Madde madde yaz, uzun paragraf kurma"
@@ -899,7 +899,7 @@
 <div class="modal-overlay" id="searchModal" onclick="if(event.target.id==='searchModal')closeSearchModal()">
   <div class="modal" style="max-width:520px;">
     <div class="modal-title">Ara</div>
-    <input type="search" id="globalSearchInput" class="modal-input" placeholder="Görev, not, günlük, besin, hisse, sınav..." oninput="runGlobalSearch()" autocomplete="off">
+    <input type="search" id="globalSearchInput" class="modal-input" placeholder="Görev, not, günlük, besin, sınav..." oninput="runGlobalSearch()" autocomplete="off">
     <div id="globalSearchResults" class="gsearch-results"></div>
     <button class="modal-close" onclick="closeSearchModal()">Kapat</button>
   </div>

@@ -71,7 +71,7 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 
 ## ⚙️ Worker kuralları
 
-- ⚠️ **TEK cron:** `*/5 * * * *`. Cloudflare ücretsiz plan worker başına 3 cron kabul eder, fazlası **sessizce** düşer (Ağu'da 6 özellik aylarca ölüydü). Yeni zamanlı iş `wrangler.toml`'a DEĞİL, `scheduled()` içine `if (at(h, m)) jobs.push(...)` olarak (TR saati, 5 dk pencere). Takvim: 08:00 sabah brifingi+plan+çakışma · 09:00 deadline · 12:00 öğle · 18:30 portföy (hafta içi) · 19:30 hedef ajanı · 21:00 akşam+Hevy+yarının planı · Pazar 20:00 haftalık PRO koç + çakışmalar · Pazar 21:00 haftalık+sağlık · Pzt 03:00 yedek · borsa alarmı hafta içi 10-18 her 30 dk · her tur sabit hatırlatıcı + plan blok bildirimi.
+- ⚠️ **TEK cron:** `*/5 * * * *`. Cloudflare ücretsiz plan worker başına 3 cron kabul eder, fazlası **sessizce** düşer (Ağu'da 6 özellik aylarca ölüydü). Yeni zamanlı iş `wrangler.toml`'a DEĞİL, `scheduled()` içine `if (at(h, m)) jobs.push(...)` olarak (TR saati, 5 dk pencere). Takvim: 08:00 sabah brifingi+plan+çakışma · 09:00 deadline · 12:00 öğle · 19:30 hedef ajanı · 21:00 akşam+Hevy+yarının planı · Pazar 20:00 haftalık PRO koç + çakışmalar · Pazar 21:00 haftalık+sağlık · Pzt 03:00 yedek · her tur sabit hatırlatıcı + plan blok bildirimi.
 - **AI katmanları** (`AI_TIERS`): `light` · `normal` · `deep` (ücretsiz model, derin düşünme) · `heavy` (PRO; `env.GEMINI_MODEL_PRO`).
   - ⚠️ **PRO MALİYET KURALI:** `heavy` yalnız ① cron (günde sabit sayıda) ② kullanıcının düğmeye basmasıyla ③ **sohbet — yalnız SAHİBE, günde `CHAT_PRO_DAILY` (40) tavanıyla** (5 Eki, Salim'in bilinçli kararı; sayaç `aidan_usage`, okunamazsa tavan dolu sayılır, yalnız gerçekten PRO yanıt verdiyse artar). Başka serbest akışlı özellik ASLA `heavy` almaz → `deep`. Kullanıcı ucunda çıplak `heavy` yok: `aiTierForUser(env, user, 'heavy')` (sahip dışı → `deep`). Model adını yalnız tier `heavy` kalırsa geç.
   - `geminiModelFor` bilerek eski davranışta: secret yoksa ücretsiz. Toplu ücretliye geçiş Salim'in vermediği maliyet kararıdır.
@@ -129,7 +129,7 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 - Toparlanma skorları kişisel tabana göre (medyan+MAD); 14 gün taban oturmadan skor yok. Dinlenme nabzında işaret ters.
 - Bayat tartı: ardışık 2+ gün aynı değer → uyarı; toplu dolgu ve tarihli gönderim muaf. İçe aktarma ile `/health` doğrulama aralıkları birebir aynı (`28-saglik-import`). Apple `export.xml` DOMParser'sız (100 MB+).
 
-**Borsa**
+**Borsa** (11 Eki: Aidan'dan ÇIKTI — Salim "uygulamayı karışık yapıyor". Site ayrı yaşar; Aidan'a borsa bildirimi, sohbet bağlamı, menü geri EKLENMEZ — Salim'in kararı olmadan)
 - Tarama/eleme/skor PWA'da; worker sıralamaz. Türetilmiş ROE (`PD/DD ÷ F/K`) tek yıllıktır — yalnız ön eleme. Buffett skoru `close` kullanır (`adjclose` temettüyü çift sayar). Yahoo 4 yıl verir; 2-3 yıllık tabloda "güçlü kalite" etiketi yok.
 - `BIST_UNIVERSE` elle tutulan liste — endeks değişince güncelle. İş Yatırım ucu yalnız hisse kartında (taramada IP engeli riski).
 - Accent olmayan amberler (TA uyarı rozeti, karbonhidrat serisi) veri rengidir, palet değişiminde çevrilmez.

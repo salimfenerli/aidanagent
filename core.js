@@ -69,10 +69,10 @@ data.dumps = data.dumps || [];
 data.pushLog = data.pushLog || [];
 data.journal = data.journal || [];
 data.reminders = data.reminders || [];  // sabit hatırlatıcılar (ilaç/su/ders) — Worker 15dk cron push'lar
-// NOT (14 Agu 2026): watchlist/portfolioHistory/trades borsa sitesine tasindi
-// (public.aidan_stocks). Aidan blob'undaki ESKI kopyalar SILINMEDI — yeni site
-// canlida dogrulanana kadar geri donus yolu acik kalsin diye. Artik hicbir
-// Aidan kodu okumuyor; dogrulama sonrasi tek satirlik temizlikle atilabilir.
+// BORSA AIDAN'DAN ÇIKTI (11 Eki 2026, Salim). watchlist/portfolioHistory/trades
+// borsa sitesinin public.aidan_stocks tablosunda (11 Eki doğrulandı: aynı 6 hisse) +
+// haftalık yedekte. Aidan blob'undaki eski kopya atılır — her kayıtta boşuna buluta gidiyordu.
+delete data.watchlist; delete data.portfolioHistory; delete data.trades;
 // SAGLAMLIK: bozuk senkron/birlesme sonucu diziye null ya da string sizabiliyor.
 // Eskiden tek bir null gorev init'teki geriye-uyumluluk dongusunu comertip
 // TUM uygulamayi olduruyordu (6 Agu TDZ hatasiyla ayni sinif: veri -> tam olum).

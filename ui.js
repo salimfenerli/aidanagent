@@ -1827,7 +1827,7 @@ const TOUR_STEPS = [
   {
     emoji: '',
     title: 'Aidan\'a hoş geldin',
-    body: 'ADHD beyninle birlikte yürüyen bir asistan. Görev, odak, borsa, hatırlatma — hepsi tek yerde.<br><br>5 küçük ipucuyla seni hızlıca tanıştıracağım.',
+    body: 'ADHD beyninle birlikte yürüyen bir asistan. Görev, okul, spor, beslenme — hepsi tek yerde.<br><br>5 küçük ipucuyla seni hızlıca tanıştıracağım.',
   },
   {
     emoji: '',
