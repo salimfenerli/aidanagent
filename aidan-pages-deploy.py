@@ -39,6 +39,7 @@ INCLUDE = [
     ("karne.js", "/karne.js"),
     ("hafiza.js", "/hafiza.js"),
     ("hedefler.js", "/hedefler.js"),
+    ("harcama.js", "/harcama.js"),
     ("ajan.js", "/ajan.js"),
     ("hafta.js", "/hafta.js"),
     ("health.js", "/health.js"),

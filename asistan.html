@@ -111,6 +111,10 @@
       <summary><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>Hedefler <span class="school-badge" id="goalBadge"></span></summary>
       <div class="goal-inner" id="goalInner"><div class="settings-help">Yükleniyor…</div></div>
     </details>
+    <details class="school-section" id="hrcSection" ontoggle="this.open&&loadModule('harcama').then(function(){renderHarcama()}).catch(function(){})">
+      <summary><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M16 15h2"/></svg>Harcamalar <span class="school-badge" id="hrcBadge"></span></summary>
+      <div class="hrc-inner" id="hrcInner"><div class="settings-help">Yükleniyor…</div></div>
+    </details>
     <details class="school-section" id="schoolSection">
       <summary><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>Okul <span class="school-badge" id="schoolBadge"></span></summary>
       <div class="school-inner">

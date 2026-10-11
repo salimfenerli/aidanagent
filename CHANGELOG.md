@@ -1,3 +1,9 @@
+# 💸 11 Eki 2026 — HARCAMA TAKİBİ (v7-206)
+
+Salim: "aylık harcamaları yazabileyim — bugün şu kadar harcadım diye gireyim". Görevler > Harcamalar paneli, yeni tembel modül harcama.js (7 yer + panel ontoggle'da iner; ilk yükleme 184.6/185 KB). Tek kutu: "85 öğle yemeği" → tutar + not kodla ayrılır (Türk biçimi 1.250,75; "dün" kelimesi tarihi geri alır), kategori anahtar kelimeyle (Yemek/Ulaşım/Okul/Spor/Giyim/Eğlence/Diğer, elle de seçilir), AI yok. Ay gezinme, bu ay / günlük ort. / ay sonu tahmini (≥5 gün), geçen ayın AYNI gün aralığıyla kıyas, kategori çubukları, gün gün liste + sil, isteğe bağlı aylık limit (%80 uyarı, aşım kırmızı). Veri data.harcama blob'ta (yalnız PWA yazar → yedeğe girer). Testler 57-harcama (14, kapı dahil). 1547/1547.
+
+---
+
 # ✅ 10 Eki 2026 — KURS TEYİDİ
 
 Salim teyit etti: Pazartesi 17:30-19:00 kurs GERÇEK (duzen.ders[1] zaten doğru). Perşembe 17:25-19:05 "kurs" = okuldaki haftalık sınav (haftalikSinav[4]) — aynı şey, ayrı kurs bloğu EKLENMEZ. Veri değişmedi. Tekrar sorma.

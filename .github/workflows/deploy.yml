@@ -17,6 +17,7 @@ on:
       - 'karne.js'
       - 'hafiza.js'
       - 'hedefler.js'
+      - 'harcama.js'
       - 'ajan.js'
       - 'hafta.js'
       - 'supabase.js'

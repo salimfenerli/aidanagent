@@ -29,7 +29,7 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 
 **Aidan istemcisi** (`asistan.html` → Pages'te `/index.html`):
 - Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + `loadModule`) → `tasks.js` (sekmeler, gün planı, quick-capture) → `ui.js` (render, ayarlar, auth, sohbet; en altta İLK RENDER).
-- **Tembel modüller** (`core.js` → `LAZY_MODULES`): `supabase` · `program` · `nutrition` · `health` · `foods` · `school` · `onboarding` · `karne` · `hafiza` (+ davet + yedek listesi) · `hedefler` · `ajan` · `hafta`.
+- **Tembel modüller** (`core.js` → `LAZY_MODULES`): `supabase` · `program` · `nutrition` · `health` · `foods` · `school` · `onboarding` · `karne` · `hafiza` (+ davet + yedek listesi) · `hedefler` · `ajan` · `hafta` · `harcama` (panel `<details>` açılınca iner — `ontoggle`).
 - ⚠️ **Yeni tembel modül = 7 yer:** `LAZY_MODULES` · `sw.js` ASSETS · `aidan-pages-deploy.py` INCLUDE · `.github/workflows/deploy.yml` paths · `.gitattributes` · `package.json` `check` · `tests/07-hygiene` + `tests/13-lazy` listeleri. Biri eksikse modül 404 olur ya da deploy tetiklenmez — **sessiz arıza**.
 - **İlk yükleme bütçesi** (`13-lazy`): dolu. Yeni özellik eşiği YÜKSELTEREK geçirilmez; nadir açılan kod tembel modüle taşınır, CSS modülün içine enjekte edilir (`hafiza.js`/`hedefler.js` deseni).
 - Veri: `localStorage 'aidan'` = Supabase `aidan_data.data` (tek JSON blob, debounced push + realtime pull). Şekil için `core.js` varsayılanlarına bak.
@@ -163,4 +163,5 @@ Mood/check-in · streak · hyperfocus uyarısı · hafta takvimi · rutinler sek
 - Antrenman kurulumunda "şu günler sabit" seçimi yok (serbest metin bunu `uygulanamayan`'a yazıyor).
 - Görev karnesi aylık görünüm · fotoğraftan öğün ekleme (altyapı hazır: `resizeImageToDataUrl` + `visionRun` + `/food-macros`).
 - Beslenme denetiminden kalanlar: çinko/magnezyum `NUT_MICRO` · uyku öncesi kazein · takviye sertifika notu · ergen sporcu RMR (Reale 2020) alternatifi.
+- Harcama (`data.harcama`, AI'sız): ⏳ sabah brifingine/Pazar koçuna satır · ⏳ sohbetten "bu hafta yemeğe ne harcadım" · ⏳ banka SMS'inden otomatik.
 - `icon.png` mascot paletle uyumsuz; kalan buton-glyph emojileri SVG'ye.
