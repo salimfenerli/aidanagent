@@ -1,3 +1,9 @@
+# ✅ 10 Eki 2026 — KURS TEYİDİ
+
+Salim teyit etti: Pazartesi 17:30-19:00 kurs GERÇEK (duzen.ders[1] zaten doğru). Perşembe 17:25-19:05 "kurs" = okuldaki haftalık sınav (haftalikSinav[4]) — aynı şey, ayrı kurs bloğu EKLENMEZ. Veri değişmedi. Tekrar sorma.
+
+---
+
 # 💓 8 Eki 2026 — NABIZ TARİHİ
 
 Şüphe doğrulandı: kısayol nabzı tarihsiz yolluyordu, sunucu trToday() basıyordu → data.health'te 7 ve 8 Eki ikisi de 69. srvNabizBayat: tarihsiz nabız bugünden ÖNCEKİ en yeni kayıtla aynıysa yazılmaz (gerçek tekrar günü kaybı kabul — bayat taban daha kötü); rhrDate alanı gelirse o güne yazılır (rehbere 8. alan). Yalnız bayat nabız geldiğinde 422 değil "nabız değişmemiş" (her WhatsApp açılışında hata bildirimi çıkmasın). Ayrıca 75af54c'de push edilmemiş kalan "kalkışsız tek yatış yazılmaz" satırı eklendi → o commit'in kırmızı CI'ı yeşile döndü. Mevcut 8 Eki 69 kaydı bırakıldı (hangisinin gerçek olduğu bilinmiyor). 1532/1532.
