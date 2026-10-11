@@ -1,3 +1,9 @@
+# ✍️ 11 Eki 2026 — HARCAMA GİRİŞİ GELİŞTİRİLDİ (v7-207)
+
+Salim: "harcama kaydetme yerini iyice geliştir". Giriş kartı: büyük kutu (17px — iOS odak yakınlaştırması yok) + CANLI ÖNİZLEME (ne kaydedileceği, tutarsız parça sarı) · tek seferde çoklu giriş "85 yemek, 40 otobüs" (hrcBol: rakam ARASI virgül ondalık, ; + yeni satır "… ve 40" ayırır; tutarsız parça kutuda kalır) · Bugün/Dün/başka gün çipleri + seçili günün toplamı · kategori çipleri (Otomatik + 7, en sık önce; partiye uygulanır) · Kaydet düğmesi adet+toplamı yazar · Sık kullanılanlar (son 60 günde ≥2 kez aynı not+tutar → tek dokunuş, hrcSik) · satıra dokun → düzenle/Güncelle · sil + ekle "Geri al" (onay penceresi kalktı). 57-harcama 21 test.
+
+---
+
 # 💸 11 Eki 2026 — HARCAMA TAKİBİ (v7-206)
 
 Salim: "aylık harcamaları yazabileyim — bugün şu kadar harcadım diye gireyim". Görevler > Harcamalar paneli, yeni tembel modül harcama.js (7 yer + panel ontoggle'da iner; ilk yükleme 184.6/185 KB). Tek kutu: "85 öğle yemeği" → tutar + not kodla ayrılır (Türk biçimi 1.250,75; "dün" kelimesi tarihi geri alır), kategori anahtar kelimeyle (Yemek/Ulaşım/Okul/Spor/Giyim/Eğlence/Diğer, elle de seçilir), AI yok. Ay gezinme, bu ay / günlük ort. / ay sonu tahmini (≥5 gün), geçen ayın AYNI gün aralığıyla kıyas, kategori çubukları, gün gün liste + sil, isteğe bağlı aylık limit (%80 uyarı, aşım kırmızı). Veri data.harcama blob'ta (yalnız PWA yazar → yedeğe girer). Testler 57-harcama (14, kapı dahil). 1547/1547.

@@ -22,19 +22,23 @@ const HRC_KAT = [
   ['yemek', 'Yemek', ['yemek', 'kahve', 'çay', 'döner', 'doner', 'simit', 'market', 'kantin', 'öğle', 'kahvaltı', 'burger', 'pizza', 'tost', 'su ', 'içecek', 'cips', 'çikolata', 'restoran', 'lahmacun', 'pide', 'kebap', 'yemeksepeti', 'getir', 'atıştırma', 'kola', 'meyve', 'süt', 'tavuk', 'et ']],
 ];
 const HRC_KAT_AD = HRC_KAT.reduce((o, k) => { o[k[0]] = k[1]; return o; }, { diger: 'Diğer' });
+const HRC_KAT_SIRA = ['yemek', 'ulasim', 'okul', 'spor', 'giyim', 'eglence', 'diger'];   // çip sırası: en sık önce
 const HRC_AY = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 const HRC_GUN = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
 
 let _hrcAy = null;      // gösterilen ay 'YYYY-MM' (null = bu ay)
 let _hrcSayac = 0;      // aynı ms'de iki kayıt → id çakışmasın
+let _hrcGun = null;     // giriş günü 'YYYY-MM-DD' (null = bugün)
+let _hrcSecKat = '';    // elle seçilen kategori ('' = otomatik)
+let _hrcDuzen = null;   // düzenlenen kaydın id'si
+let _hrcTaslak = '';    // kutudaki yazı — çip dokunuşunda kaybolmasın
+let _hrcSikList = [];   // ekrandaki sık kullanılanlar (indeksle çağrılır)
 
 (function hrcStyle() {
   if (document.getElementById('hrcStyle')) return;
   const st = document.createElement('style');
   st.id = 'hrcStyle';
   st.textContent = '.hrc-inner{padding:0 14px 14px;display:flex;flex-direction:column;gap:12px}' +
-    '.hrc-add{display:flex;flex-direction:column;gap:6px}.hrc-row{display:flex;gap:6px}.hrc-row>*{min-width:0}' +
-    '.hrc-row input[type=text]{flex:1}.hrc-row input[type=date]{flex:1}.hrc-row select{flex:1}.hrc-row button{flex:none;min-height:44px}' +
     '.hrc-nav{display:flex;align-items:center;gap:8px}.hrc-nav b{flex:1;text-align:center;font-size:15px}' +
     '.hrc-nav button{min-width:44px;min-height:44px}' +
     '.hrc-sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}' +
@@ -50,7 +54,21 @@ let _hrcSayac = 0;      // aynı ms'de iki kayıt → id çakışmasın
     '.hrc-item{display:flex;align-items:center;gap:8px;min-height:44px}.hrc-item span{flex:1;font-size:14px;min-width:0;overflow-wrap:anywhere}' +
     '.hrc-item small{color:var(--text-muted);font-size:11.5px;margin-left:6px}.hrc-item b{font-variant-numeric:tabular-nums}' +
     '.hrc-item button{min-width:36px;min-height:36px}' +
-    '.hrc-limit{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--text-muted)}.hrc-limit input{width:110px}';
+    '.hrc-limit{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--text-muted)}.hrc-limit input{width:110px}' +
+    '.hrc-giris{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--border-soft);border-radius:12px;background:var(--bg)}' +
+    '.hrc-giris.duzen{border-color:var(--accent)}.hrc-giris-h{font-size:12.5px;color:var(--text-muted);display:flex;justify-content:space-between;align-items:center}' +
+    '.hrc-in{width:100%;font-size:17px;min-height:48px}' +
+    '.hrc-prev{display:flex;flex-direction:column;gap:2px;font-size:13px;color:var(--text-muted)}.hrc-prev:empty{display:none}' +
+    '.hrc-pv b{color:var(--text);font-variant-numeric:tabular-nums}.hrc-pv.bad{color:var(--warning)}' +
+    '.hrc-chips{display:flex;gap:6px;flex-wrap:wrap}' +
+    '.hrc-chip{min-height:44px;padding:0 14px;border-radius:22px;border:1px solid var(--border-soft);background:var(--bg-elev);color:var(--text-muted);font-size:14px;font-weight:500;cursor:pointer}' +
+    '.hrc-chip[aria-pressed=true]{background:var(--accent-soft);color:var(--text);border-color:var(--accent)}' +
+    'input.hrc-chip{padding:0 10px;max-width:150px}input.hrc-chip[aria-pressed=false]{color:var(--text-faint)}' +
+    '.hrc-sik .hrc-chip{color:var(--text)}.hrc-sik .hrc-chip b{font-variant-numeric:tabular-nums;margin-right:4px}' +
+    '.hrc-lbl{font-size:11.5px;color:var(--text-faint);margin-bottom:-2px}' +
+    '.hrc-save{width:100%;min-height:48px;font-size:15px}.hrc-save-row{display:flex;gap:6px}.hrc-save-row .hrc-save{flex:1}' +
+    '.hrc-item-t{flex:1;min-width:0;min-height:44px;display:flex;align-items:center;flex-wrap:wrap;gap:0 6px;text-align:left;background:none;border:0;padding:0;color:var(--text);font:inherit;font-size:14px;cursor:pointer}' +
+    '.hrc-item-t small{margin-left:0}';
   document.head.appendChild(st);
 })();
 
@@ -79,6 +97,43 @@ function hrcAyristir(metin) {
     .replace(/(^|\s)dün(?=\s|$)/i, ' ')
     .replace(/\s+/g, ' ').trim();
   return { tl, not: not.slice(0, 80), dun };
+}
+
+// "85 yemek, 40 otobüs" → iki parça. Rakamlar ARASINDAKİ virgül ondalıktır
+// (85,50 · 1.250,75); "yemek,40" ya da "85, 40" ayırıcıdır. ; + yeni satır ve
+// "… ve 40 …" de ayırır.
+function hrcBol(metin) {
+  const s = String(metin == null ? '' : metin).slice(0, 600);
+  const parca = [];
+  let cur = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    const ayir = c === '\n' || c === ';' || c === '+' ||
+      (c === ',' && !(/\d/.test(s[i - 1] || '') && /\d/.test(s[i + 1] || '')));
+    if (ayir) { parca.push(cur); cur = ''; } else cur += c;
+  }
+  parca.push(cur);
+  const out = [];
+  parca.forEach(p => p.split(/\s+ve\s+(?=\d)/i).forEach(x => { x = x.trim(); if (x) out.push(x); }));
+  return out.slice(0, 20);
+}
+
+// Son 60 günde en az 2 kez girilen (aynı not + aynı tutar) kalemler — tek dokunuş.
+function hrcSik(liste, bugun, n) {
+  const t = new Date(bugun + 'T12:00:00');
+  t.setDate(t.getDate() - 60);
+  const sinir = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+  const g = {};
+  for (const h of (Array.isArray(liste) ? liste : [])) {
+    if (!h || !h.not || !(h.tl > 0) || !h.d || h.d < sinir) continue;
+    const k = String(h.not).toLocaleLowerCase('tr').trim() + '|' + h.tl;
+    if (!g[k]) g[k] = { tl: h.tl, not: h.not, kat: h.kat || 'diger', adet: 0, son: '' };
+    g[k].adet++;
+    if (h.d > g[k].son) g[k].son = h.d;
+  }
+  return Object.keys(g).map(k => g[k]).filter(x => x.adet >= 2)
+    .sort((a, b) => (b.adet - a.adet) || (a.son < b.son ? 1 : a.son > b.son ? -1 : 0))
+    .slice(0, n || 4).map(x => ({ tl: x.tl, not: x.not, kat: x.kat, adet: x.adet }));
 }
 
 function hrcKategori(not) {
@@ -141,12 +196,7 @@ function renderHarcama() {
   const [y, m] = ay.split('-').map(Number);
   let h = '';
 
-  h += '<div class="hrc-add">' +
-    '<div class="hrc-row"><input type="text" id="hrcText" maxlength="140" enterkeyhint="done" autocomplete="off" placeholder="Örn. 85 öğle yemeği" onkeydown="if(event.key===\'Enter\')hrcEkle()"></div>' +
-    '<div class="hrc-row"><input type="date" id="hrcDate" aria-label="Tarih" value="' + bugun + '" max="' + bugun + '">' +
-    '<select id="hrcKat" aria-label="Kategori"><option value="">Otomatik</option>' +
-    Object.keys(HRC_KAT_AD).map(k => '<option value="' + k + '">' + escapeHtml(HRC_KAT_AD[k]) + '</option>').join('') +
-    '</select><button class="small" onclick="hrcEkle()">Ekle</button></div></div>';
+  h += '<div class="hrc-giris" id="hrcGiris"></div>';
 
   h += '<div class="hrc-nav"><button class="small secondary" aria-label="Önceki ay" onclick="hrcAyGit(-1)">‹</button>' +
     '<b>' + HRC_AY[m - 1] + ' ' + y + '</b>' +
@@ -182,7 +232,7 @@ function renderHarcama() {
   const ayKayit = hrcListe().filter(x => x && x.d && hrcAyKey(x.d) === ay)
     .sort((a, b) => (a.d === b.d ? b.id - a.id : (a.d < b.d ? 1 : -1)));
   if (!ayKayit.length) {
-    h += '<div class="settings-help">' + (buAy ? 'Bu ay henüz harcama yok. Yukarıya "85 öğle yemeği" gibi yaz, Ekle\'ye bas.' : 'Bu ayda kayıt yok.') + '</div>';
+    h += '<div class="settings-help">' + (buAy ? 'Bu ay henüz harcama yok. Yukarıya "85 öğle yemeği" gibi yaz, Kaydet\'e bas. Birden çok harcamayı virgülle ayır: "85 yemek, 40 otobüs".' : 'Bu ayda kayıt yok.') + '</div>';
   } else {
     const gunler = {};
     ayKayit.forEach(x => { (gunler[x.d] = gunler[x.d] || []).push(x); });
@@ -190,11 +240,13 @@ function renderHarcama() {
       const g = gunler[d];
       const top = g.reduce((s, x) => s + x.tl, 0);
       const dt = new Date(d + 'T12:00:00');
-      const ad = d === bugun ? 'Bugün' : d === shiftDateStr(bugun, -1) ? 'Dün' : dt.getDate() + ' ' + HRC_AY[dt.getMonth()].slice(0, 3) + ' ' + HRC_GUN[dt.getDay()];
+      const ad = hrcGunAd(d, bugun);
       h += '<div class="hrc-day"><div class="hrc-day-h"><span>' + escapeHtml(ad) + '</span><span>' + hrcTL(top) + '</span></div>';
       g.forEach(x => {
-        h += '<div class="hrc-item"><span>' + escapeHtml(x.not || HRC_KAT_AD[x.kat] || 'Harcama') +
-          '<small>' + escapeHtml(HRC_KAT_AD[x.kat] || 'Diğer') + '</small></span><b>' + hrcTL(x.tl) + '</b>' +
+        const xid = escapeHtml(String(x.id));
+        h += '<div class="hrc-item"><button type="button" class="hrc-item-t" aria-label="Düzenle" data-id="' + xid + '" onclick="hrcDuzenle(this.dataset.id)">' +
+          escapeHtml(x.not || HRC_KAT_AD[x.kat] || 'Harcama') +
+          '<small>' + escapeHtml(HRC_KAT_AD[x.kat] || 'Diğer') + '</small></button><b>' + hrcTL(x.tl) + '</b>' +
           '<button class="small secondary" aria-label="Sil" data-id="' + escapeHtml(String(x.id)) + '" onclick="hrcSil(this.dataset.id)">✕</button></div>';
       });
       h += '</div>';
@@ -205,40 +257,198 @@ function renderHarcama() {
     (limit ? escapeHtml(String(limit)) : '') + '" onchange="hrcLimitKaydet(this.value)"> ₺</label>';
 
   el.innerHTML = h;
+  hrcGirisCiz();
   const badge = document.getElementById('hrcBadge');
   if (badge) badge.textContent = o.toplam > 0 && buAy ? hrcTL(o.toplam) : '';
 }
 
-function hrcEkle() {
-  const inp = document.getElementById('hrcText');
-  const r = hrcAyristir(inp && inp.value);
-  if (!r) { showToast('Tutarı yaz — örn. "85 öğle yemeği"', 'warning', 3000); return; }
-  const dEl = document.getElementById('hrcDate');
-  const bugun = today();
-  let d = (dEl && /^\d{4}-\d{2}-\d{2}$/.test(dEl.value)) ? dEl.value : bugun;
-  if (d > bugun) d = bugun;
-  if (r.dun && d === bugun) d = shiftDateStr(bugun, -1);
-  const kEl = document.getElementById('hrcKat');
-  const kat = (kEl && kEl.value && HRC_KAT_AD[kEl.value]) ? kEl.value : hrcKategori(r.not);
-  const L = hrcListe();
-  L.push({ id: Date.now() * 10 + (_hrcSayac++ % 10), d, tl: r.tl, not: r.not, kat });
-  if (L.length > HRC_MAX_ADET) { L.sort((a, b) => (a.d < b.d ? -1 : 1)); L.splice(0, L.length - HRC_MAX_ADET); }
-  save();
-  _hrcAy = hrcAyKey(d) === hrcAyKey(bugun) ? null : hrcAyKey(d);
-  renderHarcama();
-  const yeni = document.getElementById('hrcText');
-  if (yeni) yeni.focus();
-  showToast(hrcTL(r.tl) + ' · ' + (HRC_KAT_AD[kat] || 'Diğer') + ' eklendi', 'success', 2000);
+function hrcGunAd(d, bugun) {
+  if (d === bugun) return 'Bugün';
+  if (d === shiftDateStr(bugun, -1)) return 'Dün';
+  const dt = new Date(d + 'T12:00:00');
+  return dt.getDate() + ' ' + HRC_AY[dt.getMonth()].slice(0, 3) + ' ' + HRC_GUN[dt.getDay()];
+}
+function hrcSeciliGun() {
+  const b = today();
+  const g = /^\d{4}-\d{2}-\d{2}$/.test(_hrcGun || '') ? _hrcGun : b;
+  return g > b ? b : g;   // gelecek tarihe harcama yazılmaz
+}
+function hrcTutarMetin(tl) { return String(tl).replace('.', ','); }
+
+/** Giriş kutusu: yazı + canlı önizleme + gün/kategori çipleri + Kaydet + sık kullanılanlar. */
+function hrcGirisCiz() {
+  const el = document.getElementById('hrcGiris');
+  if (!el) return;
+  const bugun = today(), dun = shiftDateStr(bugun, -1), g = hrcSeciliGun();
+  const duz = _hrcDuzen != null ? hrcListe().find(x => String(x.id) === String(_hrcDuzen)) : null;
+  if (_hrcDuzen != null && !duz) _hrcDuzen = null;
+  el.classList.toggle('duzen', !!duz);
+  const gunKayit = hrcListe().filter(x => x && x.d === g);
+  const gunTop = gunKayit.reduce((t, x) => t + x.tl, 0);
+  const basildi = (v) => ' aria-pressed="' + (v ? 'true' : 'false') + '"';
+  let h = '<div class="hrc-giris-h"><span>' + (duz ? 'Düzenleniyor' : escapeHtml(hrcGunAd(g, bugun)) + ' toplam: <b>' + hrcTL(gunTop) + '</b>' +
+    (gunKayit.length ? ' · ' + gunKayit.length + ' kalem' : '')) + '</span></div>';
+  h += '<input type="text" class="hrc-in" id="hrcText" maxlength="600" enterkeyhint="done" autocomplete="off" autocapitalize="off"' +
+    ' placeholder="' + (duz ? 'Tutar ve not' : '85 öğle yemeği, 40 otobüs') + '" value="' + escapeHtml(_hrcTaslak) + '"' +
+    ' oninput="_hrcTaslak=this.value;hrcOnizle()" onkeydown="if(event.key===\'Enter\'){event.preventDefault();hrcEkle()}">';
+  h += '<div class="hrc-prev" id="hrcPrev" aria-live="polite"></div>';
+  h += '<div class="hrc-lbl">Gün</div><div class="hrc-chips">' +
+    '<button type="button" class="hrc-chip"' + basildi(g === bugun) + ' onclick="hrcGunSec(\'bugun\')">Bugün</button>' +
+    '<button type="button" class="hrc-chip"' + basildi(g === dun) + ' onclick="hrcGunSec(\'dun\')">Dün</button>' +
+    '<input type="date" class="hrc-chip" id="hrcDate" aria-label="Başka gün" max="' + bugun + '" value="' + g + '"' +
+    basildi(g !== bugun && g !== dun) + ' onchange="hrcGunSec(this.value)"></div>';
+  h += '<div class="hrc-lbl">Kategori</div><div class="hrc-chips">' +
+    '<button type="button" class="hrc-chip"' + basildi(!_hrcSecKat) + ' onclick="hrcKatSec(\'\')">Otomatik</button>' +
+    HRC_KAT_SIRA.map(k => '<button type="button" class="hrc-chip" data-k="' + k + '"' + basildi(_hrcSecKat === k) +
+      ' onclick="hrcKatSec(this.dataset.k)">' + escapeHtml(HRC_KAT_AD[k]) + '</button>').join('') + '</div>';
+  h += '<div class="hrc-save-row"><button type="button" class="hrc-save" id="hrcKaydet" onclick="hrcEkle()">Kaydet</button>' +
+    (duz ? '<button type="button" class="hrc-save secondary" onclick="hrcVazgec()">Vazgeç</button>' : '') + '</div>';
+  _hrcSikList = duz ? [] : hrcSik(hrcListe(), bugun, 4);
+  if (_hrcSikList.length) {
+    h += '<div class="hrc-lbl">Sık kullanılanlar — dokun, ' + escapeHtml(hrcGunAd(g, bugun).toLocaleLowerCase('tr')) + ' eklensin</div><div class="hrc-chips hrc-sik">' +
+      _hrcSikList.map((x, i) => '<button type="button" class="hrc-chip" data-i="' + i + '" onclick="hrcSikEkle(+this.dataset.i)"><b>' +
+        hrcTL(x.tl) + '</b>' + escapeHtml(x.not) + '</button>').join('') + '</div>';
+  }
+  el.innerHTML = h;
+  hrcOnizle();
 }
 
+/** Yazdıkça ne kaydedileceğini gösterir — kaydetmeden önce hata görünür. */
+function hrcParcalar() {
+  const ok = [], bad = [];
+  hrcBol(_hrcTaslak).forEach(p => { const r = hrcAyristir(p); if (r) ok.push(r); else bad.push(p); });
+  return { ok, bad };
+}
+function hrcOnizle() {
+  const pv = document.getElementById('hrcPrev');
+  const btn = document.getElementById('hrcKaydet');
+  const { ok, bad } = hrcParcalar();
+  const g = hrcSeciliGun(), bugun = today();
+  if (pv) {
+    pv.innerHTML = ok.map(r => '<div class="hrc-pv"><b>' + hrcTL(r.tl) + '</b> · ' +
+      escapeHtml(HRC_KAT_AD[_hrcSecKat || hrcKategori(r.not)] || 'Diğer') + (r.not ? ' — ' + escapeHtml(r.not) : '') +
+      (r.dun && g === bugun ? ' · dün' : '') + '</div>').join('') +
+      bad.map(p => '<div class="hrc-pv bad">"' + escapeHtml(p.slice(0, 40)) + '" — tutar yok</div>').join('');
+  }
+  if (btn) {
+    const top = ok.reduce((t, r) => t + r.tl, 0);
+    btn.disabled = !ok.length || (_hrcDuzen != null && ok.length !== 1);
+    btn.textContent = _hrcDuzen != null ? (ok.length > 1 ? 'Düzenlerken tek harcama' : 'Güncelle')
+      : ok.length > 1 ? ok.length + ' harcama kaydet · ' + hrcTL(top)
+      : ok.length ? 'Kaydet · ' + hrcTL(top) : 'Kaydet';
+  }
+}
+
+function hrcGunSec(v) {
+  const b = today();
+  _hrcGun = v === 'bugun' ? null : v === 'dun' ? shiftDateStr(b, -1) : (/^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : null);
+  hrcGirisCiz();
+}
+function hrcKatSec(k) {
+  _hrcSecKat = (k && HRC_KAT_AD[k]) ? k : '';
+  hrcGirisCiz();
+}
+function hrcOdak() {
+  const i = document.getElementById('hrcText');
+  if (i) { try { i.focus({ preventScroll: true }); } catch (_) { i.focus(); } }
+}
+function hrcYeniId() { return Date.now() * 10 + (_hrcSayac++ % 10); }
+function hrcBudama(L) {
+  if (L.length > HRC_MAX_ADET) { L.sort((a, b) => (a.d < b.d ? -1 : 1)); L.splice(0, L.length - HRC_MAX_ADET); }
+}
+function hrcGeriAlToast(mesaj, geriAl) {
+  if (typeof showUndoToast === 'function') showUndoToast(mesaj, geriAl, 5000);
+  else showToast(mesaj, 'success', 2000);
+}
+
+function hrcEkle() {
+  const inp = document.getElementById('hrcText');
+  if (inp) _hrcTaslak = inp.value;
+  const { ok, bad } = hrcParcalar();
+  if (!ok.length) { showToast('Tutarı yaz — örn. "85 öğle yemeği"', 'warning', 3000); return; }
+  const bugun = today(), g = hrcSeciliGun();
+  const L = hrcListe();
+
+  if (_hrcDuzen != null) {                       // DÜZENLEME: tek kayıt güncellenir
+    if (ok.length !== 1) { showToast('Düzenlerken tek harcama yaz.', 'warning'); return; }
+    const x = L.find(e => String(e.id) === String(_hrcDuzen));
+    if (!x) { hrcVazgec(); return; }
+    const r = ok[0];
+    x.tl = r.tl; x.not = r.not; x.d = r.dun && g === bugun ? shiftDateStr(bugun, -1) : g;
+    x.kat = _hrcSecKat || hrcKategori(r.not);
+    save();
+    _hrcDuzen = null; _hrcTaslak = ''; _hrcSecKat = ''; _hrcGun = null;
+    _hrcAy = hrcAyKey(x.d) === hrcAyKey(bugun) ? null : hrcAyKey(x.d);
+    renderHarcama();
+    showToast('Güncellendi', 'success', 1800);
+    return;
+  }
+
+  const yeni = ok.map(r => ({
+    id: hrcYeniId(), d: r.dun && g === bugun ? shiftDateStr(bugun, -1) : g,
+    tl: r.tl, not: r.not, kat: _hrcSecKat || hrcKategori(r.not),
+  }));
+  yeni.forEach(x => L.push(x));
+  hrcBudama(L);
+  save();
+  _hrcTaslak = bad.join(', ');                   // tutarsız parça kutuda kalır, düzeltilsin
+  _hrcSecKat = '';
+  const ilk = yeni[0].d;
+  _hrcAy = hrcAyKey(ilk) === hrcAyKey(bugun) ? null : hrcAyKey(ilk);
+  renderHarcama();
+  hrcOdak();
+  const top = yeni.reduce((t, x) => t + x.tl, 0);
+  const idler = yeni.map(x => String(x.id));
+  hrcGeriAlToast((yeni.length > 1 ? yeni.length + ' harcama · ' : (HRC_KAT_AD[yeni[0].kat] || 'Diğer') + ' · ') + hrcTL(top) + ' kaydedildi', () => {
+    data.harcama = hrcListe().filter(x => idler.indexOf(String(x.id)) < 0);
+    save(); renderHarcama();
+  });
+  if (bad.length) showToast(bad.length + ' parçada tutar yok — kutuda bıraktım', 'warning', 3500);
+}
+
+function hrcSikEkle(i) {
+  const s = _hrcSikList[i];
+  if (!s) return;
+  const x = { id: hrcYeniId(), d: hrcSeciliGun(), tl: s.tl, not: s.not, kat: s.kat || hrcKategori(s.not) };
+  const L = hrcListe();
+  L.push(x); hrcBudama(L);
+  save();
+  renderHarcama();
+  hrcGeriAlToast(hrcTL(x.tl) + ' ' + x.not + ' eklendi', () => {
+    data.harcama = hrcListe().filter(e => String(e.id) !== String(x.id));
+    save(); renderHarcama();
+  });
+}
+
+function hrcDuzenle(id) {
+  const x = hrcListe().find(e => String(e.id) === String(id));
+  if (!x) return;
+  _hrcDuzen = x.id;
+  _hrcTaslak = hrcTutarMetin(x.tl) + (x.not ? ' ' + x.not : '');
+  _hrcGun = x.d;
+  _hrcSecKat = x.kat || '';
+  hrcGirisCiz();
+  const el = document.getElementById('hrcGiris');
+  if (el) { try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {} }
+  hrcOdak();
+}
+function hrcVazgec() {
+  _hrcDuzen = null; _hrcTaslak = ''; _hrcSecKat = ''; _hrcGun = null;
+  hrcGirisCiz();
+}
+
+/** Sil: onay penceresi yerine 5 sn "Geri al" — yanlış dokunuş geri dönülebilir. */
 function hrcSil(id) {
   const L = hrcListe();
   const i = L.findIndex(x => String(x.id) === String(id));
   if (i < 0) return;
-  if (!confirm('"' + (L[i].not || 'Harcama') + ' — ' + hrcTL(L[i].tl) + '" silinsin mi?')) return;
-  L.splice(i, 1);
+  const [x] = L.splice(i, 1);
+  if (String(_hrcDuzen) === String(x.id)) { _hrcDuzen = null; _hrcTaslak = ''; }
   save();
   renderHarcama();
+  hrcGeriAlToast('"' + (x.not || 'Harcama') + '" silindi', () => {
+    hrcListe().push(x); save(); renderHarcama();
+  });
 }
 
 function hrcAyGit(n) {
