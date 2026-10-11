@@ -9,6 +9,11 @@
  * Plan UYGULAMA anında yeniden hesaplanır: kart dün çizildiyse bugünün
  * yüküyle dağıtılır, "bugün" kaymaz.
  *
+ * 11 Eki 2026 — TEK GİRİŞ KAPISI (Faz 1): harcama_ekle · ogun_ekle · uyku_kaydet ·
+ * kilo_kaydet. SAYI KODLA: öğün kalorisi foods.js besin veritabanından (modelin
+ * sayısı hiç gelmez), harcama kategorisi harcama.js'ten, kilo sınırı upsertBody'den.
+ * Bir mesajda 2+ bekleyen eylem varsa "Hepsini uygula" tek dokunuş + tek Geri al.
+ *
  * ⚠️ Yeni modul eklersen 7 yer: LAZY_MODULES · sw.js ASSETS · deploy INCLUDE ·
  *    Actions paths · .gitattributes · package.json check · tests/07 + 13 listeleri.
  */
@@ -28,7 +33,9 @@ const AJAN_DAY_CAP = 120;
     '.ajan-it{font-size:13.5px;line-height:1.45;padding-left:10px;color:var(--text,#e5e1d9)}' +
     '.ajan-btns{display:flex;gap:8px;margin-top:10px}.ajan-btns button{min-height:36px}' +
     '.ajan-done{margin-top:8px;font-size:12.5px;font-weight:600;color:var(--success,#5cbf7a)}' +
-    '.ajan-done.off{color:var(--text-muted,#9a9389)}';
+    '.ajan-done.off{color:var(--text-muted,#9a9389)}' +
+    '.ajan-all{width:100%;min-height:44px}' +
+    '.ajan-sub.uyari{color:var(--warning,#e5a117)}';
   document.head.appendChild(st);
 })();
 
@@ -82,7 +89,55 @@ function ajanPlan(a) {
 function ajanTask(id) {
   return (data.tasks || []).find(t => String(t.id) === String(id));
 }
-function ajanGun(iso) { return typeof fmtDayLabel === 'function' ? fmtDayLabel(iso) : iso; }
+function ajanGun(iso) {
+  if (iso === shiftDateStr(today(), -1)) return 'Dün';
+  return typeof fmtDayLabel === 'function' ? fmtDayLabel(iso) : iso;
+}
+
+const AJAN_OGUN_AD = { kahvalti: 'Kahvaltı', ogle: 'Öğle', aksam: 'Akşam', atistirma: 'Atıştırma' };
+const AJAN_HRC_AD = { yemek: 'Yemek', ulasim: 'Ulaşım', okul: 'Okul', spor: 'Spor', giyim: 'Giyim', eglence: 'Eğlence', diger: 'Diğer' };
+const AJAN_KCAL_TAVAN = 5000;   // 38-gram-sorgusu kuralı: tek kalem 5000 kcal'i aşamaz → bilinmiyor say
+function ajanTL(n) { return (Math.round(n * 100) / 100).toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + ' ₺'; }
+function ajanSayi(n) { return String(Math.round(n * 100) / 100).replace('.', ','); }
+function ajanOgunVarsayilan(tarih) {
+  if (tarih !== today()) return 'aksam';
+  const h = new Date().getHours();
+  return h < 11 ? 'kahvalti' : h < 16 ? 'ogle' : h < 22 ? 'aksam' : 'atistirma';
+}
+
+/**
+ * "3 yumurta" → besin veritabanından ölçekli kayıt. Saf (foods.js fonksiyonlarını okur).
+ * Eşleşme yoksa kalori NULL — makrosu bilinmeyen kaleme makro yazılmaz.
+ */
+function ajanYemekCoz(yemek) {
+  const bos = { name: String(yemek || '').slice(0, 80), kcal: null, protein: null, carb: null, fat: null, bilinmiyor: true };
+  if (typeof seedFoodMatches !== 'function' || typeof parseFoodQuery !== 'function') return bos;
+  const pr = parseFoodQuery(yemek);
+  const f = seedFoodMatches(yemek, 1)[0];
+  const sc = (v, m) => (v == null ? null : Math.round(v * m));
+  if (f) {
+    let m = 1, ek = '';
+    if (pr.gram && pr.qty > 0 && f.g > 0) { m = pr.qty / f.g; ek = ' (' + Math.round(pr.qty) + 'g)'; }
+    else {
+      const d = (typeof _olcuDonustur === 'function') ? _olcuDonustur(pr, f) : null;
+      if (d && d.gram) { if (f.g > 0) { m = d.qty / f.g; ek = ' (' + Math.round(d.qty) + 'g)'; } }
+      else if (d) { m = d.qty; }
+      else if (pr.qty > 0) { m = pr.qty; }
+      if (!ek && m !== 1) ek = ' ×' + ajanSayi(m);
+    }
+    const kcal = sc(f.k, m);
+    if (kcal != null && kcal > AJAN_KCAL_TAVAN) return bos;
+    return { name: f.n + ek, kcal, protein: sc(f.p, m), carb: sc(f.c, m), fat: sc(f.f, m), bilinmiyor: kcal == null };
+  }
+  const c = (typeof customFoodMatches === 'function' && trNorm(pr.core || '').length >= 2) ? customFoodMatches(yemek, 1)[0] : null;
+  if (c) {
+    const m = pr.qty > 0 && !pr.gram ? pr.qty : 1;
+    const kcal = sc(c.kcal, m);
+    if (kcal != null && kcal > AJAN_KCAL_TAVAN) return bos;
+    return { name: c.name + (m !== 1 ? ' ×' + ajanSayi(m) : ''), kcal, protein: sc(c.protein, m), carb: sc(c.carb, m), fat: sc(c.fat, m), bilinmiyor: kcal == null };
+  }
+  return bos;
+}
 
 function ajanCard(mi, ai, a) {
   const st = a.status || 'pending';
@@ -114,6 +169,23 @@ function ajanCard(mi, ai, a) {
     h += '<div class="ajan-head">' + (a.type === 'gorev_tamamla' ? 'Tamamla: ' : 'Ertele: ') + escapeHtml(t ? t.text : '(görev bulunamadı)') + '</div>';
     if (a.type === 'gorev_ertele') h += '<div class="ajan-sub">Yeni tarih: ' + escapeHtml(ajanGun(a.tarih)) + '</div>';
     if (!ok && st === 'pending') h += '<div class="ajan-sub">Bu görev artık açık değil.</div>';
+  } else if (a.type === 'harcama_ekle') {
+    const kat = a.kategori || (typeof hrcKategori === 'function' ? hrcKategori(a.not) : null);
+    h += '<div class="ajan-head">Harcama: ' + ajanTL(a.tl) + (kat ? ' · ' + escapeHtml(AJAN_HRC_AD[kat] || 'Diğer') : '') + '</div>';
+    h += '<div class="ajan-sub">' + escapeHtml([a.not, ajanGun(a.tarih)].filter(Boolean).join(' · ')) + '</div>';
+  } else if (a.type === 'ogun_ekle') {
+    const y = ajanYemekCoz(a.yemek);
+    const ogun = a.ogun || ajanOgunVarsayilan(a.tarih);
+    h += '<div class="ajan-head">' + escapeHtml(AJAN_OGUN_AD[ogun] || 'Öğün') + ': ' + escapeHtml(y.name) + '</div>';
+    h += y.bilinmiyor
+      ? '<div class="ajan-sub uyari">Kalori bilinmiyor — adıyla kaydedilir, Diyet\'ten düzeltebilirsin · ' + escapeHtml(ajanGun(a.tarih)) + '</div>'
+      : '<div class="ajan-sub">~' + y.kcal + ' kcal' + (y.protein != null ? ' · ' + y.protein + ' g protein' : '') + ' · ' + escapeHtml(ajanGun(a.tarih)) + '</div>';
+  } else if (a.type === 'uyku_kaydet') {
+    h += '<div class="ajan-head">Uyku: ' + ajanSayi(a.saat) + ' saat</div>';
+    h += '<div class="ajan-sub">' + escapeHtml([a.yatis && a.kalkis ? a.yatis + ' → ' + a.kalkis : '', ajanGun(a.tarih)].filter(Boolean).join(' · ')) + '</div>';
+  } else if (a.type === 'kilo_kaydet') {
+    h += '<div class="ajan-head">Kilo: ' + ajanSayi(a.kg) + ' kg' + (a.yag != null ? ' · yağ %' + ajanSayi(a.yag) : '') + '</div>';
+    h += '<div class="ajan-sub">' + escapeHtml(ajanGun(a.tarih)) + '</div>';
   } else {
     return '';
   }
@@ -130,21 +202,28 @@ function renderChatActions() {
   const chat = (typeof ensureChat === 'function') ? ensureChat() : [];
   const slots = document.querySelectorAll('.chat-ajan[data-i]');
   if (!slots.length) return;
-  const gerekOkul = [...slots].some(s => { const m = chat[+s.dataset.i]; return m && (m.actions || []).some(a => a.type === 'odev_plani' && (a.status || 'pending') === 'pending'); });
-  if (gerekOkul && typeof hwSpread !== 'function') {
+  const bekleyen = (t) => [...slots].some(s => { const m = chat[+s.dataset.i]; return m && (m.actions || []).some(a => a.type === t && (a.status || 'pending') === 'pending'); });
+  if (bekleyen('odev_plani') && typeof hwSpread !== 'function') {
     // Ödev motoru school.js'te; önce o insin, sonra tekrar çiz.
     Promise.all([loadModule('school'), loadModule('hafta').catch(() => {})]).then(renderChatActions).catch(() => {});
   }
+  // Öğün kalorisi besin veritabanından (foods.js) — inmeden kart "bilinmiyor" der, inince yeniden çizilir.
+  if (bekleyen('ogun_ekle') && typeof seedFoodMatches !== 'function') loadModule('foods').then(renderChatActions).catch(() => {});
+  if (bekleyen('harcama_ekle') && typeof hrcKategori !== 'function') loadModule('harcama').then(renderChatActions).catch(() => {});
   slots.forEach(s => {
     const mi = +s.dataset.i, m = chat[mi];
-    s.innerHTML = (m && Array.isArray(m.actions)) ? m.actions.map((a, ai) => ajanCard(mi, ai, a)).join('') : '';
+    if (!m || !Array.isArray(m.actions)) { s.innerHTML = ''; return; }
+    const kalan = m.actions.filter(a => (a.status || 'pending') === 'pending').length;
+    s.innerHTML = (kalan >= 2 ? '<button class="ajan-all" onclick="ajanApplyAll(' + mi + ')">Hepsini uygula (' + kalan + ')</button>' : '') +
+      m.actions.map((a, ai) => ajanCard(mi, ai, a)).join('');
   });
 }
 
-async function ajanApply(mi, ai) {
+/** toplu=true: toast/çizim yok, geri alma fonksiyonunu döndürür (ajanApplyAll toplar). */
+async function ajanApply(mi, ai, toplu) {
   const m = ensureChat()[mi];
   const a = m && m.actions && m.actions[ai];
-  if (!a || (a.status || 'pending') !== 'pending') return;
+  if (!a || (a.status || 'pending') !== 'pending') return null;
   let mesaj = '', geriAl = null;
   if (a.type === 'odev_plani') {
     if (typeof hwSpread !== 'function') { try { await loadModule('school'); } catch (_) { showToast('Ödev motoru yüklenemedi', 'error'); return; } }
@@ -173,24 +252,99 @@ async function ajanApply(mi, ai) {
     geriAl = () => { data.tasks = data.tasks.filter(x => x.id !== t.id); a.status = 'pending'; save(); renderTasks(); renderChatActions(); };
   } else if (a.type === 'gorev_tamamla') {
     const t = ajanTask(a.gorevId);
-    if (!t || t.done) { showToast('Görev artık açık değil', 'warning'); return; }
+    if (!t || t.done) { if (!toplu) showToast('Görev artık açık değil', 'warning'); return null; }
     a.status = 'applied';
     toggleTask(t.id);          // konfeti, kayıt, çizim — normal tamamlama yolu
-    renderChatActions();
-    return;
+    if (!toplu) renderChatActions();
+    return toplu ? () => { const x = ajanTask(a.gorevId); if (x && x.done) toggleTask(x.id); a.status = 'pending'; } : null;
   } else if (a.type === 'gorev_ertele') {
     const t = ajanTask(a.gorevId);
-    if (!t || t.done) { showToast('Görev artık açık değil', 'warning'); return; }
+    if (!t || t.done) { if (!toplu) showToast('Görev artık açık değil', 'warning'); return null; }
     const eski = t.due;
     t.due = a.tarih; t.postponeCount = (t.postponeCount || 0) + 1;
     mesaj = 'Ertelendi: ' + ajanGun(a.tarih);
     geriAl = () => { t.due = eski; t.postponeCount = Math.max(0, (t.postponeCount || 1) - 1); a.status = 'pending'; save(); renderTasks(); renderChatActions(); };
-  } else return;
+  } else if (a.type === 'harcama_ekle') {
+    if (typeof hrcKategori !== 'function') { try { await loadModule('harcama'); } catch (_) {} }
+    if (!Array.isArray(data.harcama)) data.harcama = [];
+    const kat = a.kategori || (typeof hrcKategori === 'function' ? hrcKategori(a.not) : 'diger');
+    const x = { id: Date.now() * 10 + (ai % 10), d: a.tarih, tl: a.tl, not: a.not || '', kat, src: 'sohbet' };
+    data.harcama.push(x);
+    mesaj = ajanTL(a.tl) + ' harcama kaydedildi';
+    geriAl = () => { data.harcama = (data.harcama || []).filter(e => e.id !== x.id); a.status = 'pending'; save(); ajanYenile(); };
+  } else if (a.type === 'ogun_ekle') {
+    if (typeof seedFoodMatches !== 'function') { try { await loadModule('foods'); } catch (_) {} }
+    ensureDiet();
+    const y = ajanYemekCoz(a.yemek);     // kalori UYGULAMA anında, veritabanından
+    const gun = data.diet.days[a.tarih] || (data.diet.days[a.tarih] = { meals: [], water: 0 });
+    gun.meals = gun.meals || [];
+    const rec = { id: Date.now() + ai, slot: a.ogun || ajanOgunVarsayilan(a.tarih), name: y.name, kcal: y.kcal, protein: y.protein, carb: y.carb, fat: y.fat,
+      at: a.tarih === today() && typeof mealNow === 'function' ? mealNow() : null, src: 'sohbet' };
+    gun.meals.push(rec);
+    mesaj = y.name + ' öğüne eklendi';
+    geriAl = () => { const g = data.diet.days[a.tarih]; if (g) g.meals = (g.meals || []).filter(e => e.id !== rec.id); a.status = 'pending'; save(); ajanYenile(); };
+  } else if (a.type === 'uyku_kaydet') {
+    ensureSleep();
+    const eski = sleepFor(a.tarih);
+    const kopya = eski ? JSON.parse(JSON.stringify(eski)) : null;
+    const rec = { date: a.tarih, bedtime: a.yatis || null, wake: a.kalkis || null, hours: a.saat, quality: eski ? eski.quality || null : null, src: 'sohbet' };
+    if (eski) Object.assign(eski, rec); else data.sleep.push(rec);
+    data.sleep = data.sleep.filter(x => x && x.date).sort((x, y) => (x.date < y.date ? 1 : -1)).slice(0, 60);
+    mesaj = 'Uyku kaydedildi: ' + ajanSayi(a.saat) + ' saat';
+    geriAl = () => {
+      data.sleep = (data.sleep || []).filter(x => x.date !== a.tarih);
+      if (kopya) data.sleep.push(kopya);
+      data.sleep.sort((x, y) => (x.date < y.date ? 1 : -1));
+      a.status = 'pending'; save(); ajanYenile();
+    };
+  } else if (a.type === 'kilo_kaydet') {
+    ensureDiet();
+    const eski = (data.diet.weights || []).find(w => w && w.date === a.tarih);
+    const kopya = eski ? JSON.parse(JSON.stringify(eski)) : null;
+    const rec = upsertBody({ date: a.tarih, kg: a.kg, fat: a.yag, src: 'sohbet' });   // sınırlar orada
+    if (!rec) { if (!toplu) showToast('Geçersiz kilo değeri', 'warning'); return null; }
+    mesaj = 'Kilo kaydedildi: ' + ajanSayi(a.kg) + ' kg';
+    geriAl = () => {
+      data.diet.weights = (data.diet.weights || []).filter(w => w.date !== a.tarih);
+      if (kopya) { data.diet.weights.push(kopya); data.diet.weights.sort((x, y) => (x.date < y.date ? -1 : 1)); }
+      a.status = 'pending'; save(); ajanYenile();
+    };
+  } else return null;
   a.status = 'applied';
-  save(); if (typeof renderTasks === 'function') renderTasks();
-  renderChatActions();
+  if (toplu) return geriAl;
+  save(); ajanYenile();
   if (typeof showUndoToast === 'function' && geriAl) showUndoToast(mesaj, geriAl, 6000);
   else showToast(mesaj, 'success');
+  return null;
+}
+
+/** Uygulamadan sonra açık ekranlar güncellensin (diyet/harcama paneli açıksa). */
+function ajanYenile() {
+  if (typeof renderTasks === 'function') renderTasks();
+  renderChatActions();
+  const diet = document.getElementById('diet');
+  if (diet && diet.classList.contains('active') && typeof renderDiet === 'function') { try { renderDiet(); } catch (_) {} }
+  const hs = document.getElementById('hrcSection');
+  if (hs && hs.open && typeof renderHarcama === 'function') renderHarcama();
+}
+
+/** Mesajdaki tüm bekleyen eylemler — tek dokunuş, tek "Geri al". */
+async function ajanApplyAll(mi) {
+  const m = ensureChat()[mi];
+  if (!m || !Array.isArray(m.actions)) return;
+  const geriler = [];
+  let n = 0;
+  for (let ai = 0; ai < m.actions.length; ai++) {
+    if ((m.actions[ai].status || 'pending') !== 'pending') continue;
+    const g = await ajanApply(mi, ai, true);
+    if (m.actions[ai].status === 'applied') n++;
+    if (g) geriler.push(g);
+  }
+  save(); ajanYenile();
+  if (!n) return;
+  const hepsiniGeriAl = () => { geriler.slice().reverse().forEach(g => { try { g(); } catch (_) {} }); save(); ajanYenile(); };
+  if (typeof showUndoToast === 'function') showUndoToast(n + ' kayıt uygulandı', hepsiniGeriAl, 8000);
+  else showToast(n + ' kayıt uygulandı', 'success');
 }
 
 function ajanDismiss(mi, ai) {

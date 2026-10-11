@@ -79,11 +79,11 @@ describe('ajan — temizleyici', () => {
     assert.strictEqual(a[1].tarih, '2026-10-07');
   });
 
-  test('geçersiz tarih biçimleri, bilinmeyen araç, en fazla 5 eylem', () => {
+  test('geçersiz tarih biçimleri, bilinmeyen araç, en fazla 12 eylem (11 Eki: gün kaydı için 5 → 12)', () => {
     const calls = [{ name: 'sil_her_seyi', arguments: {} }];
-    for (let i = 0; i < 8; i++) calls.push({ name: 'gorev_ekle', arguments: { text: 'görev ' + i, tarih: '2026-02-30', kategori: 'uydurma', dk: 3 } });
+    for (let i = 0; i < 15; i++) calls.push({ name: 'gorev_ekle', arguments: { text: 'görev ' + i, tarih: '2026-02-30', kategori: 'uydurma', dk: 3 } });
     const a = js(M.agentSanitizeActions(calls, { today: BUGUN, taskIds: [] }));
-    assert.strictEqual(a.length, 5);
+    assert.strictEqual(a.length, 12);
     assert.ok(a.every(x => x.type === 'gorev_ekle' && x.tarih === null && x.kategori === null && x.dk === null));
     assert.deepStrictEqual(js(M.agentSanitizeActions(null, { today: BUGUN })), []);
   });
@@ -106,7 +106,7 @@ describe('ajan — temizleyici', () => {
     assert.match(p, /"ekledim" DEME/);
     assert.match(p, /UYDURMA/);
     assert.match(p, /TEK "odev_plani"/);
-    assert.deepStrictEqual(js(M.AGENT_TOOLS.map(t => t.name)), ['odev_plani', 'gorev_ekle', 'gorev_tamamla', 'gorev_ertele']);
+    assert.deepStrictEqual(js(M.AGENT_TOOLS.map(t => t.name)), ['odev_plani', 'gorev_ekle', 'gorev_tamamla', 'gorev_ertele', 'harcama_ekle', 'ogun_ekle', 'uyku_kaydet', 'kilo_kaydet']);
   });
 });
 

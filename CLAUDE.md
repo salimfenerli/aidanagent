@@ -101,8 +101,9 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 - `pruneOldData`: 180 günden eski BİTMİŞ görev + diyet günü, 60 günden eski sohbet atılır; sohbet "kayıtlar"ına dokunulmaz.
 
 **Sohbet ajanı** (5 Eki — `/chat` + `ajan.js`)
-- Araçlar: `odev_plani` (okul / özel ders ödevlerini tek pakette) · `gorev_ekle` · `gorev_tamamla` · `gorev_ertele`. Worker `agentSanitizeActions` ile temizler (uydurma görev id'si → eylem yok, geçmiş tarih → null); `actions` döner, blob'a YAZMAZ.
-- `ajan.js` kart çizer; **Uygula'ya basılmadan veri değişmez**. Ödev planı uygulama ANINDA `hwWorkDays`+`hwSpread` (school.js, ödev paketiyle aynı motor) ile yeniden hesaplanır. Bölünmüş ödev `seq` KULLANMAZ (`hwFixSeq` tüm seq'leri tek grup sayar) → `ajanFixParts`.
+- Araçlar: `odev_plani` (okul / özel ders ödevlerini tek pakette) · `gorev_ekle` · `gorev_tamamla` · `gorev_ertele` · **11 Eki TEK GİRİŞ KAPISI:** `harcama_ekle` · `ogun_ekle` · `uyku_kaydet` · `kilo_kaydet` (mesaj başı en fazla `AGENT_MAX_ACTIONS` 12). Worker `agentSanitizeActions` ile temizler (uydurma görev id'si → eylem yok, geçmiş tarih → null, tutar/kilo Türk biçimi `agentNum` + sınır, kayıt tarihi en fazla 7 gün geri); `actions` döner, blob'a YAZMAZ.
+- ⚠️ **Öğün kalorisi modelden ASLA gelmez:** `ogun_ekle` yalnız metin taşır; `ajan.js` `ajanYemekCoz` besin veritabanından (foods.js) ölçekler, eşleşme yoksa kcal `null`. Sohbetin kayıt soruları yalnız `agentKayitlar` (kod hesaplar) bölümünden cevaplanır.
+- `ajan.js` kart çizer; **Uygula'ya basılmadan veri değişmez**. 2+ bekleyen eylemde "Hepsini uygula" + tek Geri al. Ödev planı uygulama ANINDA `hwWorkDays`+`hwSpread` (school.js, ödev paketiyle aynı motor) ile yeniden hesaplanır. Bölünmüş ödev `seq` KULLANMAZ (`hwFixSeq` tüm seq'leri tek grup sayar) → `ajanFixParts`.
 - Bağlam: bugün+gün adı, açık görevler `[id]`, ders programı (`data.school.timetable`), sabit program (özel ders). Meta-öğrenme modunda araç yok.
 
 **Hafıza / hedef ajanı** (4 Eki)

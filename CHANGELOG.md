@@ -1,3 +1,9 @@
+# 🚪 11 Eki 2026 — FAZ 1: SOHBET TEK GİRİŞ KAPISI (v7-210)
+
+Salim: "isteğim otomatik olarak bilgilerin düşmesi — ele girme friction oluşturuyor"; "sohbeti denedim, AI verileri işleyemedi". Teşhis: sohbet yalnız görev sayısını görüyordu (son mesajı "uygulamaya yahoo verisi geliyor, bakamaz mısın" → "çekemiyorum"); harcama/öğün/uyku/kilo aracı yoktu. Yeni araçlar harcama_ekle / ogun_ekle / uyku_kaydet / kilo_kaydet (AGENT_MAX_ACTIONS 5→12). Sayı kodla: agentNum (Türk biçimi, eksi/tavan reddi), uyku süresi iki saatten kodla, kilo upsertBody sınırları, kayıt tarihi ≤7 gün geri, öğün kalorisi modelden HİÇ gelmez (ajanYemekCoz → foods.js seed/custom, 5000 kcal tavanı, eşleşmezse null). Bağlama [KAYITLAR] (agentKayitlar: harcama bugün/7 gün kategorili/ay+limit, öğün, uyku ort., son kilo, Hevy son 7 gün, biten görev) + TR saati (öğün seçimi). ajan.js: 4 kart, "Hepsini uygula" + tek Geri al (eski uyku/kilo kaydı aynen geri gelir). Model: sahibe Gemini 3.1 Pro (günde 40), ~$0,05/mesaj. 59-tek-giris (15) + 53 güncellendi.
+
+---
+
 # 🧹 11 Eki 2026 — FAZ 0 TEMİZLİK (v7-209)
 
 Değerlendirme: 10 açık görevin 7'si tanıtım turunun örnek görevi (3 cihaz → 3 kopya, gün planı "Bugünün 3'ü" diye onları seçiyordu), bitirilmiş görev 0. Veri (SQL, elle yedek aidan_backups #7 önce alındı): tasks → [], kalkışsız 2 uyku kaydı, watchlist/portfolioHistory/trades/checkins/routines silindi; updated_at=now() → cihazlar sürümle çeker. Kod: onboarding.js örnek görev düğmesi kaldırıldı (tur veriye hiç yazmaz); .quick-capture input min-width:0 (390px'te + düğmesi taşıyordu); .app-header marjı body padding'iyle eşlendi (-18 / ≤600 -14). 58-faz0 (7 test, kapılar dahil). 1561/1561.

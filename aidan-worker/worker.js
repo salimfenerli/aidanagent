@@ -4103,9 +4103,13 @@ function chatHealthShort(data) {
 // CHAT_PRO_DAILY çağrı tavanıyla (aidan_usage sayacı). Tavan dolunca ücretsiz
 // modele düşer. Sahip olmayan kullanıcı ASLA PRO almaz (aiTierForUser).
 const CHAT_PRO_DAILY = 40;
-const AGENT_MAX_ACTIONS = 5;
+const AGENT_MAX_ACTIONS = 12;   // 11 Eki: akşam tek mesajla gün girişi (harcama+öğün+uyku+görev) — 5 yetmiyordu
 const AGENT_MAX_HW = 30;
 const AGENT_CATS = ['odev', 'ders', 'ev', 'kisisel'];
+// 11 Eki 2026 — TEK GİRİŞ KAPISI (Faz 1). Harcama kategorileri harcama.js ile AYNI anahtarlar.
+const AGENT_HRC_KAT = ['yemek', 'ulasim', 'okul', 'spor', 'giyim', 'eglence', 'diger'];
+const AGENT_OGUN = ['kahvalti', 'ogle', 'aksam', 'atistirma'];
+const AGENT_GECMIS_GUN = 7;     // geriye dönük kayıt en fazla 1 hafta (unutulan dünkü harcama vb.)
 
 const AGENT_TOOLS = [
   {
@@ -4166,6 +4170,59 @@ const AGENT_TOOLS = [
       required: ['gorev_id', 'yeni_tarih'],
     },
   },
+  {
+    name: 'harcama_ekle',
+    description: 'Kullanıcının söylediği TEK bir harcamayı kaydeder. Her harcama ayrı çağrı.',
+    parameters: {
+      type: 'object',
+      properties: {
+        tutar: { type: 'string', description: 'Kullanıcının yazdığı gibi, örn. "85" ya da "1.250,50"' },
+        not: { type: 'string', description: 'Ne için: "öğle yemeği", "otobüs"' },
+        kategori: { type: 'string', enum: AGENT_HRC_KAT },
+        tarih: { type: 'string', description: 'YYYY-MM-DD — yalnız bugün değilse (ör. "dün")' },
+      },
+      required: ['tutar'],
+    },
+  },
+  {
+    name: 'ogun_ekle',
+    description: 'Yenen TEK bir besini öğün kaydına ekler. Kalori/makro YAZMA — uygulama kendi besin veritabanından hesaplar.',
+    parameters: {
+      type: 'object',
+      properties: {
+        yemek: { type: 'string', description: 'Miktarıyla, kullanıcının dediği gibi: "3 yumurta", "200 gr tavuk göğsü", "1 tabak mercimek çorbası"' },
+        ogun: { type: 'string', enum: AGENT_OGUN },
+        tarih: { type: 'string', description: 'YYYY-MM-DD — yalnız bugün değilse' },
+      },
+      required: ['yemek'],
+    },
+  },
+  {
+    name: 'uyku_kaydet',
+    description: 'Bir gecenin uykusunu kaydeder. Tarih = UYANILAN gün (dün gece uyuduysa bugün).',
+    parameters: {
+      type: 'object',
+      properties: {
+        yatis: { type: 'string', description: 'HH:MM — söylendiyse' },
+        kalkis: { type: 'string', description: 'HH:MM — söylendiyse' },
+        saat: { type: 'number', description: 'Toplam uyku saati — yalnız saatler söylenmediyse, örn. 7.5' },
+        tarih: { type: 'string', description: 'YYYY-MM-DD uyanılan gün — yalnız bugün değilse' },
+      },
+    },
+  },
+  {
+    name: 'kilo_kaydet',
+    description: 'Tartı sonucunu kaydeder. Yorum YAPMA.',
+    parameters: {
+      type: 'object',
+      properties: {
+        kg: { type: 'string', description: 'Kullanıcının yazdığı gibi, örn. "68,4"' },
+        yag: { type: 'string', description: 'Yağ oranı % — yalnız söylendiyse' },
+        tarih: { type: 'string', description: 'YYYY-MM-DD — yalnız bugün değilse' },
+      },
+      required: ['kg'],
+    },
+  },
 ];
 
 const AGENT_PROMPT = `
@@ -4179,6 +4236,11 @@ ARAÇLAR — AJAN MODU:
 - Tek iş → "gorev_ekle". Tamamlama/erteleme → yalnız AÇIK GÖREVLER listesindeki [id] ile; listede yoksa sor.
 - BU HAFTA tablosunu kullan: son tarih seçerken ödev kapasitesi dolu günleri ve SINAV günlerini gözet; sınavdan önceki güne yeni ödev yığma.
 - Öncelik OKUL > UYKU > ANTRENMAN. ÇAKIŞMALAR varsa ve konu açılırsa söyle. Antrenman programını sen değiştiremezsin — Diyet sekmesindeki programdan hafifletilmesini öner.
+- GÜN KAYDI (tek giriş kapısı): kullanıcı tek mesajda birden çok şey söyleyebilir — "matematiği bitirdim, 85 yemek, 40 otobüs, 7 saat uyudum, kahvaltıda 3 yumurta". HER parça için ayrı araç çağır: harcama → harcama_ekle (her tutar ayrı), yenen her besin → ogun_ekle (her besin ayrı, miktarıyla), uyku → uyku_kaydet, tartı → kilo_kaydet, biten iş → gorev_tamamla (yalnız AÇIK GÖREVLER [id] ile; listede yoksa gorev_ekle DEĞİL, sor).
+- Sayı UYDURMA: tutarı ve kiloyu kullanıcının yazdığı gibi geçir; kalori, makro, kategori dışı sayı yazma — uygulama hesaplar. Öğün belirtilmediyse saatine göre seç (05-11 kahvalti, 11-16 ogle, 16-22 aksam, gerisi atistirma).
+- "dün" denirse tarih = BUGÜN'den bir önceki gün. Uyku tarihi = uyanılan gün.
+- Kilo/vücut hakkında yorum, hedef ya da diyet önerisi YAPMA; sadece kaydet.
+- KAYIT SORULARI ("bu hafta yemeğe ne harcadım", "dün kaç saat uyudum", "bu hafta kaç antrenman yaptım") → yalnız [KAYITLAR] bölümündeki HESAPLANMIŞ sayılarla cevap ver; orada yoksa "kaydı yok" de, tahmin etme.
 - Sadece sohbet, soru ya da ders anlatımıysa araç ÇAĞIRMA.
 - Araç çağırdığında cevap metnin 1-2 cümle: ne hazırladığını ve varsa dikkat edilecek şeyi söyle (ör. "perşembe 2 saati aşıyor").`;
 
@@ -4190,6 +4252,35 @@ function agentDateOk(s, today, maxDays) {
   const t = new Date(today + 'T12:00:00Z');
   if ((d - t) / 86400000 > (maxDays || 90)) return null;
   return s;
+}
+// Geçmiş tarih (bugün dahil, en fazla AGENT_GECMIS_GUN geri). Gelecek tarihli harcama/öğün/uyku olmaz.
+function agentPastDateOk(s, today, maxBack) {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(s + 'T12:00:00Z');
+  if (isNaN(d) || d.toISOString().slice(0, 10) !== s || s > today) return null;
+  const t = new Date(today + 'T12:00:00Z');
+  return (t - d) / 86400000 <= (maxBack || AGENT_GECMIS_GUN) ? s : null;
+}
+// Türk biçimi sayı ("1.250,50" · "68,4" · 85) — harcama.js hrcSayi ile aynı kural.
+function agentNum(x, lo, hi, dec) {
+  let t;
+  if (typeof x === 'number') t = x;
+  else if (/-\s*\d/.test(String(x == null ? '' : x))) return null;   // "-50" → 50 OLMAZ
+  else {
+    const m = /(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)/.exec(String(x == null ? '' : x));
+    if (!m) return null;
+    let v = m[1];
+    if (/\.\d{3}(?:,|$)/.test(v)) v = v.replace(/\./g, '');
+    t = parseFloat(v.replace(',', '.'));
+  }
+  if (!Number.isFinite(t) || t < lo || t > hi) return null;
+  const p = Math.pow(10, dec == null ? 2 : dec);
+  return Math.round(t * p) / p;
+}
+function agentHM(x) {
+  const m = /^(\d{1,2})[:.](\d{2})$/.exec(String(x == null ? '' : x).trim());
+  if (!m || +m[1] > 23 || +m[2] > 59) return null;
+  return String(+m[1]).padStart(2, '0') + ':' + m[2];
 }
 function agentInt(x, lo, hi) {
   const n = Math.round(Number(x));
@@ -4245,9 +4336,91 @@ function agentSanitizeActions(toolCalls, ctx) {
       const tarih = agentDateOk(a.yeni_tarih, today, 365);
       if (!id || !ids.has(id) || !tarih) continue;
       out.push({ type: 'gorev_ertele', gorevId: id, tarih });
+    } else if (tc.name === 'harcama_ekle') {
+      // 🔒 Tutar kodla çözülür; 0, eksi, 100.000 üstü düşer (harcama.js HRC_MAX_TL ile aynı).
+      const tl = agentNum(a.tutar, 0.01, 100000, 2);
+      if (tl == null) continue;
+      out.push({
+        type: 'harcama_ekle', tl, not: agentStr(a.not, 80),
+        kategori: AGENT_HRC_KAT.indexOf(a.kategori) >= 0 ? a.kategori : null,
+        tarih: agentPastDateOk(a.tarih, today) || today,
+      });
+    } else if (tc.name === 'ogun_ekle') {
+      // Kalori BURADA YOK: istemci besin veritabanından hesaplar; modelin sayısı hiç taşınmaz.
+      const yemek = agentStr(a.yemek, 80);
+      if (yemek.length < 2) continue;
+      out.push({ type: 'ogun_ekle', yemek, ogun: AGENT_OGUN.indexOf(a.ogun) >= 0 ? a.ogun : null, tarih: agentPastDateOk(a.tarih, today) || today });
+    } else if (tc.name === 'uyku_kaydet') {
+      const yatis = agentHM(a.yatis), kalkis = agentHM(a.kalkis);
+      let saat = null;
+      if (yatis && kalkis) {
+        let dk = (+kalkis.slice(0, 2) * 60 + +kalkis.slice(3)) - (+yatis.slice(0, 2) * 60 + +yatis.slice(3));
+        if (dk <= 0) dk += 1440;
+        saat = dk <= 16 * 60 ? Math.round(dk / 60 * 100) / 100 : null;
+      } else saat = agentNum(a.saat, 1, 16, 2);
+      if (saat == null) continue;     // ne iki saat ne süre → kayıt yok (yarım uyku kaydı bayat veri üretir)
+      out.push({ type: 'uyku_kaydet', yatis: yatis && kalkis ? yatis : null, kalkis: yatis && kalkis ? kalkis : null, saat, tarih: agentPastDateOk(a.tarih, today) || today });
+    } else if (tc.name === 'kilo_kaydet') {
+      // Sınırlar core.js upsertBody ile aynı (kilo 20-500, yağ %3-70).
+      const kg = agentNum(a.kg, 20, 500, 1);
+      if (kg == null) continue;
+      out.push({ type: 'kilo_kaydet', kg, yag: agentNum(a.yag, 3, 70, 1), tarih: agentPastDateOk(a.tarih, today) || today });
     }
   }
   return out;
+}
+
+/**
+ * [KAYITLAR] — sohbetin "bu hafta ne harcadım / kaç saat uyudum" sorularına
+ * cevap verdiği TEK kaynak. Sayıları KOD hesaplar; model yalnız okur.
+ * Saf fonksiyon (test edilir). Borsa YOK (11 Eki: Aidan'dan çıktı).
+ */
+function agentKayitlar(d, today) {
+  const gun7 = hfEkleSafe(today, -6), ayBas = today.slice(0, 8) + '01';
+  const L = ['\n[KAYITLAR — uygulama hesapladı, son 7 gün = ' + gun7 + '..' + today + ']'];
+  const r2 = (n) => Math.round(n * 100) / 100;
+  // Harcama
+  const H = (Array.isArray(d.harcama) ? d.harcama : []).filter(h => h && h.d && h.tl > 0);
+  const katTop = (arr) => {
+    const k = {};
+    arr.forEach(h => { k[h.kat || 'diger'] = (k[h.kat || 'diger'] || 0) + h.tl; });
+    return Object.keys(k).sort((a, b) => k[b] - k[a]).map(x => x + ' ' + r2(k[x]) + ' TL').join(', ');
+  };
+  const h7 = H.filter(h => h.d >= gun7 && h.d <= today), hAy = H.filter(h => h.d >= ayBas && h.d <= today), hBugun = H.filter(h => h.d === today);
+  if (H.length) {
+    L.push('HARCAMA: bugün ' + r2(hBugun.reduce((t, h) => t + h.tl, 0)) + ' TL (' + hBugun.length + ' kalem)' +
+      ' · son 7 gün ' + r2(h7.reduce((t, h) => t + h.tl, 0)) + ' TL' + (h7.length ? ' [' + katTop(h7) + ']' : '') +
+      ' · bu ay ' + r2(hAy.reduce((t, h) => t + h.tl, 0)) + ' TL' +
+      ((d.settings && d.settings.harcamaLimit > 0) ? ' / limit ' + d.settings.harcamaLimit + ' TL' : ''));
+  } else L.push('HARCAMA: kayıt yok');
+  // Öğün
+  const days = (d.diet && d.diet.days) || {};
+  const ogun7 = Object.keys(days).filter(k => k >= gun7 && k <= today && (days[k].meals || []).length).sort();
+  const bugunM = (days[today] && days[today].meals) || [];
+  const kcal = bugunM.reduce((t, m) => t + (m.kcal > 0 ? m.kcal : 0), 0);
+  L.push('ÖĞÜN: bugün ' + (bugunM.length ? bugunM.length + ' kalem, ' + kcal + ' kcal (' + bugunM.slice(-8).map(m => String(m.name || '').slice(0, 30)).join(', ') + ')' : 'kayıt yok') +
+    ' · son 7 günde kayıtlı gün: ' + ogun7.length);
+  // Uyku
+  const S = (Array.isArray(d.sleep) ? d.sleep : []).filter(x => x && x.date && x.hours > 0 && x.date >= gun7 && x.date <= today)
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  L.push('UYKU: ' + (S.length ? 'son gece ' + S[0].date + ' ' + S[0].hours + ' sa' + (S[0].bedtime && S[0].wake ? ' (' + S[0].bedtime + '-' + S[0].wake + ')' : '') +
+    ' · 7 gün ort. ' + r2(S.reduce((t, x) => t + x.hours, 0) / S.length) + ' sa (' + S.length + ' gece)' : 'son 7 günde kayıt yok'));
+  // Kilo — yalnız son değer, yorum YOK (16 yaş kilidi)
+  const W = (d.diet && Array.isArray(d.diet.weights) ? d.diet.weights : []).filter(w => w && w.kg != null && w.date).sort((a, b) => (a.date < b.date ? 1 : -1));
+  L.push('KİLO: ' + (W.length ? W[0].kg + ' kg (' + W[0].date + ')' : 'kayıt yok'));
+  // Antrenman (Hevy)
+  const A = ((d.hevy && Array.isArray(d.hevy.workouts)) ? d.hevy.workouts : []).filter(w => w && w.date >= gun7 && w.date <= today)
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+  L.push('ANTRENMAN (Hevy, son 7 gün): ' + (A.length ? A.length + ' antrenman — ' + A.map(w => w.date.slice(5) + ' ' + String(w.title || '').slice(0, 24) + (w.setCount ? ' ' + w.setCount + ' set' : '')).join(', ') : 'kayıt yok'));
+  // Görev
+  const T = (d.tasks || []).filter(t => t && t.done && t.doneDate && t.doneDate >= gun7 && t.doneDate <= today);
+  L.push('BİTEN GÖREV (son 7 gün): ' + T.length + (T.length ? ' — ' + T.slice(-6).map(t => String(t.text || '').slice(0, 30)).join(', ') : ''));
+  return L.join('\n');
+}
+function hfEkleSafe(t, n) {
+  const d = new Date(t + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
 }
 
 /** Ajanın göreceği bağlam: bugün, açık görevler ([id] ile), ders programı, sabit program. */
@@ -4255,7 +4428,10 @@ function agentContext(d, today) {
   const GUN = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
   const KISA = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
   const dow = new Date(today + 'T12:00:00Z').getUTCDay();
-  const lines = [`\n\n[AJAN BAĞLAMI]\nBUGÜN: ${today} ${GUN[dow]}`];
+  // Saat: öğün seçimi (kahvaltı/öğle/akşam) için. Yalnız bugünün bağlamında anlamlı.
+  const trNow = new Date(Date.now() + (typeof TR_OFFSET_MS === 'number' ? TR_OFFSET_MS : 3 * 3600000));
+  const saatStr = today === trNow.toISOString().slice(0, 10) ? ` · saat ${String(trNow.getUTCHours()).padStart(2, '0')}:${String(trNow.getUTCMinutes()).padStart(2, '0')}` : '';
+  const lines = [`\n\n[AJAN BAĞLAMI]\nBUGÜN: ${today} ${GUN[dow]}${saatStr}`];
   const acik = (d.tasks || []).filter(t => t && !t.done)
     .sort((x, y) => String(x.due || '9999').localeCompare(String(y.due || '9999'))).slice(0, 30);
   lines.push(`AÇIK GÖREVLER (${acik.length}):`);
@@ -4284,6 +4460,7 @@ function agentContext(d, today) {
     const koc = d.haftaKoc;
     if (koc && koc.metin && koc.at >= hfEkle(today, -8)) lines.push(`HAFTALIK KOÇ NOTU (${koc.at}): ${String(koc.metin).slice(0, 600)}`);
   }
+  try { lines.push(agentKayitlar(d, today)); } catch (_) {}   // kayıt özeti bozulursa sohbet ölmesin
   return lines.join('\n');
 }
 
