@@ -1,4 +1,4 @@
-const CACHE = 'aidan-v7-211';
+const CACHE = 'aidan-v7-212';
 const ASSETS = [
   '/',
   '/supabase.js',
@@ -58,6 +58,9 @@ self.addEventListener('notificationclick', e => {
         if ('focus' in c) {
           // Uygulama zaten açıksa navigate yerine mesaj gönder (state kaybolmasın)
           if (d.blockId) { try { c.postMessage({ type: 'BLOCK_ACTION', blockId: d.blockId, action: act }); } catch (err) {} }
+          // Faz 3: "Günü kapat" (/?ac=sohbet) — açık uygulamada sohbete geç
+          const ac = /[?&]ac=([a-z]+)/.exec(url);
+          if (ac) { try { c.postMessage({ type: 'AC', ac: ac[1] }); } catch (err) {} }
           return c.focus();
         }
       }

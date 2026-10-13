@@ -957,13 +957,19 @@ function initBlockActionBridge() {
       setTimeout(() => handleBlockAction(blk, act), 400);
       history.replaceState(null, '', location.pathname);
     }
+    const ac = q.get('ac');   // Faz 3: "Günü kapat" bildirimi → sohbet
+    if (ac) { setTimeout(() => pushAc(ac), 400); history.replaceState(null, '', location.pathname); }
   } catch (e) {}
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.addEventListener('message', ev => {
       const d = ev && ev.data;
       if (d && d.type === 'BLOCK_ACTION' && d.blockId) handleBlockAction(d.blockId, d.action || 'open');
+      if (d && d.type === 'AC') pushAc(d.ac);
     });
   }
+}
+function pushAc(ac) {
+  if (ac === 'sohbet') loadModule('bugun').then(() => bugunSohbet()).catch(() => {});
 }
 
 // AI: görevleri + uyanık pencereyi → saat saat plan (Worker /plan)

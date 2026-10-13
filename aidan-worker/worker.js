@@ -16,7 +16,7 @@
  * Bindings:
  *   AI                    — Workers AI
  *
- * Manuel test: https://<url>/?type=morning|noon|evening|deadline|weekly|stocks|portfolio|reminders&secret=<WEBHOOK_SECRET>
+ * Manuel test: https://<url>/?type=morning|gunukapat|noon|evening|deadline|weekly|stocks|portfolio|reminders&secret=<WEBHOOK_SECRET>
  */
 
 const TR_OFFSET_MS = 3 * 60 * 60 * 1000;
@@ -1403,6 +1403,48 @@ async function buildWeekly(env, data, memory) {
   return { title: '📊 Haftalık review', message: lines.join('\n') };
 }
 
+// ============================================================
+// FAZ 3 (13 Eki 2026) — GÜNDE 2 BİLDİRİM: sabah + akşam "Günü kapat"
+// Eskiden: 08 sabah · 09 deadline · 12 öğle · 21 akşam (+ Pazar 20 koç, 21 haftalık + sağlık).
+// Salim'in derdi elle giriş; bildirim çoğaldıkça hepsi gürültü oldu. Akşamki tek
+// bildirim SOHBETİ açar (tek giriş kapısı): "ne yedin / ne harcadın / ne bitti" tek mesaj.
+// Metni KOD kurar (AI yok): sayılar uydurulamaz, maliyet sıfır.
+// ============================================================
+function sabahSonTarihSatiri(data, bugun, yarin) {
+  const acik = ((data && data.tasks) || []).filter(t => t && !t.done && t.due);
+  const bg = acik.filter(t => t.due === bugun).map(t => t.text);
+  const yr = acik.filter(t => t.due === yarin).map(t => t.text);
+  const kis = (a) => a.slice(0, 3).join(', ') + (a.length > 3 ? ` +${a.length - 3}` : '');
+  const L = [];
+  if (bg.length) L.push(`🔥 Bugün son gün: ${kis(bg)}`);
+  if (yr.length) L.push(`⏰ Yarın son gün: ${kis(yr)}`);
+  return L.join('\n');
+}
+
+function buildGunuKapat(data, bugun, yarin) {
+  const d = data || {};
+  const tasks = d.tasks || [];
+  const biten = tasks.filter(t => t && t.doneDate === bugun).length;
+  const mit = tasks.filter(t => t && t.mitDate === bugun);
+  const mitBiten = mit.filter(t => t.done).length;
+  const gun = (d.diet && d.diet.days && d.diet.days[bugun]) || {};
+  const ogun = Array.isArray(gun.meals) ? gun.meals.length : 0;
+  const harcama = (Array.isArray(d.harcama) ? d.harcama : []).filter(h => h && h.d === bugun).length;
+  const uyku = (Array.isArray(d.sleep) ? d.sleep : []).some(s => s && s.date === bugun);
+  const eksik = [];
+  if (!ogun) eksik.push('öğün');
+  if (!harcama) eksik.push('harcama');
+  if (!uyku) eksik.push('uyku');
+  const L = [];
+  L.push(`✅ Bugün ${biten} iş bitti` + (mit.length ? ` · Bugünün 3'ü ${mitBiten}/${mit.length}` : ''));
+  L.push(eksik.length
+    ? `📝 Kayıtsız: ${eksik.join(', ')}. Tek mesajla yaz, ben ayırırım.`
+    : '📝 Kayıtlar tamam. Eklemek istediğin bir şey varsa yaz.');
+  const yr = tasks.filter(t => t && !t.done && t.due === yarin).map(t => t.text);
+  if (yr.length) L.push(`⏰ Yarın son gün: ${yr.slice(0, 2).join(', ')}${yr.length > 2 ? ` +${yr.length - 2}` : ''}`);
+  return { title: '🌙 Günü kapat', message: L.join('\n'), tag: 'aidan-aksam', url: '/?ac=sohbet' };
+}
+
 function buildDeadlineAlerts(data) {
   const today = trToday();
   const tasks = data.tasks || [];
@@ -1590,7 +1632,8 @@ function buildDailySummaryLine(data) {
   return `📊 Dün: ${parts.join(' · ')}`;
 }
 
-async function runCronJob(env, type) {
+async function runCronJob(env, type, opts) {
+  const sessiz = !!(opts && opts.sessiz);   // Faz 3: rapor üret + kaydet, push ATMA
   const users = await fetchAllUsers(env);
   const results = [];
   for (const u of users) {
@@ -1604,8 +1647,12 @@ async function runCronJob(env, type) {
           // 5 Eki 2026 — Haftam: bugün/yarın için çapraz çakışma (sınav + ağır antrenman, ödev aşımı, geç seans)
           const hcak = hfCakismalar(u.data, trToday(), 2).filter(c => c.seviye !== 'bilgi').slice(0, 2);
           if (payload && hcak.length) payload.message += '\n\n' + hcak.map(c => `⚠️ ${c.mesaj} ${c.oneri}`).join('\n');
+          // Faz 3 (13 Eki): 09:00 deadline push'u sabaha katıldı — sabah TEK bildirim
+          const sonTarih = sabahSonTarihSatiri(u.data, trToday(), trDate(1));
+          if (payload && sonTarih) payload.message += '\n\n' + sonTarih;
           break;
         }
+        case 'gunukapat': payload = buildGunuKapat(u.data, trToday(), trDate(1)); break;
         case 'noon':     payload = buildNoon(u.data); break;
         case 'evening':  payload = buildEvening(u.data); break;
         case 'deadline': payload = buildDeadlineAlerts(u.data); break;
@@ -1615,8 +1662,10 @@ async function runCronJob(env, type) {
       }
       if (!payload) { results.push({ userId: u.userId, sent: false, reason: 'no-content' }); continue; }
       const subs = (u.data.settings && u.data.settings.pushSubs) || [];
-      await sendPushToAll(env, u.data, payload, { userId: u.userId });
-      logPush(u.data, type, payload, subs.length);
+      if (!sessiz) {
+        await sendPushToAll(env, u.data, payload, { userId: u.userId });
+        logPush(u.data, type, payload, subs.length);
+      }
       try { await saveUserData(env, u.userId, u.data); } catch (e) { console.error(`save fail user=${u.userId}`, e.message); }
       results.push({ userId: u.userId, sent: true, subs: subs.length });
     } catch (e) {
@@ -10674,29 +10723,27 @@ export default {
       runCronJob(env, 'morning').then(() => runAutoPlan(env, { trigger: 'morning' }))
     );
 
-    // 09:00 - deadline uyarisi
-    if (at(9, 0)) jobs.push(runCronJob(env, 'deadline'));
+    // ⛔ 09:00 deadline + 12:00 ogle push'u KALDIRILDI (Faz 3, 13 Eki): son tarihler
+    // sabah bildirimine katildi. Gunde 2 bildirim: sabah + aksam. Geri ekleme.
 
-    // 12:00 - ogle check-in
-    if (at(12, 0)) jobs.push(runCronJob(env, 'noon'));
-
-    // 21:00 - aksam ozeti -> Hevy senkron -> YARININ plani.
+    // 21:00 - "GUNU KAPAT" (sohbeti acar) -> Hevy senkron -> YARININ plani.
     // Hevy once senkronlanir: bugunun antrenmani plan gecmisine islensin,
     // planlayici yarini kurarken antrenman gununu bilsin.
     if (at(21, 0)) jobs.push(
-      runCronJob(env, 'evening')
+      runCronJob(env, 'gunukapat')
         .then(() => runHevySync(env).catch(e => console.error('hevy sync', e.message)))
         .then(() => runAutoPlan(env, { trigger: 'evening', forDate: trDate(1) }))
     );
 
-    // Pazar 21:00 - haftalik gorev ozeti + haftalik SAGLIK analizi
-    // (aksam ozetiyle ayni saat; eskiden de iki ayri trigger olarak boyleydi)
-    if (dow === 0 && at(21, 0)) jobs.push(
-      runCronJob(env, 'weekly').then(() => runCronJob(env, 'health'))
+    // Pazar 20:00 - TEK haftalik bildirim (Faz 3, 13 Eki): saglik raporu SESSIZ uretilir
+    // (data.coach'a kaydedilir, push yok) -> PRO koc (haftaKocFacts gorev + saglik +
+    // gelecek hafta zaten iceriyor) tek push atar. Eskiden Pazar 4 bildirimdi
+    // (20 koc, 21 aksam + haftalik gorev + saglik). Haftalik gorev push'u koca katildi.
+    if (dow === 0 && at(20, 0)) jobs.push(
+      runCronJob(env, 'health', { sessiz: true })
+        .catch(e => console.error('saglik sessiz', e.message))
+        .then(() => runHaftaOzet(env))
     );
-
-    // Pazar 20:00 - HAFTAM ozeti (5 Eki 2026): onumuzdeki 7 gunun capraz cakismalari
-    if (dow === 0 && at(20, 0)) jobs.push(runHaftaOzet(env));
 
     // 19:30 - HEDEF AJANI (4 Eki 2026): zamani gelen hedefleri dusunur,
     // yeni oneri varsa tek push. Okul sonrasi, 21:00 aksam ozetinden once.
