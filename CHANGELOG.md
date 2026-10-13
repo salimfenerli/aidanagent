@@ -1,3 +1,7 @@
+# 🗓️ 14 Eki 2026 — ADLI DERS / KURS (v7-213)
+
+Salim: Pzt + Çar 17:30-18:30 matematik dersi. Veriye yazıldı (`diet.nut.duzen.ders` 1 ve 3, `ad: 'Matematik dersi'`; eski Pzt 17:30-19:00 kaydının yerine). `hfGun` ikizi (hafta.js + worker) `ad` varsa blok adına koyar (yoksa "Ek ders / kurs"); beslenme ekranından saat düzenlenince ad korunur. Antrenman otomatik 19:00'a kayıyor (Pzt Alt Vücut A, Çar dövüş). Test 63-gun-bilgisi.
+
 # 🗓️ 13 Eki 2026 — FAZ 3: GÜNDE 2 BİLDİRİM (v7-212)
 
 Eskiden günde 4 push (08 sabah · 09 deadline · 12 öğle · 21 akşam) + Pazar 20 koç, 21 haftalık görev + sağlık. Şimdi: **08:00 sabah** (son tarihler `sabahSonTarihSatiri` ile içinde) + **21:00 "Günü kapat"** (`buildGunuKapat`, AI yok: biten iş, Bugünün 3'ü, kayıtsız öğün/harcama/uyku, yarın son gün; `url: '/?ac=sohbet'`). Bildirime dokununca sohbet açılır: kapalı uygulamada `?ac=` (tasks.js `pushAc`), açık uygulamada SW `AC` mesajı. Pazar 20:00: sağlık raporu `runCronJob(...,{sessiz:true})` ile üretilip kaydedilir, push atmaz → PRO koç TEK push. Haftalık görev push'u kaldırıldı (koç facts zaten içeriyor). buildNoon/buildEvening/buildDeadlineAlerts/buildWeekly silinmedi (`?type=` elle test). Hedef ajanı 19:30 yalnız yeni öneride atar (değişmedi). Test 62-faz3-bildirim; 54 regex güncellendi.

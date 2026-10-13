@@ -61,7 +61,7 @@ function hfGun(d, tarih) {
   const okul = duzen.okul && duzen.okul[String(dow)];
   if (okul) ekle('okul', 'Okul', hfDk(okul.bas), hfDk(okul.bit));
   const kurs = duzen.ders && duzen.ders[String(dow)];
-  if (kurs) ekle('ders', 'Ek ders / kurs', hfDk(kurs.bas), hfDk(kurs.bit));
+  if (kurs) ekle('ders', kurs.ad ? String(kurs.ad).slice(0, 40) : 'Ek ders / kurs', hfDk(kurs.bas), hfDk(kurs.bit));
   // 5 Eki 2026 — HAFTALIK SINAV (Salim: her Salı/Perşembe 17:25-19:05 okulda).
   // Rutin: her hafta tekrarlar → sınav haftası / ağır antrenman alarmı ÜRETMEZ
   // (her hafta çalan alarm gürültüdür); önceki akşama TEKRAR süresi ayırır.
