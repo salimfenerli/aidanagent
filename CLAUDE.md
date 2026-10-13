@@ -29,7 +29,7 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 
 **Aidan istemcisi** (`asistan.html` → Pages'te `/index.html`):
 - Statik sıra: `core.js` (diyet + uyku + `escapeHtml` + `loadModule`) → `tasks.js` (sekmeler, gün planı, quick-capture) → `ui.js` (render, ayarlar, auth, sohbet; en altta İLK RENDER).
-- **Tembel modüller** (`core.js` → `LAZY_MODULES`): `supabase` · `program` · `nutrition` · `health` · `foods` · `school` · `onboarding` · `karne` · `hafiza` (+ davet + yedek listesi) · `hedefler` · `ajan` · `hafta` · `harcama` (panel `<details>` açılınca iner — `ontoggle`).
+- **Tembel modüller** (`core.js` → `LAZY_MODULES`): `supabase` · `program` · `nutrition` · `health` · `foods` · `school` · `onboarding` · `karne` · `hafiza` (+ davet + yedek listesi) · `hedefler` · `ajan` · `hafta` · `harcama` (panel `<details>` açılınca iner — `ontoggle`) · `bugun` (Görevler tepesindeki Bugün kartı; eski kalabalığı silmez, en alttaki "Ayrıntılar"a TAŞIR — id'ler korunur; `renderTasks`'ı sarmalar).
 - ⚠️ **Yeni tembel modül = 7 yer:** `LAZY_MODULES` · `sw.js` ASSETS · `aidan-pages-deploy.py` INCLUDE · `.github/workflows/deploy.yml` paths · `.gitattributes` · `package.json` `check` · `tests/07-hygiene` + `tests/13-lazy` listeleri. Biri eksikse modül 404 olur ya da deploy tetiklenmez — **sessiz arıza**.
 - **İlk yükleme bütçesi** (`13-lazy`): dolu. Yeni özellik eşiği YÜKSELTEREK geçirilmez; nadir açılan kod tembel modüle taşınır, CSS modülün içine enjekte edilir (`hafiza.js`/`hedefler.js` deseni).
 - Veri: `localStorage 'aidan'` = Supabase `aidan_data.data` (tek JSON blob, debounced push + realtime pull). Şekil için `core.js` varsayılanlarına bak.

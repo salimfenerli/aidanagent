@@ -18,6 +18,7 @@ on:
       - 'hafiza.js'
       - 'hedefler.js'
       - 'harcama.js'
+      - 'bugun.js'
       - 'ajan.js'
       - 'hafta.js'
       - 'supabase.js'

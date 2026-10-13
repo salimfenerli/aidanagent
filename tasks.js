@@ -366,6 +366,8 @@ function ensureGoalsModule() {
   // Haftam paneli (hafta.js) aynı anda iner — ikisi de Görevler sekmesinde.
   if (typeof renderHafta === 'function') renderHafta();
   else loadModule('hafta').then(() => { if (typeof renderHafta === 'function') renderHafta(); }).catch(() => {});
+  // Faz 2 (13 Eki): sekmenin tepesindeki Bugün kartı — bugun.js
+  loadModule('bugun').then(() => { if (typeof renderBugun === 'function') renderBugun(); }).catch(() => {});
   if (typeof renderGoals === 'function') return renderGoals();
   return loadModule('hedefler')
     .then(() => { if (typeof renderGoals === 'function') renderGoals(); })
