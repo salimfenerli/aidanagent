@@ -36,3 +36,9 @@ test('worker ikizi aynı satırı taşır', () => {
 test('beslenme ekranında saat düzenlenince ad korunur', () => {
   assert.match(readText('nutrition.js'), /d\.ders\[String\(dow\)\] = Object\.assign\(\{\}, d\.ders\[String\(dow\)\], \{ bas: nutSaat\(b\), bit: nutSaat\(e\) \}\)/);
 });
+
+test('sohbete gelen ödev listesi görseli odev_plani aracına yönlendirilir', () => {
+  const W = readText('aidan-worker/worker.js');
+  assert.match(W, /Görsel bir ÖDEV LİSTESİ ise[^']*odev_plani aracıyla TEK pakette/);
+  assert.match(W, /const agentOn = !metaMode;/);   // görselli mesajda da araçlar açık
+});
