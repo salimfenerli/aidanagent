@@ -1,3 +1,7 @@
+# 🗓️ 14 Eki 2026 — SOHBETTEN SABİT PROGRAM (v7-215)
+
+Salim: "yazdığımı tak diye programa koymasın, anlayıp özümseyip kaydetsin". Yeni ajan aracı `program_kaydet` {islem ekle/sil, tur okul/ders/dovus/sabit, ad, gunler, bas, bit}. Prompt: kısaltmayı aç, Türkçe saati 24 saate çevir (okul bitişine göre), süreden bitiş hesapla, belirsizse SOR, zaten kayıtlıysa araç çağırma, tek seferlik → gorev_ekle. Bağlama KAYITLI PROGRAM (okul + adlı ek ders) eklendi. Worker temizler (tür beyaz liste, `agentGunler` Türkçe ad, HH:MM, bas<bit). ajan.js kartı hfGun önce/sonra etkiyi gösterir (antrenman kayması, ödeve kalan süre, çakışma uyarısı); Uygula → `ajanProgUygula` (aynı ad üzerine yazar), Geri al anlık görüntüden. Test 64.
+
 # 🗓️ 14 Eki 2026 — HER PERŞEMBE "ÖDEV LİSTESİ" HATIRLATICISI (v7-214)
 
 Salim: "perşembe günleri ödev listeni paylaş diye hatırlatsın" (okul ödevi WhatsApp'tan haftalık geliyor). Sabit hatırlatıcıya `days: [dow,...]` (belirli günler), `msg` (özel metin), `url` (yalnız `/` ya da `/?ac=x`, dış adres düşer) eklendi. Veriye yazıldı: Perşembe 20:00 "Ödev listesi" → sohbeti açar. Sohbet [FOTOĞRAF] talimatı: görsel ödev listesiyse `odev_plani` tek paket. Ayarlar listesi gün adlarını gösterir. Test 63.

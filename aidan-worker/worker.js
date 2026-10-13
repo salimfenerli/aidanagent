@@ -4159,6 +4159,10 @@ const AGENT_CATS = ['odev', 'ders', 'ev', 'kisisel'];
 const AGENT_HRC_KAT = ['yemek', 'ulasim', 'okul', 'spor', 'giyim', 'eglence', 'diger'];
 const AGENT_OGUN = ['kahvalti', 'ogle', 'aksam', 'atistirma'];
 const AGENT_GECMIS_GUN = 7;     // geriye dönük kayıt en fazla 1 hafta (unutulan dünkü harcama vb.)
+// 14 Eki 2026 — SABİT PROGRAM sohbetten (Salim: "yazdığımı tak diye koymasın, anlayıp özümseyip kaydetsin").
+// okul → duzen.okul · ders (ek ders/kurs/özel ders) → duzen.ders · dovus + sabit → fixedSchedule.
+const AGENT_PROG_TUR = ['okul', 'ders', 'dovus', 'sabit'];
+const AGENT_GUN_AD = { pazar: 0, paz: 0, pazartesi: 1, pzt: 1, sali: 2, sal: 2, carsamba: 3, car: 3, crs: 3, persembe: 4, per: 4, prs: 4, cuma: 5, cum: 5, cumartesi: 6, cmt: 6 };
 
 const AGENT_TOOLS = [
   {
@@ -4260,6 +4264,22 @@ const AGENT_TOOLS = [
     },
   },
   {
+    name: 'program_kaydet',
+    description: 'HER HAFTA TEKRAR EDEN sabit programı ekler/değiştirir/siler: okul saatleri, ek ders / kurs / özel ders, dövüş antrenmanı saati, diğer sabit iş (servis, satranç kulübü, aile yemeği). Tek seferlik iş için KULLANMA (gorev_ekle). Kullanıcının yazdığını anla ve normalleştir; aynı ad + gün zaten varsa üzerine yazar (değiştirmek için sil+ekle gerekmez).',
+    parameters: {
+      type: 'object',
+      properties: {
+        islem: { type: 'string', enum: ['ekle', 'sil'] },
+        tur: { type: 'string', enum: AGENT_PROG_TUR, description: 'okul = okul giriş-çıkış saati · ders = ek ders, kurs, özel ders, etüt · dovus = kickboks/MMA/güreş/BJJ antrenmanı · sabit = diğer her hafta tekrar eden şey' },
+        ad: { type: 'string', description: 'Düzgün, kısa ad: "Matematik dersi", "Kickboks", "Satranç kulübü" (kısaltma açılır: "mat" → "Matematik dersi"). okul için boş.' },
+        gunler: { type: 'array', items: { type: 'integer' }, description: 'Haftanın günleri: 0=Pazar 1=Pazartesi … 6=Cumartesi' },
+        bas: { type: 'string', description: 'HH:MM (24 saat). "5 buçuk" okul sonrasıysa 17:30.' },
+        bit: { type: 'string', description: 'HH:MM — söylenmediyse süreden hesapla ("1 saat" → bas+60 dk)' },
+      },
+      required: ['islem', 'tur'],
+    },
+  },
+  {
     name: 'kilo_kaydet',
     description: 'Tartı sonucunu kaydeder. Yorum YAPMA.',
     parameters: {
@@ -4290,6 +4310,7 @@ ARAÇLAR — AJAN MODU:
 - "dün" denirse tarih = BUGÜN'den bir önceki gün. Uyku tarihi = uyanılan gün.
 - Kilo/vücut hakkında yorum, hedef ya da diyet önerisi YAPMA; sadece kaydet.
 - KAYIT SORULARI ("bu hafta yemeğe ne harcadım", "dün kaç saat uyudum", "bu hafta kaç antrenman yaptım", "bugün bilgisayarda ne kadar YouTube") → yalnız [KAYITLAR] bölümündeki HESAPLANMIŞ sayılarla cevap ver; orada yoksa "kaydı yok" de, tahmin etme.
+- SABİT PROGRAM ("pazartesi çarşamba 17:30-18:30 matematik dersim var", "cumartesi kickboks 3'ten 5'e", "artık çarşamba kurs yok") → program_kaydet. Önce ANLA: kısaltmayı aç, Türkçe saat ifadesini 24 saate çevir (okul 17:00'de bitiyorsa "5 buçuk" = 17:30), süre verildiyse bitişi hesapla. Başlangıç ya da bitiş gerçekten belirsizse ARAÇ ÇAĞIRMA, tek cümleyle sor. KAYITLI PROGRAM ve BU HAFTA ile karşılaştır: aynısı zaten kayıtlıysa araç çağırma, "zaten kayıtlı" de; değişiklikse yalnız yeni hâlini "ekle" (üzerine yazar); okul/başka blokla çakışıyorsa cevapta söyle. Tek seferlik olay (yarınki doktor) program DEĞİL → gorev_ekle.
 - Sadece sohbet, soru ya da ders anlatımıysa araç ÇAĞIRMA.
 - Araç çağırdığında cevap metnin 1-2 cümle: ne hazırladığını ve varsa dikkat edilecek şeyi söyle (ör. "perşembe 2 saati aşıyor").`;
 
@@ -4330,6 +4351,20 @@ function agentHM(x) {
   const m = /^(\d{1,2})[:.](\d{2})$/.exec(String(x == null ? '' : x).trim());
   if (!m || +m[1] > 23 || +m[2] > 59) return null;
   return String(+m[1]).padStart(2, '0') + ':' + m[2];
+}
+// Günler: 0-6 sayı ya da Türkçe ad ("pazartesi", "Çar"). Tekrarsız, Pzt→Paz sıralı.
+function agentGunler(x) {
+  const out = [];
+  for (const v of (Array.isArray(x) ? x : []).slice(0, 7)) {
+    let n = null;
+    if (typeof v === 'number' || /^\d$/.test(String(v))) n = Number(v);
+    else {
+      const k = String(v || '').toLocaleLowerCase('tr').replace(/ı/g, 'i').replace(/ş/g, 's').replace(/ç/g, 'c').replace(/[^a-z]/g, '');
+      if (k in AGENT_GUN_AD) n = AGENT_GUN_AD[k];
+    }
+    if (Number.isInteger(n) && n >= 0 && n <= 6 && out.indexOf(n) < 0) out.push(n);
+  }
+  return out.sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
 }
 function agentInt(x, lo, hi) {
   const n = Math.round(Number(x));
@@ -4409,6 +4444,20 @@ function agentSanitizeActions(toolCalls, ctx) {
       } else saat = agentNum(a.saat, 1, 16, 2);
       if (saat == null) continue;     // ne iki saat ne süre → kayıt yok (yarım uyku kaydı bayat veri üretir)
       out.push({ type: 'uyku_kaydet', yatis: yatis && kalkis ? yatis : null, kalkis: yatis && kalkis ? kalkis : null, saat, tarih: agentPastDateOk(a.tarih, today) || today });
+    } else if (tc.name === 'program_kaydet') {
+      // 🔒 Model ne derse desin: tür beyaz listede, gün 0-6, saat HH:MM, başlangıç < bitiş.
+      const tur = AGENT_PROG_TUR.indexOf(a.tur) >= 0 ? a.tur : null;
+      if (!tur) continue;
+      const islem = a.islem === 'sil' ? 'sil' : 'ekle';
+      const gunler = agentGunler(a.gunler);
+      const bas = agentHM(a.bas), bit = agentHM(a.bit);
+      let ad = tur === 'okul' ? '' : agentStr(a.ad, 40);
+      if (!ad && tur === 'ders') ad = 'Ek ders';
+      if (!ad && tur === 'dovus') ad = 'Dövüş antrenmanı';
+      if (!ad && tur === 'sabit') continue;
+      if (islem === 'ekle' && (!gunler.length || !bas || !bit || bas >= bit)) continue;
+      if (islem === 'sil' && !gunler.length && tur === 'okul') continue;
+      out.push({ type: 'program_kaydet', islem, tur, ad, gunler, bas: islem === 'ekle' ? bas : null, bit: islem === 'ekle' ? bit : null });
     } else if (tc.name === 'kilo_kaydet') {
       // Sınırlar core.js upsertBody ile aynı (kilo 20-500, yağ %3-70).
       const kg = agentNum(a.kg, 20, 500, 1);
@@ -4506,6 +4555,12 @@ function agentContext(d, today) {
       .map(k => `${KISA[Number(k)]}: ${tt[k].map(x => String((x && (x.name || x.ders || x.subject)) || x)).filter(Boolean).slice(0, 10).join(', ')}`);
     if (satir.length) lines.push('OKUL DERS PROGRAMI: ' + satir.join(' · '));
   }
+  // 14 Eki — KAYITLI PROGRAM: program_kaydet "zaten var / değişiklik" kararını buradan verir.
+  const dz = (d.diet && d.diet.nut && d.diet.nut.duzen) || {};
+  const gunSat = (o, adli) => ['1', '2', '3', '4', '5', '6', '0'].filter(k => o && o[k] && o[k].bas)
+    .map(k => `${KISA[Number(k)]} ${adli && o[k].ad ? o[k].ad + ' ' : ''}${o[k].bas}-${o[k].bit}`).join(', ');
+  if (gunSat(dz.okul)) lines.push('KAYITLI PROGRAM — OKUL: ' + gunSat(dz.okul));
+  if (gunSat(dz.ders, true)) lines.push('KAYITLI PROGRAM — EK DERS/KURS: ' + gunSat(dz.ders, true));
   const fx = (d.fixedSchedule || []).filter(f => f && f.enabled !== false && Array.isArray(f.days) && f.days.length).slice(0, 10);
   if (fx.length) lines.push('SABİT PROGRAM (özel ders, kurs, antrenman): ' + fx.map(f => `${String(f.label || '').slice(0, 30)} ${f.days.map(x => KISA[x]).join('/')} ${f.start || ''}-${f.end || ''}`).join(' · '));
   // 5 Eki 2026 — Haftam: okul + kurs + antrenman + sınav + ödev kapasitesi tek tabloda.
