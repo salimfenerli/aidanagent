@@ -2451,7 +2451,7 @@ function renderFixedReminders() {
       <input type="checkbox" ${r.enabled !== false ? 'checked' : ''} onchange="toggleFixedReminder(${r.id})" aria-label="Aç/kapa">
       <span class="fixedrem-time">${escapeHtml(r.time || '–')}</span>
       <span class="fixedrem-label">${escapeHtml(r.label || '')}</span>
-      <span class="fixedrem-days">${r.days === 'weekdays' ? 'Hafta içi' : 'Her gün'}</span>
+      <span class="fixedrem-days">${Array.isArray(r.days) ? r.days.map(x => ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'][x] || '').join(', ') : r.days === 'weekdays' ? 'Hafta içi' : 'Her gün'}</span>
       <button class="fixedrem-del" onclick="deleteFixedReminder(${r.id})" aria-label="Sil">✕</button>
     </div>
   `).join('');

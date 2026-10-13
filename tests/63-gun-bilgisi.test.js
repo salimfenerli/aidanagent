@@ -42,3 +42,39 @@ test('sohbete gelen ödev listesi görseli odev_plani aracına yönlendirilir', 
   assert.match(W, /Görsel bir ÖDEV LİSTESİ ise[^']*odev_plani aracıyla TEK pakette/);
   assert.match(W, /const agentOn = !metaMode;/);   // görselli mesajda da araçlar açık
 });
+
+// 14 Eki — Salim: "perşembe günleri ödev listeni paylaş diye de hatırlatsın"
+const { describe } = require('node:test');
+const vm = require('vm');
+describe('belirli günlü hatırlatıcı (her Perşembe ödev listesi)', () => {
+  const W = readText('aidan-worker/worker.js').replace(/\r\n/g, '\n');
+  const kur = (isoUtc) => {
+    const sabit = Date.parse(isoUtc);
+    const FakeDate = class extends Date { constructor(...a) { super(...(a.length ? a : [sabit])); } static now() { return sabit; } };
+    const giden = [];
+    const c = { Math, Number, String, Array, Object, JSON, console, Date: FakeDate, TR_OFFSET_MS: 3 * 3600000,
+      trToday: () => new Date(sabit + 3 * 3600000).toISOString().slice(0, 10),
+      trDate: (n) => new Date(sabit + 3 * 3600000 + n * 86400000).toISOString().slice(0, 10),
+      sendPushToAll: async (env, d, p) => { giden.push(p); }, logPush: () => {}, saveUserData: async () => {} };
+    vm.createContext(c);
+    const kaynak = W.slice(W.indexOf('async function runFixedRemindersForUser('), W.indexOf('\n}\n', W.indexOf('async function runFixedRemindersForUser(')) + 3);
+    vm.runInContext(kaynak + '\nthis.R = runFixedRemindersForUser;', c);
+    return { c, giden };
+  };
+  const rem = () => ({ id: 1, time: '20:00', label: 'Ödev listesi', days: [4], msg: 'Bu haftanın ödev mesajını Aidan sohbetine yapıştır.', url: '/?ac=sohbet' });
+  test('Perşembe 20:00 atar, sohbeti açar; Çarşamba atmaz', async () => {
+    let k = kur('2026-10-15T17:02:00Z');   // Perşembe 20:02 TR
+    await k.c.R({}, { userId: 'u', data: { reminders: [rem()] } });
+    assert.strictEqual(k.giden.length, 1);
+    assert.strictEqual(k.giden[0].url, '/?ac=sohbet');
+    assert.match(k.giden[0].message, /ödev mesajını/);
+    k = kur('2026-10-14T17:02:00Z');       // Çarşamba
+    await k.c.R({}, { userId: 'u', data: { reminders: [rem()] } });
+    assert.strictEqual(k.giden.length, 0);
+  });
+  test('🔒 dış adres bildirime girmez', async () => {
+    const k = kur('2026-10-15T17:02:00Z');
+    await k.c.R({}, { userId: 'u', data: { reminders: [Object.assign(rem(), { url: 'https://kotu.example' })] } });
+    assert.strictEqual(k.giden[0].url, undefined);
+  });
+});

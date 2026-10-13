@@ -7977,15 +7977,18 @@ async function runFixedRemindersForUser(env, u) {
     let diff = nowMin - ((+m[1]) * 60 + (+m[2]));
     // Gece yarısı taşması: 23:46-23:59 hatırlatıcıları son cron 23:45'i kaçırır —
     // 00:00/00:15 turunda "dünün hatırlatıcısı" olarak yakala (lastFired da düne yazılır).
-    let fireDay = todayStr, fireWeekday = isWeekday;
+    let fireDay = todayStr, fireWeekday = isWeekday, fireDow = tr.getUTCDay();
     if (diff < 0 && nowMin <= 30) {
       diff += 1440;
       fireDay = trDate(-1);
       const yd = new Date(Date.now() + TR_OFFSET_MS - 86400000).getUTCDay();
       fireWeekday = yd >= 1 && yd <= 5;
+      fireDow = yd;
     }
     if (r.lastFired === fireDay) continue;
     if (r.days === 'weekdays' && !fireWeekday) continue;
+    // 14 Eki 2026 — belirli günler (örn. [4] = her Perşembe "ödev listeni paylaş")
+    if (Array.isArray(r.days) && r.days.indexOf(fireDow) < 0) continue;
     if (diff >= 0 && diff <= 30) { due.push(r); r.lastFired = fireDay; }
   }
   if (!due.length) return { checked: rems.length, sent: 0 };
@@ -8000,9 +8003,11 @@ async function runFixedRemindersForUser(env, u) {
     } else if (r.mode === 'interval') {
       msg = `${r.startTime}–${r.endTime} arası hatırlatma — hadi`;
     } else {
-      msg = `Saat ${r.time} — günün sabiti, hadi`;
+      msg = r.msg ? String(r.msg).slice(0, 200) : `Saat ${r.time} — günün sabiti, hadi`;
     }
     const payload = { title: `⏰ ${r.label || 'Hatırlatma'}`, message: msg };
+    // Yalnız uygulama içi yol (/?ac=sohbet gibi) — dış adres kabul edilmez
+    if (typeof r.url === 'string' && /^\/(\?ac=[a-z]+)?$/.test(r.url)) payload.url = r.url;
     await sendPushToAll(env, data, payload, { userId: u.userId });
     logPush(data, 'reminder', payload, ((data.settings && data.settings.pushSubs) || []).length);
   }

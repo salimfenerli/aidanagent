@@ -1,3 +1,7 @@
+# 🗓️ 14 Eki 2026 — HER PERŞEMBE "ÖDEV LİSTESİ" HATIRLATICISI (v7-214)
+
+Salim: "perşembe günleri ödev listeni paylaş diye hatırlatsın" (okul ödevi WhatsApp'tan haftalık geliyor). Sabit hatırlatıcıya `days: [dow,...]` (belirli günler), `msg` (özel metin), `url` (yalnız `/` ya da `/?ac=x`, dış adres düşer) eklendi. Veriye yazıldı: Perşembe 20:00 "Ödev listesi" → sohbeti açar. Sohbet [FOTOĞRAF] talimatı: görsel ödev listesiyse `odev_plani` tek paket. Ayarlar listesi gün adlarını gösterir. Test 63.
+
 # 🗓️ 14 Eki 2026 — ADLI DERS / KURS (v7-213)
 
 Salim: Pzt + Çar 17:30-18:30 matematik dersi. Veriye yazıldı (`diet.nut.duzen.ders` 1 ve 3, `ad: 'Matematik dersi'`; eski Pzt 17:30-19:00 kaydının yerine). `hfGun` ikizi (hafta.js + worker) `ad` varsa blok adına koyar (yoksa "Ek ders / kurs"); beslenme ekranından saat düzenlenince ad korunur. Antrenman otomatik 19:00'a kayıyor (Pzt Alt Vücut A, Çar dövüş). Test 63-gun-bilgisi.
