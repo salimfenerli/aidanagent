@@ -8048,7 +8048,22 @@ async function runFixedRemindersForUser(env, u) {
   }
   if (!due.length) return { checked: rems.length, sent: 0 };
 
+  // 14 Eki 2026 — AYNI TURDA ÇOK HATIRLATICI = TEK BİLDİRİM. Gerçek günde 08:30 ve 16:00'da
+  // 4'er takviye ayrı ayrı çaldı (günde 13 push; Faz 3 hedefi 2). Nag turları (takviye
+  // "işaretleyene kadar") kendi tonunu korur, ayrı kalır.
+  const tekil = due.filter(r => r._nagIndex == null);
+  if (tekil.length > 1) {
+    const zaman = tekil[0].time || tekil[0].startTime || '';
+    const payload = {
+      title: '⏰ ' + (zaman ? zaman + ' · ' : '') + tekil.length + ' hatırlatma',
+      message: tekil.map(r => (r.label || 'Hatırlatma') + (r.msg ? ': ' + String(r.msg).slice(0, 100) : '')).join('\n'),
+      tag: 'aidan-hatirlatma',
+    };
+    await sendPushToAll(env, data, payload, { userId: u.userId });
+    logPush(data, 'reminder', payload, ((data.settings && data.settings.pushSubs) || []).length);
+  }
   for (const r of due) {
+    if (tekil.length > 1 && r._nagIndex == null) continue;   // yukarıda tek pakette gitti
     // Nag turlarinda ton yumusak kalir: suclama yok, ne yapilacagi net.
     let msg;
     if (r._nagIndex != null) {

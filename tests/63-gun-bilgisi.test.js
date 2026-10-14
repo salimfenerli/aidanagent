@@ -78,3 +78,24 @@ describe('belirli günlü hatırlatıcı (her Perşembe ödev listesi)', () => {
     assert.strictEqual(k.giden[0].url, undefined);
   });
 });
+
+describe('aynı saatte çok hatırlatıcı = TEK bildirim (14 Eki: günde 13 push)', () => {
+  const W = readText('aidan-worker/worker.js').replace(/\r\n/g, '\n');
+  test('08:30\'daki 4 takviye tek push\'ta, adlarıyla', async () => {
+    const sabit = Date.parse('2026-10-15T05:31:00Z');   // 08:31 TR
+    const FakeDate = class extends Date { constructor(...a) { super(...(a.length ? a : [sabit])); } static now() { return sabit; } };
+    const giden = [];
+    const c = { Math, Number, String, Array, Object, JSON, console, Date: FakeDate, TR_OFFSET_MS: 3 * 3600000,
+      trToday: () => '2026-10-15', trDate: () => '2026-10-14',
+      sendPushToAll: async (env, d, p) => { giden.push(p); }, logPush: () => {}, saveUserData: async () => {} };
+    vm.createContext(c);
+    const i = W.indexOf('async function runFixedRemindersForUser(');
+    vm.runInContext(W.slice(i, W.indexOf('\n}\n', i) + 3) + '\nthis.R = runFixedRemindersForUser;', c);
+    const rems = ['Stikolin', 'Magnezyum', 'Kreatin', 'Argivit'].map((l, k) => ({ id: k, time: '08:30', label: l }));
+    const r = await c.R({}, { userId: 'u', data: { reminders: rems } });
+    assert.strictEqual(giden.length, 1);
+    assert.strictEqual(giden[0].title, '⏰ 08:30 · 4 hatırlatma');
+    assert.strictEqual(giden[0].message, 'Stikolin\nMagnezyum\nKreatin\nArgivit');
+    assert.strictEqual(r.sent, 4);
+  });
+});

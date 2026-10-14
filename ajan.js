@@ -181,6 +181,21 @@ function ajanProgUygula(d, a) {
   }
   return d;
 }
+/** Program değişince BUGÜNÜN/YARININ hazır planı bayat kalmasın (14 Eki: Çarşamba planı
+ *  matematik dersi eklenmeden önce kurulmuştu, 17:30'da "Şimdi: Dövüş" bildirimi geldi).
+ *  Bitmiş blok varsa dokunmaz (kullanıcının işaretlediği ilerleme silinmesin). */
+function ajanProgPlanYenile(a) {
+  const p = data.dayPlan;
+  if (!p || !p.date || p.date < today() || typeof planLocalBlocks !== 'function') return false;
+  const dow = new Date(p.date + 'T12:00:00').getDay();
+  if (a.gunler.length && a.gunler.indexOf(dow) < 0) return false;
+  if ((p.blocks || []).some(b => b && b.done)) return false;
+  let r = null;
+  try { r = planLocalBlocks(p.date); } catch (_) { return false; }
+  if (!r || !Array.isArray(r.blocks) || !r.blocks.length) return false;
+  p.blocks = r.blocks;
+  return true;
+}
 function ajanSonrakiGun(dow) {
   for (let i = 0; i < 7; i++) { const t = shiftDateStr(today(), i); if (new Date(t + 'T12:00:00').getDay() === dow) return t; }
   return today();
@@ -371,11 +386,13 @@ async function ajanApply(mi, ai, toplu) {
     };
   } else if (a.type === 'program_kaydet') {
     ensureDiet();
-    const kopya = JSON.stringify({ duzen: (data.diet.nut && data.diet.nut.duzen) || null, fs: data.fixedSchedule || null });
+    const kopya = JSON.stringify({ duzen: (data.diet.nut && data.diet.nut.duzen) || null, fs: data.fixedSchedule || null, plan: data.dayPlan || null });
     ajanProgUygula(data, a);
-    mesaj = a.islem === 'sil' ? 'Programdan çıkarıldı' : 'Programa eklendi: ' + (a.tur === 'okul' ? 'okul saati' : ajanProgEtiket(a));
+    const planYeni = ajanProgPlanYenile(a);
+    mesaj = (a.islem === 'sil' ? 'Programdan çıkarıldı' : 'Programa eklendi: ' + (a.tur === 'okul' ? 'okul saati' : ajanProgEtiket(a))) + (planYeni ? ' · plan güncellendi' : '');
     geriAl = () => {
       const k = JSON.parse(kopya);
+      if (k.plan) data.dayPlan = k.plan;
       data.diet.nut = data.diet.nut || {};
       if (k.duzen) data.diet.nut.duzen = k.duzen; else delete data.diet.nut.duzen;
       if (k.fs) data.fixedSchedule = k.fs; else delete data.fixedSchedule;

@@ -112,3 +112,24 @@ describe('KAPI — kart etkiyi gösterir, Uygula yazar, Geri al geri alır', () 
     assert.deepStrictEqual(fs.filter(f => f.label === 'Kickboks').map(f => f.days), [[6]]);
   });
 });
+
+describe('KAPI — program değişince hazır gün planı bayat kalmaz (14 Eki gerçek hata)', () => {
+  const A = loadApp({ scripts: ['core.js', 'tasks.js', 'ui.js', 'hafta.js', 'ajan.js'] });
+  after(() => A.close());
+  test('bugünün planı yeniden kurulur, Geri al eski planı getirir; bitmiş blok varsa dokunulmaz', async () => {
+    A.evalIn(`ensureDiet(); data.diet.nut = { duzen: { antrenman: '17:00' } }; data.fixedSchedule = [];
+      data.program = { days: [{ dow: new Date(today() + 'T12:00:00').getDay(), name: 'Dövüş antrenmanı', type: 'fight' }] };
+      data.dayPlan = { date: today(), blocks: [{ id: 1, label: 'Dövüş antrenmanı', start: '17:30', end: '19:00', kind: 'fixed' }] };
+      window.__a = { type: 'program_kaydet', islem: 'ekle', tur: 'ders', ad: 'Matematik dersi', gunler: [new Date(today() + 'T12:00:00').getDay()], bas: '17:30', bit: '18:30' };
+      data.chat = [{ role: 'assistant', content: 'x', actions: [window.__a] }];`);
+    const geri = await A.evalIn('ajanApply(0, 0, true)');
+    const bloklar = JSON.parse(A.evalIn('JSON.stringify(data.dayPlan.blocks)'));
+    assert.ok(bloklar.some(b => /Matematik dersi/.test(b.label) && b.start === '17:30'), JSON.stringify(bloklar));
+    assert.ok(!bloklar.some(b => /Dövüş/.test(b.label) && b.start === '17:30'), 'dövüş 17:30\'da kalmamalı');
+    geri();
+    assert.strictEqual(A.evalIn('data.dayPlan.blocks[0].start'), '17:30');
+    assert.strictEqual(A.evalIn('data.dayPlan.blocks.length'), 1);
+    A.evalIn("data.dayPlan.blocks[0].done = true");
+    assert.strictEqual(A.evalIn('ajanProgPlanYenile(window.__a)'), false);
+  });
+});

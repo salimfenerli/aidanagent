@@ -1,3 +1,7 @@
+# 🗓️ 14 Eki 2026 akşam — GERÇEK GÜNDEN 2 DÜZELTME (v7-216)
+
+pushLog ölçümü: 14 Eki'de 13 bildirim (08:30 ve 16:00'da 4'er takviye ayrı ayrı). → Aynı turda 2+ hatırlatıcı TEK push (`⏰ 08:30 · 4 hatırlatma`, gövdede adlar); nag turları ayrı kalır. · Çarşamba 17:30'da "Şimdi: Dövüş antrenmanı" geldi, oysa 17:30-18:30 matematik dersi vardı: plan Salı 21:00'de, ders gece eklenmeden ÖNCE kurulmuştu. → `program_kaydet` uygulanınca o güne ait hazır plan `planLocalBlocks` ile yeniden kurulur (bitmiş blok varsa dokunulmaz), Geri al eski planı getirir. Testler 63/64.
+
 # 🗓️ 14 Eki 2026 — SOHBETTEN SABİT PROGRAM (v7-215)
 
 Salim: "yazdığımı tak diye programa koymasın, anlayıp özümseyip kaydetsin". Yeni ajan aracı `program_kaydet` {islem ekle/sil, tur okul/ders/dovus/sabit, ad, gunler, bas, bit}. Prompt: kısaltmayı aç, Türkçe saati 24 saate çevir (okul bitişine göre), süreden bitiş hesapla, belirsizse SOR, zaten kayıtlıysa araç çağırma, tek seferlik → gorev_ekle. Bağlama KAYITLI PROGRAM (okul + adlı ek ders) eklendi. Worker temizler (tür beyaz liste, `agentGunler` Türkçe ad, HH:MM, bas<bit). ajan.js kartı hfGun önce/sonra etkiyi gösterir (antrenman kayması, ödeve kalan süre, çakışma uyarısı); Uygula → `ajanProgUygula` (aynı ad üzerine yazar), Geri al anlık görüntüden. Test 64.
