@@ -9,7 +9,7 @@
  *  - öğün durumları worker bekçisiyle aynı kural (işaret / pencere kaydı / sıradaki başladı)
  *  - plan saatsizse kart gizli; bekleyen öğünde Yedim → kayıt + sayaç artar
  *  - yer tutucuların hepsinin gerçeği ayarlar.js'te; modül yüklenince ezilir
- *  - KAPI: asistan.html yer tutucusu, ui.js açılış kancası, ajanYenile kartı tazeler
+ *  - KAPI: asistan.html yer tutucusu, ui.js açılış kancası, ajanYenile kartı tazeler; Günü kapat öğün satırı
  */
 const { test, describe, after } = require('node:test');
 const assert = require('node:assert');
@@ -109,30 +109,28 @@ describe('KAPI', () => {
   });
 });
 
-describe('worker — akşam öğün satırı + Pazar tek push', () => {
+describe('worker — Günü kapat öğün satırı (19 Eki: akşam bildirimine taşındı)', () => {
   const vm = require('vm');
   const W = readText('aidan-worker/worker.js').replace(/\r\n/g, '\n');
   const BLOK = W.slice(W.indexOf('// 🍽️ ÖĞÜN BEKÇİSİ (17 Eki 2026)'), W.indexOf('// 🍽️ ÖĞÜN BEKÇİSİ SONU'));
-  const ev = /function buildEvening\(data\) \{[\s\S]*?\n\}\n/.exec(W)[0];
-  const ctx = { console, Date, JSON, Math, String, Array, Object, Number, encodeURIComponent,
-    trToday: () => '2026-10-17', trDate: () => '2026-10-18', suggestMitForTomorrow: () => [] };
+  const gk = /function buildGunuKapat\(data, bugun, yarin\) \{[\s\S]*?\n\}\n/.exec(W)[0];
+  const ctx = { console, Date, JSON, Math, String, Array, Object, Number, encodeURIComponent };
   vm.createContext(ctx);
-  vm.runInContext(BLOK + '\n' + ev + '\nthis.EV = buildEvening;', ctx);
+  vm.runInContext(BLOK + '\n' + gk + '\nthis.GK = buildGunuKapat;', ctx);
   const plan = { activePlanId: 1, plans: [{ id: 1, weekly: false, meals: { all: [
     { name: '07:15 · Yumurta', slot: 'kahvalti' }, { name: '13:00 · Makarna', slot: 'ogle' }, { name: '19:30 · Tavuk', slot: 'aksam' }] } }] };
-  test('akşam özeti: işaret + pencere kaydı sayılır', () => {
+  test('işaret + pencere kaydı sayılır', () => {
     const data = { tasks: [], diet: Object.assign({ days: { '2026-10-17': { meals: [{ name: 'tost', at: '12:50' }] } } }, plan),
       ogunBekci: { tarih: '2026-10-17', g: { '07:15': { d: 'yedi' }, '19:30': { d: 'atla' } } } };
-    assert.match(ctx.EV(data).message, /🍽️ Öğün: 2\/3 işaretli/);
+    assert.match(ctx.GK(data, '2026-10-17', '2026-10-18').message, /🍽️ Öğün: 2\/3 işaretli/);
   });
   test('plan saatsizse satır yok', () => {
-    assert.doesNotMatch(ctx.EV({ tasks: [], diet: { days: {} } }).message, /Öğün:/);
+    assert.doesNotMatch(ctx.GK({ tasks: [], diet: { days: {} } }, '2026-10-17', '2026-10-18').message, /Öğün:/);
   });
-  test('Pazar 21:00: weekly tek push, sağlık içinde; health ayrı zincir yok', () => {
+  test('öğün bekçisi her turda; Faz 3 Pazar tek push korunuyor', () => {
     const sch = W.slice(W.indexOf('async scheduled(event, env, ctx)'));
-    assert.doesNotMatch(sch.slice(0, 4000), /runCronJob\(env, 'weekly'\)\.then\(\(\) => runCronJob\(env, 'health'\)\)/);
-    assert.match(W, /case 'weekly': \{[\s\S]{0,900}buildHealthWeekly\(env, u\.data\)[\s\S]{0,300}sağlık analizin hazır/);
-    assert.match(W, /case 'health':   payload = await buildHealthWeekly/);   // elle tetik kalır
+    assert.match(sch.slice(0, 2000), /jobs\.push\(runOgunBekci\(env\)\);/);
+    assert.doesNotMatch(sch, /runCronJob\(env, 'weekly'\)/);
   });
 });
 

@@ -872,7 +872,7 @@ function setNutDers(dow, bas, bit) {
   const d = ensureNutDuzen();
   const b = nutDk(bas), e = nutDk(bit);
   if (b == null || e == null || e <= b) delete d.ders[String(dow)];
-  else d.ders[String(dow)] = { bas: nutSaat(b), bit: nutSaat(e) };
+  else d.ders[String(dow)] = Object.assign({}, d.ders[String(dow)], { bas: nutSaat(b), bit: nutSaat(e) });   // ad ("Matematik") korunur
   save();
   renderNutrition();
 }

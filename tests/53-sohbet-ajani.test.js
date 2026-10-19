@@ -106,7 +106,7 @@ describe('ajan — temizleyici', () => {
     assert.match(p, /"ekledim" DEME/);
     assert.match(p, /UYDURMA/);
     assert.match(p, /TEK "odev_plani"/);
-    assert.deepStrictEqual(js(M.AGENT_TOOLS.map(t => t.name)), ['odev_plani', 'gorev_ekle', 'gorev_tamamla', 'gorev_ertele', 'harcama_ekle', 'ogun_ekle', 'uyku_kaydet', 'kilo_kaydet']);
+    assert.deepStrictEqual(js(M.AGENT_TOOLS.map(t => t.name)), ['odev_plani', 'gorev_ekle', 'gorev_tamamla', 'gorev_ertele', 'harcama_ekle', 'ogun_ekle', 'uyku_kaydet', 'program_kaydet', 'kilo_kaydet']);
   });
 });
 

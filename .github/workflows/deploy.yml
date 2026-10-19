@@ -18,6 +18,7 @@ on:
       - 'hafiza.js'
       - 'hedefler.js'
       - 'harcama.js'
+      - 'bugun.js'
       - 'ayarlar.js'
       - 'ogun.js'
       - 'ajan.js'
