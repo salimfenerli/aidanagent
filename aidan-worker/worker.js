@@ -1249,6 +1249,14 @@ function buildEvening(data) {
   doneToday.slice(0, 5).forEach(t => lines.push(`  • ${t.text}`));
   lines.push('', `⭐ MIT: ${mitDone}/${mit.length}`);
   lines.push(`🍅 Pomodoro: ${pomoToday}`);
+  // 🍽️ 18 Eki 2026 — öğün bekçisiyle aynı kural: işaret ya da pencere kaydı
+  const og = ogunGruplari(data, today);
+  if (og.length) {
+    const ob = (data.ogunBekci && data.ogunBekci.tarih === today && data.ogunBekci.g) || {};
+    const yenen = og.filter((g, i) => (ob[g.saat] || {}).d === 'yedi' ||
+      ogunKayitliMi(data, today, g, og[i + 1] ? og[i + 1].dk : null)).length;
+    lines.push(`🍽️ Öğün: ${yenen}/${og.length} işaretli`);
+  }
 
   // Yarın için MIT — seçilmemişse akıllı öneri + inline butonlar
   let replyMarkup = null;
@@ -1541,7 +1549,7 @@ async function sendPushToAll(env, data, payload, sessionInfo) {
     // actions: Android/masaüstü Chrome gösterir. iOS PWA desteklemez —
     // orada bildirime tıklama fallback'i devreye girer (sw.js notificationclick).
     actions: payload.actions || undefined,
-    data: { url: payload.url || '/', blockId: payload.blockId || null },
+    data: { url: payload.url || '/', blockId: payload.blockId || null, ogun: payload.ogun || null },
   });
   const dead = [];
   for (const sub of subs) {
@@ -1609,7 +1617,18 @@ async function runCronJob(env, type) {
         case 'noon':     payload = buildNoon(u.data); break;
         case 'evening':  payload = buildEvening(u.data); break;
         case 'deadline': payload = buildDeadlineAlerts(u.data); break;
-        case 'weekly':   payload = await buildWeekly(env, u.data, await memoryFetchForCron(env, u)); break;
+        case 'weekly': {
+          // 18 Eki 2026 — PAZAR BİLDİRİM SADELEŞTİRME. Eskiden 21:00'de akşam özeti +
+          // haftalık review + haftalık sağlık AYRI push'tu (20:00 koçla Pazar 4 bildirim).
+          // Sağlık analizi yine üretilip kaydediliyor (data.coach), ama push'u haftalık
+          // review'a TEK SATIR olarak biniyor. Elle tetik (?type=health) ayrı kalır.
+          payload = await buildWeekly(env, u.data, await memoryFetchForCron(env, u));
+          let saglik = null;
+          try { saglik = await buildHealthWeekly(env, u.data); } catch (e) { console.error('health weekly', e.message); }
+          if (payload && saglik) payload.message += '\n\n🫀 Haftalık sağlık analizin hazır — uygulamada Sağlık koçu bölümünde.';
+          else if (!payload && saglik) payload = saglik;
+          break;
+        }
         case 'health':   payload = await buildHealthWeekly(env, u.data); break;
         default: throw new Error(`Bilinmeyen tip: ${type}`);
       }
@@ -9000,6 +9019,149 @@ function minHM(min) {
   return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0');
 }
 
+// ============================================================
+// 🍽️ ÖĞÜN BEKÇİSİ (17 Eki 2026)
+// ============================================================
+// Salim: "bugün de yemek yemeyi unuttum, 1 öğün yedim". Diyet planı öğün
+// saatlerini zaten taşıyor ("13:00 · Makarna — 300 g") ama HİÇBİR bildirim o
+// saati kullanmıyordu; öğün kaydı Ağustos'tan beri boştu (kayıt yok = takip yok).
+// Takviye nag deseni (Ağu): saatinde push, "Yedim"e basılana kadar ana öğünde
+// 3, ara öğünde 2 kez. Susturan: Yedim / Atladım / 15 dk ertele işareti ya da
+// o öğün penceresinde girilmiş bir öğün kaydı (sohbetten girilen dahil).
+// ⚠️ Saatleri MOTOR üretir (plan kalem adındaki "HH:MM · " öneki) — burada
+// saat hesaplanmaz. Önekli kalem yoksa bekçi sessiz kalır (uydurma saat yok).
+// Durum: data.ogunBekci = { tarih, g: { 'HH:MM': { d:'yedi'|'atla', n, e, es } } }
+//   n = gönderilen ping sayısı · e = erteleme bitiş dk'sı · es = e için atıldı mı
+const OGUN_NAG_ANA = [0, 20, 45];   // ana öğün: saatinde, +20, +45 dk
+const OGUN_NAG_ARA = [0, 25];       // atıştırma / ara öğün: 2 kez yeter
+const OGUN_DAY_KEYS = ['paz', 'pzt', 'sal', 'car', 'per', 'cum', 'cmt'];
+const OGUN_SAAT_RE = /^\s*(\d{1,2}):(\d{2})\s*·\s*/;
+const OGUN_AD = { kahvalti: 'Kahvaltı', ogle: 'Öğle', aksam: 'Akşam', ara: 'Ara öğün', atistirma: 'Ara öğün' };
+
+function ogunHm(s) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s || '');
+  return m ? (+m[1]) * 60 + (+m[2]) : -1;
+}
+
+// Aktif planın o tarihteki öğünleri saat başına gruplanmış: [{saat, dk, slot, kalemler}]
+function ogunGruplari(data, tarih) {
+  const d = (data && data.diet) || {};
+  const plans = Array.isArray(d.plans) ? d.plans : [];
+  const p = plans.find(x => x && x.id === d.activePlanId) || plans[0];
+  if (!p || !p.meals) return [];
+  const a = String(tarih).split('-').map(Number);
+  const dow = new Date(Date.UTC(a[0], a[1] - 1, a[2], 12)).getUTCDay();
+  const list = (p.meals.all || []).concat(p.weekly ? (p.meals[OGUN_DAY_KEYS[dow]] || []) : []);
+  const map = {};
+  for (const m of list) {
+    const mm = OGUN_SAAT_RE.exec((m && m.name) || '');
+    if (!mm) continue;
+    const h = +mm[1], mi = +mm[2];
+    if (h > 23 || mi > 59) continue;
+    const saat = String(h).padStart(2, '0') + ':' + mm[2];
+    const g = map[saat] || (map[saat] = { saat, dk: h * 60 + mi, slot: m.slot || 'atistirma', kalemler: [] });
+    if (m.slot && m.slot !== 'atistirma') g.slot = m.slot;   // karışık grupta ana öğün adı kazanır
+    const ad = String(m.name).replace(OGUN_SAAT_RE, '').split(' — ')[0].trim();
+    if (ad && g.kalemler.indexOf(ad) < 0) g.kalemler.push(ad);
+  }
+  return Object.keys(map).map(k => map[k]).sort((x, y) => x.dk - y.dk);
+}
+
+// Öğün penceresinde (saatten 60 dk önce → sonraki öğünden 30 dk önce) kayıt var mı?
+function ogunKayitliMi(data, tarih, g, sonrakiDk) {
+  const day = data && data.diet && data.diet.days && data.diet.days[tarih];
+  const bit = sonrakiDk != null ? sonrakiDk - 30 : 1440;
+  return ((day && day.meals) || []).some(m => {
+    if (m && m.bekci === g.saat) return true;
+    const t = ogunHm(m && m.at);
+    return t >= g.dk - 60 && t < bit;
+  });
+}
+
+// Bu turda atılacak pingler. data.ogunBekci'yi GÜNCELLER (atıldı işareti).
+// Kaçırılan tur telafi edilmez (5 dk pencere) — eski öğün için bildirim yağmaz.
+function ogunBekciDue(data, tarih, nowMin) {
+  const gruplar = ogunGruplari(data, tarih);
+  if (!gruplar.length) return [];
+  if (!data.ogunBekci || data.ogunBekci.tarih !== tarih) data.ogunBekci = { tarih, g: {} };
+  const st = data.ogunBekci.g || (data.ogunBekci.g = {});
+  const out = [];
+  gruplar.forEach((g, i) => {
+    const s = st[g.saat] || {};
+    if (s.d) return;
+    const sonraki = gruplar[i + 1] ? gruplar[i + 1].dk : null;
+    if (ogunKayitliMi(data, tarih, g, sonraki)) return;
+    if (s.e != null) {                    // ertelendi: yalnız erteleme saatinde tek ping
+      if (s.es !== s.e && nowMin >= s.e && nowMin < s.e + 5) {
+        st[g.saat] = Object.assign({}, s, { es: s.e });
+        out.push({ g, tur: 'ertele' });
+      }
+      return;
+    }
+    if (sonraki != null && nowMin >= sonraki) return;   // sıradaki öğün başladı — eskisini sus
+    const offs = (g.slot === 'atistirma' || g.slot === 'ara') ? OGUN_NAG_ARA : OGUN_NAG_ANA;
+    const n = s.n || 0;
+    for (let k = offs.length - 1; k >= n; k--) {
+      const t = g.dk + offs[k];
+      if (nowMin >= t) {
+        if (nowMin < t + 5) {
+          st[g.saat] = Object.assign({}, s, { n: k + 1 });
+          out.push({ g, tur: k === 0 ? 'ilk' : (k === offs.length - 1 ? 'son' : 'tekrar') });
+        }
+        break;
+      }
+    }
+  });
+  return out;
+}
+
+function ogunBekciPayload(x) {
+  const g = x.g;
+  const ad = OGUN_AD[g.slot] || 'Öğün';
+  const k = g.kalemler.slice(0, 3).join(', ') + (g.kalemler.length > 3 ? ' …' : '');
+  const msg = x.tur === 'ilk' ? `${k} — yedin mi? Dokun, işaretle.`
+    : x.tur === 'tekrar' ? 'Hâlâ işaretlenmedi. Yediysen dokun, sussun.'
+    : x.tur === 'son' ? 'Son hatırlatma — yemediysen şimdi bir şey ye.'
+    : `Ertelediğin öğün: ${k}`;
+  return {
+    title: `🍽️ ${g.saat} · ${ad}`,
+    message: msg,
+    tag: 'aidan-ogun-' + g.saat,            // aynı öğünün pingi öncekini değiştirir
+    url: '/?ogun=' + encodeURIComponent(g.saat),
+    ogun: g.saat,
+    actions: [{ action: 'yedim', title: 'Yedim' }, { action: 'ertele', title: '15 dk' }],
+  };
+}
+// 🍽️ ÖĞÜN BEKÇİSİ SONU
+
+async function runOgunBekci(env) {
+  const users = await fetchAllUsers(env);
+  const results = [];
+  for (const u of users) {
+    try { results.push({ userId: u.userId, ...(await runOgunBekciForUser(env, u)) }); }
+    catch (e) { results.push({ userId: u.userId, error: e.message }); }
+  }
+  return { type: 'ogunbekci', users: users.length, results };
+}
+
+async function runOgunBekciForUser(env, u) {
+  const data = u.data;
+  if ((data.settings || {}).ogunBekci === false) return { sent: 0 };
+  const tr = new Date(Date.now() + TR_OFFSET_MS);
+  const nowMin = tr.getUTCHours() * 60 + tr.getUTCMinutes();
+  const due = ogunBekciDue(data, trToday(), nowMin);
+  if (!due.length) return { sent: 0 };
+  for (const x of due) {
+    const payload = ogunBekciPayload(x);
+    await sendPushToAll(env, data, payload, { userId: u.userId });
+    logPush(data, 'ogun', payload, ((data.settings && data.settings.pushSubs) || []).length);
+  }
+  try { await saveUserData(env, u.userId, data); } catch (e) { console.error('ogun save fail', e.message); }
+  return { sent: due.length };
+}
+
+// ============================================================
+
 async function runPlanBlockPings(env) {
   const users = await fetchAllUsers(env);
   const results = [];
@@ -10667,6 +10829,8 @@ export default {
     // Ikisinin de kendi lastFired guard'i var, sik cron'da tek atarlar.
     jobs.push(runFixedReminders(env));
     jobs.push(runPlanBlockPings(env));
+    // 🍽️ Öğün bekçisi (17 Eki): plan öğün saatinde push, "Yedim"e kadar 2-3 kez.
+    jobs.push(runOgunBekci(env));
 
     // 08:00 - sabah brifingi + guvenlik agi planlama (aksam planlayamadiysa
     // sabah bugunu planlar; plan zaten varsa dokunmaz)
@@ -10692,7 +10856,7 @@ export default {
     // Pazar 21:00 - haftalik gorev ozeti + haftalik SAGLIK analizi
     // (aksam ozetiyle ayni saat; eskiden de iki ayri trigger olarak boyleydi)
     if (dow === 0 && at(21, 0)) jobs.push(
-      runCronJob(env, 'weekly').then(() => runCronJob(env, 'health'))
+      runCronJob(env, 'weekly')   // sağlık analizi içinde (18 Eki: tek push)
     );
 
     // Pazar 20:00 - HAFTAM ozeti (5 Eki 2026): onumuzdeki 7 gunun capraz cakismalari

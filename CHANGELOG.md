@@ -1,3 +1,39 @@
+# ✍️ 18 Eki 2026 — ANA EKRANDAN TEK SATIR ÖĞÜN GİRİŞİ (v7-216)
+
+Salim: "yediklerimi nasıl gireceğim, orayı da kolaylaştıralım". Plandan farklı yiyince kayıt 3-4 adımdı (Diyet → yemek ekle → ara → seç / sohbet → Uygula). bugun.js öğün kartı: bekleyen öğünde "Yedim · Farklı yedim · Atladım", öğün yokken "+ Bir şey yedim". Tek satır ("2 yumurta, 1 simit ve ayran") virgül/ve/ile/+ ile bölünür, her parça ajanYemekCoz (foods.js, AI yok) → canlı önizleme (kalem kalem kcal + toplam kcal/protein; bulunamayan "kaydedilmez"), Enter/Kaydet tek dokunuş, Geri al. Öğün için girildiyse o öğün 'yedi' + kayıtlar bekci etiketi → hatırlatma susar. Form açıkken dakikalık tazeleme dokunmaz. 63 +5 test.
+
+---
+
+# 🛒 18 Eki 2026 — ÖĞÜN GİRİŞİ DENETİMİ + HAFTALIK ALIŞVERİŞ LİSTESİ (v7-215)
+
+Salim: "bi kullanıcı gibi öğün yazdırmayı dene, database'deki kaloriler doğru mu" + "haftalık yemeğe göre alışveriş listesi". Veritabanı: 498 kalemin 477'si Atwater (4P+4K+9Y) ile ±%15 tutarlı, kalan 21 açıklanabilir (alkol, lifli sebze, şeker alkolü); 100 g değerleri USDA ile uyumlu (yumurta 144, tavuk göğsü 165/31P, pilav 163, ekmek 267, beyaz peynir 263…). Asıl hatalar ÇÖZÜCÜDE (sohbet + yemek penceresi ortak), 50 cümleyle denendi: "10 badem" 690 kcal (birim "10 adet" ×10 → 69), "1 avuç fındık" 75 (→188, avuç≈30 g), "yarım ekmek" 40 (→333, somun 250 g; tam sayı "2 ekmek" bilerek dilim), "pizza 2 dilim"/"makarna 200 gr" eşleşmiyordu (sondaki miktar), "tavuk döner dürüm" 'dürüm' birim sanılıp porsiyon döner (323→488; Tavuk/Et dürüm takma adları), "200g tavuk" Tavuk but → göğsü ('tavuk' takma adı). Alışveriş: Beslenme kartı → Günlük menü → "Haftalık alışveriş listesi" (details): önümüzdeki 7 günün satırları toplanır, pişmiş yemek çiğ karşılığına (NUT_CIG: pilav→60 g pirinç, köfte→190 g kıyma, levrek→250 g…), yemekhane hariç, 5 grup, işaretle (diet.nut.gunluk.alindi) + kopyala. Plan satırları artık besin+adet taşıyor; eskileri adından çözülür. 64 (23 test).
+
+---
+
+# 🏠 18 Eki 2026 — YER AÇMA + BUGÜN ÖĞÜN KARTI + PAZAR TEK PUSH (v7-214)
+
+Salim: "sen gerekenleri yapmaya devam et, uygulama vizyonuna uygun olanları". (1) Yer: ilk yükleme 184,96/185 KB'tı. Ayarlar sekmesi + global arama kodu (bildirim geçmişi, ICS takvim, depolama çubuğu, geri sayım yönetimi, arama; 12,7 KB kaynak) → ayarlar.js (tembel). ui.js'te aynı adlı 8 yer tutucu (`_lz`): ilk çağrıda modülü indirir, modül inince gerçekleri onları ezer (klasik script'te global function yeniden tanımı). Ölçüm 181,6 → bütçe 185 → 183. (2) Faz 2 ilk adım: ana ekranda "şu an" kartının altında öğün kartı (bugun.js, tembel; yalnız planda saatli öğün varsa iner): X/N öğün, saati gelmiş işaretsiz öğün için "yedin mi?" + Yedim/Atladım (ajan.js ogunBekciAksiyon, Geri al dahil), yoksa sıradaki öğün; dakikada bir + sekmeye dönünce tazelenir. Durum kuralı worker bekçisiyle aynı. (3) Worker: akşam özetine "🍽️ Öğün: x/N işaretli"; Pazar 21:00 haftalık review + sağlık analizi TEK push (analiz yine üretilip data.coach'a kaydediliyor) → Pazar 4 bildirimden 3'e. 63-bugun-ayarlar (12), 11/13/07 güncellendi.
+
+---
+
+# ⚖️ 18 Eki 2026 — GÜNLÜK MENÜ: MAKRO BENZER + ÇEŞİTLİ (v7-213)
+
+Salim: "genel kalori makrolar benzer olsun ama çeşitlilik oluşturabilsin". Ölçüm (14 gün, 68.5 kg bulk): kalori ±%5 tutuyordu ama karbonhidrat %-24 / yağ %+25'e kadar kayıyordu; öğle ve akşamda 14 günde yalnız 4'er tabak. Kök nedenler: (1) tek şablonla gün, (2) havuzlar aynı boyda (5) → aynı adımda dönüyor, (3) yeni 46 g'lık çapalar (tavuk göğsü/hindi/bonfile) nutBuildDay bandına (±%35) takılıp HİÇ seçilmiyordu — havuza eklemek yetmedi, ölçüldü. Çözüm motoru değiştirmeden: nutGunlukSatirlar gün başına 8 aday kurar (kötüyse +8), puan = 2×kcal + karb + yağ sapması + protein (hedef+%10 üstü / altı) + dün/önceki gün aynı ana yemek cezası (0.15/0.08); aday indeksleri adım 23 ile gün başına ayrık. Havuz: öğle 9, akşam 8, atıştırma 7 (çapa ≤39 g: Tavuk sote, Et sote, Alabalık, Tavuk pirzola, Çupra). NUT_ICERIK: "Domates sevmem" → Çoban/Mevsim salata da düşer (her tabakta domates çıkıyordu). Sonuç (3×90 gün): düz profil k/c/f en kötü 5/8/11 %, tercihli 5/12/16 %; 28 günde 19-29 farklı ana yemek çifti, ardışık aynı gün 0. 7 gün doldurma ~70-160 ms. 62 +6 test. 1625/1625.
+
+---
+
+# 🗓️ 18 Eki 2026 — GÜNLÜK MENÜ (v7-212)
+
+Salim: "diyet listesini artık halledelim, günlük öğün yazsın" → seçim: "her gün farklı menü". Motor zaten tek "örnek gün" kuruyordu (nutBuildDay, "Plana aktar" elle). Yeni: Beslenme kartında "Günlük menü — Aç" → "Aidan günlük menü" planı (weekly) → 7 gün ileri, her kova kendi tarihiyle (şablon = n.sablon + gün no + "Bugünü değiştir" sayacı; gün tipi hfGunTipi). Satırlar "HH:MM · " önekli ve saate göre sıralı → öğün bekçisi saati buradan okur (ikiz sözleşme testli). Tazeleme: renderNutrition + ui.js açılışta 6 sn sonra (yalnız açık ve bayatsa modülleri tembel indirir). Elle eklenen kalem korunur (kaynak:'aidan' dışı), Kapat önceki plana döner. Durum diet.nut.gunluk {acik, yazildi, kay, son, onceki}. İlk yükleme 184,96/185 KB — ui.js'e bir daha satır sığmaz, sıradaki iş önce yer açmalı. Not: gerçek veride motor hedefi "koru", hesaplayıcı "kilo al" (çelişki uyarısı ekranda). 62-gunluk-menu (11).
+
+---
+
+# 🍽️ 17 Eki 2026 — ÖĞÜN BEKÇİSİ (v7-211)
+
+Salim: "bugün de yemek yemeyi unuttum, 1 öğün yedim, düzeltelim". Teşhis: aktif plan ("Bulk — tam doğru") her kalemde saat taşıyor ("13:00 · Makarna — 300 g", günde 5-6 öğün) ama hiçbir bildirim bu saati kullanmıyordu; diet.days'te Ağustos'tan beri öğün kaydı YOK. Çözüm (takviye nag deseni): worker her turda runOgunBekci → ogunGruplari (aktif plan + günün kovası, "HH:MM · " önekine göre grup; önek yoksa sessiz) → ogunBekciDue: ana öğün saatinde/+20/+45, ara öğün saatinde/+25; susturan Yedim/Atladım, o pencerede öğün kaydı (sohbetten de), sıradaki öğünün başlaması; ertele = tek ping; kaçan tur telafi yok. Push tag öğün başına + actions Yedim/15 dk + data.ogun → sw.js (?ogun=&act= / OGUN_ACTION) → tasks.js ogunKopru → ajan.js ogunBekciAksiyon (tembel; ilk yükleme 184,8/185 KB). Yedim = o saatin plan kalemleri öğün kaydına (kalori plandan, tek kez, Geri al) → takip verisi de kendiliğinden oluşuyor. Durum data.ogunBekci {tarih, g}. Kapatma: settings.ogunBekci=false (UI düğmesi yok — bütçe dolu). 61-ogun-bekci (18).
+
+---
+
 # 💻 11 Eki 2026 — BİLGİSAYAR EKRAN SÜRESİ (Faz 1 devamı, yeni ekran YOK)
 
 Salim: "aidana bilgisayar ekran süresi şeyini yapalım". iPhone ekran süresi dışarı çıkamıyor (Apple DeviceActivityReport sandbox); Windows'ta ActivityWatch yerel kaydediyor. pc/: aidan-ekran.ps1 (AW query2: AFK hariç pencere süresi app başı + web eklentisi varsa $domain başı; dün+bugün; 1 dk altı atılır) · gizli-calistir.vbs (pencere açmadan) · kur.bat/kur.ps1 (AW kontrolü, gizli anahtar → ayar.txt, schtasks 30 dk, ilk gönderim) · kaldir.bat · KURULUM.md. Worker /screen (secret, srvEkranTemizle: ≤7 gün geri, ≤24 sa, ≤25 kalem, toplam kesilmemiş listeden) → aidan_screen tablosu (RLS+GRANT, blob'a DEĞİL). Sohbet ekranOku paralel + agentKayitlar BİLGİSAYAR satırı. Betik pwsh 7 + sahte AW/worker ile uçtan uca denendi (gönderim, AW kapalı, 404, ayar yok). 60-pc-ekran (14). Not: Faz kuralına uygun — yeni panel yok, yalnız veri → sohbet.
