@@ -6,7 +6,9 @@
  *
  * Kilitlenenler:
  *  - saatler deterministik, evdeki pencere içinde, blokların 20 dk yakınına düşmez, aralar ≥60 dk
- *  - antrenman günü 2, değilse 3; üst vücut günü squat
+ *  - antrenman günü 2, değilse 3; her molada farklı hareket (şınav/barfiks/squat/hamle/plank/burpee)
+ *  - antrenman günü o bölge dinlenir (üst → şınav/barfiks yok, bacak → squat/hamle yok, burpee yok)
+ *  - Ayarlar'dan tek tek kapatılan hareket gelmez
  *  - ilk ping tek kez, "20 dk sonra" tek tekrar, yapılan/kapalı → ping yok
  *  - 🔒 16 yaş: set başı adet tavanı aşılmaz, günde en fazla 3 set
  *  - istemci: dokun = kaydet, Geri al, 6 sette bir +1, ikiz sabitler aynı
@@ -33,7 +35,7 @@ function hfGun(d, tarih) {
   if (GUN.antrenman) b.push({ bas: 19 * 60 + 30, bit: 20 * 60 + 30 });
   return { pencere: { bas: 15 * 60, bit: 22 * 60 + 30 }, bloklar: b, antrenman: GUN.antrenman };
 }
-this.S = hareketSaatleri; this.D = hareketDue; this.P = hareketPayload; this.O = hareketOzet; this.T = hareketTuru; this.A = hareketAdet; this.TUR = HAREKET_TUR;`, ctx);
+this.S = hareketSaatleri; this.D = hareketDue; this.P = hareketPayload; this.O = hareketOzet; this.Y = hareketYasak; this.R = hareketTurleri; this.A = hareketAdet; this.TUR = HAREKET_TUR;`, ctx);
 
 const TARIH = '2026-10-26';
 const veri = () => ({ program: { days: [{ name: 'Üst A', odak: ['chest', 'triceps'] }, { name: 'Alt A', odak: ['quads'] }] } });
@@ -55,16 +57,44 @@ describe('saatler', () => {
     const g = ['2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29'].map(t => js(ctx.S(veri(), t)).join(','));
     assert.ok(new Set(g).size > 1);
   });
-  test('antrenman günü en fazla 2 + antrenmana yakın değil; üst vücut → squat, alt → şınav', () => {
+  test('antrenman günü en fazla 2 + antrenmana yakın değil', () => {
     ctx.GUN.antrenman = { ad: 'Üst A' };
     const a = js(ctx.S(veri(), TARIH));
     assert.ok(a.length <= 2);
     a.forEach(dk => assert.ok(dk <= 19 * 60 + 10 || dk >= 20 * 60 + 50, 'antrenman yakını ' + dk));
-    assert.strictEqual(ctx.T(veri(), TARIH), 'squat');
-    ctx.GUN.antrenman = { ad: 'Alt A' };
-    assert.strictEqual(ctx.T(veri(), TARIH), 'sinav');
     ctx.GUN.antrenman = null;
-    assert.strictEqual(ctx.T(veri(), TARIH), 'sinav');
+  });
+});
+
+describe('hareket havuzu', () => {
+  const bolge = (t) => ctx.TUR[t].bolge;
+  test('boş gün: 3 molada 3 FARKLI hareket, deterministik, günden güne değişir', () => {
+    ctx.GUN.antrenman = null;
+    const r = js(ctx.R(veri(), TARIH, 3));
+    assert.strictEqual(new Set(r).size, 3);
+    assert.deepStrictEqual(js(ctx.R(veri(), TARIH, 3)), r);
+    const gunler = ['2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30'].map(t => js(ctx.R(veri(), t, 3)).join(','));
+    assert.ok(new Set(gunler).size > 1);
+    const hepsi = new Set();
+    for (let i = 0; i < 40; i++) js(ctx.R(veri(), '2026-11-' + String(1 + (i % 28)).padStart(2, '0') + (i >= 28 ? 'x' : ''), 3)).forEach(t => hepsi.add(t));
+    ['sinav', 'barfiks', 'squat'].forEach(t => assert.ok(hepsi.has(t), t + ' hiç gelmedi'));
+  });
+  test('üst vücut günü şınav/barfiks/burpee yok; bacak günü squat/hamle/burpee yok', () => {
+    ctx.GUN.antrenman = { ad: 'Üst A' };
+    assert.deepStrictEqual(js(ctx.Y(veri(), TARIH)).sort(), ['tum', 'ust']);
+    ['2026-10-26', '2026-10-27', '2026-10-28'].forEach(t => js(ctx.R(veri(), t, 2)).forEach(x => assert.ok(['alt', 'govde'].includes(bolge(x)), x)));
+    ctx.GUN.antrenman = { ad: 'Alt A' };
+    ['2026-10-26', '2026-10-27', '2026-10-28'].forEach(t => js(ctx.R(veri(), t, 2)).forEach(x => assert.ok(['ust', 'govde'].includes(bolge(x)), x)));
+    ctx.GUN.antrenman = null;
+    assert.deepStrictEqual(js(ctx.Y(veri(), TARIH)), []);
+  });
+  test('kapatılan hareket gelmez; hepsi kapalıysa mola yok', () => {
+    ctx.GUN.antrenman = null;
+    const d = veri(); d.hareketAyar = { kapat: { barfiks: true, burpee: true } };
+    for (let i = 1; i <= 20; i++) js(ctx.R(d, '2026-11-' + String(i).padStart(2, '0'), 3)).forEach(x => assert.ok(x !== 'barfiks' && x !== 'burpee'));
+    const e = veri(); e.hareketAyar = { kapat: Object.fromEntries(Object.keys(ctx.TUR).map(k => [k, true])) };
+    ctx.D(e, TARIH, 0);
+    assert.strictEqual(e.hareket.n, 0);
   });
 });
 
@@ -94,16 +124,23 @@ describe('due + 16 yaş kilidi', () => {
     const d = veri(); d.hareketAyar = { adet: { sinav: 500, squat: -4 } };
     assert.strictEqual(ctx.A(d, 'sinav'), ctx.TUR.sinav.tavan);
     assert.strictEqual(ctx.A(d, 'squat'), ctx.TUR.squat.baslangic);
+    for (const k of Object.keys(ctx.TUR)) assert.ok(ctx.TUR[k].tavan <= 90 && ctx.TUR[k].min >= 1, k);
+    assert.ok(ctx.TUR.barfiks.tavan <= 12);
     ['2026-10-26', '2026-10-31', '2026-11-01'].forEach(t => assert.ok(js(ctx.S(veri(), t)).length <= 3));
   });
   test('payload: dokun = yaptım, url + hareket alanı; Günü kapat özeti', () => {
     const d = veri(); ctx.D(d, TARIH, 0);
+    d.hareket.turler = ['sinav', 'barfiks', 'plank'];
+    assert.match(js(ctx.P(d, { i: 0, tur: 'ilk' })).message, /Yere yat, 10 şınav çek/);
+    assert.match(js(ctx.P(d, { i: 2, tur: 'ilk' })).message, /30 sn plank/);
     const p = js(ctx.P(d, { i: 1, tur: 'ilk' }));
-    assert.match(p.message, /Yere yat, 10 şınav çek/);
+    assert.match(p.message, /Bara asıl, 3 barfiks çek/);
     assert.strictEqual(p.url, '/?hareket=1');
     assert.strictEqual(p.hareket, '1');
-    d.hareket.yap = { 0: 10, 2: 11 };
-    assert.match(ctx.O(d, TARIH), /2\/\d · 21 şınav/);
+    d.hareket.yap = { 0: 10, 1: 4 };
+    assert.match(ctx.O(d, TARIH), /2\/\d · 10 şınav, 4 barfiks/);
+    const eski = veri(); eski.hareket = { tarih: TARIH, n: 2, tur: 'squat', saatler: [1, 2], yap: { 0: 15 } };
+    assert.match(ctx.O(eski, TARIH), /1\/2 · 15 squat/);
   });
 });
 
@@ -120,18 +157,12 @@ describe('KAPI (worker + sw + köprü)', () => {
     assert.match(t, /q\.get\('hareket'\)/);
     assert.match(t, /loadModule\('ogun'\)\.then\(\(\) => hareketAksiyon/);
   });
-  test('ikiz sabitler: worker HAREKET_TUR ↔ ogun.js HAREKET_TUR_I ↔ ayarlar.js', () => {
+  test('ikiz tablo: worker HAREKET_TUR ↔ ogun.js HAREKET_TUR_I birebir; ayarlar.js kopya tutmaz', () => {
     const A2 = loadApp({ scripts: ['core.js', 'tasks.js', 'ui.js', 'ayarlar.js', 'ogun.js'] });
     try {
-      const I = JSON.parse(A2.evalIn('JSON.stringify(HAREKET_TUR_I)'));
-      const Y = JSON.parse(A2.evalIn('JSON.stringify(HAREKET_AYAR_TUR)'));
-      for (const k of ['sinav', 'squat']) {
-        assert.strictEqual(I[k].baslangic, ctx.TUR[k].baslangic);
-        assert.strictEqual(I[k].tavan, ctx.TUR[k].tavan);
-        assert.strictEqual(Y[k].vars, ctx.TUR[k].baslangic);
-        assert.strictEqual(Y[k].max, ctx.TUR[k].tavan);
-      }
+      assert.deepStrictEqual(JSON.parse(A2.evalIn('JSON.stringify(HAREKET_TUR_I)')), js(ctx.TUR));
     } finally { A2.close(); }
+    assert.doesNotMatch(readText('ayarlar.js'), /baslangic:/);
   });
 });
 
@@ -162,6 +193,10 @@ describe('istemci (ogun.js + ayarlar.js)', () => {
     A.evalIn("data.hareketAyar = { setSay: { sinav: 5 } }; hareketAksiyon('0', 'open')");
     assert.strictEqual(E('data.hareketAyar.adet.sinav'), 11);
     kur();
+    A.evalIn("data.hareket.turler = ['plank', 'barfiks', 'squat']; data.hareketAyar = { setSay: { plank: 5 } }; hareketAksiyon('0', 'open'); hareketAksiyon('1', 'open')");
+    assert.strictEqual(E('data.hareketAyar.adet.plank'), 35);
+    assert.deepStrictEqual(E('data.hareketLog[today()]'), { set: 2, plank: 30, barfiks: 3 });
+    kur();
     A.evalIn("data.hareketAyar = { setSay: { sinav: 11 }, adet: { sinav: 25 } }; hareketAksiyon('0', 'open')");
     assert.strictEqual(E('data.hareketAyar.adet.sinav'), 25);
     kur();
@@ -174,7 +209,7 @@ describe('istemci (ogun.js + ayarlar.js)', () => {
   test('Bugün kartı satırı', () => {
     kur();
     A.evalIn("data.hareket.yap = { 0: 10 }");
-    assert.deepStrictEqual(E('bugunOzet(data, today(), 600).hareket'), { n: 3, tur: 'sinav', set: 1, adet: 10 });
+    assert.deepStrictEqual(E('bugunOzet(data, today(), 600).hareket'), { n: 3, set: 1 });
   });
   test('Ayarlar satırı: Depolama\'nın üstünde, +/− ve Kapat', () => {
     kur();
@@ -189,6 +224,11 @@ describe('istemci (ogun.js + ayarlar.js)', () => {
     assert.strictEqual(el.nextElementSibling, doc.getElementById('storageInfo').closest('.settings-row'));
     el.querySelector('button[data-h="arti"][data-tur="sinav"]').click();
     assert.strictEqual(E('data.hareketAyar.adet.sinav'), 11);
+    doc.getElementById('hareketAyarRow').querySelector('button[data-h="arti"][data-tur="plank"]').click();
+    assert.strictEqual(E('data.hareketAyar.adet.plank'), 35);
+    doc.getElementById('hareketAyarRow').querySelector('button[data-h="sec"][data-tur="barfiks"]').click();
+    assert.strictEqual(E('data.hareketAyar.kapat.barfiks'), true);
+    assert.strictEqual(doc.getElementById('hareketAyarRow').querySelector('button[data-h="arti"][data-tur="barfiks"]'), null);
     doc.getElementById('hareketAyarRow').querySelector('button[data-h="ac"]').click();
     assert.strictEqual(E('data.hareketAyar.kapali'), true);
     assert.match(doc.getElementById('hareketAyarRow').textContent, /Aç/);

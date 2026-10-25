@@ -1,3 +1,7 @@
+# 💪 25 Eki 2026 — v7-220 Hareket havuzu
+- Salim: "şınav lafın gelişi, barfiks squat falan da". Havuz: şınav · barfiks · squat · hamle · plank (sn) · burpee; günün molalarına deterministik, birbirinden farklı dağılır.
+- Antrenman günü: üst vücut → şınav/barfiks yok, bacak → squat/hamle yok, burpee hiç yok. Ayarlar'da hareket başı Açık/Kapalı (bar yoksa barfiks kapatılır) + adet ±. Tablo yalnız worker + ogun.js (ayarlar kopyası kaldırıldı).
+
 # 💪 25 Eki 2026 — v7-219 Hareket molası
 - Worker `runHareket` (her tur): `hfGun` penceresinde blokların 20 dk uzağında, tarihe bağlı deterministik 3 saat (antrenman günü 2, aralar ≥60 dk). Push "Yere yat, 10 şınav çek"; dokun = yaptım, "20 dk sonra" tek tekrar.
 - Üst vücut antrenman günü şınav yerine squat. 16 yaş: set başı tavan (25/30), günde ≤3 set, 6 sette bir +1.

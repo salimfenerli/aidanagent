@@ -275,21 +275,15 @@ function gsGoSchool() {
 
 // ============================================================
 // 💪 HAREKET MOLASI AYARI (25 Eki 2026) — Ayarlar'da "Depolama"nın üstüne enjekte edilir
-// (asistan.html ilk yükleme bütçesinde — satır eklenmez). Aç/kapat + set başı adet +
+// (asistan.html ilk yükleme bütçesinde — satır eklenmez). Aç/kapat + hareket başı aç/kapat + adet +
 // son 7 gün. Bildirimleri worker atar (runHareket); burası yalnız data.hareketAyar yazar.
 // ============================================================
-const HAREKET_AYAR_TUR = { sinav: { ad: 'Şınav', min: 3, max: 25, vars: 10 }, squat: { ad: 'Squat (üst vücut günü)', min: 3, max: 30, vars: 15 } };
-
-function hareketAyarAdet(tur) {
-  const T = HAREKET_AYAR_TUR[tur];
-  const a = Number(data.hareketAyar && data.hareketAyar.adet && data.hareketAyar.adet[tur]);
-  return Math.max(T.min, Math.min(T.max, Math.round(a > 0 ? a : T.vars)));
-}
-
+// Hareket tablosu TEK yerde: ogun.js HAREKET_TUR_I (worker ikizi). Burada kopyası yok.
 function renderHareketAyar() {
   const ref = document.getElementById('storageInfo');
   const satir = ref && ref.closest('.settings-row');
   if (!satir) return;
+  if (typeof HAREKET_TUR_I === 'undefined') { loadModule('ogun').then(() => renderHareketAyar()).catch(() => {}); return; }
   let el = document.getElementById('hareketAyarRow');
   if (!el) {
     el = document.createElement('div');
@@ -300,36 +294,48 @@ function renderHareketAyar() {
       const b = ev.target.closest('button[data-h]');
       if (!b) return;
       const ay = data.hareketAyar || (data.hareketAyar = {});
+      const tur = b.dataset.tur, T = HAREKET_TUR_I[tur];
       if (b.dataset.h === 'ac') ay.kapali = !ay.kapali;
+      else if (!T) return;
+      else if (b.dataset.h === 'sec') ay.kapat = Object.assign({}, ay.kapat, { [tur]: !(ay.kapat && ay.kapat[tur]) });
       else {
-        const tur = b.dataset.tur, T = HAREKET_AYAR_TUR[tur];
-        if (!T) return;
-        const yeni = Math.max(T.min, Math.min(T.max, hareketAyarAdet(tur) + (b.dataset.h === 'arti' ? 1 : -1)));
+        const yeni = Math.max(T.min, Math.min(T.tavan, hareketAdetI(tur) + (b.dataset.h === 'arti' ? T.adim : -T.adim)));
         ay.adet = Object.assign({}, ay.adet, { [tur]: yeni });
       }
       save(); renderHareketAyar();
     });
   }
   const ay = data.hareketAyar || {};
+  const kapat = ay.kapat || {};
   const log = data.hareketLog || {};
   const bas = shiftDateStr(today(), -6);
-  let set = 0, sinav = 0, squat = 0;
-  Object.keys(log).forEach(g => { if (g >= bas) { set += log[g].set || 0; sinav += log[g].sinav || 0; squat += log[g].squat || 0; } });
-  const adetSatir = (tur) => '<div class="ha-adet"><span>' + HAREKET_AYAR_TUR[tur].ad + '</span>' +
-    '<button class="small secondary" data-h="eksi" data-tur="' + tur + '" aria-label="azalt">−</button>' +
-    '<b>' + hareketAyarAdet(tur) + '</b>' +
-    '<button class="small secondary" data-h="arti" data-tur="' + tur + '" aria-label="artır">+</button></div>';
+  let set = 0; const top = {};
+  Object.keys(log).forEach(g => {
+    if (g < bas) return;
+    set += log[g].set || 0;
+    Object.keys(HAREKET_TUR_I).forEach(t => { if (log[g][t]) top[t] = (top[t] || 0) + log[g][t]; });
+  });
+  const ozet = Object.keys(top).map(t => top[t] + ' ' + HAREKET_TUR_I[t].ad).join(' · ');
+  const adetSatir = (tur) => {
+    const T = HAREKET_TUR_I[tur], acik = !kapat[tur];
+    return '<div class="ha-adet' + (acik ? '' : ' ha-kapali') + '"><span>' + escapeHtml(T.ad.charAt(0).toUpperCase() + T.ad.slice(1)) + '</span>' +
+      '<button class="small secondary" data-h="sec" data-tur="' + tur + '">' + (acik ? 'Açık' : 'Kapalı') + '</button>' +
+      (acik ? '<button class="small secondary" data-h="eksi" data-tur="' + tur + '" aria-label="azalt">−</button>' +
+        '<b>' + hareketAdetI(tur) + '</b>' +
+        '<button class="small secondary" data-h="arti" data-tur="' + tur + '" aria-label="artır">+</button>' : '') + '</div>';
+  };
   el.innerHTML = '<label>Hareket molası</label>' +
-    '<div class="settings-help">Evdeki boş saatlerinde günde 1-3 kez "yere yat, şınav çek" bildirimi. Bildirime dokun = yaptım. ' +
-    'Üst vücut antrenmanı olan gün şınav yerine squat gelir (aynı kası iki kez yormamak için). Adet her 6 sette bir kendiliğinden 1 artar.</div>' +
-    '<button class="small' + (ay.kapali ? '' : ' secondary') + '" data-h="ac">' + (ay.kapali ? 'Aç' : 'Kapat') + '</button>' +
-    (ay.kapali ? '' : adetSatir('sinav') + adetSatir('squat')) +
-    '<div class="settings-help">Son 7 gün: ' + (set ? set + ' set · ' + sinav + ' şınav · ' + squat + ' squat' : 'henüz kayıt yok') + '</div>';
+    '<div class="settings-help">Evdeki boş saatlerinde günde 1-3 kez kısa hareket bildirimi; her molada farklı hareket. Bildirime dokun = yaptım. ' +
+    'Antrenman günü o bölge dinlenir (üst vücut günü şınav/barfiks gelmez, bacak günü squat/hamle gelmez). Adet her 6 sette bir kendiliğinden artar. Barın yoksa barfiksi kapat.</div>' +
+    '<button class="small' + (ay.kapali ? '' : ' secondary') + '" data-h="ac">' + (ay.kapali ? 'Aç' : 'Hepsini kapat') + '</button>' +
+    (ay.kapali ? '' : Object.keys(HAREKET_TUR_I).map(adetSatir).join('')) +
+    '<div class="settings-help">Son 7 gün: ' + (set ? set + ' set · ' + ozet : 'henüz kayıt yok') + '</div>';
   if (!document.getElementById('hareketAyarStil')) {
     const st = document.createElement('style');
     st.id = 'hareketAyarStil';
-    st.textContent = '.ha-adet{display:flex;align-items:center;gap:10px;margin-top:8px}.ha-adet span{flex:1}' +
-      '.ha-adet button{min-width:44px;min-height:44px}.ha-adet b{min-width:28px;text-align:center;font-variant-numeric:tabular-nums}';
+    st.textContent = '.ha-adet{display:flex;align-items:center;gap:8px;margin-top:8px}.ha-adet span{flex:1}' +
+      '.ha-adet button{min-width:44px;min-height:44px}.ha-adet b{min-width:28px;text-align:center;font-variant-numeric:tabular-nums}' +
+      '.ha-kapali span{opacity:.55}';
     document.head.appendChild(st);
   }
 }

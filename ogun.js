@@ -241,9 +241,13 @@ function bugunBaslat() {
 // dokunduysan Geri al. Adet yavaş artar: o türde her 6 set +1 (tavana kadar).
 // ⚠️ HAREKET_TUR_I worker'daki HAREKET_TUR ile İKİZ (test 70 karşılaştırır).
 // ============================================================
-const HAREKET_TUR_I = {
-  sinav: { ad: 'şınav', baslangic: 10, tavan: 25 },
-  squat: { ad: 'squat', baslangic: 15, tavan: 30 },
+const HAREKET_TUR_I = {   // ⚠️ worker HAREKET_TUR ile İKİZ (70)
+  sinav: { ad: 'şınav', bolge: 'ust', min: 3, baslangic: 10, tavan: 25, adim: 1, emir: 'Yere yat, {n} şınav çek' },
+  barfiks: { ad: 'barfiks', bolge: 'ust', min: 1, baslangic: 3, tavan: 12, adim: 1, emir: 'Bara asıl, {n} barfiks çek' },
+  squat: { ad: 'squat', bolge: 'alt', min: 5, baslangic: 15, tavan: 30, adim: 1, emir: 'Kalk, {n} squat yap' },
+  hamle: { ad: 'hamle (her bacak)', bolge: 'alt', min: 3, baslangic: 8, tavan: 15, adim: 1, emir: 'Kalk, her bacak {n} hamle (lunge) yap' },
+  plank: { ad: 'sn plank', bolge: 'govde', min: 15, baslangic: 30, tavan: 90, adim: 5, emir: 'Yere in, {n} sn plank' },
+  burpee: { ad: 'burpee', bolge: 'tum', min: 3, baslangic: 6, tavan: 15, adim: 1, emir: 'Kalk, {n} burpee yap' },
 };
 const HAREKET_ARTIS_SET = 6;
 
@@ -251,7 +255,7 @@ function hareketAdetI(tur) {
   const T = HAREKET_TUR_I[tur] || HAREKET_TUR_I.sinav;
   const ay = data.hareketAyar && data.hareketAyar.adet;
   const a = Number(ay && typeof ay === 'object' ? ay[tur] : null);
-  return Math.max(3, Math.min(T.tavan, Math.round(a > 0 ? a : T.baslangic)));
+  return Math.max(T.min, Math.min(T.tavan, Math.round(a > 0 ? a : T.baslangic)));
 }
 
 function hareketYenile() {
@@ -275,21 +279,22 @@ function hareketAksiyon(i, act) {
     return;
   }
   if (h.yap[k] != null) { showToast('Bu set zaten kayıtlı', 'success', 2500); return; }
-  const tur = HAREKET_TUR_I[h.tur] ? h.tur : 'sinav';
+  const t0 = (h.turler && h.turler[k]) || h.tur;
+  const tur = HAREKET_TUR_I[t0] ? t0 : 'sinav';
   const T = HAREKET_TUR_I[tur];
   const adet = hareketAdetI(tur);
   h.yap[k] = adet;
   data.hareketLog = data.hareketLog || {};
   const L = data.hareketLog[t] || (data.hareketLog[t] = { set: 0 });
   L.set += 1; L[tur] = (L[tur] || 0) + adet;
-  // Yavaş ilerleme: o türde toplam set HAREKET_ARTIS_SET'in katına ulaşınca +1
+  // Yavaş ilerleme: o türde toplam set HAREKET_ARTIS_SET'in katına ulaşınca +adim (tavanı aşmaz)
   const ay = data.hareketAyar || (data.hareketAyar = {});
   const eskiAyar = JSON.stringify(ay);
   ay.setSay = ay.setSay || {};
   ay.setSay[tur] = (ay.setSay[tur] || 0) + 1;
   let artti = false;
   if (ay.setSay[tur] % HAREKET_ARTIS_SET === 0 && adet < T.tavan) {
-    ay.adet = Object.assign({}, ay.adet, { [tur]: adet + 1 }); artti = true;
+    ay.adet = Object.assign({}, ay.adet, { [tur]: Math.min(T.tavan, adet + T.adim) }); artti = true;
   }
   // 60 günden eski günlük kayıtlar atılır
   const sinir = shiftDateStr(t, -60);
@@ -303,6 +308,6 @@ function hareketAksiyon(i, act) {
     data.hareketAyar = JSON.parse(eskiAyar);
     save(); hareketYenile();
   };
-  const mesaj = adet + ' ' + T.ad + ' kaydedildi' + (artti ? ' · sıradaki set ' + (adet + 1) : '');
+  const mesaj = adet + ' ' + T.ad + ' kaydedildi' + (artti ? ' · sıradaki ' + Math.min(T.tavan, adet + T.adim) : '');
   if (typeof showUndoToast === 'function') showUndoToast(mesaj, geri); else showToast(mesaj, 'success');
 }

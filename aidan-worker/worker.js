@@ -9253,21 +9253,25 @@ function ogunBekciPayload(x) {
 // 💪 HAREKET MOLASI (25 Eki 2026)
 // ============================================================
 // Salim: "evde spor için bi anda gelen 'yat şınav çek' bildirimi, ben tamam diye
-// işaretleyeyim ve takip etsin". Gün içinde EVDE olduğu boş saatlerde (Haftam
-// çekirdeği hfGun.pencere: okul/kurs çıkışı + hazırlık → yatıştan 1 saat önce)
-// rastgele görünen ama TARİHE BAĞLI (deterministik) 3 saat seçilir; antrenman
-// günü 2. Okul, kurs, antrenman, sabit program bloğunun 20 dk yakınına düşmez.
-// Bildirime dokunmak = yaptım (iOS'ta düğme yok — öğün bekçisinin dersi: iki
-// dokunuş isteyen bildirim yanıtsız kalıyor). "20 dk sonra" tek tekrar.
-// ⚠️ 16 yaş kilidi: set başı en fazla tavan, günde en fazla 3 set — aşırı
-// antrenman teşviki yok. Adet artışı istemcide (yapılan sete göre, yavaş).
-// ⚠️ ÜST VÜCUT GÜNÜ ŞINAV YOK: Salim'in programında Salı/Pazar dips + omuz press +
-// row var; üstüne gün içi şınav aynı kası yorar → o günler squat (bacak dinç).
-// Durum: data.hareket = { tarih, n, tur, saatler, gon: [i], yap: {i: adet}, e: {i: dk}, es: {i: dk} }
-//        data.hareketAyar = { kapali, adet: {sinav, squat} } · data.hareketLog = { tarih: {set, sinav, squat} } (istemci yazar)
+// işaretleyeyim ve takip etsin" + "şınav lafın gelişi, barfiks squat falan da".
+// Gün içinde EVDE olduğu boş saatlerde (Haftam çekirdeği hfGun.pencere) rastgele
+// görünen ama TARİHE BAĞLI (deterministik) 3 saat seçilir; antrenman günü 2.
+// Okul, kurs, antrenman, sabit program bloğunun 20 dk yakınına düşmez.
+// Her molaya HAVUZDAN farklı bir hareket düşer (aynı gün tekrar yok, havuz yetiyorsa).
+// Bildirime dokunmak = yaptım (iOS'ta düğme yok — öğün bekçisinin dersi).
+// ⚠️ 16 yaş kilidi: hareket başı tavan, günde en fazla 3 set — aşırı antrenman yok.
+// ⚠️ Antrenman günü o bölge DİNLENİR: üst vücut günü şınav/barfiks yok, bacak günü
+//    squat/hamle yok, antrenman günü burpee yok (tüm vücut).
+// ⚠️ HAREKET_TUR ogun.js HAREKET_TUR_I ile İKİZ (70 testi birebir karşılaştırır).
+// Durum: data.hareket = { tarih, n, turler: [tur], saatler, gon: [i], yap: {i: adet}, e: {i: dk}, es: {i: dk} }
+//        data.hareketAyar = { kapali, kapat: {tur: true}, adet: {tur: n}, setSay } · data.hareketLog (istemci yazar)
 const HAREKET_TUR = {
-  sinav: { ad: 'şınav', baslangic: 10, tavan: 25, emir: 'Yere yat' },
-  squat: { ad: 'squat', baslangic: 15, tavan: 30, emir: 'Kalk' },
+  sinav: { ad: 'şınav', bolge: 'ust', min: 3, baslangic: 10, tavan: 25, adim: 1, emir: 'Yere yat, {n} şınav çek' },
+  barfiks: { ad: 'barfiks', bolge: 'ust', min: 1, baslangic: 3, tavan: 12, adim: 1, emir: 'Bara asıl, {n} barfiks çek' },
+  squat: { ad: 'squat', bolge: 'alt', min: 5, baslangic: 15, tavan: 30, adim: 1, emir: 'Kalk, {n} squat yap' },
+  hamle: { ad: 'hamle (her bacak)', bolge: 'alt', min: 3, baslangic: 8, tavan: 15, adim: 1, emir: 'Kalk, her bacak {n} hamle (lunge) yap' },
+  plank: { ad: 'sn plank', bolge: 'govde', min: 15, baslangic: 30, tavan: 90, adim: 5, emir: 'Yere in, {n} sn plank' },
+  burpee: { ad: 'burpee', bolge: 'tum', min: 3, baslangic: 6, tavan: 15, adim: 1, emir: 'Kalk, {n} burpee yap' },
 };
 const HAREKET_PAY = 20;         // blok kenarından uzaklık (dk)
 const HAREKET_ARA = 60;         // iki bildirim arası en az (dk)
@@ -9278,22 +9282,36 @@ function hareketHash(s) {
   return (h >>> 0) / 4294967296;   // [0,1)
 }
 
-/** Günün hareketi: antrenman günü üst vücutsa squat, değilse şınav. */
-function hareketTuru(d, tarih) {
+/** Antrenman günü dinlenen bölgeler: ['ust'|'alt'|'tum']. */
+function hareketYasak(d, tarih) {
   const g = typeof hfGun === 'function' ? hfGun(d, tarih) : null;
   const ad = g && g.antrenman && g.antrenman.ad;
-  if (!ad) return 'sinav';
+  if (!ad) return [];
   const gun = ((d && d.program && d.program.days) || []).find(x => x && x.name === ad);
-  const odak = (gun && gun.odak) || [];
-  const ust = odak.some(o => /chest|shoulders|triceps/.test(o)) || /üst/i.test(String(ad));
-  return ust ? 'squat' : 'sinav';
+  const odak = ((gun && gun.odak) || []).join(' ') + ' ' + String(ad);
+  const out = ['tum'];
+  if (/chest|shoulders|triceps|back|lats|biceps|üst|ust/i.test(odak)) out.push('ust');
+  if (/quads|hamstrings|glutes|calves|legs|alt|bacak/i.test(odak)) out.push('alt');
+  return out;
+}
+
+/** Günün mola hareketleri (n tane, deterministik; aynı gün tekrar yok — havuz yetiyorsa). */
+function hareketTurleri(d, tarih, n) {
+  const yasak = hareketYasak(d, tarih);
+  const kapat = (d && d.hareketAyar && d.hareketAyar.kapat) || {};
+  const havuz = Object.keys(HAREKET_TUR).filter(k => !kapat[k] && yasak.indexOf(HAREKET_TUR[k].bolge) < 0);
+  if (!havuz.length) return [];
+  const sira = havuz.slice().sort((a, b) => hareketHash(tarih + a) - hareketHash(tarih + b));
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(sira[i % sira.length]);
+  return out;
 }
 
 function hareketAdet(d, tur) {
   const T = HAREKET_TUR[tur] || HAREKET_TUR.sinav;
   const ay = d && d.hareketAyar && d.hareketAyar.adet;
   const a = Number(ay && typeof ay === 'object' ? ay[tur] : null);
-  return Math.max(3, Math.min(T.tavan, Math.round(a > 0 ? a : T.baslangic)));
+  return Math.max(T.min, Math.min(T.tavan, Math.round(a > 0 ? a : T.baslangic)));
 }
 
 /** O günün bildirim saatleri (dk). Saf + deterministik: aynı gün hep aynı saatler. */
@@ -9326,12 +9344,20 @@ function hareketSaatleri(d, tarih) {
   return out;
 }
 
+/** i. molanın hareketi (eski kayıtta tek `tur` vardı). */
+function hareketTurOf(h, i) {
+  const t = (h && h.turler && h.turler[i]) || (h && h.tur);
+  return HAREKET_TUR[t] ? t : 'sinav';
+}
+
 /** Bu turda atılacak hareket bildirimleri. data.hareket'i GÜNCELLER. */
 function hareketDue(d, tarih, nowMin) {
   if (d && d.hareketAyar && d.hareketAyar.kapali) return [];
   if (!d.hareket || d.hareket.tarih !== tarih) {
-    const saatler = hareketSaatleri(d, tarih);
-    d.hareket = { tarih, n: saatler.length, tur: hareketTuru(d, tarih), saatler, gon: [], yap: {}, e: {}, es: {} };
+    let saatler = hareketSaatleri(d, tarih);
+    const turler = hareketTurleri(d, tarih, saatler.length);
+    if (!turler.length) saatler = [];
+    d.hareket = { tarih, n: saatler.length, turler, saatler, gon: [], yap: {}, e: {}, es: {} };
   }
   const h = d.hareket;
   h.gon = h.gon || []; h.yap = h.yap || {}; h.e = h.e || {}; h.es = h.es || {};
@@ -9349,12 +9375,11 @@ function hareketDue(d, tarih, nowMin) {
 }
 
 function hareketPayload(d, x) {
-  const tur = (d.hareket && d.hareket.tur) || 'sinav';
-  const T = HAREKET_TUR[tur] || HAREKET_TUR.sinav;
-  const adet = hareketAdet(d, tur);
+  const tur = hareketTurOf(d.hareket, x.i);
+  const emir = HAREKET_TUR[tur].emir.replace('{n}', hareketAdet(d, tur));
   return {
     title: '💪 Hareket molası',
-    message: x.tur === 'tekrar' ? `Şimdi: ${T.emir.toLowerCase()}, ${adet} ${T.ad}. Bitince dokun.` : `${T.emir}, ${adet} ${T.ad}${tur === 'sinav' ? ' çek' : ' yap'}. Bitince dokun — kaydedilir.`,
+    message: x.tur === 'tekrar' ? `Şimdi: ${emir}. Bitince dokun.` : `${emir}. Bitince dokun — kaydedilir.`,
     tag: 'aidan-hareket',
     url: '/?hareket=' + x.i,
     hareket: String(x.i),
@@ -9367,9 +9392,10 @@ function hareketOzet(d, tarih) {
   const h = d && d.hareket;
   if (!h || h.tarih !== tarih || !h.n) return '';
   const yap = Object.keys(h.yap || {});
-  const adet = yap.reduce((s, k) => s + (Number(h.yap[k]) || 0), 0);
-  const T = HAREKET_TUR[h.tur] || HAREKET_TUR.sinav;
-  return `💪 Hareket: ${yap.length}/${h.n}` + (adet ? ` · ${adet} ${T.ad}` : '');
+  const top = {};
+  yap.forEach(k => { const t = hareketTurOf(h, k); top[t] = (top[t] || 0) + (Number(h.yap[k]) || 0); });
+  const parca = Object.keys(top).map(t => top[t] + ' ' + HAREKET_TUR[t].ad);
+  return `💪 Hareket: ${yap.length}/${h.n}` + (parca.length ? ' · ' + parca.join(', ') : '');
 }
 // 💪 HAREKET MOLASI SONU
 
