@@ -94,6 +94,7 @@ function renderStorageInfo() {
     '<div class="sp-row"><span>' + escapeHtml(STORAGE_ETIKET[x.key] || x.key) +
     '</span><b>' + fmtBytes(x.chars) + '</b></div>').join('') ||
     '<div class="sp-row"><span>Henüz veri yok</span></div>';
+  renderHareketAyar();   // 25 Eki: Ayarlar açılınca hareket molası satırı (aynı anda çizilir)
 }
 
 function renderCalendarSync() {
@@ -269,5 +270,66 @@ function gsGoSchool() {
     ss.open = true;
     Promise.resolve(typeof ensureSchoolModule === 'function' ? ensureSchoolModule() : null)
       .then(() => setTimeout(() => ss.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80));
+  }
+}
+
+// ============================================================
+// 💪 HAREKET MOLASI AYARI (25 Eki 2026) — Ayarlar'da "Depolama"nın üstüne enjekte edilir
+// (asistan.html ilk yükleme bütçesinde — satır eklenmez). Aç/kapat + set başı adet +
+// son 7 gün. Bildirimleri worker atar (runHareket); burası yalnız data.hareketAyar yazar.
+// ============================================================
+const HAREKET_AYAR_TUR = { sinav: { ad: 'Şınav', min: 3, max: 25, vars: 10 }, squat: { ad: 'Squat (üst vücut günü)', min: 3, max: 30, vars: 15 } };
+
+function hareketAyarAdet(tur) {
+  const T = HAREKET_AYAR_TUR[tur];
+  const a = Number(data.hareketAyar && data.hareketAyar.adet && data.hareketAyar.adet[tur]);
+  return Math.max(T.min, Math.min(T.max, Math.round(a > 0 ? a : T.vars)));
+}
+
+function renderHareketAyar() {
+  const ref = document.getElementById('storageInfo');
+  const satir = ref && ref.closest('.settings-row');
+  if (!satir) return;
+  let el = document.getElementById('hareketAyarRow');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'hareketAyarRow';
+    el.className = 'settings-row';
+    satir.parentNode.insertBefore(el, satir);
+    el.addEventListener('click', ev => {
+      const b = ev.target.closest('button[data-h]');
+      if (!b) return;
+      const ay = data.hareketAyar || (data.hareketAyar = {});
+      if (b.dataset.h === 'ac') ay.kapali = !ay.kapali;
+      else {
+        const tur = b.dataset.tur, T = HAREKET_AYAR_TUR[tur];
+        if (!T) return;
+        const yeni = Math.max(T.min, Math.min(T.max, hareketAyarAdet(tur) + (b.dataset.h === 'arti' ? 1 : -1)));
+        ay.adet = Object.assign({}, ay.adet, { [tur]: yeni });
+      }
+      save(); renderHareketAyar();
+    });
+  }
+  const ay = data.hareketAyar || {};
+  const log = data.hareketLog || {};
+  const bas = shiftDateStr(today(), -6);
+  let set = 0, sinav = 0, squat = 0;
+  Object.keys(log).forEach(g => { if (g >= bas) { set += log[g].set || 0; sinav += log[g].sinav || 0; squat += log[g].squat || 0; } });
+  const adetSatir = (tur) => '<div class="ha-adet"><span>' + HAREKET_AYAR_TUR[tur].ad + '</span>' +
+    '<button class="small secondary" data-h="eksi" data-tur="' + tur + '" aria-label="azalt">−</button>' +
+    '<b>' + hareketAyarAdet(tur) + '</b>' +
+    '<button class="small secondary" data-h="arti" data-tur="' + tur + '" aria-label="artır">+</button></div>';
+  el.innerHTML = '<label>Hareket molası</label>' +
+    '<div class="settings-help">Evdeki boş saatlerinde günde 1-3 kez "yere yat, şınav çek" bildirimi. Bildirime dokun = yaptım. ' +
+    'Üst vücut antrenmanı olan gün şınav yerine squat gelir (aynı kası iki kez yormamak için). Adet her 6 sette bir kendiliğinden 1 artar.</div>' +
+    '<button class="small' + (ay.kapali ? '' : ' secondary') + '" data-h="ac">' + (ay.kapali ? 'Aç' : 'Kapat') + '</button>' +
+    (ay.kapali ? '' : adetSatir('sinav') + adetSatir('squat')) +
+    '<div class="settings-help">Son 7 gün: ' + (set ? set + ' set · ' + sinav + ' şınav · ' + squat + ' squat' : 'henüz kayıt yok') + '</div>';
+  if (!document.getElementById('hareketAyarStil')) {
+    const st = document.createElement('style');
+    st.id = 'hareketAyarStil';
+    st.textContent = '.ha-adet{display:flex;align-items:center;gap:10px;margin-top:8px}.ha-adet span{flex:1}' +
+      '.ha-adet button{min-width:44px;min-height:44px}.ha-adet b{min-width:28px;text-align:center;font-variant-numeric:tabular-nums}';
+    document.head.appendChild(st);
   }
 }

@@ -232,3 +232,77 @@ function bugunBaslat() {
   _bugunZamanlayici = setInterval(() => { if (!document.hidden && !_bugunForm) renderBugunOgun(); }, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && !_bugunForm) renderBugunOgun(); });
 }
+
+// ============================================================
+// 💪 HAREKET MOLASI — istemci (25 Eki 2026)
+// Worker (runHareket) evdeki boş saatte "Yere yat, 10 şınav çek" atar. Bildirime
+// DOKUNMAK = YAPTIM (iOS düğme göstermez; öğün bekçisinde iki dokunuş istenince
+// hiç yanıt gelmedi). "20 dk sonra" düğmesi Android/masaüstünde. Yanlışlıkla
+// dokunduysan Geri al. Adet yavaş artar: o türde her 6 set +1 (tavana kadar).
+// ⚠️ HAREKET_TUR_I worker'daki HAREKET_TUR ile İKİZ (test 70 karşılaştırır).
+// ============================================================
+const HAREKET_TUR_I = {
+  sinav: { ad: 'şınav', baslangic: 10, tavan: 25 },
+  squat: { ad: 'squat', baslangic: 15, tavan: 30 },
+};
+const HAREKET_ARTIS_SET = 6;
+
+function hareketAdetI(tur) {
+  const T = HAREKET_TUR_I[tur] || HAREKET_TUR_I.sinav;
+  const ay = data.hareketAyar && data.hareketAyar.adet;
+  const a = Number(ay && typeof ay === 'object' ? ay[tur] : null);
+  return Math.max(3, Math.min(T.tavan, Math.round(a > 0 ? a : T.baslangic)));
+}
+
+function hareketYenile() {
+  if (typeof renderBugun === 'function') { try { renderBugun(); } catch (_) {} }
+  if (typeof renderHareketAyar === 'function') { try { renderHareketAyar(); } catch (_) {} }
+}
+
+/** Bildirimden: 'open' | 'yaptim' → kaydet; 'sonra' → 20 dk sonra tek tekrar. */
+function hareketAksiyon(i, act) {
+  const k = String(parseInt(i, 10));
+  if (k === 'NaN') return;
+  const t = today();
+  const h = data.hareket;
+  if (!h || h.tarih !== t || !(Number(k) < (h.saatler || []).length)) { showToast('Bu hareket molası bugüne ait değil', 'info', 3000); return; }
+  h.yap = h.yap || {}; h.e = h.e || {};
+  if (act === 'sonra') {
+    const n = new Date();
+    h.e[k] = Math.ceil((n.getHours() * 60 + n.getMinutes() + 20) / 5) * 5;
+    save();
+    showToast('20 dk sonra tekrar hatırlatırım', 'info', 3000);
+    return;
+  }
+  if (h.yap[k] != null) { showToast('Bu set zaten kayıtlı', 'success', 2500); return; }
+  const tur = HAREKET_TUR_I[h.tur] ? h.tur : 'sinav';
+  const T = HAREKET_TUR_I[tur];
+  const adet = hareketAdetI(tur);
+  h.yap[k] = adet;
+  data.hareketLog = data.hareketLog || {};
+  const L = data.hareketLog[t] || (data.hareketLog[t] = { set: 0 });
+  L.set += 1; L[tur] = (L[tur] || 0) + adet;
+  // Yavaş ilerleme: o türde toplam set HAREKET_ARTIS_SET'in katına ulaşınca +1
+  const ay = data.hareketAyar || (data.hareketAyar = {});
+  const eskiAyar = JSON.stringify(ay);
+  ay.setSay = ay.setSay || {};
+  ay.setSay[tur] = (ay.setSay[tur] || 0) + 1;
+  let artti = false;
+  if (ay.setSay[tur] % HAREKET_ARTIS_SET === 0 && adet < T.tavan) {
+    ay.adet = Object.assign({}, ay.adet, { [tur]: adet + 1 }); artti = true;
+  }
+  // 60 günden eski günlük kayıtlar atılır
+  const sinir = shiftDateStr(t, -60);
+  Object.keys(data.hareketLog).forEach(g => { if (g < sinir) delete data.hareketLog[g]; });
+  save();
+  hareketYenile();
+  const geri = () => {
+    const hh = data.hareket; if (hh && hh.tarih === t && hh.yap) delete hh.yap[k];
+    const LL = data.hareketLog && data.hareketLog[t];
+    if (LL) { LL.set = Math.max(0, LL.set - 1); LL[tur] = Math.max(0, (LL[tur] || 0) - adet); }
+    data.hareketAyar = JSON.parse(eskiAyar);
+    save(); hareketYenile();
+  };
+  const mesaj = adet + ' ' + T.ad + ' kaydedildi' + (artti ? ' · sıradaki set ' + (adet + 1) : '');
+  if (typeof showUndoToast === 'function') showUndoToast(mesaj, geri); else showToast(mesaj, 'success');
+}

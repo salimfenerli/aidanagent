@@ -1,3 +1,8 @@
+# 💪 25 Eki 2026 — v7-219 Hareket molası
+- Worker `runHareket` (her tur): `hfGun` penceresinde blokların 20 dk uzağında, tarihe bağlı deterministik 3 saat (antrenman günü 2, aralar ≥60 dk). Push "Yere yat, 10 şınav çek"; dokun = yaptım, "20 dk sonra" tek tekrar.
+- Üst vücut antrenman günü şınav yerine squat. 16 yaş: set başı tavan (25/30), günde ≤3 set, 6 sette bir +1.
+- İstemci `ogun.js` `hareketAksiyon` (kayıt + Geri al), Bugün kartında "Hareket x/n", Ayarlar'da aç/kapat + adet ± + son 7 gün, Günü kapat'ta özet. Test `70-hareket`.
+
 # 🌊 20 Eki 2026 — AKICILIK + "2x yumurta" (v7-218)
 
 Salim: "kullanmadım bugün" (öğün bekçisi 12 push attı, 0 işaret) → "ui iyileştirelim, daha smooth olsun" + "2x yumurta 600 kalori diyor". (1) Çarpan yazımı: "2x / 2 x / x2 / yumurta x2 / 2×" parseFoodQuery'de miktara çevrilir — eskiden yerel eşleşme yoktu, kullanıcı paket/AI aramasına düşüp saçma sayı görüyordu. (2) Playwright 390 px ölçümü: görev yakalama + kısayollar + bildirim bandı HER sekmede ilk ekranın ~%30'u → body[data-tab] ile yalnız Görevler'de. Öğün kartı 1,2 sn gecikmeyle gelip "Bugünün 3'ü"nü itiyordu → gecikme 0. Diyet modülü inerken boş iskelet görünüp çubuk kalkınca sekme zıplıyordu (CLS 0.48) → .panel.yukleniyor: iskelet gizli, çubuk mutlak; ölçülen kayma 0. Sekme geçişi 180 ms belirme (reduced-motion'da yok) + yeni sekme baştan başlar (scrollingElement; jsdom scrollTo yok). İlk yükleme 182,7/183 KB — pay ~0,3 KB. 69-akicilik (8). Açık: Fitbit verisi Apple Sağlık'ta var ama Aidan'a hiç akmamış (yalnız 7-8 Eki 2 kayıt) — Kısayol otomasyonu kurulmamış.

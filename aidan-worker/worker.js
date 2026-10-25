@@ -1445,6 +1445,8 @@ function buildGunuKapat(data, bugun, yarin) {
       ogunKayitliMi(d, bugun, g, og[i + 1] ? og[i + 1].dk : null)).length;
     L.push(`🍽️ Öğün: ${yenen}/${og.length} işaretli`);
   }
+  const hr = typeof hareketOzet === 'function' ? hareketOzet(d, bugun) : '';
+  if (hr) L.push(hr);
   L.push(eksik.length
     ? `📝 Kayıtsız: ${eksik.join(', ')}. Tek mesajla yaz, ben ayırırım.`
     : '📝 Kayıtlar tamam. Eklemek istediğin bir şey varsa yaz.');
@@ -1591,7 +1593,7 @@ async function sendPushToAll(env, data, payload, sessionInfo) {
     // actions: Android/masaüstü Chrome gösterir. iOS PWA desteklemez —
     // orada bildirime tıklama fallback'i devreye girer (sw.js notificationclick).
     actions: payload.actions || undefined,
-    data: { url: payload.url || '/', blockId: payload.blockId || null, ogun: payload.ogun || null },
+    data: { url: payload.url || '/', blockId: payload.blockId || null, ogun: payload.ogun || null, hareket: payload.hareket || null },
   });
   const dead = [];
   for (const sub of subs) {
@@ -9247,6 +9249,151 @@ function ogunBekciPayload(x) {
 }
 // 🍽️ ÖĞÜN BEKÇİSİ SONU
 
+// ============================================================
+// 💪 HAREKET MOLASI (25 Eki 2026)
+// ============================================================
+// Salim: "evde spor için bi anda gelen 'yat şınav çek' bildirimi, ben tamam diye
+// işaretleyeyim ve takip etsin". Gün içinde EVDE olduğu boş saatlerde (Haftam
+// çekirdeği hfGun.pencere: okul/kurs çıkışı + hazırlık → yatıştan 1 saat önce)
+// rastgele görünen ama TARİHE BAĞLI (deterministik) 3 saat seçilir; antrenman
+// günü 2. Okul, kurs, antrenman, sabit program bloğunun 20 dk yakınına düşmez.
+// Bildirime dokunmak = yaptım (iOS'ta düğme yok — öğün bekçisinin dersi: iki
+// dokunuş isteyen bildirim yanıtsız kalıyor). "20 dk sonra" tek tekrar.
+// ⚠️ 16 yaş kilidi: set başı en fazla tavan, günde en fazla 3 set — aşırı
+// antrenman teşviki yok. Adet artışı istemcide (yapılan sete göre, yavaş).
+// ⚠️ ÜST VÜCUT GÜNÜ ŞINAV YOK: Salim'in programında Salı/Pazar dips + omuz press +
+// row var; üstüne gün içi şınav aynı kası yorar → o günler squat (bacak dinç).
+// Durum: data.hareket = { tarih, n, tur, saatler, gon: [i], yap: {i: adet}, e: {i: dk}, es: {i: dk} }
+//        data.hareketAyar = { kapali, adet: {sinav, squat} } · data.hareketLog = { tarih: {set, sinav, squat} } (istemci yazar)
+const HAREKET_TUR = {
+  sinav: { ad: 'şınav', baslangic: 10, tavan: 25, emir: 'Yere yat' },
+  squat: { ad: 'squat', baslangic: 15, tavan: 30, emir: 'Kalk' },
+};
+const HAREKET_PAY = 20;         // blok kenarından uzaklık (dk)
+const HAREKET_ARA = 60;         // iki bildirim arası en az (dk)
+
+function hareketHash(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0) / 4294967296;   // [0,1)
+}
+
+/** Günün hareketi: antrenman günü üst vücutsa squat, değilse şınav. */
+function hareketTuru(d, tarih) {
+  const g = typeof hfGun === 'function' ? hfGun(d, tarih) : null;
+  const ad = g && g.antrenman && g.antrenman.ad;
+  if (!ad) return 'sinav';
+  const gun = ((d && d.program && d.program.days) || []).find(x => x && x.name === ad);
+  const odak = (gun && gun.odak) || [];
+  const ust = odak.some(o => /chest|shoulders|triceps/.test(o)) || /üst/i.test(String(ad));
+  return ust ? 'squat' : 'sinav';
+}
+
+function hareketAdet(d, tur) {
+  const T = HAREKET_TUR[tur] || HAREKET_TUR.sinav;
+  const ay = d && d.hareketAyar && d.hareketAyar.adet;
+  const a = Number(ay && typeof ay === 'object' ? ay[tur] : null);
+  return Math.max(3, Math.min(T.tavan, Math.round(a > 0 ? a : T.baslangic)));
+}
+
+/** O günün bildirim saatleri (dk). Saf + deterministik: aynı gün hep aynı saatler. */
+function hareketSaatleri(d, tarih) {
+  if (typeof hfGun !== 'function') return [];
+  const g = hfGun(d, tarih);
+  const n = g.antrenman ? 2 : 3;
+  const bas = g.pencere.bas, bit = g.pencere.bit;
+  if (!(bit - bas >= 60)) return [];
+  // Serbest aralıklar = pencere − (bloklar ± pay)
+  let serbest = [[bas, bit]];
+  for (const b of g.bloklar) {
+    const kb = b.bas - HAREKET_PAY, ke = b.bit + HAREKET_PAY;
+    serbest = serbest.flatMap(([x, y]) => (ke <= x || kb >= y) ? [[x, y]] : [[x, kb], [ke, y]].filter(([p, q]) => q - p >= 15));
+  }
+  const toplam = serbest.reduce((s, [x, y]) => s + (y - x), 0);
+  if (toplam < 45) return [];
+  const sec = (konum) => {   // birikimli serbest dakikadan gerçek dakikaya
+    let k = konum;
+    for (const [x, y] of serbest) { if (k <= y - x) return x + k; k -= (y - x); }
+    return serbest[serbest.length - 1][1];
+  };
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const r = hareketHash(tarih + '#' + i);
+    const konum = toplam * (i + 0.2 + 0.6 * r) / n;   // her dilimin ortasına yakın, rastgele
+    const dk = Math.round(sec(konum) / 5) * 5;
+    if (!out.length || dk - out[out.length - 1] >= HAREKET_ARA) out.push(dk);
+  }
+  return out;
+}
+
+/** Bu turda atılacak hareket bildirimleri. data.hareket'i GÜNCELLER. */
+function hareketDue(d, tarih, nowMin) {
+  if (d && d.hareketAyar && d.hareketAyar.kapali) return [];
+  if (!d.hareket || d.hareket.tarih !== tarih) {
+    const saatler = hareketSaatleri(d, tarih);
+    d.hareket = { tarih, n: saatler.length, tur: hareketTuru(d, tarih), saatler, gon: [], yap: {}, e: {}, es: {} };
+  }
+  const h = d.hareket;
+  h.gon = h.gon || []; h.yap = h.yap || {}; h.e = h.e || {}; h.es = h.es || {};
+  const out = [];
+  (h.saatler || []).forEach((dk, i) => {
+    if (h.yap[i] != null) return;
+    if (h.gon.indexOf(i) < 0) {
+      if (nowMin >= dk && nowMin < dk + 5) { h.gon.push(i); out.push({ i, tur: 'ilk' }); }
+      return;
+    }
+    const e = h.e[i];
+    if (e != null && h.es[i] !== e && nowMin >= e && nowMin < e + 5) { h.es[i] = e; out.push({ i, tur: 'tekrar' }); }
+  });
+  return out;
+}
+
+function hareketPayload(d, x) {
+  const tur = (d.hareket && d.hareket.tur) || 'sinav';
+  const T = HAREKET_TUR[tur] || HAREKET_TUR.sinav;
+  const adet = hareketAdet(d, tur);
+  return {
+    title: '💪 Hareket molası',
+    message: x.tur === 'tekrar' ? `Şimdi: ${T.emir.toLowerCase()}, ${adet} ${T.ad}. Bitince dokun.` : `${T.emir}, ${adet} ${T.ad}${tur === 'sinav' ? ' çek' : ' yap'}. Bitince dokun — kaydedilir.`,
+    tag: 'aidan-hareket',
+    url: '/?hareket=' + x.i,
+    hareket: String(x.i),
+    actions: [{ action: 'yaptim', title: 'Yaptım' }, { action: 'sonra', title: '20 dk sonra' }],
+  };
+}
+
+/** Günü kapat satırı (bugün plan varsa). */
+function hareketOzet(d, tarih) {
+  const h = d && d.hareket;
+  if (!h || h.tarih !== tarih || !h.n) return '';
+  const yap = Object.keys(h.yap || {});
+  const adet = yap.reduce((s, k) => s + (Number(h.yap[k]) || 0), 0);
+  const T = HAREKET_TUR[h.tur] || HAREKET_TUR.sinav;
+  return `💪 Hareket: ${yap.length}/${h.n}` + (adet ? ` · ${adet} ${T.ad}` : '');
+}
+// 💪 HAREKET MOLASI SONU
+
+async function runHareket(env) {
+  const users = await fetchAllUsers(env);
+  const results = [];
+  for (const u of users) {
+    try {
+      const data = u.data;
+      const tr = new Date(Date.now() + TR_OFFSET_MS);
+      const due = hareketDue(data, trToday(), tr.getUTCHours() * 60 + tr.getUTCMinutes());
+      if (!due.length) { results.push({ userId: u.userId, sent: 0 }); continue; }
+      for (const x of due) {
+        const payload = hareketPayload(data, x);
+        await sendPushToAll(env, data, payload, { userId: u.userId });
+        logPush(data, 'hareket', payload, ((data.settings && data.settings.pushSubs) || []).length);
+      }
+      try { await saveUserData(env, u.userId, data); } catch (e) { console.error('hareket save fail', e.message); }
+      results.push({ userId: u.userId, sent: due.length });
+    } catch (e) { results.push({ userId: u.userId, error: e.message }); }
+  }
+  return { type: 'hareket', users: users.length, results };
+}
+
 async function runOgunBekci(env) {
   const users = await fetchAllUsers(env);
   const results = [];
@@ -10944,6 +11091,8 @@ export default {
     jobs.push(runPlanBlockPings(env));
     // 🍽️ Öğün bekçisi (17 Eki): plan öğün saatinde push, "Yedim"e kadar 2-3 kez.
     jobs.push(runOgunBekci(env));
+    // 💪 Hareket molası (25 Eki): evdeki boş saatlerde günde 2-3 "yat, şınav çek" — dokun = yaptım.
+    jobs.push(runHareket(env));
 
     // 08:00 - sabah brifingi + guvenlik agi planlama (aksam planlayamadiysa
     // sabah bugunu planlar; plan zaten varsa dokunmaz)

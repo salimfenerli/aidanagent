@@ -952,6 +952,7 @@ function handleBlockAction(blockId, action) {
   }, 200);
 }
 
+function hareketKopru(i, a) { loadModule('ogun').then(() => hareketAksiyon(i, a)).catch(() => {}); }
 function ogunKopru(s, a) { loadModule('ajan').then(() => ogunBekciAksiyon(s, a)).catch(() => {}); }
 // Uygulama acilisinda URL'den (/?blk=..&act=..) ve calisirken SW mesajindan gelir
 function initBlockActionBridge() {
@@ -965,6 +966,8 @@ function initBlockActionBridge() {
     }
     const og = q.get('ogun');   // 🍽️ öğün bekçisi (17 Eki) — iş ajan.js'te (tembel)
     if (og) { setTimeout(() => ogunKopru(og, q.get('act') || 'open'), 400); history.replaceState(null, '', location.pathname); }
+    const hr = q.get('hareket');   // hareket molası (25 Eki) — iş ogun.js'te
+    if (hr != null) { setTimeout(() => hareketKopru(hr, q.get('act') || 'open'), 400); history.replaceState(null, '', location.pathname); }
     const ac = q.get('ac');   // Faz 3: "Günü kapat" bildirimi → sohbet
     if (ac) { setTimeout(() => pushAc(ac), 400); history.replaceState(null, '', location.pathname); }
   } catch (e) {}
@@ -974,6 +977,7 @@ function initBlockActionBridge() {
       if (d && d.type === 'BLOCK_ACTION' && d.blockId) handleBlockAction(d.blockId, d.action || 'open');
       if (d && d.type === 'AC') pushAc(d.ac);
       if (d && d.type === 'OGUN_ACTION' && d.ogun) ogunKopru(d.ogun, d.action || 'open');
+      if (d && d.type === 'HAREKET' && d.hareket != null) hareketKopru(d.hareket, d.action || 'open');
     });
   }
 }

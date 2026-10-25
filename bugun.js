@@ -89,6 +89,12 @@ function bugunOzet(d, tarih, simdiDk, gunFn, yarinTarih) {
     simdi, sirada, siradaYarin, uykuSaati, odev, kcal, kcalHedef,
     harcama: Math.round(harcama * 100) / 100, uyku: uykuK ? uykuK.hours : null, antrenman: ant,
     sinav: g ? (g.sinav || []) : [],
+    // 25 Eki: hareket molası (worker data.hareket'i günün başında kurar)
+    hareket: (d.hareket && d.hareket.tarih === tarih && d.hareket.n) ? {
+      n: d.hareket.n, tur: d.hareket.tur || 'sinav',
+      set: Object.keys(d.hareket.yap || {}).length,
+      adet: Object.keys(d.hareket.yap || {}).reduce((s, k) => s + (Number(d.hareket.yap[k]) || 0), 0),
+    } : null,
   };
 }
 
@@ -128,6 +134,7 @@ function renderBugun() {
   if (o.antrenman) s += satir('Antrenman', escapeHtml(o.antrenman.ad) + ' · ' + bgHM(o.antrenman.bas));
   s += satir('Öğün', o.kcal ? o.kcal + (o.kcalHedef ? ' / ' + o.kcalHedef : '') + ' kcal' : 'kayıt yok');
   if (o.harcama) s += satir('Harcama', (typeof ajanTL === 'function' ? ajanTL(o.harcama) : o.harcama + ' ₺'));
+  if (o.hareket) s += satir('Hareket', o.hareket.set + '/' + o.hareket.n + (o.hareket.adet ? ' · ' + o.hareket.adet + ' ' + (o.hareket.tur === 'squat' ? 'squat' : 'şınav') : ''));
   s += satir('Uyku', o.uyku ? bgSaat(o.uyku) + ' saat' : 'girilmedi');
   h += '<div class="bg-satirlar">' + s + '</div>';
 

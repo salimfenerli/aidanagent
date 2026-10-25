@@ -1,4 +1,4 @@
-const CACHE = 'aidan-v7-218';
+const CACHE = 'aidan-v7-219';
 const ASSETS = [
   '/',
   '/supabase.js',
@@ -50,10 +50,11 @@ self.addEventListener('activate', e => {
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   const d = e.notification.data || {};
-  const act = e.action || ((d.blockId || d.ogun) ? 'open' : '');
+  const act = e.action || ((d.blockId || d.ogun || d.hareket != null) ? 'open' : '');
   let url = d.url || '/';
   if (d.blockId) url = '/?blk=' + encodeURIComponent(d.blockId) + '&act=' + encodeURIComponent(act);
   if (d.ogun) url = '/?ogun=' + encodeURIComponent(d.ogun) + '&act=' + encodeURIComponent(act);
+  if (d.hareket != null) url = '/?hareket=' + encodeURIComponent(d.hareket) + '&act=' + encodeURIComponent(act);
 
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
@@ -65,6 +66,7 @@ self.addEventListener('notificationclick', e => {
           const ac = /[?&]ac=([a-z]+)/.exec(url);
           if (ac) { try { c.postMessage({ type: 'AC', ac: ac[1] }); } catch (err) {} }
           if (d.ogun) { try { c.postMessage({ type: 'OGUN_ACTION', ogun: d.ogun, action: act }); } catch (err) {} }
+          if (d.hareket != null) { try { c.postMessage({ type: 'HAREKET', hareket: d.hareket, action: act }); } catch (err) {} }
           return c.focus();
         }
       }
@@ -83,6 +85,7 @@ self.addEventListener('push', e => {
     let actions = undefined;
     let blockId = null;
     let ogun = null;
+    let hareket = null;
     let parseErr = null;
     if (e.data) {
       try {
@@ -93,6 +96,7 @@ self.addEventListener('push', e => {
         url = (p.data && p.data.url) || url;
         blockId = (p.data && p.data.blockId) || null;
         ogun = (p.data && p.data.ogun) || null;
+        hareket = (p.data && p.data.hareket != null) ? p.data.hareket : null;
         // actions: max 2-3 buton gösterilir, desteklemeyen platformda sessizce yok sayılır
         if (Array.isArray(p.actions) && p.actions.length) actions = p.actions.slice(0, 3);
       } catch (err) {
@@ -108,7 +112,7 @@ self.addEventListener('push', e => {
         tag,
         renotify: true,
         actions,
-        data: { url, blockId, ogun }
+        data: { url, blockId, ogun, hareket }
       });
     } catch (err) {
       // Minimum güvenli fallback — iOS izin iptalini önler
