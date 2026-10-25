@@ -5,11 +5,12 @@ function setModuleLoading(tab, on, failed) {
   let el = panel.querySelector('.mod-loading');
   if (on || failed) {
     if (!el) { el = document.createElement('div'); el.className = 'mod-loading'; panel.prepend(el); }
+    panel.classList.toggle('yukleniyor', !failed);   // iskelet gizli, çubuk sabit (styles.css)
     el.innerHTML = failed
       ? `<span class="mod-loading-dot err"></span><span>Bolum yuklenemedi.</span>`
         + ` <button class="mod-retry" onclick="showTab('${tab}')">Tekrar dene</button>`
       : '<span class="mod-loading-dot"></span><span>Bolum yukleniyor…</span>';
-  } else if (el) { el.remove(); }
+  } else { if (el) el.remove(); panel.classList.remove('yukleniyor'); }
 }
 
 // ============ TAB ============
@@ -21,6 +22,10 @@ async function showTab(name, btn) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(name).classList.add('active');
+  // 20 Eki: sekmeye özel üst alan (styles.css) + yeni sekme baştan başlar (ortadan değil)
+  const _onceki = document.body.dataset.tab;
+  document.body.dataset.tab = name;
+  if (_onceki && _onceki !== name) (document.scrollingElement || document.documentElement).scrollTop = 0;
   if (btn) btn.classList.add('active');
   else { const _dt = document.querySelector(`[data-tab="${name}"]`); if (_dt) _dt.classList.add('active'); }
   // Alt gezinme (mobil) ayni durumu gostermeli — iki cubuk tek kaynaktan besleniyor.

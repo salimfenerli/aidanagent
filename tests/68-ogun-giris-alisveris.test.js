@@ -31,6 +31,8 @@ describe('öğün çözücü — kullanıcı cümleleri', () => {
     ['tavuk döner dürüm', 'Tavuk dürüm', 488], ['adana dürüm', 'Adana dürüm', 602],
     ['200g tavuk', 'Tavuk göğsü', 331], ['200 gr tavuk göğsü', 'Tavuk göğsü', 331],
     ['1 ölçek protein tozu', 'Protein tozu', 117], ['2 yemek kaşığı fıstık ezmesi', 'Fıstık ezmesi', 188],
+    // 20 Eki: çarpan yazımı (Salim: "2x yumurta 600 kalori diyor" — yerelde eşleşmiyor, paket/AI aramasına düşüyordu)
+    ['2x yumurta', 'Yumurta', 144], ['2 x yumurta', 'Yumurta', 144], ['x2 yumurta', 'Yumurta', 144], ['yumurta x2', 'Yumurta', 144], ['2×yumurta', 'Yumurta', 144], ['3x muz', 'Muz', 315],
   ];
   for (const [cumle, ad, kcal] of vakalar) {
     test(cumle + ' → ' + ad + ' ' + kcal + ' kcal', () => {

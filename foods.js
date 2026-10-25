@@ -1422,6 +1422,15 @@ const _FOOD_GRAM_UNITS = ['g', 'gr', 'gram', 'grami', 'ml'];
 //   '2 dilim ekmek' -> {qty:2, unit:'dilim', gram:false, core:'ekmek'}
 //   '200 gr tavuk'  -> {qty:200, unit:'gr',  gram:true,  core:'tavuk'}
 function parseFoodQuery(q) {
+  // ⚠️ 20 Eki 2026 — ÇARPAN YAZIMI. "2x yumurta", "2 x yumurta", "x2 yumurta",
+  // "yumurta x2", "2×yumurta" hiç eşleşmiyordu (çekirdek "2x yumurta" kalıyordu)
+  // ya da sayı kayboluyordu (1 yumurta). Çarpan işareti sayıya bitişikse kaldırılır,
+  // sayı miktar olur. Kelime içindeki x'e dokunulmaz (yalnız rakama komşu olan).
+  q = String(q || '')
+    .replace(/^\s*([0-9]+(?:[.,][0-9]+)?)\s*[x×*]\s*/i, '$1 ')
+    .replace(/^\s*[x×*]\s*([0-9]+(?:[.,][0-9]+)?)\s+/i, '$1 ')
+    .replace(/\s+[x×*]\s*([0-9]+(?:[.,][0-9]+)?)\s*$/i, ' $1')
+    .replace(/\s+([0-9]+(?:[.,][0-9]+)?)\s*[x×*]\s*$/i, ' $1');
   let words = trNorm(q).split(/\s+/).filter(Boolean);
   let qty = null, unit = null;
   // sadece baştaki kelime miktar olabilir (yemek adındaki sayıları bozmasın)

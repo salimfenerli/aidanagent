@@ -4502,6 +4502,21 @@
   .mod-loading-dot { animation: none; }
   .mod-retry { transition: none; }
 }
+/* 20 Eki 2026 — AKICILIK. (1) Modül inerken sekmenin boş iskeleti görünmez, yükleme
+   çubuğu üstte DURUR; modül inince içerik yerinde belirir (eskiden çubuk kalkınca
+   tüm sekme yukarı zıplıyordu — Diyet'te ölçülen kayma 0.48). */
+.panel.yukleniyor { position: relative; min-height: 60vh; }
+.panel.yukleniyor > :not(.mod-loading) { visibility: hidden; }
+.panel.yukleniyor > .mod-loading { position: absolute; top: 0; left: 0; right: 0; }
+/* (2) Sekme geçişi: kısa, sakin belirme (Impeccable: 150-250 ms ease-out). */
+.panel.active { animation: panelGir 180ms cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes panelGir { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .panel.active { animation: none; } }
+/* (3) Görev yakalama çubuğu + kısayollar + bildirim izni bandı yalnız Görevler'de:
+   diğer sekmelerde ilk ekranın ~%30'unu yiyordu (Diyet'te içerik 2. ekrana düşüyordu). */
+body[data-tab]:not([data-tab="tasks"]) .quick-capture,
+body[data-tab]:not([data-tab="tasks"]) .quick-actions,
+body[data-tab]:not([data-tab="tasks"]) #notifBanner { display: none !important; }
 
 /* ===== Atletik katman — patlayici blok + temas butcesi (9 Agu 2026) =====
    Impeccable: tam kenar + tint, yan-serit YOK, ease-out, reduced-motion var. */
