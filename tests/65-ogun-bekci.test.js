@@ -144,13 +144,29 @@ describe('KAPI — ajan.js Yedim / Geri al / ertele (PWA)', () => {
     data.diet.activePlanId = id; delete data.ogunBekci;
     const g = data.diet.days[today()]; if (g) g.meals = []; })()`);
   const ogunler = () => JSON.parse(JSON.stringify(A.evalIn('((data.diet.days[today()]||{}).meals||[]).map(m => [m.name, m.kcal, m.bekci])')));
-  test('open → soru kartı, kayıt yok', () => {
+  test('open (bildirime dokunuş) = YEDİM: kayıt + kart (25 Eki)', () => {
     kur();
     A.evalIn("ogunBekciAksiyon('13:00', 'open')");
     const el = A.window.document.getElementById('ogunSheet');
-    assert.ok(el && /yedin mi/.test(el.textContent) && /Makarna/.test(el.textContent));
-    assert.strictEqual(ogunler().length, 0);
+    assert.ok(el && /kaydedildi/.test(el.textContent) && /Makarna/.test(el.textContent));
+    assert.strictEqual(ogunler().length, 2);
+    assert.strictEqual(A.evalIn("data.ogunBekci.g['13:00'].d"), 'yedi');
+    A.evalIn("ogunBekciAksiyon('13:00', 'open')");          // ikinci dokunuş çift saymaz
+    assert.strictEqual(ogunler().length, 2);
     assert.deepStrictEqual(A.errors, []);
+  });
+  test('dokunuş sonrası "Henüz yemedim" → kayıt geri + ertele; "Atladım" → geri + atla', () => {
+    kur();
+    A.evalIn("ogunBekciAksiyon('13:00', 'open')");
+    A.window.document.querySelector('#ogunSheet button[data-a="geriErtele"]').click();
+    assert.strictEqual(ogunler().length, 0);
+    assert.ok(A.evalIn("data.ogunBekci.g['13:00'].e") % 5 === 0);
+    assert.notStrictEqual(A.evalIn("data.ogunBekci.g['13:00'].d"), 'yedi');
+    kur();
+    A.evalIn("ogunBekciAksiyon('19:30', 'open')");
+    A.window.document.querySelector('#ogunSheet button[data-a="geriAtla"]').click();
+    assert.strictEqual(ogunler().length, 0);
+    assert.strictEqual(A.evalIn("data.ogunBekci.g['19:30'].d"), 'atla');
   });
   test('Yedim → yalnız o saatin kalemleri, plandaki kaloriyle, bir kez', () => {
     kur();

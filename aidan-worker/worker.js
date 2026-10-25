@@ -9234,8 +9234,8 @@ function ogunBekciPayload(x) {
   const g = x.g;
   const ad = OGUN_AD[g.slot] || 'Öğün';
   const k = g.kalemler.slice(0, 3).join(', ') + (g.kalemler.length > 3 ? ' …' : '');
-  const msg = x.tur === 'ilk' ? `${k} — yedin mi? Dokun, işaretle.`
-    : x.tur === 'tekrar' ? 'Hâlâ işaretlenmedi. Yediysen dokun, sussun.'
+  const msg = x.tur === 'ilk' ? `${k} — yiyince dokun, kaydedilir.`
+    : x.tur === 'tekrar' ? 'Hâlâ işaretlenmedi. Yediysen dokun — kaydedilir, susar.'
     : x.tur === 'son' ? 'Son hatırlatma — yemediysen şimdi bir şey ye.'
     : `Ertelediğin öğün: ${k}`;
   return {
@@ -10617,6 +10617,32 @@ function haeToItems(body) {
   return { items, weights };
 }
 
+// 🩺 SAĞLIK GÖNDERİM TEŞHİSİ (25 Eki 2026)
+// Salim'in kısayolu "kuruldu ama çalışmıyor": veri 8 Eki'den beri gelmiyordu ve
+// nedenini görmek için ekran görüntüsü gerekiyordu. Uç artık son gönderimin
+// SONUCUNU ve hangi alanların BOŞ geldiğini data.saglikTani'ye yazar; Ayarlar gösterir.
+// Yazım yalnız durum değişince ya da günde bir kez (her WhatsApp açılışında blob yazılmaz).
+// Yanlış secret burada GÖRÜNMEZ (kullanıcı bilinmez) → "hiç gelmedi" = anahtar/otomasyon.
+const SAGLIK_ALAN = { uyku: ['bedtime', 'wake', 'hours'], nabiz: ['rhr'], tarti: ['kg'], adim: ['steps'] };
+function saglikTaniOlustur(raw, hae, tartilar, sonuc) {
+  const dolu = (v) => v != null && String(v).trim() !== '';
+  const gelen = {};
+  for (const grup of Object.keys(SAGLIK_ALAN)) {
+    gelen[grup] = (raw || []).some(it => it && typeof it === 'object' && SAGLIK_ALAN[grup].some(k => dolu(it[k])));
+  }
+  if (tartilar && tartilar.length) gelen.tarti = true;
+  const tr = new Date(Date.now() + TR_OFFSET_MS).toISOString();
+  return { tarih: tr.slice(0, 10), saat: tr.slice(11, 16), format: hae ? 'hae' : 'kisayol', sonuc, gelen };
+}
+/** data.saglikTani'yi günceller; blob YAZILMALI mı (durum değişti / yeni gün)? */
+function saglikTaniYaz(data, tani) {
+  const eski = data.saglikTani;
+  const anahtar = (t) => t ? JSON.stringify([t.tarih, t.format, t.sonuc === 'guncel' ? 'kaydedildi' : t.sonuc, t.gelen]) : '';
+  const degisti = anahtar(eski) !== anahtar(tani);
+  if (degisti) data.saglikTani = tani;
+  return degisti;
+}
+
 async function handleHealthApi(request, env) {
   const cors = {
     'Access-Control-Allow-Origin': '*',
@@ -10640,10 +10666,14 @@ async function handleHealthApi(request, env) {
   const hae = haeToItems(body);
   const raw = hae ? hae.items : (Array.isArray(body.items) ? body.items : [body]);
   const tartilar = hae ? hae.weights : [];
-  if ((!raw.length && !tartilar.length) || raw.length > 400 || tartilar.length > 400) return jsonCors({ error: 'bad size' }, 400, cors);
+  if (raw.length > 400 || tartilar.length > 400) return jsonCors({ error: 'bad size' }, 400, cors);
 
   const session = await fetchAidan(env);
   const data = session.data;
+  if (!raw.length && !tartilar.length) {
+    if (saglikTaniYaz(data, saglikTaniOlustur(raw, hae, tartilar, 'bos'))) await saveAidan(env, data, session);
+    return jsonCors({ error: 'bad size' }, 400, cors);
+  }
 
   // Değişmeyen gönderimde YAZMA: tek kısayol her WhatsApp açılışında çalışıyor —
   // her seferinde blob yazmak PWA senkronunu boşuna dürter (çakışma riski).
@@ -10684,10 +10714,13 @@ async function handleHealthApi(request, env) {
     if (s || h) lastDate = date;
   }
   if (!sleepN && !healthN && !bodyN && !bayatN) {
+    // Kısayol çalıştı ama değerler boş/geçersiz — teşhis için iz bırak (Ayarlar okur)
+    if (saglikTaniYaz(data, saglikTaniOlustur(raw, hae, tartilar, 'gecersiz'))) await saveAidan(env, data, session);
     return jsonCors({ ok: false, saved: 0, error: 'gecerli olcum yok' }, 422, cors);
   }
   const degisti = JSON.stringify([data.sleep || [], data.health || [], (data.diet || {}).weights || []]) !== onceki;
-  if (degisti) await saveAidan(env, data, session);
+  const taniDegisti = saglikTaniYaz(data, saglikTaniOlustur(raw, hae, tartilar, degisti ? 'kaydedildi' : 'guncel'));
+  if (degisti || taniDegisti) await saveAidan(env, data, session);
 
   // Ozet Kisayol bildiriminde gorunur — sessiz basari = fark edilmeyen ariza
   const bits = [];

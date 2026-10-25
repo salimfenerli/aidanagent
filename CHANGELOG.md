@@ -1,3 +1,7 @@
+# 🩺 25 Eki 2026 — v7-221 Öğün dokunuşu + sağlık teşhisi (Salim sporda, otonom)
+- Öğün bildirimine dokunmak artık doğrudan **Yedim** (plan kalemleri kaydedilir). Kart: Tamam · Henüz yemedim (geri al + 15 dk) · Atladım · Geri al. Push metni "yiyince dokun, kaydedilir". Neden: soru kartıyla 12 pingte 0 işaret.
+- `/health` teşhisi: `saglikTaniOlustur`/`saglikTaniYaz` → `data.saglikTani {tarih, saat, format, sonuc, gelen}`; boş/geçersiz gönderim de iz bırakır. Ayarlar'da "Sağlık verisi" satırı (`saglikTaniMetni`): hiç gelmedi / eski / boş (izin) / kısmi / tamam. Son veri 8 Eki — Salim'in kısayolu otomasyonla hiç ulaşmamış.
+
 # 💪 25 Eki 2026 — v7-220 Hareket havuzu
 - Salim: "şınav lafın gelişi, barfiks squat falan da". Havuz: şınav · barfiks · squat · hamle · plank (sn) · burpee; günün molalarına deterministik, birbirinden farklı dağılır.
 - Antrenman günü: üst vücut → şınav/barfiks yok, bacak → squat/hamle yok, burpee hiç yok. Ayarlar'da hareket başı Açık/Kapalı (bar yoksa barfiks kapatılır) + adet ±. Tablo yalnız worker + ogun.js (ayarlar kopyası kaldırıldı).

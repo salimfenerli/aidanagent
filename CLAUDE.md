@@ -120,7 +120,7 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 - Öğün çözücü (`parseFoodQuery` + `_olcuDonustur`, sohbet ve yemek penceresi ORTAK): birimi sayı taşıyan besinde ("10 adet") söylenen sayı TANE sayısıdır; avuç ≈30 g; "yarım ekmek" somun, tam sayı "2 ekmek" dilim (bilerek); sondaki miktar ("pizza 2 dilim") okunur; son kelime "dürüm" addır (`68-ogun-giris-alisveris`).
 - Miktarlı sorgu ("200 gr X") gram tabanından ölçeklenir; hiçbir sorgu tek dokunuşta 5000 kcal üstü kayıt üretmez (`38-gram-sorgusu`). Ölçekleme tek birim tabanından; `input[type=number]` virgülü siler.
 - **Günlük menü** (18 Eki, `nutGunluk*`): 7 gün ileri, kova başına yazıldığı TARİH tutulur (`diet.nut.gunluk.yazildi`); tarih değişince yalnız bayat kova tazelenir. Satırlar saat önekli — bekçiyle sözleşme (`66-gunluk-menu`). Gün = 8(+8) aday içinden makro sapması + tekrar cezası en düşük olan (`nutGunPuan`). ⚠️ Ana öğün havuzuna 1 porsiyonu >~40 g protein olan çapa ekleme — bant reddeder, şablon ölü kalır. ⚠️ İlk yükleme bütçesi ~185/185: ui.js/core.js/tasks.js'e ekleme yapmadan önce yer aç.
-- **Öğün bekçisi** (17 Eki): saat PLAN kalem adındaki `HH:MM · ` önekinden okunur (`ogunGruplari`, worker) — önek formatını değiştirirsen bekçi susar (`65-ogun-bekci`). İstemci tarafı `ajan.js` (`ogunBekciAksiyon`), ilk yükleme bütçesi dolu olduğu için.
+- **Öğün bekçisi** (17 Eki): saat PLAN kalem adındaki `HH:MM · ` önekinden okunur (`ogunGruplari`, worker) — önek formatını değiştirirsen bekçi susar (`65-ogun-bekci`). İstemci tarafı `ajan.js` (`ogunBekciAksiyon`), ilk yükleme bütçesi dolu olduğu için. ⚠️ **Bildirime dokunmak = Yedim** (25 Eki; soru kartı 12 pingte 0 işaret aldı) — kart yalnız Geri al / Henüz yemedim / Atladım sunar; iki dokunuşlu akışa geri dönme.
 - `nutFood()` foods.js yoksa `null` → motor sessizce boş öğün üretir; diyet sekmesi `program`+`nutrition`+`health`(+`foods`) modüllerini birlikte bekler.
 
 **Antrenman** (`program.js` motoru)
@@ -132,6 +132,7 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 **Sağlık / uyku**
 - Fitbit verisi: Google Health → Apple Sağlık → **Health Auto Export** (önerilen, `haeToItems` biçimi otomatik tanır) ya da iOS Kısayol → `POST /health`. `/health` yalnız sleep + health + `diet.weights` yazar. ⚠️ Fitbit/Google Health API'sine dönme (restricted scope, CASA denetimi) — tekrar araştırma.
 - **PC ekran süresi (11 Eki):** ActivityWatch (yerel, AFK sayılmaz) → `pc/aidan-ekran.ps1` (Görev Zamanlayıcı 30 dk, `kur.bat` kurar) → `/screen` → `aidan_screen` → sohbet [KAYITLAR]. ⚠️ `pc/` betikleri ASCII + CRLF (PowerShell 5.1 BOM'suz dosyayı ANSI okur); `/pc/ayar.txt` gizli anahtar, `.gitignore`'da. iPhone ekran süresi Apple kuralı gereği ÇEKİLEMEZ — tekrar araştırma.
+- **Teşhis (25 Eki, `71`):** `/health` son gönderimin sonucunu + boş gelen grupları `data.saglikTani`'ye yazar (yalnız durum değişince/günde 1), Ayarlar tek cümleyle ne yapılacağını söyler. Kısayol sorununda önce `saglikTani`'ye bak, ekran görüntüsü isteme.
 - Toparlanma skorları kişisel tabana göre (medyan+MAD); 14 gün taban oturmadan skor yok. Dinlenme nabzında işaret ters.
 - Bayat tartı: ardışık 2+ gün aynı değer → uyarı; toplu dolgu ve tarihli gönderim muaf. İçe aktarma ile `/health` doğrulama aralıkları birebir aynı (`28-saglik-import`). Apple `export.xml` DOMParser'sız (100 MB+).
 

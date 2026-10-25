@@ -94,6 +94,7 @@ function renderStorageInfo() {
     '<div class="sp-row"><span>' + escapeHtml(STORAGE_ETIKET[x.key] || x.key) +
     '</span><b>' + fmtBytes(x.chars) + '</b></div>').join('') ||
     '<div class="sp-row"><span>Henüz veri yok</span></div>';
+  renderSaglikTani();    // 25 Eki: kısayol teşhisi
   renderHareketAyar();   // 25 Eki: Ayarlar açılınca hareket molası satırı (aynı anda çizilir)
 }
 
@@ -338,4 +339,51 @@ function renderHareketAyar() {
       '.ha-kapali span{opacity:.55}';
     document.head.appendChild(st);
   }
+}
+
+// ============================================================
+// 🩺 SAĞLIK VERİSİ TEŞHİSİ (25 Eki 2026) — Ayarlar'da Depolama'nın üstüne enjekte edilir.
+// Worker /health son gönderimin sonucunu data.saglikTani'ye yazar (saglikTaniOlustur).
+// Burası onu + son kaydın tarihini okuyup TEK cümlelik "ne yapmalısın" üretir.
+// ============================================================
+const SAGLIK_GRUP_AD = { uyku: 'uyku', nabiz: 'nabız', adim: 'adım', tarti: 'tartı' };
+
+/** Saf: durum metni. bugun = 'YYYY-MM-DD'. */
+function saglikTaniMetni(d, bugun) {
+  const t = d && d.saglikTani;
+  const tarihler = [].concat(Array.isArray(d && d.health) ? d.health : [], Array.isArray(d && d.sleep) ? d.sleep : [])
+    .map(x => x && x.date).filter(Boolean).sort();
+  const sonVeri = tarihler.length ? tarihler[tarihler.length - 1] : null;
+  const gunFark = (a) => Math.round((new Date(bugun + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
+  const tarihYaz = (a) => { const g = gunFark(a); return g <= 0 ? 'bugün' : g === 1 ? 'dün' : g + ' gün önce'; };
+  if (!t) {
+    return { durum: 'yok', metin: sonVeri
+      ? 'Son sağlık verisi ' + tarihYaz(sonVeri) + ' geldi; o günden beri kısayol hiç ulaşmadı. Otomasyon çalışmıyor ya da kısayoldaki gizli anahtar yanlış.'
+      : 'Sağlık verisi hiç gelmedi. Kısayol/otomasyon kurulu değil ya da gizli anahtar yanlış.' };
+  }
+  const gelen = t.gelen || {};
+  const eksik = ['uyku', 'nabiz'].filter(k => !gelen[k]).map(k => SAGLIK_GRUP_AD[k]);
+  const ne = Object.keys(SAGLIK_GRUP_AD).filter(k => gelen[k]).map(k => SAGLIK_GRUP_AD[k]);
+  const once = 'Kısayol son ' + tarihYaz(t.tarih) + ' ' + (t.saat || '') + ' çalıştı';
+  if (gunFark(t.tarih) >= 2) return { durum: 'eski', metin: once + '. O günden beri çalışmıyor → Otomasyon\'da "Çalıştırmadan Önce Sor" kapalı mı, bak.' };
+  if (t.sonuc === 'bos' || t.sonuc === 'gecersiz' || eksik.length === 2) {
+    return { durum: 'bos', metin: once + ' ama ' + (eksik.join(' ve ') || 'veriler') + ' BOŞ geldi → Ayarlar → Sağlık → Veri Erişimi ve Aygıtlar → Kısayollar: izinleri aç. Google Health → Apple Sağlık aktarımı da açık olmalı.' };
+  }
+  return { durum: eksik.length ? 'kismi' : 'ok', metin: once + ' · gelen: ' + ne.join(', ') + (eksik.length ? ' · eksik: ' + eksik.join(', ') + ' (Sağlık izni kapalı olabilir)' : '') };
+}
+
+function renderSaglikTani() {
+  const ref = document.getElementById('storageInfo');
+  const satir = ref && ref.closest('.settings-row');
+  if (!satir) return;
+  let el = document.getElementById('saglikTaniRow');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'saglikTaniRow';
+    el.className = 'settings-row';
+    satir.parentNode.insertBefore(el, document.getElementById('hareketAyarRow') || satir);
+  }
+  const r = saglikTaniMetni(data, today());
+  el.innerHTML = '<label>Sağlık verisi (Fitbit → Apple Sağlık → Aidan)</label>' +
+    '<div class="settings-help" data-durum="' + r.durum + '">' + escapeHtml(r.metin) + '</div>';
 }
