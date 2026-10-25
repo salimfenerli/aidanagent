@@ -1218,7 +1218,7 @@ function renderDietPlan() {
   const planned = planMealsForDate(dietKey());
   if (!planned.length) {
     el.innerHTML = '<div class="diet-empty">Bugün için planlı öğün yok. "Planı düzenle" ile ekle ya da diyetisyen kağıdını okut.</div>';
-    if (meta) meta.textContent = p.name; return;
+    if (meta) meta.textContent = p.name === 'Planım' ? '' : p.name; return;
   }
   const day = dietDay(false);
   const eatenIds = new Set((day.meals || []).filter(m => m.planId != null).map(m => m.planId));

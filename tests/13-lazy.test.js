@@ -345,8 +345,12 @@ describe('ilk yukleme butcesi', () => {
     // 18 Eki 2026: esik 185 -> 183. Olcum 185'e dayanmisti (184.96); "Bugun" ekrani
     // yer bekliyordu. Ayarlar + global arama (12.7 KB kaynak) ayarlar.js'e, ogun
     // karti bugun.js'e (ikisi de tembel). Olcum 182 KB, 1 KB pay birakildi.
-    assert.ok(kb <= 183,
-      `ilk yukleme ${kb} KB gzip — butce 183 KB. Yeni agir bagimlilik statik eklendi mi?`);
+    // 25 Eki 2026: esik 183 -> 177. Diyet sadelestirmesi 184'e cikardi; styles.css'te
+    // Borsa'dan kalan OLU kurallar (pf-/scr-/stock-/tj-... 516 kural, Borsa kendi
+    // styles.css'ini kullaniyor) silindi: -8.5 KB gzip, 5 sekmede piksel farki yok.
+    // Olcum 175.4 KB, ~1.5 KB pay.
+    assert.ok(kb <= 177,
+      `ilk yukleme ${kb} KB gzip — butce 177 KB. Yeni agir bagimlilik statik eklendi mi?`);
   });
 
   test('tembel moduller butceye DAHIL DEGIL (gercekten ayrildilar)', () => {

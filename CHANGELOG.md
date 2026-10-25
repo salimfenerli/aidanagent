@@ -1,3 +1,8 @@
+# 🥗 25 Eki 2026 — v7-223 Diyet ekranı sadeleşti + ölü Borsa CSS'i silindi
+- Sıra: koç şeridi → tarih (Karne başlığın sağında) → kalori halkası + makrolar TEK kart → Yemek ekle (tek dolu düğme) → günlük → Ne yesem → Su → Planım → Kilo → "Daha fazla" (Tarifler, Takviyeler, Hedefler & hatırlatıcılar, İçe aktarma) → Beslenme/Antrenman. Ekran 10098 → ~7800 px.
+- Günlüğün "bugün / kalori 0" kartı halkanın kopyasıydı → gizli. Boş öğün: kutu yerine tek "+ ekle" satırı. Su "+1 L" ikincil. "Planım · Planım" tekrarı kalktı. Beslenme/Antrenman başlıkları büyük harf değil.
+- styles.css: Borsa'dan kalan 516 ölü kural silindi (-8.5 KB gzip, 5 sekmede piksel farkı 0). Bütçe 183 → 177 KB.
+
 # 🧹 25 Eki 2026 — v7-222 Düzen (1. tur)
 - Salim: "uygulama aykırı ve amatör duruyor". Playwright ile iPhone ekranları tarandı. Kök neden: etiketsiz `button` varsayılanı dolu accent → her ekranda 5-10 "birincil" düğme; `.ghost` tanımsızdı; 5 CSS katmanı.
 - Yapılan: başlık saati saniyesiz · boş rozetin gri çizgisi gizli + açılır başlıklara ok · `button.ghost` tanımı · CSV içe aktarma düğmeleri ikincil · görev kartının 7 ikonu telefonda dokununca açılır · kısayol ve filtre çipleri tek satır kayar · "362 dk sonra" → "6 sa 2 dk sonra" · günlük başlıkları büyük harf.
