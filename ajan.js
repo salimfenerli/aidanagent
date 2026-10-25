@@ -125,7 +125,8 @@ function ajanYemekCoz(yemek) {
       if (d && d.gram) { if (f.g > 0) { m = d.qty / f.g; ek = ' (' + Math.round(d.qty) + 'g)'; } }
       else if (d) { m = d.qty; }
       else if (pr.qty > 0) { m = pr.qty; }
-      if (!ek && m !== 1) ek = ' ×' + ajanSayi(m);
+      if (!ek && f.g > 0) ek = ' (' + Math.round(m * f.g) + 'g)';   // 25 Eki: gram esas
+      else if (!ek && m !== 1) ek = ' ×' + ajanSayi(m);
     }
     const kcal = sc(f.k, m);
     if (kcal != null && kcal > AJAN_KCAL_TAVAN) return bos;

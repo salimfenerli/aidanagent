@@ -3852,6 +3852,7 @@ button.ghost:hover { background: var(--surface-hover); color: var(--text); }
 #diet .diet-summary { flex-wrap: wrap; }
 #diet #dietGoalWarn { flex-basis: 100%; }
 #diaryList .dt-sec-name { text-transform: capitalize; }
+#diaryList .dt-row-warn { color: var(--warning); }
 #nutOnerSection .diet-card-head { flex-wrap: wrap; row-gap: 4px; }
 #nutOnerSection .diet-card-title { white-space: nowrap; }
 #dietMore { margin-top: 6px; }

@@ -143,7 +143,7 @@ describe('hizli ekleme (+)', () => {
     const m = ogunler();
     assert.strictEqual(m.length, once + 1);
     const son = m[m.length - 1];
-    assert.strictEqual(son.name, 'Basmati pirinç');
+    assert.strictEqual(son.name, 'Basmati pirinç (150g)');   // 25 Eki: gram esas
     assert.strictEqual(son.kcal, 186);  // 27 Eyl: etiketten türetildi (347/2,8 × 1,5)
     assert.strictEqual(son.slot, 'ogle');
   });
@@ -166,7 +166,7 @@ describe('hizli ekleme (+)', () => {
     assert.ok(i >= 0, 'haslanmis yumurta sonuclarda yok');
     W.quickAddSeed(i);
     const son = ogunler().slice(-1)[0];
-    assert.match(son.name, /×2$/);
+    assert.match(son.name, /\(100g\)$/);   // 25 Eki: 2 adet → 100 g
     assert.strictEqual(son.kcal, 144);   // 72 × 2
   });
 
@@ -237,7 +237,7 @@ describe('friction: klavyeden cikmadan ekleme', () => {
     W.renderLocalMatches();
     W.foodSearchEnter();
     assert.strictEqual(ogunler().length, once + 1, 'Enter eklemedi');
-    assert.strictEqual(ogunler().slice(-1)[0].name, 'Basmati pirinç');
+    assert.strictEqual(ogunler().slice(-1)[0].name, 'Basmati pirinç (150g)');
     assert.strictEqual(A.evalIn('window.__bulut'), 0, 'Enter buluta gitti');
   });
 

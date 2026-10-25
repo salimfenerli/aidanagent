@@ -914,6 +914,9 @@ function renderSearchResults(q, offRes, aiJson) {
       multi: !!(aiJson.items && aiJson.items.length > 1), items: aiJson.items || [], source: aiJson.source
     };
     _aiFood._srcLbl = aiJson.source === 'usda' ? 'Veritabanı' : (aiJson.source === 'mixed' ? 'Veritabanı + AI' : (_aiFood.multi ? 'Toplam' : 'AI tahmini'));
+    // 25 Eki: AI/USDA sonucunda kalori makrolarla uyuşmuyorsa kendiliğinden AÇILMAZ, etiketi uyarır.
+    _aiFood._tutarsiz = !makroTutarli(base.kcal, base.protein, base.carb, base.fat, q);
+    if (_aiFood._tutarsiz) _aiFood._srcLbl += ' · kalori-makro uyuşmuyor';
     _aiFood._bd = _aiFood.multi ? `<div class="macro-note">${_aiFood.items.map(it => `${escapeHtml(it.name)} · ${it.kcal} kcal${(it.source === 'usda' || it.source === 'curated') ? '' : ' (tahmin)'}`).join('  +  ')}</div>` : '';
     html += '<div class="freq-head">Jenerik / hesap</div><div class="food-results">' +
       `<button class="food-result" onclick="pickAiRow()"><span class="food-result-name">${escapeHtml(q)} <span class="food-result-brand">${_aiFood._srcLbl}</span></span><span class="food-result-kcal">${base.kcal} kcal</span></button>` +
@@ -922,7 +925,7 @@ function renderSearchResults(q, offRes, aiJson) {
   if (!html) { out.innerHTML = '<div class="diet-empty">Sonuç yok. "Elle" sekmesinden kalori girebilirsin.</div>'; return; }
   out.innerHTML = html;
   // Marka eslesme yoksa tek AI sonucunu otomatik ac (hizli ekleme)
-  if (!off.length && base && base.kcal != null) pickAiRow();
+  if (!off.length && base && base.kcal != null && !(_aiFood && _aiFood._tutarsiz)) pickAiRow();
 }
 function pickAiRow() {
   if (!_aiFood) return;
@@ -939,6 +942,8 @@ function portionUnitLabel() {
   const u = (_aiFood && _aiFood.unit) ? _aiFood.unit : 'porsiyon';
   return u.replace(/^\d+\s*/, '');
 }
+/** Sayılı birim kipinin düğme adı: "Adet", "Dilim"… ("porsiyon" → "Porsiyon"). */
+function _birimAd() { const u = portionUnitLabel(); return u.charAt(0).toLocaleUpperCase('tr') + u.slice(1); }
 function setPortionMode(mode) {
   if (!_aiFood) return;
   if (mode === 'gram' && !_aiFood.grams) return;
@@ -969,7 +974,11 @@ function _portionMult() {
 }
 function renderPortionChips() {
   const el = document.getElementById('dtChips'); if (!el) return;
-  const vals = (_portionMode === 'gram') ? [30, 50, 100, 150, 200] : [0.5, 1, 1.5, 2];
+  // Gram çipleri besinin kendi ölçüsünden: yarım, 1, 1,5, 2 birim + 100 g (5'e yuvarlı).
+  const ug = (_aiFood && _aiFood.grams) || 100;
+  const vals = (_portionMode === 'gram')
+    ? [...new Set([ug / 2, ug, ug * 1.5, ug * 2, 100].map(v => Math.max(5, Math.round(v / 5) * 5)))].sort((a, b) => a - b)
+    : [0.5, 1, 1.5, 2];
   el.innerHTML = vals.map(v =>
     `<button class="dt-chip" onclick="setPortionValue(${v})">${_portionMode === 'gram' ? v + 'g' : String(v).replace('.', ',')}</button>`
   ).join('');
@@ -988,8 +997,8 @@ function showAiPortion(q, srcLbl, bd) {
   _portionMode = 'porsiyon';
   const seg = (multi || !hasG) ? '' :
     `<div class="dt-seg" role="group" aria-label="Miktar birimi">
-      <button class="dt-seg-btn active" data-mode="porsiyon" onclick="setPortionMode('porsiyon')">Porsiyon</button>
       <button class="dt-seg-btn" data-mode="gram" onclick="setPortionMode('gram')">Gram</button>
+      <button class="dt-seg-btn active" data-mode="porsiyon" onclick="setPortionMode('porsiyon')">${escapeHtml(_birimAd())}</button>
     </div>`;
   const numRow = multi
     ? '<div class="portion-note">Yazdığın miktarlar zaten hesaba katıldı — aşağıdaki toplam eklenir.</div>'
@@ -1004,6 +1013,8 @@ function showAiPortion(q, srcLbl, bd) {
     `<div class="dt-macros" id="aiPreview"></div>` +
     `<button class="portion-add" onclick="addAiFood()">${MEAL_SLOTS[_mealSlot] || 'Öğün'}'e ekle</button>`;
   renderPortionChips();
+  // 25 Eki: GRAM ESAS — gram karşılığı biliniyorsa kutu gramla açılır ("1 porsiyon" yerine "150 g").
+  if (hasG && !multi) setPortionMode('gram');
   updateAiPreview();
   fp.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -1047,8 +1058,11 @@ function foodMemoryMatches(q, limit) {
     const saf = _miktarAyikla(e.name).ad.toLocaleLowerCase('tr');
     const sf = (typeof TURK_FOODS !== 'undefined' ? TURK_FOODS : []).find(f => f.n.toLocaleLowerCase('tr') === saf);
     if (!sf || !sf.g) continue;
-    const beklenen = _miktarAyikla(e.name).gram ? null : sf.k;   // etiketli kayitta kcal zaten olcekli
-    if (beklenen != null && Math.abs(e.kcal - beklenen) > Math.max(2, beklenen * 0.02)) continue;
+    // Etiketli kayitta (Ekmek (60g)) beklenen kcal gramla ölçeklenir — 25 Eki'den beri
+    // her tablo kaydı gram etiketli; kcal/gram tabloyla tutmuyorsa devralma YOK.
+    const eg = _miktarAyikla(e.name).gram;
+    const beklenen = eg ? sf.k * eg / sf.g : sf.k;
+    if (Math.abs(e.kcal - beklenen) > Math.max(2, beklenen * 0.02)) continue;
     e.grams = sf.g; e.unit = sf.u;
   }
   return out;
@@ -1075,6 +1089,9 @@ function renderLocalMatches() {
   _customMatches = customFoodMatches(q, 6);
   const customNames = new Set(_customMatches.map(m => m.name.toLocaleLowerCase('tr')));
   _localMatches = foodMemoryMatches(q, 6).filter(m => !customNames.has(m.name.toLocaleLowerCase('tr')));
+  // 25 Eki: MİKTARLI SORGUDA birimi bilinmeyen geçmiş kayıt elenir. "Yumurta" adlı
+  // 320 kcal'lik (4 yumurtalık) kayıt "2 yumurta" ile ×2 = 640 kcal yazıyordu.
+  if (parsed.qty) _localMatches = _localMatches.filter(m => m.grams || _miktarAyikla(m.name).gram || _miktarAyikla(m.name).kat);
   const personalNames = new Set([...customNames, ..._localMatches.map(m => m.name.toLocaleLowerCase('tr'))]);
   // 🔴 GRAM SORGUSUNDA TEKRAR AYIKLAMA YAPILMAZ. Normalde "daha once yedin"
   // satiri temel besin ikizini gizler (ayni seyi iki kez gostermemek icin).
@@ -1103,10 +1120,13 @@ function renderLocalMatches() {
   if (_seedMatches.length) {
     const sb = '<div class="freq-head">Temel besinler</div><div class="food-results">' +
       _seedMatches.map((sf, i) => _foodRow(
-        `<button class="food-result" onclick="pickSeedFood(${i})"><span class="food-result-name">${escapeHtml(sf.n)} <span class="food-result-brand">${escapeHtml(sf.u)}</span></span><span class="food-result-kcal">${sf.k} kcal</span></button>`,
+        `<button class="food-result" onclick="pickSeedFood(${i})"><span class="food-result-name">${escapeHtml(sf.n)} <span class="food-result-brand">${escapeHtml(_seedBirim(sf))}</span></span><span class="food-result-kcal">${sf.k} kcal</span></button>`,
         `quickAddSeed(${i})`)).join('') +
       '</div>';
-    if (gramOnce) bolumler.unshift(sb); else bolumler.push(sb);
+    // 25 Eki: adı birebir tutan temel besin varsa ("pilav") tablo ÖNE geçer —
+    // geçmişteki "Tavuk pilav" (780 kcal) ilk satır olup Enter'la yazılıyordu.
+    const tam = _seedMatches.some(sf => trNorm(sf.n) === trNorm(q));
+    if (gramOnce || tam) bolumler.unshift(sb); else bolumler.push(sb);
   }
   html += bolumler.join('');
   // ⚠️ SIFIR SONUCTA BOS EKRAN BIRAKMA. Onceden hicbir sey yazmiyordu:
@@ -1210,6 +1230,10 @@ function _quickAddFood(o) {
     // 'taban' 1 grama indirir ((200g) kaydinda 1/200), carpan istenen gram.
     qty = haz.gram ? (taban * istek) : (istek / gramTaban);
     gramEtiket = istek;
+  } else if (!gramIstendi && istek && haz.gram && Number(o.grams) > 0) {
+    // 25 Eki: "4 dilim ekmek" + hafızadaki "Ekmek (60g)" → 4 BİRİM (4 × 30 g), kaydın 4 katı değil.
+    qty = istek * Number(o.grams) / haz.gram;
+    gramEtiket = istek * Number(o.grams);
   } else if (!gramIstendi && istek) {
     // Porsiyon istegi: etiketli kayitta etiketli miktarin KATI demektir.
     qty = haz.gram ? istek : (taban * istek);
@@ -1218,6 +1242,8 @@ function _quickAddFood(o) {
     qty = 1;                                    // miktar yazilmadi: kaydi oldugu gibi ekle
     gramEtiket = haz.gram || 0;
   }
+  // 25 Eki: GRAM ESAS — gram tabanı biliniyorsa kayıt her zaman gramla etiketlenir.
+  if (!gramEtiket && gramTaban && !haz.gram && !haz.kat) gramEtiket = gramTaban * qty;
   // Etiketteki ×N yerine gosterilecek YENI kat (kcal carpani qty, etiket birimKat).
   const birimKat = haz.kat ? qty * haz.kat : qty;
   const kStr = (birimKat % 1) ? String(Math.round(birimKat * 100) / 100).replace('.', ',') : String(birimKat);
@@ -1396,7 +1422,15 @@ function pickPersonalFood(i) {
   const m = _localMatches[i]; if (!m) return;
   // grams devralindiysa porsiyon editorunde Gram kipi de acilir.
   _aiFood = { name: m.name, kcal: m.kcal, protein: m.protein, carb: m.carb, fat: m.fat, multi: false, items: [], source: 'memory', unit: m.unit || null, grams: m.grams || null };
-  showAiPortion(m.name, 'Hafızandan' + (m.unit ? ' · ' + m.unit : ''), '');
+  // 25 Eki: gram etiketli kayıt ("Ekmek (60g)") — değerler 60 g'lık; editör o kaydın
+  // KENDİ gramına oturur, yoksa tablo birimi (30 g) ile çarpılıp 2 kat sayılırdı.
+  const hz = _miktarAyikla(m.name);
+  if (hz.gram) {
+    const tb = Number(m.grams) > 0 ? Number(m.grams) : hz.gram, k = tb / hz.gram;
+    const sc = (v) => v == null ? v : Math.round(v * k * 10) / 10;
+    _aiFood = Object.assign(_aiFood, { name: hz.ad, kcal: Math.round(m.kcal * k), protein: sc(m.protein), carb: sc(m.carb), fat: sc(m.fat), grams: tb, unit: Number(m.grams) > 0 ? m.unit : tb + ' g' });
+  }
+  showAiPortion(_aiFood.name, 'Hafızandan' + (m.unit ? ' · ' + m.unit : ''), '');
   applyPickQty();
 }
 // Türkçe diakritik-duyarsız normalize (kofte→kofte=köfte, doner→döner). Hızlı yazımda eşleşsin.
@@ -1459,10 +1493,21 @@ function parseFoodQuery(q) {
   if (qty == null && words.length > 1) {
     const n = words.length;
     const sayi = (w) => /^[0-9]+([.,][0-9]+)?$/.test(w);
+    const bitisik = (w) => w.match(/^([0-9]+([.,][0-9]+)?)(g|gr|gram|ml|adet|dilim)$/);
     if (n > 2 && sayi(words[n - 2]) && _FOOD_UNITS.includes(words[n - 1])) {
       qty = Number(words[n - 2].replace(',', '.')); words.splice(n - 2, 1);
     } else if (sayi(words[n - 1])) {
       qty = Number(words[n - 1].replace(',', '.')); words.pop();
+    } else if (bitisik(words[n - 1])) {
+      // 25 Eki: "tavuk göğsü 250g" — sondaki bitişik gram hiç eşleşmiyordu
+      const b = bitisik(words[n - 1]); qty = Number(b[1].replace(',', '.')); unit = b[3]; words.pop();
+    } else {
+      // 25 Eki: ortadaki miktar — "pirinç 100 gr çiğ", "tavuk 200g haşlama"
+      for (let i = 1; i < n - 1; i++) {
+        if (sayi(words[i]) && _FOOD_UNITS.includes(words[i + 1])) { qty = Number(words[i].replace(',', '.')); words.splice(i, 1); break; }
+        const b = bitisik(words[i]);
+        if (b) { qty = Number(b[1].replace(',', '.')); unit = b[3]; words.splice(i, 1); break; }
+      }
     }
   }
   // ⚠️ 18 Eki 2026 — "dürüm" SON kelimeyse yemeğin ADI ("tavuk döner dürüm",
@@ -1543,6 +1588,12 @@ function _olcuDonustur(parsed, besin) {
   return { qty: Math.round(parsed.qty * ml * yog), gram: true };
 }
 
+/** Arama satırı birimi: nitel birim (porsiyon, kase…) yerine gram; sayılıda ikisi. */
+function _seedBirim(sf) {
+  if (!(sf.g > 0)) return sf.u;
+  if (/^\d+\s*g$/.test(sf.u) || /^(porsiyon|kase|tabak|avuç|kepçe|su bardağı)$/i.test(sf.u)) return sf.g + ' g';
+  return sf.u + ' · ' + sf.g + ' g';
+}
 function pickSeedFood(i) {
   const sf = _seedMatches[i]; if (!sf) return;
   _olcuUygula(sf);
@@ -1565,6 +1616,8 @@ function applyPickQty() {
     if (!(_aiFood && _aiFood.grams)) return;   // gram tabani yok: uydurma
     setPortionMode('gram');
     el.value = _pickQty;
+  } else if (_portionMode === 'gram' && _aiFood && _aiFood.grams) {
+    el.value = Math.round(_pickQty * _aiFood.grams);   // "2 yumurta" → 100 g (kutu gram kipinde)
   } else {
     el.value = _pickQty;
   }
@@ -1599,6 +1652,8 @@ function addAiFood() {
   let label;
   if (_portionMode === 'gram' && _aiFood.grams) {
     label = _aiFood.name + ` (${Math.round(raw)}g)`;
+  } else if (_aiFood.grams && !_aiFood.multi) {
+    label = _aiFood.name + ` (${Math.round(m * _aiFood.grams)}g)`;   // 25 Eki: gram biliniyorsa her kayıt gramla
   } else {
     const qStr = (m % 1) ? m.toString().replace('.', ',') : String(m);
     label = _aiFood.name + (m !== 1 ? ` ×${qStr}` : '');

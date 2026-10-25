@@ -1,3 +1,9 @@
+# ⚖️ 25 Eki 2026 — v7-224 Kalori doğruluğu + gram esas
+- Salim: "asla kalori makro hatası istemiyorum" + "porsiyon nitel, gramda derinleşelim".
+- Denetim: 498 besin tek tek 100 g değerine çevrilip referansla karşılaştırıldı; Atwater sapması yalnız alkollerde (doğru, 7 kcal/g). Salim'in kayıtlı öğünlerinde tutarsız kayıt yok.
+- 65 gerçekçi yazımla uçtan uca deneme → 5 hata bulundu ve düzeltildi: (1) "2 yumurta" geçmişteki birimsiz 320 kcal'lik "Yumurta" kaydını ×2 yapıp 640 yazıyordu; (2) "pilav" geçmişteki "Tavuk pilav"ı (780) ilk satıra koyuyordu; (3) "tavuk göğsü 250g" sonuç vermiyordu; (4) "pirinç 100 gr çiğ" sonuç vermiyordu; (5) hafızadaki gram etiketli kayda "4 dilim" kaydın 4 katını yazıyordu.
+- Gram esas: her tablo kaydı "(Ng)" etiketli, editör gramla açılır, plan/öneri "300 g Makarna". `makroTutarli` kapısı. Test 72.
+
 # 🥗 25 Eki 2026 — v7-223 Diyet ekranı sadeleşti + ölü Borsa CSS'i silindi
 - Sıra: koç şeridi → tarih (Karne başlığın sağında) → kalori halkası + makrolar TEK kart → Yemek ekle (tek dolu düğme) → günlük → Ne yesem → Su → Planım → Kilo → "Daha fazla" (Tarifler, Takviyeler, Hedefler & hatırlatıcılar, İçe aktarma) → Beslenme/Antrenman. Ekran 10098 → ~7800 px.
 - Günlüğün "bugün / kalori 0" kartı halkanın kopyasıydı → gizli. Boş öğün: kutu yerine tek "+ ekle" satırı. Su "+1 L" ikincil. "Planım · Planım" tekrarı kalktı. Beslenme/Antrenman başlıkları büyük harf değil.

@@ -1420,12 +1420,20 @@ function applyMacro(m) {
 // ===== FatSecret tarzı GÜNLÜK (diary) — öğüne göre bölümler + inline ekle =====
 // Ad icindeki miktar ekini ("Tavuk (180g)", "Yumurta ×2") ikinci satira ayirir.
 // Boylece ad okunur kalir, miktar da kaybolmaz — Stitch yerlesiminin ana fikri.
+/** 25 Eki: kalori ↔ makro tutarlılığı (4P + 4K + 9Y). Eksik makroda karar yok; alkolde muaf
+ *  (7 kcal/g makroya girmez). Günlükte tutarsız kalem "kontrol et" diye işaretlenir. */
+function makroTutarli(k, p, c, f, ad) {
+  if ([k, p, c, f].some(v => v == null || v === '' || !isFinite(Number(v)))) return true;
+  if (/bira|şarap|sarap|rakı|raki|votka|viski|alkol/i.test(String(ad || ''))) return true;
+  const a = 4 * p + 4 * c + 9 * f;
+  return Math.abs(a - k) <= Math.max(40, k * 0.2);
+}
 function splitMealName(name) {
   const s = String(name || '');
   let m = s.match(/^(.*?)\s*\((\d+)g\)\s*$/);
   if (m) return { ad: m[1], mik: m[2] + ' g' };
   m = s.match(/^(.*?)\s*×\s*([\d,\.]+)\s*$/);
-  if (m) return { ad: m[1], mik: m[2] + ' porsiyon' };
+  if (m) return { ad: m[1], mik: '×' + m[2] };
   return { ad: s, mik: '' };
 }
 // Gunluk basliklarinda Stitch'in kucuk harfli adlari + ikon.
@@ -1491,6 +1499,7 @@ function renderDiary() {
           `<button class="dt-row-main" onclick="editMeal(${m.id})">` +
             `<span class="dt-row-name">${escapeHtml(sp.ad)}</span>` +
             (alt ? `<span class="dt-row-sub">${escapeHtml(alt)}</span>` : '') +
+            (makroTutarli(m.kcal, m.protein, m.carb, m.fat, m.name) ? '' : '<span class="dt-row-sub dt-row-warn">Kalori ile makrolar uyuşmuyor — kontrol et</span>') +
           '</button>' +
           `<span class="dt-row-kcal">${m.kcal != null ? m.kcal : '—'}</span>` +
           `<button class="dt-row-del" onclick="removeMeal(${m.id})" aria-label="Sil">✕</button>` +

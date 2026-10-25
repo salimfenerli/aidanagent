@@ -145,7 +145,7 @@ describe('hızlı giriş — "Farklı yedim" / "Bir şey yedim" (18 Eki)', () =>
     A.evalIn('_moduleLoads.foods = Promise.resolve(); _moduleLoads.ajan = Promise.resolve()');
     const n = A.evalIn("bugunKaydet('13:00', '2 yumurta, 1 simit, zxqw uydurma')");
     assert.strictEqual(n, 2);
-    assert.deepStrictEqual(ogunler(), [['Yumurta ×2', 144, '13:00', 'ogle'], ['Simit', 352, '13:00', 'ogle']]);
+    assert.deepStrictEqual(ogunler(), [['Yumurta (100g)', 144, '13:00', 'ogle'], ['Simit (110g)', 352, '13:00', 'ogle']]);
     assert.strictEqual(A.evalIn("data.ogunBekci.g['13:00'].d"), 'yedi');
     assert.deepStrictEqual(durum('13:30').slice(1, 2), ['13:00:tamam']);
   });
@@ -173,7 +173,7 @@ describe('hızlı giriş — "Farklı yedim" / "Bir şey yedim" (18 Eki)', () =>
     A.evalIn('bugunOnizle()');
     await new Promise(r => setTimeout(r, 20));
     const oz = A.window.document.getElementById('boOniz').textContent;
-    assert.match(oz, /Yumurta ×3\s*216 kcal/);
+    assert.match(oz, /Yumurta \(150g\)\s*216 kcal/);
     assert.match(oz, /zxqw — bulunamadı/);
     el().querySelector('button[data-a="vazgec"]').click();
     assert.ok(!A.window.document.getElementById('boGirdi'));
