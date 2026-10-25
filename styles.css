@@ -4517,6 +4517,29 @@
 body[data-tab]:not([data-tab="tasks"]) .quick-capture,
 body[data-tab]:not([data-tab="tasks"]) .quick-actions,
 body[data-tab]:not([data-tab="tasks"]) #notifBanner { display: none !important; }
+/* 25 Eki 2026 — DÜZEN. Salim: "aykırı ve amatör duruyor". (1) Boş rozet gri çizgi gibi
+   görünüyordu → gizli; açılır başlıklara ok. (2) .ghost tanımsızdı → dolu buton gibi
+   çıkıyordu. (3) Görev kartında 7 ikon hep açıktı: telefonda yalnız dokununca açılır
+   (kaydır = tamamla/sil zaten var). (4) Günlük başlıkları büyük harfle başlar. */
+.school-badge:empty { display: none; }
+.school-section > summary::after { content: ""; width: 7px; height: 7px; margin-left: auto; border: solid var(--text-faint); border-width: 0 2px 2px 0; transform: rotate(45deg); transition: transform 180ms ease-out; flex-shrink: 0; }
+.school-section > summary:has(.school-badge:not(:empty))::after { margin-left: 10px; }
+.school-section[open] > summary::after { transform: rotate(-135deg); }
+button.ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border-soft); }
+button.ghost:hover { background: var(--surface-hover); color: var(--text); }
+@media (max-width: 520px) {
+  .task:not(.acik) .task-actions { display: none; }
+  .task.acik .task-actions { animation: panelGir 160ms ease-out; }
+}
+.dt-day-title::first-letter, .dt-sec-name::first-letter { text-transform: uppercase; }
+/* (5) Kısayol satırı ve filtreler TEK satır, yatay kayar (3 satıra taşıyordu; "Ödev paketi" ikiye bölünüyordu). */
+.quick-actions { overflow-x: auto; scrollbar-width: none; }
+.quick-actions::-webkit-scrollbar { display: none; }
+.quick-actions button { flex: 0 0 auto; white-space: nowrap; padding: 9px 13px; }
+#filterChips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: -14px; padding-inline: 14px; }
+#filterChips::-webkit-scrollbar { display: none; }
+#filterChips > * { flex-shrink: 0; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .school-section > summary::after, .task.acik .task-actions { transition: none; animation: none; } }
 
 /* ===== Atletik katman — patlayici blok + temas butcesi (9 Agu 2026) =====
    Impeccable: tam kenar + tint, yan-serit YOK, ease-out, reduced-motion var. */

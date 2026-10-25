@@ -121,7 +121,7 @@ function renderBugun() {
   h += '</div>';
   if (o.sirada) {
     h += '<span class="bg-etiket">SIRADA</span><div class="bg-sira">' + escapeHtml(o.sirada.ad) + '<small>' + (o.siradaYarin ? 'yarın ' : '') + bgHM(o.sirada.bas) +
-      (!o.siradaYarin && o.sirada.bas > dk ? ' · ' + (o.sirada.bas - dk) + ' dk sonra' : '') + '</small></div>';
+      (!o.siradaYarin && o.sirada.bas > dk ? ' · ' + bugunSure(o.sirada.bas - dk) + ' sonra' : '') + '</small></div>';
   }
   h += '</div>';
 
@@ -193,3 +193,20 @@ function bugunDuzenle() {
   // ŞU AN / SIRADA dakika dakika ilerlesin (yalnız sekme açıkken)
   setInterval(() => { const p = document.getElementById('tasks'); if (p && p.classList.contains('active') && !document.hidden) renderBugun(); }, 60000);
 })();
+
+// 25 Eki 2026 — GÖREV KARTI: telefonda 7 eylem ikonu gizli (styles.css "DÜZEN"); karta
+// dokununca açılır, başka karta dokununca öncekisi kapanır. Düğme/onay kutusu/rozet
+// dokunuşları karışmaz. Kaydırma (tamamla/sil) ayrı, dokunuş sayılmaz.
+if (!window._gorevKartDokun) {
+  window._gorevKartDokun = true;
+  document.addEventListener('click', (ev) => {
+    const kart = ev.target.closest && ev.target.closest('.task');
+    if (!kart || ev.target.closest('button, input, a, label, .badge, .subtask, .postpone-nudge')) return;
+    const acik = kart.classList.contains('acik');
+    document.querySelectorAll('.task.acik').forEach(k => k.classList.remove('acik'));
+    if (!acik) kart.classList.add('acik');
+  });
+}
+
+/** 25 Eki: "362 dk sonra" → "6 sa 2 dk sonra" (dakika sayısı okunmuyordu). */
+function bugunSure(m) { const h = Math.floor(m / 60), d = m % 60; return h ? h + ' sa' + (d ? ' ' + d + ' dk' : '') : d + ' dk'; }

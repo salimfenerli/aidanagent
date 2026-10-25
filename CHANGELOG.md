@@ -1,3 +1,8 @@
+# 🧹 25 Eki 2026 — v7-222 Düzen (1. tur)
+- Salim: "uygulama aykırı ve amatör duruyor". Playwright ile iPhone ekranları tarandı. Kök neden: etiketsiz `button` varsayılanı dolu accent → her ekranda 5-10 "birincil" düğme; `.ghost` tanımsızdı; 5 CSS katmanı.
+- Yapılan: başlık saati saniyesiz · boş rozetin gri çizgisi gizli + açılır başlıklara ok · `button.ghost` tanımı · CSV içe aktarma düğmeleri ikincil · görev kartının 7 ikonu telefonda dokununca açılır · kısayol ve filtre çipleri tek satır kayar · "362 dk sonra" → "6 sa 2 dk sonra" · günlük başlıkları büyük harf.
+- Sıradaki tur (önerildi): Diyet ve Ayarlar sadeleştirme — ekranda tek dolu düğme, nadir araçlar "Daha fazla" altına, çift kalori özeti tekleşir.
+
 # 🩺 25 Eki 2026 — v7-221 Öğün dokunuşu + sağlık teşhisi (Salim sporda, otonom)
 - Öğün bildirimine dokunmak artık doğrudan **Yedim** (plan kalemleri kaydedilir). Kart: Tamam · Henüz yemedim (geri al + 15 dk) · Atladım · Geri al. Push metni "yiyince dokun, kaydedilir". Neden: soru kartıyla 12 pingte 0 işaret.
 - `/health` teşhisi: `saglikTaniOlustur`/`saglikTaniYaz` → `data.saglikTani {tarih, saat, format, sonuc, gelen}`; boş/geçersiz gönderim de iz bırakır. Ayarlar'da "Sağlık verisi" satırı (`saglikTaniMetni`): hiç gelmedi / eski / boş (izin) / kısmi / tamam. Son veri 8 Eki — Salim'in kısayolu otomasyonla hiç ulaşmamış.

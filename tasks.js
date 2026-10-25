@@ -101,14 +101,12 @@ function syncAppHeader(name) {
   document.querySelectorAll('#appMenu button[data-nav]').forEach(b =>
     b.classList.toggle('active', b.dataset.nav === name));
 }
-// App-bar saati — saniyelik canlı (borsa modunda kendi saati var, orada atla)
+// App-bar saati — HH:MM (borsa modunda kendi saati var, orada atla)
 function tickAppHeaderClock() {
   const el = document.getElementById('appHeaderClock');
   if (!el) return;
   const n = new Date();
-  el.textContent = String(n.getHours()).padStart(2,'0') + ':' +
-                   String(n.getMinutes()).padStart(2,'0') + ':' +
-                   String(n.getSeconds()).padStart(2,'0');
+  el.textContent = String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');   // 25 Eki: saniye gürültüydü
 }
 // Tam-ekran modunu aç + ilk başlığı/sayacı kur
 document.body.classList.add('app-mode');

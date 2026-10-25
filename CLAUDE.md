@@ -149,6 +149,7 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 - **Kaynak: `DESIGN.md`** + `styles.css`'in SON `:root` bloğu (5 katman var, sonuncusu kazanır; palet bloğu EN SONDA kalmalı). Hex'i JS'e yazma (`25-gorsel-dil` kırar).
 - **Impeccable standardı (KALICI):** framework `C:\Users\Salim\Downloads\impeccable-main\` (`SKILL.md` + `reference/product.md`). Yasaklar: mor/neon gradyan, glassmorphism, glow, gradient-text · **renkli yan-şerit kenarlık ASLA** (tam kenar + tint + nokta/ikon) · iç içe kart · özel scrollbar · bounce/elastik animasyon · saf #000/#fff · dekoratif emoji (SVG ikon kullan: `icon(...)`). Tek font ailesi; hareket 150-250 ms ease-out + `prefers-reduced-motion`.
 - **Akıcılık (20 Eki, `69`):** görev yakalama/kısayol/bildirim bandı yalnız Görevler'de (`body[data-tab]`); modül inerken `.panel.yukleniyor` iskeleti gizler — tembel modül eklerken bu kalıbı koru, kartı geç `setTimeout`'la sonradan ekleyip içeriği zıplatma.
+- **Düzen (25 Eki):** etiketsiz `button` DOLU (accent) çıkar → nadir/ikincil düğmeye `secondary` ya da `ghost` ver, ekranda tek dolu düğme hedefle. Telefonda görev kartı eylemleri dokununca açılır (`.task.acik`, `bugun.js`). Kısayol + filtre satırı tek satır, yatay kayar.
 - Dokunma hedefi ≥44px (`::after` ile görünmez alan). iOS'ta odak dokunmadan sonra kalır — `:focus-visible` halkası beyaza yakın accent'le parlamasın.
 - Bir renk tek anlam taşır: accent ≠ uyarı.
 
