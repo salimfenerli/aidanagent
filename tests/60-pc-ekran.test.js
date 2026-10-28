@@ -99,6 +99,8 @@ describe('Windows betikleri (pc/)', () => {
     assert.match(s, /workers\.dev\/screen/);
     assert.match(s, /filter_period_intersect\(w, not_afk\)/);
     assert.match(s, /Get-Content \$ayar/);
+    // site süresi yalnız tarayıcı önde iken (eklenti arka plandaki sekmeyi de sayıyordu)
+    assert.match(s, /b = filter_period_intersect\(b, tarayici\)/);
   });
   test('🔒 gizli anahtar dosyası git\'e GİRMEZ; pc/ CRLF kuralı borsa\'dan önce', () => {
     assert.match(readText('.gitignore'), /^\/pc\/ayar\.txt$/m);

@@ -251,7 +251,7 @@ describe('bağlantılar', () => {
   test('worker: sohbet ajanı haftayı görür, sabah brifingi + Pazar 20:00 push', () => {
     assert.match(WK, /BU HAFTA \(ödev X\/Y dk/);
     assert.match(WK, /const hcak = hfCakismalar\(u\.data, trToday\(\), 2\)/);
-    assert.match(WK, /if \(dow === 0 && at\(20, 0\)\) jobs\.push\(runHaftaOzet\(env\)\);/);
+    assert.match(WK, /if \(dow === 0 && at\(20, 0\)\) jobs\.push\([\s\S]{0,160}runHaftaOzet\(env\)\)/);
     assert.match(WK, /url: '\/#hafta'/);
   });
   test('hafta.js tembel, Görevler sekmesiyle iner', () => {

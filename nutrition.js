@@ -872,7 +872,7 @@ function setNutDers(dow, bas, bit) {
   const d = ensureNutDuzen();
   const b = nutDk(bas), e = nutDk(bit);
   if (b == null || e == null || e <= b) delete d.ders[String(dow)];
-  else d.ders[String(dow)] = { bas: nutSaat(b), bit: nutSaat(e) };
+  else d.ders[String(dow)] = Object.assign({}, d.ders[String(dow)], { bas: nutSaat(b), bit: nutSaat(e) });   // ad ("Matematik") korunur
   save();
   renderNutrition();
 }
@@ -1690,6 +1690,21 @@ function nutAyniAile(a, b) {
  * Porsiyon metni. Birim zaten sayi iceriyorsa ("5 adet", "10 adet", "2 yarım")
  * bir daha sayi yazma — "1 5 adet Zeytin" gibi bozuk metin cikiyordu.
  */
+/**
+ * 25 Eki 2026 — GRAM ESAS. Salim: "porsiyon nitel bir kavram, gramda derinleşelim".
+ * Tablo besininin gram karşılığı (TURK_FOODS[].g, ölçülmüş) biliniyorsa miktar
+ * GRAMLA yazılır: "300 g Makarna". Sayılabilir birimde (adet, dilim, kaşık…)
+ * sayı korunur, gram yanına eklenir: "2 adet (100 g) Yumurta". Gram bilinmiyorsa
+ * (kendi besinin, geçmiş kayıt) eski biçim — UYDURMA gram yazılmaz.
+ */
+const NUT_SAYILI_BIRIM = /adet|dilim|yumurta|kaşık|kasik|ölçek|olcek|kutu|şişe|sise|fincan|top|küp|kup|kare|şiş|yarım|parça|paket|bardak/i;
+function nutGramYaz(adet, birim, ad) {
+  const f = ad ? nutFood(ad) : null;
+  if (!f || !(f.g > 0) || f.u !== birim) return nutPortion(adet, birim);
+  const g = Math.max(5, Math.round(adet * f.g / 5) * 5);
+  if (/^\d+\s*g$/.test(String(birim)) || !NUT_SAYILI_BIRIM.test(String(birim))) return g + ' g';
+  return nutPortion(adet, birim) + ' (' + g + ' g)';
+}
 function nutPortion(adet, birim) {
   const sayiliBirim = /^\d/.test(String(birim));
   if (sayiliBirim) return adet === 1 ? String(birim) : (adet + ' \u00d7 ' + birim);
@@ -2823,7 +2838,7 @@ function renderNutrition() {
       '<b>' + m.kcal + ' kcal · ' + m.protein + 'g P</b></div>' +
       '<div class="nm-list">' + m.items.map(x =>
         '<div class="nm-item"><span>' + escapeHtml(x.n) + '</span>' +
-        '<span class="nm-qty">' + escapeHtml(nutPortion(x.adet, x.u)) + '</span></div>'
+        '<span class="nm-qty">' + escapeHtml(nutGramYaz(x.adet, x.u, x.n)) + '</span></div>'
       ).join('') + '</div></div>';
   }).join('');
 
@@ -3107,7 +3122,7 @@ function nutDuzenHtml(d, cakisma) {
 function nutYemekhaneHtml(m, z) {
   const y = nutYemekhane(m);
   const kalemler = (s) => s.items.map(x => escapeHtml(x.n) + ' ' +
-    escapeHtml(nutPortion(x.adet, x.u))).join(' · ');
+    escapeHtml(nutGramYaz(x.adet, x.u, x.n))).join(' · ');
   return '<div class="nut-meal nm-out"><div class="nm-head"><span>' +
     escapeHtml(nutSlotLabel(m.slot)) +
     '<i class="nm-when">' + escapeHtml(z.saat + ' · ' + z.etiket) + '</i></span>' +
@@ -3123,13 +3138,13 @@ function nutYemekhaneHtml(m, z) {
       '<div class="nt-row">' + escapeHtml(kalemler(s)) + '</div>' +
       (s.telafi
         ? '<div class="nut-note">Protein ' + s.acik + ' g eksik → çantadan <b>' +
-          escapeHtml(nutPortion(s.telafi.adet, s.telafi.u) + ' ' + s.telafi.n) +
+          escapeHtml(nutGramYaz(s.telafi.adet, s.telafi.u, s.telafi.n) + ' ' + s.telafi.n) +
           '</b> ekle: ' + s.telafiliKcal + ' kcal · ' + s.telafiliProtein + 'g P</div>'
         : '') +
       (s.cantaEk
         ? '<div class="nut-note">Tepsi ' + s.kcalAcik + ' kcal eksik kalıyor (porsiyonu sen ' +
           'seçmiyorsun) → çantadan <b>' + escapeHtml(s.cantaEk.items.map(x =>
-            nutPortion(x.adet, x.u) + ' ' + x.n).join(' + ')) + '</b> (' + s.cantaEk.kcal +
+            nutGramYaz(x.adet, x.u, x.n) + ' ' + x.n).join(' + ')) + '</b> (' + s.cantaEk.kcal +
           ' kcal · ' + s.cantaEk.protein + 'g P)</div>'
         : (s.telafi ? '' : '<div class="nt-row nc-ok">Hedefi tek başına tutuyor — çantadan bir şey ekleme.</div>')) +
       '</div>').join('') +
@@ -3149,7 +3164,7 @@ function nutCantaHtml(meals, times, yemekhaneVar) {
       '<div class="nt-slot"><b>' + escapeHtml((c.saat ? c.saat + ' · ' : '') +
       (c.slot === 'telafi' ? 'Yemekhane telafisi' : nutSlotLabel(c.slot))) + '</b>' +
       '<div class="nt-row">' + escapeHtml(c.oneri.items.map(x =>
-        nutPortion(x.adet, x.u) + ' ' + x.n).join(' + ')) +
+        nutGramYaz(x.adet, x.u, x.n) + ' ' + x.n).join(' + ')) +
       ' — ' + c.oneri.kcal + ' kcal · ' + c.oneri.protein + 'g P</div>' +
       '<div class="nut-sub">' + escapeHtml(c.neden) + '</div></div>').join('') +
     '</details>';
@@ -3243,7 +3258,11 @@ function nutOrnekSatirlari(ogunler, zaman) {
       if (!(x.adet > 0)) continue;
       out.push({
         slot: m.slot === 'ara' ? 'atistirma' : m.slot,
+<<<<<<< HEAD
         name: nutPortion(x.adet, x.u) + ' ' + x.n,
+=======
+        name: nutGramYaz(x.adet, x.u, x.n) + ' ' + x.n,
+>>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
         besin: x.n, adet: x.adet,   // alışveriş listesi için (18 Eki) — adı ayrıştırmaya gerek kalmasın
         kcal: Math.round(x.adet * x.k),
         protein: Math.round(x.adet * x.p),
@@ -3655,7 +3674,7 @@ const NUT_ONER_BUYUK_BIRIM = /porsiyon|kase|kutu|dürüm|durum|tabak|bardak|\*/i
 function nutOnerEtiket(o) {
   if (!o) return '';
   if (o.u === NUT_ONER_KAYIT) return (o.adet === 1 ? o.n : (o.adet + '\u00d7 ' + o.n));
-  return nutPortion(o.adet, o.u) + ' ' + o.n;
+  return (o.kaynak === 'tablo' ? nutGramYaz(o.adet, o.u, o.n) : nutPortion(o.adet, o.u)) + ' ' + o.n;
 }
 // ⚠️ KAYNAK CARPANI. Saf makro puani her seferinde tohum tabloyu seciyordu;
 // kullanicinin kendi kaydettigi "Annemin köftesi" hicbir listede

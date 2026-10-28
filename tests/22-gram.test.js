@@ -210,6 +210,10 @@ describe('Porsiyon <-> gram donusumu', () => {
   test('kip degisince miktar korunur (1.5 porsiyon -> 75 g)', () => {
     A.evalIn(`_aiFood = { name:'T', kcal:100, protein:5, carb:5, fat:5, multi:false, items:[], source:'seed', unit:'dilim', grams:50 }`);
     W.showAiPortion('T', 'Temel', '');
+    // 25 Eki: gram karşılığı olan besin GRAM kipinde açılır (1 birim = 50 g)
+    assert.strictEqual(A.evalIn('_portionMode'), 'gram');
+    assert.strictEqual(Number(W.document.getElementById('aiQty').value), 50);
+    W.setPortionMode('porsiyon');
     W.setPortionValue(1.5);
     W.setPortionMode('gram');
     assert.strictEqual(Number(W.document.getElementById('aiQty').value), 75);

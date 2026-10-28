@@ -36,8 +36,14 @@ karne.js        text eol=crlf
 hafiza.js       text eol=crlf
 hedefler.js     text eol=crlf
 harcama.js      text eol=crlf
+<<<<<<< HEAD
 ayarlar.js      text eol=crlf
 bugun.js        text eol=crlf
+=======
+bugun.js        text eol=crlf
+ayarlar.js      text eol=crlf
+ogun.js         text eol=crlf
+>>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
 ajan.js         text eol=crlf
 hafta.js        text eol=crlf
 health.js       text eol=crlf

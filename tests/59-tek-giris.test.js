@@ -133,7 +133,7 @@ describe('KAPI — ajan.js kartları ve Uygula (PWA)', () => {
   test('öğün kalorisi VERİTABANINDAN: "3 yumurta" → 216 kcal (modelin sayısı yok)', () => {
     const r = JSON.parse(JSON.stringify(A.evalIn("ajanYemekCoz('3 yumurta')")));
     assert.strictEqual(r.kcal, 216);
-    assert.match(r.name, /Yumurta ×3/);
+    assert.match(r.name, /Yumurta \(150g\)/);   // 25 Eki: gram esas
     const g = JSON.parse(JSON.stringify(A.evalIn("ajanYemekCoz('200 gr tavuk göğsü')")));
     assert.ok(g.kcal > 150 && g.kcal < 450, 'gram ölçeği: ' + g.kcal);
     assert.match(g.name, /\(200g\)/);
@@ -155,7 +155,7 @@ describe('KAPI — ajan.js kartları ve Uygula (PWA)', () => {
     const metin = slot.textContent;
     assert.match(metin, /Hepsini uygula \(4\)/);
     assert.match(metin, /Harcama: 85 ₺ · Yemek/);
-    assert.match(metin, /Kahvaltı: Yumurta ×3/);
+    assert.match(metin, /Kahvaltı: Yumurta \(150g\)/);
     assert.match(metin, /~216 kcal/);
     assert.match(metin, /Uyku: 7,5 saat/);
     assert.match(metin, /Kilo: 68,4 kg/);

@@ -26,7 +26,11 @@ const CRLF_DOSYALAR = [
   // 6 Eyl 2026: uc tembel modul listede YOKTU. foods.js .gitattributes'ta da
   // yoktu — `* text=auto` ile depoya LF yazilip Windows'a CRLF acilacakti,
   // yani 14 Agustos'ta 3 haftalik deploy'u durduran tuzagin aynisi acikti.
+<<<<<<< HEAD
   'nutrition.js', 'health.js', 'foods.js', 'school.js', 'onboarding.js', 'karne.js', 'hafiza.js', 'hedefler.js', 'harcama.js', 'ajan.js', 'hafta.js', 'ayarlar.js', 'bugun.js',
+=======
+  'nutrition.js', 'health.js', 'foods.js', 'school.js', 'onboarding.js', 'karne.js', 'hafiza.js', 'hedefler.js', 'harcama.js', 'bugun.js', 'ajan.js', 'hafta.js', 'ayarlar.js', 'ogun.js',
+>>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
 ];
 
 describe('satir sonu disiplini', () => {

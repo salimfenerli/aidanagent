@@ -125,7 +125,8 @@ function ajanYemekCoz(yemek) {
       if (d && d.gram) { if (f.g > 0) { m = d.qty / f.g; ek = ' (' + Math.round(d.qty) + 'g)'; } }
       else if (d) { m = d.qty; }
       else if (pr.qty > 0) { m = pr.qty; }
-      if (!ek && m !== 1) ek = ' ×' + ajanSayi(m);
+      if (!ek && f.g > 0) ek = ' (' + Math.round(m * f.g) + 'g)';   // 25 Eki: gram esas
+      else if (!ek && m !== 1) ek = ' ×' + ajanSayi(m);
     }
     const kcal = sc(f.k, m);
     if (kcal != null && kcal > AJAN_KCAL_TAVAN) return bos;
@@ -139,6 +140,86 @@ function ajanYemekCoz(yemek) {
     return { name: c.name + (m !== 1 ? ' ×' + ajanSayi(m) : ''), kcal, protein: sc(c.protein, m), carb: sc(c.carb, m), fat: sc(c.fat, m), bilinmiyor: kcal == null };
   }
   return bos;
+}
+
+/* ---------- SABİT PROGRAM (14 Eki 2026) ----------
+ * Salim: "yazdığımı tak diye programa koymasın, anlayıp özümseyip kaydetsin".
+ * AI anlar (worker program_kaydet), kod doğrular, KART ETKİYİ gösterir (antrenman kayması,
+ * ödev süresi, çakışma — hafta.js hfGun'dan, kendi takvim hesabı YOK), Uygula'yla kaydedilir.
+ * okul → duzen.okul · ders → duzen.ders (beslenme öğün saatleri de bunu okur) ·
+ * dovus/sabit → fixedSchedule (dövüş adı hfGun'un dövüş bloğu kuralına uyar). */
+const AJAN_GUN_KISA = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+const AJAN_DOVUS_RE = /kick|boks|dövüş|dovus|mma|muay|güreş|gures|bjj|jiu/i;
+function ajanAyni(x, y) { return String(x || '').trim().toLocaleLowerCase('tr') === String(y || '').trim().toLocaleLowerCase('tr'); }
+function ajanProgEtiket(a) {
+  if (a.tur === 'dovus') return AJAN_DOVUS_RE.test(a.ad) ? a.ad : ('Dövüş: ' + a.ad).slice(0, 40);
+  return a.ad;
+}
+/** Saf: programı d'ye uygular (d yerinde değişir). */
+function ajanProgUygula(d, a) {
+  d.diet = d.diet || {}; d.diet.nut = d.diet.nut || {};
+  const z = d.diet.nut.duzen || (d.diet.nut.duzen = {});
+  if (a.tur === 'okul' || a.tur === 'ders') {
+    const k = a.tur;
+    const o = z[k] || (z[k] = {});
+    const gunler = a.gunler.length ? a.gunler : Object.keys(o).map(Number);
+    gunler.forEach(g => {
+      const x = o[String(g)];
+      if (a.islem === 'sil') { if (x && (k === 'okul' || !x.ad || ajanAyni(x.ad, a.ad))) delete o[String(g)]; }
+      else o[String(g)] = k === 'okul' ? { bas: a.bas, bit: a.bit } : { bas: a.bas, bit: a.bit, ad: a.ad };
+    });
+    return d;
+  }
+  const label = ajanProgEtiket(a);
+  const fs = Array.isArray(d.fixedSchedule) ? d.fixedSchedule : (d.fixedSchedule = []);
+  const ayni = fs.filter(f => f && ajanAyni(f.label, label));
+  const hedef = a.gunler.length ? a.gunler : [0, 1, 2, 3, 4, 5, 6];
+  // Önce bu günleri aynı adlı kayıtlardan çıkar (değiştirme = üzerine yazma)
+  ayni.forEach(f => { f.days = (f.days || []).filter(g => hedef.indexOf(g) < 0); });
+  d.fixedSchedule = fs.filter(f => !(f && ayni.indexOf(f) >= 0 && !f.days.length));
+  if (a.islem === 'ekle') {
+    const es = d.fixedSchedule.find(f => f && ajanAyni(f.label, label) && f.start === a.bas && f.end === a.bit);
+    if (es) es.days = es.days.concat(a.gunler).filter((g, i, s) => s.indexOf(g) === i);
+    else d.fixedSchedule.push({ id: Date.now(), label, days: a.gunler.slice(), start: a.bas, end: a.bit, enabled: true, src: 'sohbet' });
+  }
+  return d;
+}
+/** Program değişince BUGÜNÜN/YARININ hazır planı bayat kalmasın (14 Eki: Çarşamba planı
+ *  matematik dersi eklenmeden önce kurulmuştu, 17:30'da "Şimdi: Dövüş" bildirimi geldi).
+ *  Bitmiş blok varsa dokunmaz (kullanıcının işaretlediği ilerleme silinmesin). */
+function ajanProgPlanYenile(a) {
+  const p = data.dayPlan;
+  if (!p || !p.date || p.date < today() || typeof planLocalBlocks !== 'function') return false;
+  const dow = new Date(p.date + 'T12:00:00').getDay();
+  if (a.gunler.length && a.gunler.indexOf(dow) < 0) return false;
+  if ((p.blocks || []).some(b => b && b.done)) return false;
+  let r = null;
+  try { r = planLocalBlocks(p.date); } catch (_) { return false; }
+  if (!r || !Array.isArray(r.blocks) || !r.blocks.length) return false;
+  p.blocks = r.blocks;
+  return true;
+}
+function ajanSonrakiGun(dow) {
+  for (let i = 0; i < 7; i++) { const t = shiftDateStr(today(), i); if (new Date(t + 'T12:00:00').getDay() === dow) return t; }
+  return today();
+}
+/** Kartın "etkisi" satırları: önce/sonra hfGun. hafta.js yoksa boş (kart yine çalışır). */
+function ajanProgEtki(a) {
+  if (typeof hfGun !== 'function') return [];
+  const sonra = ajanProgUygula(JSON.parse(JSON.stringify(data)), a);
+  const L = [];
+  const gunler = a.gunler.length ? a.gunler : [1, 2, 3, 4, 5, 6, 0];
+  gunler.forEach(g => {
+    const t = ajanSonrakiGun(g), x = hfGun(data, t), y = hfGun(sonra, t), gk = AJAN_GUN_KISA[g];
+    if (x.antrenman && y.antrenman && x.antrenman.bas !== y.antrenman.bas) L.push({ m: gk + ' ' + x.antrenman.ad + ' ' + hfSaat(x.antrenman.bas) + ' → ' + hfSaat(y.antrenman.bas) });
+    if (x.odevKap !== y.odevKap) L.push({ m: gk + ' ödeve kalan süre ' + x.odevKap + ' → ' + y.odevKap + ' dk' });
+    if (a.islem === 'ekle') {
+      const b = hfDk(a.bas), e = hfDk(a.bit);
+      y.bloklar.filter(k => k.bas < e && k.bit > b && !(k.bas === b && k.bit === e) && !ajanAyni(k.label, ajanProgEtiket(a)))
+        .forEach(k => L.push({ m: gk + ' ' + k.label + ' ' + hfSaat(k.bas) + '-' + hfSaat(k.bit) + ' ile çakışıyor', uyari: true }));
+    }
+  });
+  return L.slice(0, 8);
 }
 
 function ajanCard(mi, ai, a) {
@@ -185,6 +266,12 @@ function ajanCard(mi, ai, a) {
   } else if (a.type === 'uyku_kaydet') {
     h += '<div class="ajan-head">Uyku: ' + ajanSayi(a.saat) + ' saat</div>';
     h += '<div class="ajan-sub">' + escapeHtml([a.yatis && a.kalkis ? a.yatis + ' → ' + a.kalkis : '', ajanGun(a.tarih)].filter(Boolean).join(' · ')) + '</div>';
+  } else if (a.type === 'program_kaydet') {
+    const TUR = { okul: 'Okul saati', ders: 'Ek ders / kurs', dovus: 'Dövüş antrenmanı', sabit: 'Sabit program' };
+    const ad = a.tur === 'okul' ? 'Okul' : ajanProgEtiket(a);
+    h += '<div class="ajan-head">' + (a.islem === 'sil' ? 'Programdan çıkar: ' : 'Programa ekle: ') + escapeHtml(ad) + '</div>';
+    h += '<div class="ajan-sub">' + escapeHtml([a.gunler.length ? a.gunler.map(g => AJAN_GUN_KISA[g]).join(', ') : 'tüm günler', a.bas ? a.bas + '-' + a.bit : '', 'her hafta', TUR[a.tur]].filter(Boolean).join(' · ')) + '</div>';
+    if (st === 'pending') ajanProgEtki(a).forEach(x => { h += '<div class="ajan-sub' + (x.uyari ? ' uyari' : '') + '">' + escapeHtml(x.m) + '</div>'; });
   } else if (a.type === 'kilo_kaydet') {
     h += '<div class="ajan-head">Kilo: ' + ajanSayi(a.kg) + ' kg' + (a.yag != null ? ' · yağ %' + ajanSayi(a.yag) : '') + '</div>';
     h += '<div class="ajan-sub">' + escapeHtml(ajanGun(a.tarih)) + '</div>';
@@ -212,6 +299,7 @@ function renderChatActions() {
   // Öğün kalorisi besin veritabanından (foods.js) — inmeden kart "bilinmiyor" der, inince yeniden çizilir.
   if (bekleyen('ogun_ekle') && typeof seedFoodMatches !== 'function') loadModule('foods').then(renderChatActions).catch(() => {});
   if (bekleyen('harcama_ekle') && typeof hrcKategori !== 'function') loadModule('harcama').then(renderChatActions).catch(() => {});
+  if (bekleyen('program_kaydet') && typeof hfGun !== 'function') loadModule('hafta').then(renderChatActions).catch(() => {});
   slots.forEach(s => {
     const mi = +s.dataset.i, m = chat[mi];
     if (!m || !Array.isArray(m.actions)) { s.innerHTML = ''; return; }
@@ -297,6 +385,20 @@ async function ajanApply(mi, ai, toplu) {
       data.sleep = (data.sleep || []).filter(x => x.date !== a.tarih);
       if (kopya) data.sleep.push(kopya);
       data.sleep.sort((x, y) => (x.date < y.date ? 1 : -1));
+      a.status = 'pending'; save(); ajanYenile();
+    };
+  } else if (a.type === 'program_kaydet') {
+    ensureDiet();
+    const kopya = JSON.stringify({ duzen: (data.diet.nut && data.diet.nut.duzen) || null, fs: data.fixedSchedule || null, plan: data.dayPlan || null });
+    ajanProgUygula(data, a);
+    const planYeni = ajanProgPlanYenile(a);
+    mesaj = (a.islem === 'sil' ? 'Programdan çıkarıldı' : 'Programa eklendi: ' + (a.tur === 'okul' ? 'okul saati' : ajanProgEtiket(a))) + (planYeni ? ' · plan güncellendi' : '');
+    geriAl = () => {
+      const k = JSON.parse(kopya);
+      if (k.plan) data.dayPlan = k.plan;
+      data.diet.nut = data.diet.nut || {};
+      if (k.duzen) data.diet.nut.duzen = k.duzen; else delete data.diet.nut.duzen;
+      if (k.fs) data.fixedSchedule = k.fs; else delete data.fixedSchedule;
       a.status = 'pending'; save(); ajanYenile();
     };
   } else if (a.type === 'kilo_kaydet') {
@@ -444,6 +546,7 @@ function ogunBekciAksiyon(saat, act) {
     return;
   }
   if (act === 'geri') { if (_ogunGeri) { _ogunGeri(); _ogunGeri = null; } ogunSheetKapat(); showToast('Geri alındı', 'info', 2500); return; }
+<<<<<<< HEAD
   if (act === 'ertele') { const s = ogunErtele(saat); ogunSheetKapat(); showToast(saat + ' öğünü — ' + s + "'te tekrar hatırlatırım", 'info', 3500); return; }
   if (act === 'atla') { ogunAtla(saat); ogunSheetKapat(); showToast(saat + ' öğünü atlandı, hatırlatma sustu', 'info', 3000); return; }
   if (act === 'kapat') { ogunSheetKapat(); return; }
@@ -452,4 +555,23 @@ function ogunBekciAksiyon(saat, act) {
   const liste = kal.map(m => '<div class="ajan-it">• ' + escapeHtml(String(m.name).replace(OGUN_RE, '')) + '</div>').join('');
   ogunSheet(saat, '<div class="ajan-head">' + saat + ' öğünü — yedin mi?</div>' + (liste || '<div class="ajan-sub">Planda kalem yok</div>') +
     '<div class="ajan-btns"><button class="small" data-a="yedim">Yedim</button><button class="small secondary" data-a="ertele">15 dk sonra</button><button class="small secondary" data-a="atla">Atladım</button></div>');
+=======
+  // 25 Eki: dokunuşla işaretlendikten sonra "aslında yemedim" yolları — önce geri al, sonra ertele/atla
+  if (act === 'geriErtele' || act === 'geriAtla') { if (_ogunGeri) { _ogunGeri(); _ogunGeri = null; } return ogunBekciAksiyon(saat, act === 'geriErtele' ? 'ertele' : 'atla'); }
+  if (act === 'ertele') { const s = ogunErtele(saat); ogunSheetKapat(); showToast(saat + ' öğünü — ' + s + "'te tekrar hatırlatırım", 'info', 3500); return; }
+  if (act === 'atla') { ogunAtla(saat); ogunSheetKapat(); showToast(saat + ' öğünü atlandı, hatırlatma sustu', 'info', 3000); return; }
+  if (act === 'kapat') { ogunSheetKapat(); return; }
+  // 'open' — iOS: bildirime dokunuldu = YEDİM (25 Eki). Soru kartı sorulunca 12 pingten 0 işaret
+  // gelmişti (iki dokunuş isteyen akış yanıtsız kalıyor); hareket molasıyla aynı kural.
+  // Yanlış dokunuşa karşı kart: Geri al · Henüz yemedim (15 dk) · Atladım.
+  if ((ogunDurum()[saat] || {}).d === 'yedi') { showToast(saat + ' öğünü zaten işaretli', 'success', 2500); return; }
+  _ogunGeri = ogunYedim(saat);
+  const kcal = kal.reduce((s, m) => s + (+m.kcal || 0), 0);
+  const liste = kal.map(m => '<div class="ajan-it">• ' + escapeHtml(String(m.name).replace(OGUN_RE, '')) + '</div>').join('');
+  const el = ogunSheet(saat, '<div class="ajan-head">' + saat + ' öğünü — yedim olarak kaydedildi</div>' + liste +
+    (kcal ? '<div class="ajan-sub">~' + Math.round(kcal) + ' kcal</div>' : '') +
+    '<div class="ajan-btns"><button class="small" data-a="kapat">Tamam</button><button class="small secondary" data-a="geriErtele">Henüz yemedim</button>' +
+    '<button class="small secondary" data-a="geriAtla">Atladım</button><button class="small secondary" data-a="geri">Geri al</button></div>');
+  setTimeout(() => { if (el.isConnected) el.remove(); }, 15000);
+>>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
 }

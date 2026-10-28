@@ -94,6 +94,11 @@ function renderStorageInfo() {
     '<div class="sp-row"><span>' + escapeHtml(STORAGE_ETIKET[x.key] || x.key) +
     '</span><b>' + fmtBytes(x.chars) + '</b></div>').join('') ||
     '<div class="sp-row"><span>Henüz veri yok</span></div>';
+<<<<<<< HEAD
+=======
+  renderSaglikTani();    // 25 Eki: kısayol teşhisi
+  renderHareketAyar();   // 25 Eki: Ayarlar açılınca hareket molası satırı (aynı anda çizilir)
+>>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
 }
 
 function renderCalendarSync() {
@@ -271,3 +276,120 @@ function gsGoSchool() {
       .then(() => setTimeout(() => ss.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80));
   }
 }
+<<<<<<< HEAD
+=======
+
+// ============================================================
+// 💪 HAREKET MOLASI AYARI (25 Eki 2026) — Ayarlar'da "Depolama"nın üstüne enjekte edilir
+// (asistan.html ilk yükleme bütçesinde — satır eklenmez). Aç/kapat + hareket başı aç/kapat + adet +
+// son 7 gün. Bildirimleri worker atar (runHareket); burası yalnız data.hareketAyar yazar.
+// ============================================================
+// Hareket tablosu TEK yerde: ogun.js HAREKET_TUR_I (worker ikizi). Burada kopyası yok.
+function renderHareketAyar() {
+  const ref = document.getElementById('storageInfo');
+  const satir = ref && ref.closest('.settings-row');
+  if (!satir) return;
+  if (typeof HAREKET_TUR_I === 'undefined') { loadModule('ogun').then(() => renderHareketAyar()).catch(() => {}); return; }
+  let el = document.getElementById('hareketAyarRow');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'hareketAyarRow';
+    el.className = 'settings-row';
+    satir.parentNode.insertBefore(el, satir);
+    el.addEventListener('click', ev => {
+      const b = ev.target.closest('button[data-h]');
+      if (!b) return;
+      const ay = data.hareketAyar || (data.hareketAyar = {});
+      const tur = b.dataset.tur, T = HAREKET_TUR_I[tur];
+      if (b.dataset.h === 'ac') ay.kapali = !ay.kapali;
+      else if (!T) return;
+      else if (b.dataset.h === 'sec') ay.kapat = Object.assign({}, ay.kapat, { [tur]: !(ay.kapat && ay.kapat[tur]) });
+      else {
+        const yeni = Math.max(T.min, Math.min(T.tavan, hareketAdetI(tur) + (b.dataset.h === 'arti' ? T.adim : -T.adim)));
+        ay.adet = Object.assign({}, ay.adet, { [tur]: yeni });
+      }
+      save(); renderHareketAyar();
+    });
+  }
+  const ay = data.hareketAyar || {};
+  const kapat = ay.kapat || {};
+  const log = data.hareketLog || {};
+  const bas = shiftDateStr(today(), -6);
+  let set = 0; const top = {};
+  Object.keys(log).forEach(g => {
+    if (g < bas) return;
+    set += log[g].set || 0;
+    Object.keys(HAREKET_TUR_I).forEach(t => { if (log[g][t]) top[t] = (top[t] || 0) + log[g][t]; });
+  });
+  const ozet = Object.keys(top).map(t => top[t] + ' ' + HAREKET_TUR_I[t].ad).join(' · ');
+  const adetSatir = (tur) => {
+    const T = HAREKET_TUR_I[tur], acik = !kapat[tur];
+    return '<div class="ha-adet' + (acik ? '' : ' ha-kapali') + '"><span>' + escapeHtml(T.ad.charAt(0).toUpperCase() + T.ad.slice(1)) + '</span>' +
+      '<button class="small secondary" data-h="sec" data-tur="' + tur + '">' + (acik ? 'Açık' : 'Kapalı') + '</button>' +
+      (acik ? '<button class="small secondary" data-h="eksi" data-tur="' + tur + '" aria-label="azalt">−</button>' +
+        '<b>' + hareketAdetI(tur) + '</b>' +
+        '<button class="small secondary" data-h="arti" data-tur="' + tur + '" aria-label="artır">+</button>' : '') + '</div>';
+  };
+  el.innerHTML = '<label>Hareket molası</label>' +
+    '<div class="settings-help">Evdeki boş saatlerinde günde 1-3 kez kısa hareket bildirimi; her molada farklı hareket. Bildirime dokun = yaptım. ' +
+    'Antrenman günü o bölge dinlenir (üst vücut günü şınav/barfiks gelmez, bacak günü squat/hamle gelmez). Adet her 6 sette bir kendiliğinden artar. Barın yoksa barfiksi kapat.</div>' +
+    '<button class="small' + (ay.kapali ? '' : ' secondary') + '" data-h="ac">' + (ay.kapali ? 'Aç' : 'Hepsini kapat') + '</button>' +
+    (ay.kapali ? '' : Object.keys(HAREKET_TUR_I).map(adetSatir).join('')) +
+    '<div class="settings-help">Son 7 gün: ' + (set ? set + ' set · ' + ozet : 'henüz kayıt yok') + '</div>';
+  if (!document.getElementById('hareketAyarStil')) {
+    const st = document.createElement('style');
+    st.id = 'hareketAyarStil';
+    st.textContent = '.ha-adet{display:flex;align-items:center;gap:8px;margin-top:8px}.ha-adet span{flex:1}' +
+      '.ha-adet button{min-width:44px;min-height:44px}.ha-adet b{min-width:28px;text-align:center;font-variant-numeric:tabular-nums}' +
+      '.ha-kapali span{opacity:.55}';
+    document.head.appendChild(st);
+  }
+}
+
+// ============================================================
+// 🩺 SAĞLIK VERİSİ TEŞHİSİ (25 Eki 2026) — Ayarlar'da Depolama'nın üstüne enjekte edilir.
+// Worker /health son gönderimin sonucunu data.saglikTani'ye yazar (saglikTaniOlustur).
+// Burası onu + son kaydın tarihini okuyup TEK cümlelik "ne yapmalısın" üretir.
+// ============================================================
+const SAGLIK_GRUP_AD = { uyku: 'uyku', nabiz: 'nabız', adim: 'adım', tarti: 'tartı' };
+
+/** Saf: durum metni. bugun = 'YYYY-MM-DD'. */
+function saglikTaniMetni(d, bugun) {
+  const t = d && d.saglikTani;
+  const tarihler = [].concat(Array.isArray(d && d.health) ? d.health : [], Array.isArray(d && d.sleep) ? d.sleep : [])
+    .map(x => x && x.date).filter(Boolean).sort();
+  const sonVeri = tarihler.length ? tarihler[tarihler.length - 1] : null;
+  const gunFark = (a) => Math.round((new Date(bugun + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
+  const tarihYaz = (a) => { const g = gunFark(a); return g <= 0 ? 'bugün' : g === 1 ? 'dün' : g + ' gün önce'; };
+  if (!t) {
+    return { durum: 'yok', metin: sonVeri
+      ? 'Son sağlık verisi ' + tarihYaz(sonVeri) + ' geldi; o günden beri kısayol hiç ulaşmadı. Otomasyon çalışmıyor ya da kısayoldaki gizli anahtar yanlış.'
+      : 'Sağlık verisi hiç gelmedi. Kısayol/otomasyon kurulu değil ya da gizli anahtar yanlış.' };
+  }
+  const gelen = t.gelen || {};
+  const eksik = ['uyku', 'nabiz'].filter(k => !gelen[k]).map(k => SAGLIK_GRUP_AD[k]);
+  const ne = Object.keys(SAGLIK_GRUP_AD).filter(k => gelen[k]).map(k => SAGLIK_GRUP_AD[k]);
+  const once = 'Kısayol son ' + tarihYaz(t.tarih) + ' ' + (t.saat || '') + ' çalıştı';
+  if (gunFark(t.tarih) >= 2) return { durum: 'eski', metin: once + '. O günden beri çalışmıyor → Otomasyon\'da "Çalıştırmadan Önce Sor" kapalı mı, bak.' };
+  if (t.sonuc === 'bos' || t.sonuc === 'gecersiz' || eksik.length === 2) {
+    return { durum: 'bos', metin: once + ' ama ' + (eksik.join(' ve ') || 'veriler') + ' BOŞ geldi → Ayarlar → Sağlık → Veri Erişimi ve Aygıtlar → Kısayollar: izinleri aç. Google Health → Apple Sağlık aktarımı da açık olmalı.' };
+  }
+  return { durum: eksik.length ? 'kismi' : 'ok', metin: once + ' · gelen: ' + ne.join(', ') + (eksik.length ? ' · eksik: ' + eksik.join(', ') + ' (Sağlık izni kapalı olabilir)' : '') };
+}
+
+function renderSaglikTani() {
+  const ref = document.getElementById('storageInfo');
+  const satir = ref && ref.closest('.settings-row');
+  if (!satir) return;
+  let el = document.getElementById('saglikTaniRow');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'saglikTaniRow';
+    el.className = 'settings-row';
+    satir.parentNode.insertBefore(el, document.getElementById('hareketAyarRow') || satir);
+  }
+  const r = saglikTaniMetni(data, today());
+  el.innerHTML = '<label>Sağlık verisi (Fitbit → Apple Sağlık → Aidan)</label>' +
+    '<div class="settings-help" data-durum="' + r.durum + '">' + escapeHtml(r.metin) + '</div>';
+}
+>>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648

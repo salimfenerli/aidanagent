@@ -38,9 +38,14 @@ $pencere = $ortak + @(
   'RETURN = sort_by_duration(merge_events_by_keys(w, ["app"]));'
 )
 # Site adlari yalniz "ActivityWatch Web Watcher" tarayici eklentisi kuruluysa gelir (yoksa bos gecer).
+# 11 Eki: eklenti tarayici ARKADAYKEN de aktif sekmeyi sayiyordu (site > tarayici suresi cikti);
+# site suresi yalniz tarayici penceresi ONDE + bilgisayar basindayken sayilir.
 $web = $ortak + @(
+  'w = flood(query_bucket(find_bucket("aw-watcher-window_")));',
+  'w = filter_period_intersect(w, not_afk);',
+  'tarayici = filter_keyvals(w, "app", ["chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "Google Chrome", "Microsoft Edge"]);',
   'b = flood(query_bucket(find_bucket("aw-watcher-web")));',
-  'b = filter_period_intersect(b, not_afk);',
+  'b = filter_period_intersect(b, tarayici);',
   'b = split_url_events(b);',
   'RETURN = sort_by_duration(merge_events_by_keys(b, ["$domain"]));'
 )

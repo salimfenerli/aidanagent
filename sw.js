@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 const CACHE = 'aidan-v7-216';
+=======
+const CACHE = 'aidan-v7-224';
+>>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
 const ASSETS = [
   '/',
   '/supabase.js',
@@ -14,8 +18,14 @@ const ASSETS = [
   '/hafiza.js',
   '/hedefler.js',
   '/harcama.js',
+<<<<<<< HEAD
   '/ayarlar.js',
   '/bugun.js',
+=======
+  '/bugun.js',
+  '/ayarlar.js',
+  '/ogun.js',
+>>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
   '/ajan.js',
   '/hafta.js',
   '/health.js',
@@ -49,10 +59,18 @@ self.addEventListener('activate', e => {
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   const d = e.notification.data || {};
+<<<<<<< HEAD
   const act = e.action || ((d.blockId || d.ogun) ? 'open' : '');
   let url = d.url || '/';
   if (d.blockId) url = '/?blk=' + encodeURIComponent(d.blockId) + '&act=' + encodeURIComponent(act);
   if (d.ogun) url = '/?ogun=' + encodeURIComponent(d.ogun) + '&act=' + encodeURIComponent(act);
+=======
+  const act = e.action || ((d.blockId || d.ogun || d.hareket != null) ? 'open' : '');
+  let url = d.url || '/';
+  if (d.blockId) url = '/?blk=' + encodeURIComponent(d.blockId) + '&act=' + encodeURIComponent(act);
+  if (d.ogun) url = '/?ogun=' + encodeURIComponent(d.ogun) + '&act=' + encodeURIComponent(act);
+  if (d.hareket != null) url = '/?hareket=' + encodeURIComponent(d.hareket) + '&act=' + encodeURIComponent(act);
+>>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
 
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
@@ -60,7 +78,15 @@ self.addEventListener('notificationclick', e => {
         if ('focus' in c) {
           // Uygulama zaten açıksa navigate yerine mesaj gönder (state kaybolmasın)
           if (d.blockId) { try { c.postMessage({ type: 'BLOCK_ACTION', blockId: d.blockId, action: act }); } catch (err) {} }
+<<<<<<< HEAD
           if (d.ogun) { try { c.postMessage({ type: 'OGUN_ACTION', ogun: d.ogun, action: act }); } catch (err) {} }
+=======
+          // Faz 3: "Günü kapat" (/?ac=sohbet) — açık uygulamada sohbete geç
+          const ac = /[?&]ac=([a-z]+)/.exec(url);
+          if (ac) { try { c.postMessage({ type: 'AC', ac: ac[1] }); } catch (err) {} }
+          if (d.ogun) { try { c.postMessage({ type: 'OGUN_ACTION', ogun: d.ogun, action: act }); } catch (err) {} }
+          if (d.hareket != null) { try { c.postMessage({ type: 'HAREKET', hareket: d.hareket, action: act }); } catch (err) {} }
+>>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
           return c.focus();
         }
       }
@@ -79,6 +105,10 @@ self.addEventListener('push', e => {
     let actions = undefined;
     let blockId = null;
     let ogun = null;
+<<<<<<< HEAD
+=======
+    let hareket = null;
+>>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
     let parseErr = null;
     if (e.data) {
       try {
@@ -89,6 +119,10 @@ self.addEventListener('push', e => {
         url = (p.data && p.data.url) || url;
         blockId = (p.data && p.data.blockId) || null;
         ogun = (p.data && p.data.ogun) || null;
+<<<<<<< HEAD
+=======
+        hareket = (p.data && p.data.hareket != null) ? p.data.hareket : null;
+>>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
         // actions: max 2-3 buton gösterilir, desteklemeyen platformda sessizce yok sayılır
         if (Array.isArray(p.actions) && p.actions.length) actions = p.actions.slice(0, 3);
       } catch (err) {
@@ -104,7 +138,11 @@ self.addEventListener('push', e => {
         tag,
         renotify: true,
         actions,
+<<<<<<< HEAD
         data: { url, blockId, ogun }
+=======
+        data: { url, blockId, ogun, hareket }
+>>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
       });
     } catch (err) {
       // Minimum güvenli fallback — iOS izin iptalini önler

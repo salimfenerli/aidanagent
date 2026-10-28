@@ -18,8 +18,14 @@ on:
       - 'hafiza.js'
       - 'hedefler.js'
       - 'harcama.js'
+<<<<<<< HEAD
       - 'ayarlar.js'
       - 'bugun.js'
+=======
+      - 'bugun.js'
+      - 'ayarlar.js'
+      - 'ogun.js'
+>>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
       - 'ajan.js'
       - 'hafta.js'
       - 'supabase.js'

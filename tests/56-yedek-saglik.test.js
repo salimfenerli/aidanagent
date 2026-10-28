@@ -107,7 +107,7 @@ describe('tek kısayol — ham tarih/saat metni (7 Eki 2026)', () => {
   test('uç: tartı yalnız kendi tarihiyle (kgDate) yazılır, değişmeyen gönderim blob\'a YAZILMAZ', () => {
     const h = W.slice(W.indexOf('async function handleHealthApi('), W.indexOf('async function handleBodyApi('));
     assert.match(h, /const kd = srvTarih\(it\.kgDate\);\n\s+if \(kd\)/);
-    assert.match(h, /if \(degisti\) await saveAidan\(env, data, session\);/);
+    assert.match(h, /if \(degisti \|\| taniDegisti\) await saveAidan\(env, data, session\);/);   // teşhis günde 1 / durum değişince (71)
     assert.match(h, /srvTarih\(it\.date\) \|\| srvTarih\(it\.wake\) \|\| trToday\(\)/);
   });
 });
