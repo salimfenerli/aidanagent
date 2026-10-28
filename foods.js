@@ -68,7 +68,7 @@ const TURK_FOODS = [
   { n: 'İşkembe çorbası', u: 'kase', g: 250, k: 180, p: 12, c: 8, f: 11 },
   { n: 'Çorba', u: 'kase', g: 250, k: 120, p: 5, c: 15, f: 4 },
   // --- Et / tavuk / balık ---
-  { n: 'Tavuk göğsü', u: 'porsiyon', g: 150, k: 248, p: 46.5, c: 0, f: 5.4, a: ['tavuk göğüs', 'tavuk fileto', 'chicken breast'] },
+  { n: 'Tavuk göğsü', u: 'porsiyon', g: 150, k: 248, p: 46.5, c: 0, f: 5.4, a: ['tavuk göğüs', 'tavuk fileto', 'chicken breast', 'tavuk'] },
   { n: 'Tavuk but', u: 'porsiyon', g: 150, k: 314, p: 39, c: 0, f: 16.4 },
   { n: 'Tavuk şiş', u: 'porsiyon', g: 150, k: 263, p: 43.5, c: 3, f: 8.3 },
   { n: 'Tavuk döner', u: 'porsiyon', g: 150, k: 323, p: 36, c: 4.5, f: 18 },
@@ -171,7 +171,7 @@ const TURK_FOODS = [
   { n: 'Cips', u: 'paket', g: 30, k: 161, p: 2, c: 15.9, f: 10.4 },
   // --- Fast food / sokak ---
   { n: 'Döner (ekmek arası)', u: 'adet', g: 250, k: 588, p: 30, c: 60, f: 25 },
-  { n: 'Tavuk dürüm', u: 'adet', g: 250, k: 488, p: 30, c: 55, f: 16.3 },
+  { n: 'Tavuk dürüm', u: 'adet', g: 250, k: 488, p: 30, c: 55, f: 16.3, a: ['tavuk döner dürüm'] },
   { n: 'Pizza', u: 'dilim', g: 110, k: 293, p: 12.1, c: 36.3, f: 11 },
   { n: 'Hamburger', u: 'adet', g: 180, k: 450, p: 23.4, c: 43.2, f: 20.7 },
   { n: 'Lahmacun', u: 'adet', g: 130, k: 299, p: 12.4, c: 39, f: 9.8 },
@@ -393,7 +393,7 @@ const TURK_FOODS = [
   { n: 'Lüfer', u: 'porsiyon', g: 150, k: 239, p: 38.6, c: 0, f: 8.3 },
   { n: 'Kızarmış tavuk', u: 'porsiyon', g: 150, k: 390, p: 36, c: 13.5, f: 21.8 },
   { n: 'Çıtır tavuk', u: 'porsiyon', g: 150, k: 398, p: 30, c: 21, f: 21.8 },
-  { n: 'Et dürüm', u: 'dürüm', g: 280, k: 560, p: 30.8, c: 61.6, f: 22.4 },
+  { n: 'Et dürüm', u: 'dürüm', g: 280, k: 560, p: 30.8, c: 61.6, f: 22.4, a: ['et döner dürüm', 'döner dürüm'] },
   { n: 'Adana dürüm', u: 'dürüm', g: 280, k: 602, p: 30.8, c: 58.8, f: 28 },
   { n: 'Nachos', u: 'porsiyon', g: 80, k: 384, p: 5.6, c: 41.6, f: 20.8 },
   { n: 'Quesadilla', u: 'porsiyon', g: 180, k: 522, p: 22.5, c: 45, f: 27 },
@@ -1444,10 +1444,26 @@ function parseFoodQuery(q) {
     if (olcu && !olcek) olcek = w;
     return !olcu || w === 'su';   // 'su' zaten birim listesinde, orada ayiklanir
   });
+  // ⚠️ 18 Eki 2026 — SONDAKİ MİKTAR. "pizza 2 dilim", "makarna 200 gr", "muz 2"
+  // hiç eşleşmiyordu (yalnız baştaki sayı miktar sayılıyordu). Baştan miktar
+  // gelmediyse sondaki "<sayı> [birim]" de miktardır.
+  if (qty == null && words.length > 1) {
+    const n = words.length;
+    const sayi = (w) => /^[0-9]+([.,][0-9]+)?$/.test(w);
+    if (n > 2 && sayi(words[n - 2]) && _FOOD_UNITS.includes(words[n - 1])) {
+      qty = Number(words[n - 2].replace(',', '.')); words.splice(n - 2, 1);
+    } else if (sayi(words[n - 1])) {
+      qty = Number(words[n - 1].replace(',', '.')); words.pop();
+    }
+  }
+  // ⚠️ 18 Eki 2026 — "dürüm" SON kelimeyse yemeğin ADI ("tavuk döner dürüm",
+  // "adana dürüm"); birim sanılıp atılınca 488 kcal'lik dürüm 323 kcal'lik
+  // porsiyon döner olarak yazılıyordu.
+  const sonDurum = words.length > 1 && words[words.length - 1] === 'durum';
   // birim kelimelerini çıkar (kalan çekirdek terim) — hepsi birimse ayıklama yapma
-  const birimler = words.filter(w => _FOOD_UNITS.includes(w));
+  const birimler = words.filter((w, i) => _FOOD_UNITS.includes(w) && !(sonDurum && i === words.length - 1));
   if (!unit && birimler.length) unit = birimler[0];
-  const kept = words.filter(w => !_FOOD_UNITS.includes(w));
+  const kept = words.filter((w, i) => !_FOOD_UNITS.includes(w) || (sonDurum && i === words.length - 1));
   return {
     qty: (qty && qty > 0) ? qty : null,
     unit: unit || null,
@@ -1477,9 +1493,30 @@ const _YOGUNLUK = [
   [/pirinc \(ciğ\)|pirinc \(cig\)|bulgur \(kuru\)|mercimek \(kuru\)|nohut \(kuru\)|seker/, 0.85],
   [/bal|pekmez|recel/, 1.4],
 ];
+// ⚠️ 18 Eki 2026 (kullanıcı gibi deneme): üç sessiz hata vardı —
+//   "10 badem"      → birim zaten "10 adet" → ×10 = 690 kcal (gerçek 69)
+//   "1 avuç fındık" → birim "10 adet" (12 g) → 75 kcal (avuç ≈ 30 g, 188)
+//   "yarım ekmek"   → ×0,5 DİLİM = 40 kcal (Türkiye'de yarım ekmek ≈ 125 g, 333)
+const _AVUC_G = 30;
+const _EKMEK_SOMUN_G = 250;
 function _olcuDonustur(parsed, besin) {
   if (!parsed || !(parsed.qty > 0) || parsed.gram || !besin) return null;
   const u = parsed.unit || '';
+  const bu0 = trNorm(besin.u || '');
+  // Birimi SAYI taşıyan besin ("10 adet", "5 adet", "3 dilim", "2 yarım"):
+  // söylenen sayı tane sayısıdır, birim sayısı değil.
+  const sayili = /^([0-9]+)\s*(adet|dilim|yarim)$/.exec(bu0);
+  if (sayili && (!u || /^(adet|adedi|tane|tanesi|dilim|dilimi)$/.test(u))) {
+    const N = Number(sayili[1]);
+    const tane = sayili[2] === 'yarim' ? N / 2 : N;   // "2 yarım ceviz" = 1 bütün ceviz
+    if (tane > 0) return { qty: parsed.qty / tane, gram: false };
+  }
+  // Avuç: besinin kendi birimi avuç değilse gram (≈30 g)
+  if (u === 'avuc' && bu0.indexOf('avuc') < 0 && besin.g > 0) return { qty: Math.round(parsed.qty * _AVUC_G), gram: true };
+  // "yarım ekmek" / "çeyrek ekmek" = somunun yarısı/çeyreği (birim söylenmediyse).
+  // Tam sayı ("2 ekmek") BİLEREK dilim kalır: "2 ekmek" diyen çoğu kez 2 dilimi
+  // kasteder, somun sayıp 8 kat fazla yazmak eksik yazmaktan kötü.
+  if (!u && parsed.qty % 1 !== 0 && trNorm(besin.n || '') === 'ekmek' && besin.g > 0) return { qty: Math.round(parsed.qty * _EKMEK_SOMUN_G), gram: true };
   const aile = /^kasi/.test(u) ? 'kasik' : (/^bardag|^bardak$|^su$/.test(u) ? 'bardak' : null);
   if (!aile) return null;
   const tur = parsed.olcek || '_';

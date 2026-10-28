@@ -18,7 +18,8 @@ const { loadApp, ROOT } = require('./helpers/load');
 // jsdom yuklemesi pahali — TEK ornek, tum testler paylasir.
 // ⚠️ close() `after` icinde: process.on('exit') KULLANMA — uygulamanin
 // setInterval'leri event loop'u ayakta tutar, exit hic tetiklenmez (bkz. 09).
-const A = loadApp({ seed: {} });
+// 18 Eki 2026: renderStorageInfo ayarlar.js'e (tembel modül) taşındı — test gerçek tanımı yükler.
+const A = loadApp({ seed: {}, scripts: ['core.js', 'tasks.js', 'ui.js', 'program.js', 'foods.js', 'ayarlar.js'] });
 const W = A.window;
 after(() => { try { A.close(); } catch (_) {} });
 

@@ -82,7 +82,7 @@ describe('tembel yukleme sozlesmesi', () => {
     const blok = /const LAZY_MODULES = \{([\s\S]*?)\};/.exec(core);
     assert.ok(blok, 'LAZY_MODULES okunamadi');
     const anahtarlar = [...blok[1].matchAll(/(\w+)\s*:/g)].map((m) => m[1]).sort();
-    assert.deepStrictEqual(anahtarlar, ['ajan', 'foods', 'hafiza', 'hafta', 'harcama', 'health', 'hedefler', 'karne', 'nutrition', 'onboarding', 'program', 'school', 'supabase'],
+    assert.deepStrictEqual(anahtarlar, ['ajan', 'ayarlar', 'bugun', 'foods', 'hafiza', 'hafta', 'harcama', 'health', 'hedefler', 'karne', 'nutrition', 'onboarding', 'program', 'school', 'supabase'],
       'modul listesi degisti — sw.js/deploy.py/Actions paths da guncellendi mi?');
   });
 
@@ -341,13 +341,17 @@ describe('ilk yukleme butcesi', () => {
     // renderDiet/renderDiary icinde ya da modalin kendi HTML'inde; ikisi de
     // foods.js inmeden calismiyor. Yani kritik yolda hicbir isi yoktu.
     // Olcum 182 KB, 3 KB pay birakildi.
-    assert.ok(kb <= 185,
-      `ilk yukleme ${kb} KB gzip — butce 185 KB. Yeni agir bagimlilik statik eklendi mi?`);
+    //
+    // 18 Eki 2026: esik 185 -> 183. Olcum 185'e dayanmisti (184.96); "Bugun" ekrani
+    // yer bekliyordu. Ayarlar + global arama (12.7 KB kaynak) ayarlar.js'e, ogun
+    // karti bugun.js'e (ikisi de tembel). Olcum 182 KB, 1 KB pay birakildi.
+    assert.ok(kb <= 183,
+      `ilk yukleme ${kb} KB gzip — butce 183 KB. Yeni agir bagimlilik statik eklendi mi?`);
   });
 
   test('tembel moduller butceye DAHIL DEGIL (gercekten ayrildilar)', () => {
     const statik = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1].replace(/^\//, ''));
-    for (const m of ['program.js', 'supabase.js', 'nutrition.js', 'health.js', 'foods.js', 'school.js', 'onboarding.js', 'karne.js', 'hafiza.js', 'hedefler.js', 'harcama.js', 'ajan.js', 'hafta.js']) {
+    for (const m of ['program.js', 'supabase.js', 'nutrition.js', 'health.js', 'foods.js', 'school.js', 'onboarding.js', 'karne.js', 'hafiza.js', 'hedefler.js', 'harcama.js', 'ajan.js', 'hafta.js', 'ayarlar.js', 'bugun.js']) {
       assert.ok(!statik.includes(m), m + ' hala statik');
     }
     assert.ok(gz('program.js') + gz('supabase.js') + gz('nutrition.js') > 80 * 1024,

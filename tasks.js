@@ -945,6 +945,7 @@ function handleBlockAction(blockId, action) {
   }, 200);
 }
 
+function ogunKopru(s, a) { loadModule('ajan').then(() => ogunBekciAksiyon(s, a)).catch(() => {}); }
 // Uygulama acilisinda URL'den (/?blk=..&act=..) ve calisirken SW mesajindan gelir
 function initBlockActionBridge() {
   try {
@@ -955,11 +956,14 @@ function initBlockActionBridge() {
       setTimeout(() => handleBlockAction(blk, act), 400);
       history.replaceState(null, '', location.pathname);
     }
+    const og = q.get('ogun');   // 🍽️ öğün bekçisi (17 Eki) — iş ajan.js'te (tembel)
+    if (og) { setTimeout(() => ogunKopru(og, q.get('act') || 'open'), 400); history.replaceState(null, '', location.pathname); }
   } catch (e) {}
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.addEventListener('message', ev => {
       const d = ev && ev.data;
       if (d && d.type === 'BLOCK_ACTION' && d.blockId) handleBlockAction(d.blockId, d.action || 'open');
+      else if (d && d.type === 'OGUN_ACTION' && d.ogun) ogunKopru(d.ogun, d.action || 'open');
     });
   }
 }

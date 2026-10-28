@@ -1,4 +1,4 @@
-const CACHE = 'aidan-v7-210';
+const CACHE = 'aidan-v7-216';
 const ASSETS = [
   '/',
   '/supabase.js',
@@ -14,6 +14,8 @@ const ASSETS = [
   '/hafiza.js',
   '/hedefler.js',
   '/harcama.js',
+  '/ayarlar.js',
+  '/bugun.js',
   '/ajan.js',
   '/hafta.js',
   '/health.js',
@@ -47,9 +49,10 @@ self.addEventListener('activate', e => {
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   const d = e.notification.data || {};
-  const act = e.action || (d.blockId ? 'open' : '');
+  const act = e.action || ((d.blockId || d.ogun) ? 'open' : '');
   let url = d.url || '/';
   if (d.blockId) url = '/?blk=' + encodeURIComponent(d.blockId) + '&act=' + encodeURIComponent(act);
+  if (d.ogun) url = '/?ogun=' + encodeURIComponent(d.ogun) + '&act=' + encodeURIComponent(act);
 
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
@@ -57,6 +60,7 @@ self.addEventListener('notificationclick', e => {
         if ('focus' in c) {
           // Uygulama zaten açıksa navigate yerine mesaj gönder (state kaybolmasın)
           if (d.blockId) { try { c.postMessage({ type: 'BLOCK_ACTION', blockId: d.blockId, action: act }); } catch (err) {} }
+          if (d.ogun) { try { c.postMessage({ type: 'OGUN_ACTION', ogun: d.ogun, action: act }); } catch (err) {} }
           return c.focus();
         }
       }
@@ -74,6 +78,7 @@ self.addEventListener('push', e => {
     let url = '/';
     let actions = undefined;
     let blockId = null;
+    let ogun = null;
     let parseErr = null;
     if (e.data) {
       try {
@@ -83,6 +88,7 @@ self.addEventListener('push', e => {
         tag = p.tag || tag;
         url = (p.data && p.data.url) || url;
         blockId = (p.data && p.data.blockId) || null;
+        ogun = (p.data && p.data.ogun) || null;
         // actions: max 2-3 buton gösterilir, desteklemeyen platformda sessizce yok sayılır
         if (Array.isArray(p.actions) && p.actions.length) actions = p.actions.slice(0, 3);
       } catch (err) {
@@ -98,7 +104,7 @@ self.addEventListener('push', e => {
         tag,
         renotify: true,
         actions,
-        data: { url, blockId }
+        data: { url, blockId, ogun }
       });
     } catch (err) {
       // Minimum güvenli fallback — iOS izin iptalini önler

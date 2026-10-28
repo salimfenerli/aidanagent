@@ -18,6 +18,8 @@ on:
       - 'hafiza.js'
       - 'hedefler.js'
       - 'harcama.js'
+      - 'ayarlar.js'
+      - 'bugun.js'
       - 'ajan.js'
       - 'hafta.js'
       - 'supabase.js'

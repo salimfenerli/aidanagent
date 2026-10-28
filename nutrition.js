@@ -1405,6 +1405,17 @@ const NUT_TEMPLATES = {
     { protein: 'İzgara köfte', carb: 'Pilav', yag: 'Zeytinyağı', ek: ['Cacık', 'Çoban salata'] },
     { protein: 'Tavuk şiş', carb: 'Bulgur pilavı', yag: 'Zeytinyağı', ek: ['Ayran', 'Çoban salata'] },
     { protein: 'Tavuk döner', carb: 'Pilav', yag: 'Zeytinyağı', ek: ['Cacık', 'Çoban salata'] },
+    // ⚠️ 18 Eki 2026 — HAVUZ 5'TEN 9'A. Günlük menüde öğle ve akşam 14 günde
+    // yalnız 4'er farklı tabak çıkıyordu (Salim: "makrolar benzer olsun ama
+    // çeşitlilik olsun"). Havuz boyları bilerek farklı (5/6/9/8/7): aynı
+    // boyda havuzlar aynı adımda döner ve günler 5 günde bir aynen tekrar eder.
+    // ⚠️ Çapa porsiyonu ≤ ~39 g protein seçildi: ana öğün hedefi ~40 g ve
+    // nutBuildDay'in bandı (±%35) 46 g'lık tavuk göğsü / hindi / bonfileyi
+    // tam porsiyonda REDDEDİYOR — havuza eklense de hiç seçilmezdi (ölçüldü).
+    { protein: 'Tavuk sote', carb: 'Tam buğday makarna', yag: 'Zeytinyağı', ek: ['Yeşil salata', 'Ayran'] },
+    { protein: 'Et sote', carb: 'Pilav', yag: 'Zeytinyağı', ek: ['Közlenmiş biber', 'Cacık'] },
+    { protein: 'Alabalık', carb: 'Fırın patates', yag: 'Zeytinyağı', ek: ['Roka salata', 'Ayran'] },
+    { protein: 'Tavuk pirzola', carb: 'Sebzeli bulgur', yag: 'Zeytinyağı', ek: ['Cacık', 'Mevsim salata'] },
   ],
   aksam: [
     { protein: 'Dana kıyma', carb: 'Pilav', yag: 'Zeytinyağı', ek: ['Çoban salata', 'Yoğurt'] },
@@ -1412,6 +1423,10 @@ const NUT_TEMPLATES = {
     { protein: 'Tavuk but', carb: 'Bulgur pilavı', yag: 'Zeytinyağı', ek: ['Cacık', 'Çoban salata'] },
     { protein: 'Levrek', carb: 'Fırın patates', yag: 'Zeytinyağı', ek: ['Çoban salata'] },
     { protein: 'Hindi eti', carb: 'Pilav', yag: 'Zeytinyağı', ek: ['Cacık', 'Çoban salata'] },
+    // 18 Eki 2026 — havuz 5'ten 8'e (bkz. öğle notu)
+    { protein: 'Tavuk sote', carb: 'Tatlı patates', yag: 'Zeytinyağı', ek: ['Brokoli', 'Yoğurt'] },
+    { protein: 'Çupra', carb: 'Bulgur pilavı', yag: 'Zeytinyağı', ek: ['Roka salata'] },
+    { protein: 'Et sote', carb: 'Tam buğday makarna', yag: 'Zeytinyağı', ek: ['Yeşil salata', 'Yoğurt'] },
   ],
   // ⚠️ Capa PROTEIN YOGUN olmali. Kefir (6 g/bardak) capa yapilinca motor
   // hedefi tutturmak icin "4 bardak kefir" yaziyordu — teknik olarak dogru,
@@ -1439,6 +1454,8 @@ const NUT_TEMPLATES = {
     // tasiyor (0.112 g/kcal) ve birimi 'porsiyon' oldugu icin yarim
     // adimlarla buyuyup kuculebiliyor.
     { protein: 'Cottage peyniri', carb: 'Muz', yag: 'Badem', ek: ['Hurma'] },
+    // 18 Eki 2026 — havuz 6'dan 7'ye (ara ile aynı boy olmasın)
+    { protein: 'Cottage peyniri', carb: 'Tam buğday ekmek', yag: 'Ceviz', ek: ['Salatalık'] },
   ],
 };
 
@@ -1539,6 +1556,16 @@ function nutYumurtaAdet(v) {
 // Sessizce yanlis plan uretmektense, uyulamadigini soylemek dogru.
 let _nutTercihKapali = false;
 
+// ⚠️ 18 Eki 2026 — BİLEŞİK EKLERİN İÇERİĞİ. "Domates sevmem" diyen kullanıcının
+// her öğle/akşam tabağında Çoban salata çıkıyordu: kelime kökü eşleşmesi
+// "Çoban salata"nın içinde domates olduğunu bilemez. Yalnız şablonlarda EK
+// olarak geçen bileşikler; çapa değil (çapa zaten yedekli seçiliyor).
+const NUT_ICERIK = {
+  'Çoban salata': ['Domates', 'Salatalık', 'Biber', 'Soğan'],
+  'Mevsim salata': ['Marul', 'Domates', 'Havuç'],
+  'Cacık': ['Yoğurt', 'Salatalık'],
+};
+
 function nutIzinli(ad) {
   if (_nutTercihKapali) return true;
   if (!ad) return false;
@@ -1546,6 +1573,7 @@ function nutIzinli(ad) {
   // Sevmedikleri KELIME KOKUYLE eslesir: "patates" deyince hem haslanmis
   // hem firin patates duser (bkz. nutAyniAile).
   if (tr.sevmem.some(x => x === ad || nutAyniAile(x, ad))) return false;
+  if ((NUT_ICERIK[ad] || []).some(i => tr.sevmem.some(x => x === i || nutAyniAile(x, i)))) return false;
   const d = NUT_DIYET[tr.diyet];
   if (d && d.re && d.re.test(ad)) return false;
   return true;
@@ -2766,6 +2794,10 @@ function renderNutrition() {
   const t = nutTargets(prof, tip, n.hedef);
   if (!t) { el.innerHTML = ''; return; }
   nutSyncDietGoals(t);
+  // 🗓️ Günlük menü: gün değiştiyse kovaları tazele (açılışta kaçtıysa burada yakalanır)
+  if (n.gunluk && n.gunluk.acik && n.gunluk.son !== today() && nutGunlukDoldur()) {
+    save(); if (typeof renderDietPlan === 'function') renderDietPlan();
+  }
 
   const ogunler = nutBuildDay(t, prof.weight, nutGunSablon(n, bugun));
   const ozet = nutDaySummary(ogunler, t, prof.weight);
@@ -2953,6 +2985,8 @@ function renderNutrition() {
     '<details class="nut-timing"><summary>Karbonhidrat zamanlaması</summary>' +
     nutCarbTiming(tip).map(x => '<div class="nt-row">' + escapeHtml(x) + '</div>').join('') +
     '</details>' +
+
+    nutGunlukHtml(n) +
 
     '<div class="nut-sample-head">Örnek gün · ' + ogunler.length + ' öğün ' +
     '<button class="nut-mini" onclick="nutOrnekPlana()">Plana aktar</button>' +
@@ -3210,6 +3244,7 @@ function nutOrnekSatirlari(ogunler, zaman) {
       out.push({
         slot: m.slot === 'ara' ? 'atistirma' : m.slot,
         name: nutPortion(x.adet, x.u) + ' ' + x.n,
+        besin: x.n, adet: x.adet,   // alışveriş listesi için (18 Eki) — adı ayrıştırmaya gerek kalmasın
         kcal: Math.round(x.adet * x.k),
         protein: Math.round(x.adet * x.p),
         carb: Math.round(x.adet * x.c),
@@ -4048,4 +4083,330 @@ function renderDietKarne() {
     ${weightBlock}
     <div class="krn-note">${note}</div>
   `;
+}
+
+// ============================================================
+// 🗓️ GÜNLÜK MENÜ (18 Eki 2026)
+// Salim: "diyet listesini halledelim, günlük öğün yazsın" → "her gün farklı menü".
+// Motor (nutBuildDay) her TARİH için ayrı şablonla gün kurar: şablon indeksi
+// = n.sablon + gün numarası (+ "Bugünü değiştir" sayacı). 7 günlük pencere
+// haftalık planın gün kovalarına (pzt..paz) yazılır; kova başına HANGİ TARİHE
+// yazıldığı tutulur, tarih değişince o kova tazelenir → her gün yeni menü.
+// Elle eklenen kalemlere dokunulmaz (nutPlanaYaz yalnız kaynak:'aidan' siler).
+// Satırlar "HH:MM · " önekli → öğün bekçisi (worker) saati buradan okur.
+// Gün tipi (antrenman/dinlenme) hafta çekirdeğinden: hfGunTipi.
+// Durum: data.diet.nut.gunluk = { acik, yazildi:{kova:tarih}, kay:{tarih:n}, son, onceki }
+// ============================================================
+const NUT_GUNLUK_ADI = 'Aidan günlük menü';
+const NUT_GUNLUK_GUN = 7;
+(function nutGunlukStil() {
+  if (typeof document === 'undefined' || typeof document.createElement !== 'function' || !document.head || document.getElementById('nutGunlukStil')) return;
+  const st = document.createElement('style');
+  st.id = 'nutGunlukStil';
+  st.textContent = '.nut-gunluk-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.nut-gunluk-btns button{min-height:44px}' +
+    '.nut-alis{margin-top:10px}.nut-alis summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600}' +
+    '.nut-alis-grup{margin:10px 0 2px;font-size:.78em;color:var(--text-muted);letter-spacing:.02em}' +
+    '.nut-alis-k{display:flex;align-items:center;gap:10px;min-height:44px;border-bottom:1px solid var(--border-soft)}' +
+    '.nut-alis-k span{flex:1}.nut-alis-k b{font-weight:600;font-variant-numeric:tabular-nums}' +
+    '.nut-alis-k.alindi span,.nut-alis-k.alindi b{color:var(--text-faint);text-decoration:line-through}';
+  document.head.appendChild(st);
+})();
+
+function nutGunNo(tarih) {
+  const a = String(tarih).split('-').map(Number);
+  return Math.floor(Date.UTC(a[0], a[1] - 1, a[2]) / 86400000);
+}
+
+// ⚠️ 18 Eki 2026 — GÜNÜN EN İYİ ADAYI. Salim: "kalori makrolar benzer olsun
+// ama çeşitlilik olsun". Tek şablonla kurulan günler kaloriyi ±%5 tutuyordu
+// ama karbonhidrat %-24, yağ %+25'e kadar kayıyordu (somonlu gün). Motora
+// dokunmadan: her tarih için NUT_GUNLUK_ADAY farklı şablonla gün kurulur,
+// makro sapması + DÜNÜN ana yemeğini tekrar cezası en düşük olan seçilir.
+// Aday indeksleri gün başına ayrık (adım 23 ≥ 16 aday — havuz boyları 5-9 ile
+// aralarında asal), yani komşu iki gün aynı aday kümesinden seçmez.
+const NUT_GUNLUK_ADAY = 8;
+const NUT_GUNLUK_ADAY_EK = 8;    // en iyi aday bile bandın dışındaysa bu kadar daha dene
+const NUT_GUNLUK_BANT = 0.10;   // karbonhidrat / yağ sapması bundan büyükse 'kötü gün'
+const NUT_GUNLUK_ADIM = 23;
+const NUT_TEKRAR_CEZA = [0.15, 0.08];   // dün / önceki gün aynı ana yemek ≈ %15 / %8 makro sapması kadar kötü
+
+function nutGunAna(ogunler) {
+  return (ogunler || []).filter(m => m.slot === 'ogle' || m.slot === 'aksam')
+    .map(m => ((m.items || []).find(x => x.rol === 'p') || {}).n).filter(Boolean);
+}
+
+/** Düşük = iyi. Protein hedefin %10 üstüne kadar cezasız (motor bilerek üstte bitirir). */
+function nutGunSapma(ogunler, t) {
+  const s = ogunler.reduce((x, m) => ({ k: x.k + m.kcal, p: x.p + m.protein, c: x.c + m.carb, f: x.f + m.fat }), { k: 0, p: 0, c: 0, f: 0 });
+  const sap = (a, b) => (b > 0 ? Math.abs(a - b) / b : 0);
+  return { s, k: sap(s.k, t.kcal), c: sap(s.c, t.carb), f: sap(s.f, t.fat) };
+}
+
+function nutGunPuan(ogunler, t, onceki) {
+  const { s } = nutGunSapma(ogunler, t);
+  const sap = (a, b) => (b > 0 ? Math.abs(a - b) / b : 0);
+  let puan = 2 * sap(s.k, t.kcal) + sap(s.c, t.carb) + sap(s.f, t.fat);
+  if (t.protein > 0) {
+    puan += Math.max(0, (s.p - t.protein) / t.protein - 0.1);
+    puan += 2 * Math.max(0, (t.protein - s.p) / t.protein);
+  }
+  nutGunAna(ogunler).forEach(a => {
+    (onceki || []).forEach((gun, i) => { if ((gun || []).indexOf(a) >= 0) puan += NUT_TEKRAR_CEZA[i] || 0; });
+  });
+  return puan;
+}
+
+/** Bir tarihin menüsü → plan satırları (saat önekli). Profil yoksa null. `.ana` = seçilen ana yemekler. */
+function nutGunlukSatirlar(tarih, prof, n) {
+  const a = String(tarih).split('-').map(Number);
+  const dow = new Date(a[0], a[1] - 1, a[2], 12).getDay();
+  const tip = (typeof hfGunTipi === 'function') ? hfGunTipi(data, tarih) : nutDayType(dow, data.program);
+  const t = nutTargets(prof, tip, n.hedef);
+  if (!t) return null;
+  const g = n.gunluk || {};
+  const kay = Number((g.kay || {})[tarih]) || 0;
+  const onceki = NUT_TEKRAR_CEZA.map((_, i) => (g.ana || {})[shiftDateStr(tarih, -(i + 1))] || []);
+  const taban = (Number(n.sablon) || 0) + nutGunNo(tarih) * NUT_GUNLUK_ADIM + kay * (NUT_GUNLUK_ADAY + NUT_GUNLUK_ADAY_EK);
+  let ogunler = null, enIyi = Infinity;
+  for (let j = 0; j < NUT_GUNLUK_ADAY + NUT_GUNLUK_ADAY_EK; j++) {
+    if (j === NUT_GUNLUK_ADAY) {          // ilk tur yettiyse dur (çoğu gün)
+      const sp = nutGunSapma(ogunler, t);
+      if (Math.max(sp.c, sp.f) <= NUT_GUNLUK_BANT) break;
+    }
+    const aday = nutBuildDay(t, prof.weight, taban + j);
+    const puan = nutGunPuan(aday, t, onceki);
+    if (puan < enIyi) { enIyi = puan; ogunler = aday; }
+  }
+  const zaman = nutMealTimes(dow, tip, ogunler, ensureNutDuzen());
+  const out = [];
+  ogunler.map((m, i) => ({ m, z: zaman[i] })).sort((x, y) => x.z.dk - y.z.dk).forEach(({ m, z }) => {
+    nutOrnekSatirlari([m], [z]).forEach(s => out.push(Object.assign(s, { name: z.saat + ' · ' + s.name })));
+  });
+  out.ana = nutGunAna(ogunler);
+  return out;
+}
+
+function nutGunlukPlan() {
+  ensureDiet();
+  const d = data.diet;
+  d.plans = d.plans || [];
+  let p = d.plans.find(x => x.name === NUT_GUNLUK_ADI);
+  if (!p) { p = { id: Date.now(), name: NUT_GUNLUK_ADI, weekly: true, meals: emptyPlanMeals() }; d.plans.push(p); }
+  p.weekly = true;
+  return p;
+}
+
+/**
+ * Bayat kovaları doldurur. `yenile` = o tarihi zorla yeniden yaz.
+ * Dönen sayı = yazılan gün. save() ÇAĞIRMAZ — çağıran karar verir.
+ */
+function nutGunlukDoldur(yenile) {
+  const n = ensureNutrition();
+  const g = n.gunluk;
+  if (!g || !g.acik) return 0;
+  const prof = nutProfile();
+  if (!prof) return 0;
+  const p = nutGunlukPlan();
+  g.yazildi = g.yazildi || {};
+  const bugun = today();
+  let yazilan = 0;
+  for (let i = 0; i < NUT_GUNLUK_GUN; i++) {
+    const tarih = shiftDateStr(bugun, i);
+    const kova = dayKeyOf(tarih);
+    if (g.yazildi[kova] === tarih && tarih !== yenile) continue;
+    const sat = nutGunlukSatirlar(tarih, prof, n);
+    if (!sat || !sat.length) continue;
+    nutPlanaYaz(p, kova, sat);
+    g.yazildi[kova] = tarih;
+    g.ana = g.ana || {};
+    g.ana[tarih] = sat.ana || [];
+    yazilan++;
+  }
+  // 'all' kovasında motor satırı kalmasın (haftalık planda all + gün birleşir)
+  p.meals.all = (p.meals.all || []).filter(x => x.kaynak !== 'aidan');
+  // Eski "değiştir" sayaçları birikmesin
+  Object.keys(g.kay || {}).forEach(k => { if (k < bugun) delete g.kay[k]; });
+  const dun = shiftDateStr(bugun, -NUT_TEKRAR_CEZA.length);   // son günlerin ana yemeği tekrar cezası için kalır
+  Object.keys(g.ana || {}).forEach(k => { if (k < dun) delete g.ana[k]; });
+  g.son = bugun;
+  return yazilan;
+}
+
+function nutGunlukAc(ac) {
+  const n = ensureNutrition();
+  ensureDiet();
+  if (ac) {
+    const prof = nutProfile();
+    if (!prof) { showToast('Önce boy ve kilonu gir', 'info'); return; }
+    const p = nutGunlukPlan();
+    const onceki = data.diet.activePlanId !== p.id ? data.diet.activePlanId : ((n.gunluk || {}).onceki || null);
+    n.gunluk = { acik: true, yazildi: {}, kay: {}, son: null, onceki };
+    nutGunlukDoldur();
+    data.diet.activePlanId = p.id;
+    save(); renderDiet();
+    showToast('7 günlük menü yazıldı — her gün kendiliğinden yenilenir', 'success', 3500);
+    return;
+  }
+  if (!n.gunluk) return;
+  n.gunluk.acik = false;
+  const p = nutGunlukPlan();
+  // Kapatınca önceki plana dön (hâlâ duruyorsa)
+  const eski = n.gunluk.onceki && (data.diet.plans || []).find(x => x.id === n.gunluk.onceki);
+  if (data.diet.activePlanId === p.id && eski) data.diet.activePlanId = eski.id;
+  save(); renderDiet();
+  showToast('Günlük menü kapandı', 'info', 2500);
+}
+
+/** Bugünün menüsünü başka şablonla yeniden yaz (beğenmediysen). */
+function nutGunlukYenile() {
+  const n = ensureNutrition();
+  if (!n.gunluk || !n.gunluk.acik) return;
+  const bugun = today();
+  const kova = dayKeyOf(bugun);
+  const p = nutGunlukPlan();
+  const oncesi = JSON.stringify(p.meals[kova] || []);
+  const kayOnce = (n.gunluk.kay || {})[bugun] || 0;
+  n.gunluk.kay = n.gunluk.kay || {};
+  n.gunluk.kay[bugun] = kayOnce + 1;
+  nutGunlukDoldur(bugun);
+  save(); renderDiet();
+  const geri = () => { const q = nutGunlukPlan(); q.meals[kova] = JSON.parse(oncesi); n.gunluk.kay[bugun] = kayOnce; save(); renderDiet(); };
+  if (typeof showUndoToast === 'function') showUndoToast('Bugünün menüsü değişti', geri);
+  else showToast('Bugünün menüsü değişti', 'success');
+}
+
+function nutGunlukHtml(n) {
+  const g = n.gunluk;
+  if (g && g.acik) {
+    return '<div class="nut-note nut-gunluk"><b>Günlük menü açık.</b> Her gün farklı menü, saatleriyle — ' +
+      'antrenman ve dinlenme gününe göre motor yazar, 7 gün ileriye hazır. ' +
+      '<div class="nut-gunluk-btns"><button class="nut-mini" onclick="nutGunlukYenile()">Bugünü değiştir</button>' +
+      '<button class="nut-mini" onclick="nutGunlukAc(false)">Kapat</button></div>' +
+      '<details class="nut-alis" ontoggle="if(this.open)nutAlisCiz(this)"><summary>Haftalık alışveriş listesi</summary>' +
+      '<div class="nut-alis-ic"></div></details></div>';
+  }
+  return '<div class="nut-note nut-gunluk"><b>Günlük menü</b> — her gün farklı, saatli öğün listesi. ' +
+    'Okul saatine, antrenman gününe ve tercihlerine göre kurulur; öğün hatırlatıcısı da bu saatleri kullanır. ' +
+    '<div class="nut-gunluk-btns"><button class="small primary" onclick="nutGunlukAc(true)">Aç</button></div></div>';
+}
+
+// ============================================================
+// 🛒 HAFTALIK ALIŞVERİŞ LİSTESİ (18 Eki 2026)
+// Salim: "haftalık yemeğe göre alışveriş listesi de verse iyi olur".
+// Kaynak: günlük menünün önümüzdeki 7 günü (motorun yazdığı satırlar). Pişmiş
+// yemek ALINMAZ — pirinç, bulgur, makarna, et/tavuk/balık ÇİĞ karşılığına
+// çevrilir (pişme verimi yaklaşık; etiket "≈"). Yemekhane satırı listeye girmez.
+// Elle eklenen plan kalemleri de sayılır (besini tanınırsa).
+// Durum: diet.nut.gunluk.alindi = { 'Pirinç': true } — "Sıfırla" ile temizlenir.
+// ============================================================
+// Pişmiş porsiyon → alışveriş kalemi + porsiyon başı ÇİĞ gram (yaklaşık verim)
+const NUT_CIG = {
+  'Pilav': ['Pirinç', 60], 'Baldo pilavı': ['Pirinç', 60], 'Kahverengi pilav': ['Esmer pirinç', 60],
+  'Bulgur pilavı': ['Bulgur', 60], 'Sebzeli bulgur': ['Bulgur', 55],
+  'Makarna': ['Makarna', 75], 'Tam buğday makarna': ['Tam buğday makarna', 75], 'Kuskus': ['Kuskus', 55],
+  'Tavuk göğsü': ['Tavuk göğsü', 200], 'Tavuk şiş': ['Tavuk göğsü', 200], 'Tavuk haşlama': ['Tavuk göğsü', 200],
+  'Tavuk sote': ['Tavuk göğsü', 160], 'Tavuk pirzola': ['Tavuk pirzola', 200], 'Tavuk but': ['Tavuk but', 220],
+  'Tavuk döner': ['Tavuk döner (hazır)', 150], 'Hindi eti': ['Hindi eti', 200],
+  'Dana kıyma': ['Dana kıyma', 160], 'İzgara köfte': ['Dana kıyma', 190], 'Et sote': ['Dana kuşbaşı', 160],
+  'Dana bonfile': ['Dana bonfile', 200],
+  'Somon': ['Somon', 200], 'Levrek': ['Levrek', 250], 'Çupra': ['Çupra', 250], 'Alabalık': ['Alabalık', 250],
+  'Balık ızgara': ['Balık', 250], 'Palamut': ['Palamut', 220],
+  'Haşlanmış patates': ['Patates', 150], 'Fırın patates': ['Patates', 170], 'Tatlı patates': ['Tatlı patates', 170],
+};
+const NUT_ALIS_GRUP = [
+  ['Et · tavuk · balık', /tavuk|hindi|dana|kıyma|kuşbaşı|bonfile|köfte|somon|levrek|çupra|alabalık|balık|palamut|ton balığı|kuzu/i],
+  ['Süt ürünleri · yumurta', /yumurta|süt|yoğurt|ayran|kefir|peynir|çökelek|lor|labne|kaymak|cottage/i],
+  ['Tahıl · ekmek · bakliyat', /pirinç|bulgur|makarna|kuskus|ekmek|bazlama|lavaş|yulaf|granola|galeta|leblebi|nohut|mercimek|fasulye|kinoa/i],
+  ['Meyve · sebze', /muz|elma|armut|üzüm|portakal|mandalina|çilek|kivi|hurma|kayısı|incir|nar|patates|salata|salatalık|domates|brokoli|biber|roka|marul|cacık/i],
+  ['Kuruyemiş · yağ · diğer', /./],
+];
+const NUT_ALIS_SIVI = /süt|ayran|kefir/i;
+
+function nutAlisSatir(m) {
+  // Yeni satırlar besin + adet taşır; eskiler adından çözülür ("07:15 · 6 adet Yumurta")
+  if (m && m.besin) return { ad: m.besin, adet: Number(m.adet) || 0 };
+  const govde = String((m && m.name) || '').replace(/^\s*\d{1,2}:\d{2}\s*·\s*/, '');
+  if (/yemekhane/i.test(govde)) return null;
+  const T = (typeof TURK_FOODS !== 'undefined') ? TURK_FOODS : [];
+  let f = null;
+  for (const x of T) if (govde.endsWith(' ' + x.n) && (!f || x.n.length > f.n.length)) f = x;
+  if (!f) return null;
+  const sayi = /^([0-9]+([.,][0-9]+)?)/.exec(govde);
+  return { ad: f.n, adet: sayi ? Number(sayi[1].replace(',', '.')) : 1 };
+}
+
+/** 7 günün listesi: [{grup, kalemler:[{ad, miktar, gram}]}]. Saf okuma — veri değişmez. */
+function nutAlisverisListesi(gunSayisi) {
+  ensureDiet();
+  const p = (data.diet.plans || []).find(x => x.name === NUT_GUNLUK_ADI);
+  if (!p) return [];
+  const bugun = today();
+  const toplam = {};   // ad → { gram, adet, birim }
+  for (let i = 0; i < (gunSayisi || NUT_GUNLUK_GUN); i++) {
+    const tarih = shiftDateStr(bugun, i);
+    const satirlar = (p.meals.all || []).concat(p.weekly ? (p.meals[dayKeyOf(tarih)] || []) : []);
+    for (const m of satirlar) {
+      const s = nutAlisSatir(m);
+      if (!s || !(s.adet > 0)) continue;
+      const f = nutFood(s.ad);
+      if (!f) continue;
+      const cig = NUT_CIG[f.n];
+      const ad = cig ? cig[0] : f.n;
+      const t = toplam[ad] || (toplam[ad] = { gram: 0, adet: 0, birim: cig ? 'g' : f.u });
+      if (cig) t.gram += s.adet * cig[1];
+      else { t.adet += s.adet; t.gram += s.adet * (Number(f.g) || 0); }
+    }
+  }
+  const miktar = (ad, t) => {
+    const u = String(t.birim || '');
+    if (/^(adet|dilim)$/.test(u)) return Math.ceil(t.adet) + ' ' + u;
+    if (/^[0-9]+\s*adet$/.test(u)) return Math.ceil(t.adet * Number(u.split(/\s/)[0])) + ' adet';
+    if (NUT_ALIS_SIVI.test(ad)) return t.gram >= 1000 ? (Math.ceil(t.gram / 250) / 4).toString().replace('.', ',') + ' L' : Math.ceil(t.gram / 50) * 50 + ' ml';
+    const g = Math.ceil(t.gram / 50) * 50;
+    return '≈ ' + (g >= 1000 ? (Math.round(g / 100) / 10).toString().replace('.', ',') + ' kg' : g + ' g');
+  };
+  const gruplar = NUT_ALIS_GRUP.map(([grup]) => ({ grup, kalemler: [] }));
+  Object.keys(toplam).sort((a, b) => a.localeCompare(b, 'tr')).forEach(ad => {
+    const gi = NUT_ALIS_GRUP.findIndex(([, re]) => re.test(ad));
+    gruplar[gi].kalemler.push({ ad, miktar: miktar(ad, toplam[ad]), gram: Math.round(toplam[ad].gram) });
+  });
+  return gruplar.filter(g => g.kalemler.length);
+}
+
+function nutAlisMetni() {
+  return nutAlisverisListesi().map(g => g.grup + '\n' + g.kalemler.map(k => '- ' + k.ad + ': ' + k.miktar).join('\n')).join('\n\n');
+}
+
+function nutAlisCiz(el) {
+  const kutu = el && el.querySelector('.nut-alis-ic');
+  if (!kutu) return;
+  const n = ensureNutrition();
+  const alindi = (n.gunluk && n.gunluk.alindi) || {};
+  const liste = nutAlisverisListesi();
+  if (!liste.length) { kutu.innerHTML = '<div class="nut-sub">Liste boş — önce günlük menüyü aç.</div>'; return; }
+  kutu.innerHTML = liste.map(g => '<div class="nut-alis-grup">' + escapeHtml(g.grup) + '</div>' +
+    g.kalemler.map(k => '<label class="nut-alis-k' + (alindi[k.ad] ? ' alindi' : '') + '"><input type="checkbox" data-ad="' + escapeHtml(k.ad) + '"' +
+      (alindi[k.ad] ? ' checked' : '') + '><span>' + escapeHtml(k.ad) + '</span><b>' + escapeHtml(k.miktar) + '</b></label>').join('')).join('') +
+    '<div class="nut-sub">Önümüzdeki 7 günün menüsünden. Pişmiş yemekler çiğ karşılığına çevrildi (yaklaşık). Yemekhane öğünü dahil değil.</div>' +
+    '<div class="nut-gunluk-btns"><button class="nut-mini" data-alis="kopyala">Listeyi kopyala</button><button class="nut-mini" data-alis="sifirla">İşaretleri sıfırla</button></div>';
+  if (!kutu._bagli) {
+    kutu._bagli = true;
+    kutu.addEventListener('change', ev => {
+      const c = ev.target.closest('input[data-ad]');
+      if (!c) return;
+      const g = ensureNutrition().gunluk; if (!g) return;
+      g.alindi = g.alindi || {};
+      if (c.checked) g.alindi[c.dataset.ad] = true; else delete g.alindi[c.dataset.ad];
+      c.closest('label').classList.toggle('alindi', c.checked);
+      save();
+    });
+    kutu.addEventListener('click', ev => {
+      const b = ev.target.closest('button[data-alis]');
+      if (!b) return;
+      if (b.dataset.alis === 'sifirla') { const g = ensureNutrition().gunluk; if (g) g.alindi = {}; save(); nutAlisCiz(el); return; }
+      const metin = nutAlisMetni();
+      const ok = () => showToast('Liste kopyalandı', 'success', 2500);
+      try { navigator.clipboard.writeText(metin).then(ok, () => showToast('Kopyalanamadı', 'warning')); } catch (_) { showToast('Kopyalanamadı', 'warning'); }
+    });
+  }
 }

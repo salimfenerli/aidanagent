@@ -35,7 +35,9 @@ const AJAN_DAY_CAP = 120;
     '.ajan-done{margin-top:8px;font-size:12.5px;font-weight:600;color:var(--success,#5cbf7a)}' +
     '.ajan-done.off{color:var(--text-muted,#9a9389)}' +
     '.ajan-all{width:100%;min-height:44px}' +
-    '.ajan-sub.uyari{color:var(--warning,#e5a117)}';
+    '.ajan-sub.uyari{color:var(--warning,#e5a117)}' +
+    '.ogun-sheet{position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:900;max-width:480px;margin:0 auto}' +
+    '.ogun-sheet .ajan-btns button{flex:1;min-height:44px}';
   document.head.appendChild(st);
 })();
 
@@ -326,6 +328,7 @@ function ajanYenile() {
   if (diet && diet.classList.contains('active') && typeof renderDiet === 'function') { try { renderDiet(); } catch (_) {} }
   const hs = document.getElementById('hrcSection');
   if (hs && hs.open && typeof renderHarcama === 'function') renderHarcama();
+  if (typeof renderBugunOgun === 'function') renderBugunOgun();   // ana ekran öğün kartı
 }
 
 /** Mesajdaki tüm bekleyen eylemler — tek dokunuş, tek "Geri al". */
@@ -353,4 +356,100 @@ function ajanDismiss(mi, ai) {
   if (!a || (a.status || 'pending') !== 'pending') return;
   a.status = 'dismissed';
   save(); renderChatActions();
+}
+
+// ============================================================
+// 🍽️ ÖĞÜN BEKÇİSİ — bildirimden gelen eylem (17 Eki 2026)
+// Worker (runOgunBekci) plan öğün saatinde push atar; dokunuş tasks.js
+// köprüsünden buraya gelir: 'yedim' | 'ertele' | 'open' (iOS buton göstermez).
+// Yedim = plandaki kalemler öğün kaydına yazılır (kalori PLANDAN, kod hesapladı)
+// + bekçi o öğün için susar. Tek dokunuş, Geri al var. Durum worker'la ortak:
+// data.ogunBekci = { tarih, g: { 'HH:MM': { d, n, e, es } } }.
+// ============================================================
+const OGUN_RE = /^\s*(\d{1,2}):(\d{2})\s*·\s*/;
+let _ogunGeri = null;
+function ogunNorm(s) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '').trim());
+  return m && +m[1] < 24 && +m[2] < 60 ? String(+m[1]).padStart(2, '0') + ':' + m[2] : null;
+}
+function ogunDurum() {
+  const t = today();
+  if (!data.ogunBekci || data.ogunBekci.tarih !== t) data.ogunBekci = { tarih: t, g: {} };
+  if (!data.ogunBekci.g) data.ogunBekci.g = {};
+  return data.ogunBekci.g;
+}
+function ogunKalemleri(saat) {
+  const list = typeof planMealsForDate === 'function' ? planMealsForDate(today()) : [];
+  return list.filter(m => { const x = OGUN_RE.exec((m && m.name) || ''); return !!x && ogunNorm(x[1] + ':' + x[2]) === saat; });
+}
+function ogunYedim(saat) {
+  ensureDiet();
+  const t = today();
+  const gun = data.diet.days[t] || (data.diet.days[t] = { meals: [], water: 0 });
+  gun.meals = gun.meals || [];
+  const st = ogunDurum();
+  const eski = st[saat] ? Object.assign({}, st[saat]) : null;
+  st[saat] = Object.assign({}, eski, { d: 'yedi' });
+  const at = typeof mealNow === 'function' ? mealNow() : null;
+  const num = (v) => (v != null && isFinite(+v) ? +v : null);
+  // Aynı öğün iki kez yazılmaz (bildirime iki kez dokunulursa)
+  const yeni = gun.meals.some(m => m && m.bekci === saat) ? [] : ogunKalemleri(saat).map((m, i) => ({
+    id: Date.now() + i, slot: m.slot || 'atistirma', name: m.name, kcal: num(m.kcal),
+    protein: num(m.protein), carb: num(m.carb), fat: num(m.fat), at, bekci: saat, src: 'bekci' }));
+  gun.meals.push(...yeni);
+  save(); ajanYenile();
+  return () => {
+    const ids = new Set(yeni.map(x => x.id));
+    const g = data.diet.days[t];
+    if (g) g.meals = (g.meals || []).filter(e => !ids.has(e.id));
+    const s = ogunDurum();
+    if (eski) s[saat] = eski; else delete s[saat];
+    save(); ajanYenile();
+  };
+}
+function ogunErtele(saat) {
+  const st = ogunDurum();
+  const n = new Date();
+  const e = Math.ceil((n.getHours() * 60 + n.getMinutes() + 15) / 5) * 5;   // cron 5 dk'lık
+  st[saat] = Object.assign({}, st[saat], { e, es: null });
+  save();
+  return String(Math.floor(e / 60) % 24).padStart(2, '0') + ':' + String(e % 60).padStart(2, '0');
+}
+function ogunAtla(saat) { const st = ogunDurum(); st[saat] = Object.assign({}, st[saat], { d: 'atla' }); save(); }
+
+function ogunSheetKapat() { const el = document.getElementById('ogunSheet'); if (el) el.remove(); }
+function ogunSheet(saat, html) {
+  ogunSheetKapat();
+  const el = document.createElement('div');
+  el.id = 'ogunSheet';
+  el.className = 'ajan-card ogun-sheet';
+  el.setAttribute('role', 'dialog');
+  el.innerHTML = html;
+  // Değer onclick'e gömülmez (CLAUDE.md kuralı) — data-a + kapanış
+  el.addEventListener('click', ev => { const b = ev.target.closest('button[data-a]'); if (b) ogunBekciAksiyon(saat, b.dataset.a); });
+  document.body.appendChild(el);
+  return el;
+}
+function ogunBekciAksiyon(saat, act) {
+  saat = ogunNorm(saat);
+  if (!saat) return;
+  const kal = ogunKalemleri(saat);
+  if (act === 'yedim') {
+    _ogunGeri = ogunYedim(saat);
+    const kcal = kal.reduce((s, m) => s + (+m.kcal || 0), 0);
+    const el = ogunSheet(saat, '<div class="ajan-head">' + saat + ' öğünü işaretlendi</div><div class="ajan-sub">' +
+      (kal.length ? kal.length + ' kalem kaydedildi' + (kcal ? ' · ~' + Math.round(kcal) + ' kcal' : '') : 'Hatırlatma bu öğün için sustu') +
+      '</div><div class="ajan-btns"><button class="small secondary" data-a="geri">Geri al</button><button class="small" data-a="kapat">Tamam</button></div>');
+    setTimeout(() => { if (el.isConnected) el.remove(); }, 8000);
+    return;
+  }
+  if (act === 'geri') { if (_ogunGeri) { _ogunGeri(); _ogunGeri = null; } ogunSheetKapat(); showToast('Geri alındı', 'info', 2500); return; }
+  if (act === 'ertele') { const s = ogunErtele(saat); ogunSheetKapat(); showToast(saat + ' öğünü — ' + s + "'te tekrar hatırlatırım", 'info', 3500); return; }
+  if (act === 'atla') { ogunAtla(saat); ogunSheetKapat(); showToast(saat + ' öğünü atlandı, hatırlatma sustu', 'info', 3000); return; }
+  if (act === 'kapat') { ogunSheetKapat(); return; }
+  // 'open' — iOS: bildirime dokunuldu → soruyu uygulamada sor
+  if ((ogunDurum()[saat] || {}).d === 'yedi') { showToast(saat + ' öğünü zaten işaretli', 'success', 2500); return; }
+  const liste = kal.map(m => '<div class="ajan-it">• ' + escapeHtml(String(m.name).replace(OGUN_RE, '')) + '</div>').join('');
+  ogunSheet(saat, '<div class="ajan-head">' + saat + ' öğünü — yedin mi?</div>' + (liste || '<div class="ajan-sub">Planda kalem yok</div>') +
+    '<div class="ajan-btns"><button class="small" data-a="yedim">Yedim</button><button class="small secondary" data-a="ertele">15 dk sonra</button><button class="small secondary" data-a="atla">Atladım</button></div>');
 }
