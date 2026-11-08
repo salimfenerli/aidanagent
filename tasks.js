@@ -19,6 +19,7 @@ async function showTab(name, btn) {
   // sekmesi kalkti; eski bir yer imi ya da kayitli durum 'stocks' derse
   // getElementById null doner ve uygulama tamamen olurdu.
   if (!document.getElementById(name)) name = 'tasks';
+  if (name === 'focus') name = 'tasks'; // 8 Kas: Odak sekmesi kaldırıldı — eski bağlantılar görevlere döner
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(name).classList.add('active');
@@ -131,7 +132,7 @@ function updateEstimateStats() {
 
   if (withBoth.length < 3) {
     el.innerHTML = `Henüz yeterli veri yok (${withBoth.length}/3 görev ölçülmüş).<br>
-      Odak sekmesinde pomodoro ile görev yaptıkça Aidan tahmin ↔ gerçek farkını ölçer.`;
+      Görevlerin gerçek süresi ölçüldükçe Aidan tahmin ↔ gerçek farkını ölçer.`;
     return;
   }
 
@@ -563,7 +564,6 @@ function renderDayPlan() {
         <div class="pb-meta">${isNow ? '<span class="pb-now-tag">● şu an</span>' : ''}${isLate ? '<span class="pb-late-tag">gecikti</span>' : ''}<span>${dur} dk</span>${b.fixedId ? '<span>sabit program</span>' : (linked ? '<span>görev</span>' : '')}</div>
       </div>
       <div class="pb-actions">
-        ${kind === 'task' && linked ? `<button onclick="focusPlanBlock(${b.taskId})" title="Bu göreve odaklan"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5a9 9 0 0 1 18 0v5a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></button>` : ''}
         <button onclick="editPlanBlock(${b.id})" title="Düzenle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
         <button onclick="deletePlanBlock(${b.id})" title="Sil"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
       </div>
@@ -634,7 +634,6 @@ function savePlanBlock() {
 function closePlanBlock() { document.getElementById('planBlockModal').classList.remove('active'); _editingBlockId = null; }
 function deletePlanBlock(id) { data.dayPlan.blocks = (data.dayPlan.blocks || []).filter(x => x.id !== id); save(); renderDayPlan(); }
 function togglePlanBlock(id) { const b = (data.dayPlan.blocks || []).find(x => x.id === id); if (!b) return; b.done = !b.done; save(); renderDayPlan(); }
-function focusPlanBlock(taskId) { bindFocusTask(taskId); showTab('focus', document.querySelector('[data-tab=focus]')); }
 function clearDayPlan() {
   if (!(data.dayPlan.blocks || []).length) { showToast('Plan zaten boş', 'info'); return; }
   if (!confirm(planIsTomorrow() ? 'Yarının tüm planını sil?' : 'Bugünün tüm planını sil?')) return;
@@ -938,8 +937,8 @@ function handleBlockAction(blockId, action) {
   }
   if (action === 'snooze') { snoozeBlock(b.id, 15); showTab('plan', document.querySelector('[data-tab=plan]')); return; }
   if (action === 'start') {
-    if (b.taskId) { focusPlanBlock(b.taskId); return; }
-    showTab('focus', document.querySelector('[data-tab=focus]'));
+    // 8 Kas: Odak sekmesi yok — blok 'başla' da planı açar
+    showTab('plan', document.querySelector('[data-tab=plan]'));
     return;
   }
   // 'open' ya da bilinmeyen — plan sekmesini aç, bloğu vurgula

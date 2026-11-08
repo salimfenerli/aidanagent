@@ -402,7 +402,7 @@ const AYAR_GRUPLAR = [
     satir: ['notifSettings', 'muteState', 'fixedRemindersList', 'hareketAyarRow'] },
   { id: 'agPlan', ad: 'Plan ve takvim', alt: 'otomatik plan, sabit program, geri sayımlar, takvim',
     ikon: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
-    satir: ['autoPlanChk', 'fixedScheduleList', 'countdownManageList', 'calendarSyncBox', 'estimateStats'] },
+    satir: ['autoPlanChk', 'fixedScheduleList', 'countdownManageList', 'calendarSyncBox'] },
   { id: 'agAi', ad: 'Aidan nasıl konuşsun', alt: 'hitap, talimatlar, hafıza',
     ikon: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     satir: ['displayName', 'aiInstructions', 'memList'] },

@@ -342,7 +342,10 @@ function acceptSuggestion(fiveMinMode) {
   if (!_suggestedTaskId) return;
   const id = _suggestedTaskId;
   closeSuggestModal();
-  startTaskNow(id, fiveMinMode);
+  // 8 Kas: Odak sekmesi kaldırıldı — öneri sayaç başlatmaz, Bugünün 3'üne alınır
+  const st = (data.tasks || []).find(x => x.id === id);
+  if (st && st.mitDate !== today()) toggleMit(id);
+  else showToast('Zaten Bugünün 3\'ünde', 'info');
 }
 
 // AI "Sen ne yapayım?" — context'i AI'a yollar, kişisel öneri çeker.
@@ -545,8 +548,6 @@ function renderTaskItem(t) {
       </div>
       <div class="task-actions">
         <button class="small ${isMit ? 'mit-on' : 'secondary'}" onclick="toggleMit(${t.id})" title="${isMit ? 'Bugünün 3\'ünden çıkar' : 'Bugünün 3\'üne ekle'}" aria-label="${isMit ? 'MIT' : 'MIT yap'}"><svg class="icon${isMit ? ' fill' : ''}" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
-        <button class="small" onclick="startTaskNow(${t.id}, false)" title="Şimdi başla — odak moduna geçer" aria-label="Başla"><svg class="icon fill" viewBox="0 0 24 24" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>
-        ${t.done || !t.estimateMin || t.estimateMin <= 5 ? '' : `<button class="small secondary" onclick="startTaskNow(${t.id}, true)" title="Sadece 2 dakika dene — başlamanın altın kuralı" aria-label="2 dakika dene"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>2dk</button>`}
         ${t.done ? '' : `<button class="small secondary" onclick="postponeTask(${t.id})" title="Ertele — başka güne kaydır" aria-label="Ertele"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>`}
         ${t.done ? '' : `<button class="small secondary" onclick="addSubtask(${t.id})" title="Alt adım ekle" aria-label="Alt adım ekle"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg></button>`}
         ${t.done ? '' : `<button class="small secondary" onclick="aiSplitTask(${t.id})" title="AI ile küçük adımlara böl" aria-label="AI ile böl"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg></button>`}
@@ -1822,12 +1823,12 @@ async function welcomeSignup() {
   }
 }
 
-// Onboarding tur — 5 adımlı, atlanabilir, kayıt sonrası ilk girişte gösterilir
+// Onboarding tur — 4 adımlı, atlanabilir, kayıt sonrası ilk girişte gösterilir
 const TOUR_STEPS = [
   {
     emoji: '',
     title: 'Aidan\'a hoş geldin',
-    body: 'ADHD beyninle birlikte yürüyen bir asistan. Görev, okul, spor, beslenme — hepsi tek yerde.<br><br>5 küçük ipucuyla seni hızlıca tanıştıracağım.',
+    body: 'ADHD beyninle birlikte yürüyen bir asistan. Görev, okul, spor, beslenme — hepsi tek yerde.<br><br>4 küçük ipucuyla seni hızlıca tanıştıracağım.',
   },
   {
     emoji: '',
@@ -1838,11 +1839,6 @@ const TOUR_STEPS = [
     emoji: '',
     title: 'Bugünün 3\'ü (MIT)',
     body: 'Günde <b>en fazla 3 öncelik</b>. Daha fazlası beynini dağıtır.<br><br>Görev kartındaki butonuna bas → üste sabit kutuya çıkar. Bittiğinde tıkla, konfeti patlar ',
-  },
-  {
-    emoji: '',
-    title: 'Odak (Pomodoro)',
-    body: '<b>Odak</b> sekmesi → 25 dk çalış, 5 dk mola. Telefonu kilitli bile olsa doğru sayar.<br><br>Bir görev seçersen geçen süre otomatik o göreve yazılır — sonra "tahmin vs gerçek" görürsün.',
   },
   {
     emoji: '',

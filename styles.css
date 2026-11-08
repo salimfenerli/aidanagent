@@ -1981,7 +1981,9 @@
     box-shadow: none;
     padding: 10px 16px;
   }
-  button:hover { background: var(--accent-hover); box-shadow: none; }
+  /* hover YALNIZ gerçek fareli cihazda: iOS dokunuştan sonra :hover'ı yapışık bırakır →
+     arka planı none olan her düğme (alt gezinme, ikon düğmeleri) bembeyaz kalıyordu (8 Kas). */
+  @media (hover: hover) { button:hover { background: var(--accent-hover); box-shadow: none; } }
   button.secondary {
     background: var(--surface-high);
     color: var(--text);
@@ -2448,7 +2450,7 @@
      ============================================================ */
   /* Dolu amber zemin üzerine koyu metin (buton, chip, badge, sekme) */
   button { color: #2a1408; }
-  button:hover { color: #2a1408; }
+  @media (hover: hover) { button:hover { color: #2a1408; } }
   button.secondary { color: var(--text); }
   button.danger { color: #f4f4f4; }
   button.danger:hover { background: #d83b3b; }

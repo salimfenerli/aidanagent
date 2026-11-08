@@ -1,3 +1,9 @@
+# 🧹 8 Kas 2026 — v7-226 Odak sekmesi kaldırıldı + alt gezinmede beyaz kutu
+- Salim: "odak kısmını kaldıralım, kullanmıyorum" + "alttaki sekmelere tıklayınca bembeyaz oluyor".
+- Beyaz kutu: genel `button:hover { background: accent-hover }` iOS'ta dokunuştan sonra yapışık kalıyor, `.dt-bnav-btn`'in `background:none`'ını (daha düşük özgüllük) eziyordu. Dolu hover artık yalnız `@media (hover: hover)`.
+- Odak: üst sekme, alt gezinme, menü, görev kartındaki Başla / 2 dk dene, plan bloğu odak düğmesi, aktif görev bandındaki "Odak ekranına geç", iki tanıtım adımı ve Ayarlar'daki "Zaman tahmini" satırı kalktı. Öneri penceresinde "Başla" → "Bugünün 3'üne al". `showTab('focus')` görevlere döner. Pomodoro motoru ve `#focus` paneli (gizli) DOM'da kaldı — motor `pomoToday` worker'da da okunuyor, silmek ayrı iş. Alt gezinme 4 sekme.
+- Test 74; 13-lazy sekme döngüsünden 'focus' çıktı.
+
 # ⚙️ 8 Kas 2026 — v7-225 Düzen 2. tur: Ayarlar 5 gruba indi + GitHub onarımı
 - **Onarım:** 28 Eki "a" commit'i çakışmalı birleştirmeyi `<<<<<<<` işaretleriyle push etmişti (18 dosya; CI kırmızı, deploy 10 gün çıkmadı — canlı v7-224'te kaldı). v7-224 ağacı onarım commit'iyle geri yüklendi.
 - Ayarlar: 17 ayrı kart / ~5000 px → 5 açılır grup (Bildirimler · Plan ve takvim · Aidan nasıl konuşsun · Bağlantılar · Veri ve yedek); kapalıyken tek ekran. Satırlar `ayarGrupla()` ile JS'te taşınır (asistan.html'e satır yok, id'ler aynı). Grup içinde satırlar kart değil, ince çizgiyle ayrılır.

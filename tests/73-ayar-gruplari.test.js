@@ -39,7 +39,7 @@ describe('Ayarlar grupları', () => {
   test('id\'ler korunur, doğru gruptalar', () => {
     ac();
     const yer = { notifSettings: 'agBildirim', muteState: 'agBildirim', fixedRemindersList: 'agBildirim', hareketAyarRow: 'agBildirim',
-      autoPlanChk: 'agPlan', fixedScheduleList: 'agPlan', countdownManageList: 'agPlan', calendarSyncBox: 'agPlan', estimateStats: 'agPlan',
+      autoPlanChk: 'agPlan', fixedScheduleList: 'agPlan', countdownManageList: 'agPlan', calendarSyncBox: 'agPlan',
       displayName: 'agAi', aiInstructions: 'agAi', memList: 'agAi',
       saglikTaniRow: 'agBag', hevyStatus: 'agBag', supaSetupBox: 'agBag', inviteSection: 'agBag',
       importFile: 'agVeri', backupDetails: 'agVeri', storageInfo: 'agVeri' };

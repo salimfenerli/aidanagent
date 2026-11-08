@@ -151,13 +151,14 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 - **Impeccable standardı (KALICI):** framework `C:\Users\Salim\Downloads\impeccable-main\` (`SKILL.md` + `reference/product.md`). Yasaklar: mor/neon gradyan, glassmorphism, glow, gradient-text · **renkli yan-şerit kenarlık ASLA** (tam kenar + tint + nokta/ikon) · iç içe kart · özel scrollbar · bounce/elastik animasyon · saf #000/#fff · dekoratif emoji (SVG ikon kullan: `icon(...)`). Tek font ailesi; hareket 150-250 ms ease-out + `prefers-reduced-motion`.
 - **Akıcılık (20 Eki, `69`):** görev yakalama/kısayol/bildirim bandı yalnız Görevler'de (`body[data-tab]`); modül inerken `.panel.yukleniyor` iskeleti gizler — tembel modül eklerken bu kalıbı koru, kartı geç `setTimeout`'la sonradan ekleyip içeriği zıplatma.
 - **Düzen (25 Eki):** etiketsiz `button` DOLU (accent) çıkar → nadir/ikincil düğmeye `secondary` ya da `ghost` ver, ekranda tek dolu düğme hedefle. Telefonda görev kartı eylemleri dokununca açılır (`.task.acik`, `bugun.js`). Kısayol + filtre satırı tek satır, yatay kayar. Diyet: halka+makro tek kart, "Yemek ekle" tek dolu düğme, nadir bölümler `#dietMore` altında (id'ler korunur). Borsa CSS'i kökte YOK (borsa/styles.css) — geri ekleme.
+- ⚠️ Dolu `button:hover` yalnız `@media (hover: hover)` içinde — iOS hover'ı yapışık bırakır, zemini none olan düğme bembeyaz kalıyordu (`74`).
 - Dokunma hedefi ≥44px (`::after` ile görünmez alan). iOS'ta odak dokunmadan sonra kalır — `:focus-visible` halkası beyaza yakın accent'le parlamasın.
 - Bir renk tek anlam taşır: accent ≠ uyarı.
 - **Ayarlar grupları (8 Kas, `73`):** satırlar `ayarlar.js` `AYAR_GRUPLAR` ile 5 açılır gruba taşınır. Yeni ayar satırı → listeye ekle, yoksa grupların altında başıboş kalır (test kırar).
 
 ## ❌ Kaldırılanlar — yeniden ÖNERME
 
-Mood/check-in · streak · hyperfocus uyarısı · hafta takvimi · rutinler sekmesi · body doubling · motivasyon banner · pomodoro trend grafiği · düşük öncelik · weekdays/weekends tekrar · magic link · şifreleme (master password) · Telegram bot · ntfy · Netlify · Fitbit API. Gerekçeler CHANGELOG.md'de.
+Odak sekmesi/pomodoro ekranı (8 Kas; panel gizli DOM'da, motor duruyor, `74`) · Mood/check-in · streak · hyperfocus uyarısı · hafta takvimi · rutinler sekmesi · body doubling · motivasyon banner · pomodoro trend grafiği · düşük öncelik · weekdays/weekends tekrar · magic link · şifreleme (master password) · Telegram bot · ntfy · Netlify · Fitbit API. Gerekçeler CHANGELOG.md'de.
 
 ## 🔧 Pratik notlar
 

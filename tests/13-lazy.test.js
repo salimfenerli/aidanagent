@@ -271,7 +271,7 @@ describe('GERCEK ilk yukleme — tembel moduller YOKKEN', () => {
   });
 
   test('sekme gecisleri patlamiyor', async () => {
-    for (const s of ['focus', 'settings', 'plan', 'chat', 'tasks']) {
+    for (const s of ['settings', 'plan', 'chat', 'tasks']) { // 'focus' 8 Kas'ta kalktı (74)
       await W.showTab(s);
       assert.ok(W.document.getElementById(s).classList.contains('active'), s + ' acilmadi');
     }
