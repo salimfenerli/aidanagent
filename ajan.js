@@ -546,16 +546,6 @@ function ogunBekciAksiyon(saat, act) {
     return;
   }
   if (act === 'geri') { if (_ogunGeri) { _ogunGeri(); _ogunGeri = null; } ogunSheetKapat(); showToast('Geri alındı', 'info', 2500); return; }
-<<<<<<< HEAD
-  if (act === 'ertele') { const s = ogunErtele(saat); ogunSheetKapat(); showToast(saat + ' öğünü — ' + s + "'te tekrar hatırlatırım", 'info', 3500); return; }
-  if (act === 'atla') { ogunAtla(saat); ogunSheetKapat(); showToast(saat + ' öğünü atlandı, hatırlatma sustu', 'info', 3000); return; }
-  if (act === 'kapat') { ogunSheetKapat(); return; }
-  // 'open' — iOS: bildirime dokunuldu → soruyu uygulamada sor
-  if ((ogunDurum()[saat] || {}).d === 'yedi') { showToast(saat + ' öğünü zaten işaretli', 'success', 2500); return; }
-  const liste = kal.map(m => '<div class="ajan-it">• ' + escapeHtml(String(m.name).replace(OGUN_RE, '')) + '</div>').join('');
-  ogunSheet(saat, '<div class="ajan-head">' + saat + ' öğünü — yedin mi?</div>' + (liste || '<div class="ajan-sub">Planda kalem yok</div>') +
-    '<div class="ajan-btns"><button class="small" data-a="yedim">Yedim</button><button class="small secondary" data-a="ertele">15 dk sonra</button><button class="small secondary" data-a="atla">Atladım</button></div>');
-=======
   // 25 Eki: dokunuşla işaretlendikten sonra "aslında yemedim" yolları — önce geri al, sonra ertele/atla
   if (act === 'geriErtele' || act === 'geriAtla') { if (_ogunGeri) { _ogunGeri(); _ogunGeri = null; } return ogunBekciAksiyon(saat, act === 'geriErtele' ? 'ertele' : 'atla'); }
   if (act === 'ertele') { const s = ogunErtele(saat); ogunSheetKapat(); showToast(saat + ' öğünü — ' + s + "'te tekrar hatırlatırım", 'info', 3500); return; }
@@ -573,5 +563,4 @@ function ogunBekciAksiyon(saat, act) {
     '<div class="ajan-btns"><button class="small" data-a="kapat">Tamam</button><button class="small secondary" data-a="geriErtele">Henüz yemedim</button>' +
     '<button class="small secondary" data-a="geriAtla">Atladım</button><button class="small secondary" data-a="geri">Geri al</button></div>');
   setTimeout(() => { if (el.isConnected) el.remove(); }, 15000);
->>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
 }

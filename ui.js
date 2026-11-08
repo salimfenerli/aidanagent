@@ -3706,19 +3706,11 @@ renderCountdowns();
 if (typeof ensureSchoolModule === 'function') setTimeout(ensureSchoolModule, 0);
 // Hedefler paneli tembel (hedefler.js) — bulut oturumunu bekler, ilk cizimi bekletmez.
 if (typeof ensureGoalsModule === 'function') setTimeout(ensureGoalsModule, 0);
-<<<<<<< HEAD
-// 🍽️ Bugün öğün kartı (18 Eki) — yalnız planda saatli öğün varsa bugun.js iner
-setTimeout(() => {
-  try { if (!planMealsForDate(today()).some(m => /^\s*\d{1,2}:\d{2}\s*·/.test(m.name || ''))) return; } catch (_) { return; }
-  loadModule('bugun').then(() => bugunBaslat()).catch(() => {});
-}, 1200);
-=======
 // 🍽️ Öğün kartı (18 Eki) — yalnız planda saatli öğün varsa ogun.js iner
 setTimeout(() => {
   try { if (!planMealsForDate(today()).some(m => /^\s*\d{1,2}:\d{2}\s*·/.test(m.name || ''))) return; } catch (_) { return; }
   loadModule('ogun').then(() => bugunBaslat()).catch(() => {});
 }, 0);   // 20 Eki: 1200 ms'de gelince "Bugünün 3'ü"nü aşağı itip zıplatıyordu
->>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
 // ⚠️ Tur onboarding.js'te (tembel). Modulu indirmeden ONCE ucuz kontrol:
 // bayrak varsa ya da zaten gorev varsa dosya HIC inmiyor — mevcut kullanici
 // bu 2.4 KB'i bir daha odemiyor.

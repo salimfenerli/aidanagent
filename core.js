@@ -10,13 +10,8 @@
 const LAZY_MODULES = { program: '/program.js',
   nutrition: '/nutrition.js', health: '/health.js', supabase: '/supabase.js',
   foods: '/foods.js', school: '/school.js', onboarding: '/onboarding.js', karne: '/karne.js',
-<<<<<<< HEAD
-  hafiza: '/hafiza.js', hedefler: '/hedefler.js', ajan: '/ajan.js', hafta: '/hafta.js', harcama: '/harcama.js',
-  ayarlar: '/ayarlar.js', bugun: '/bugun.js' };
-=======
   hafiza: '/hafiza.js', hedefler: '/hedefler.js', ajan: '/ajan.js', hafta: '/hafta.js', harcama: '/harcama.js', bugun: '/bugun.js',
   ayarlar: '/ayarlar.js', ogun: '/ogun.js' };
->>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
 const _moduleLoads = {};
 function moduleLoaded(name) { return !!(_moduleLoads[name] && _moduleLoads[name]._done); }
 function loadModule(name) {

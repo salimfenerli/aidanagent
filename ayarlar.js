@@ -94,11 +94,8 @@ function renderStorageInfo() {
     '<div class="sp-row"><span>' + escapeHtml(STORAGE_ETIKET[x.key] || x.key) +
     '</span><b>' + fmtBytes(x.chars) + '</b></div>').join('') ||
     '<div class="sp-row"><span>Henüz veri yok</span></div>';
-<<<<<<< HEAD
-=======
   renderSaglikTani();    // 25 Eki: kısayol teşhisi
   renderHareketAyar();   // 25 Eki: Ayarlar açılınca hareket molası satırı (aynı anda çizilir)
->>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
 }
 
 function renderCalendarSync() {
@@ -276,8 +273,6 @@ function gsGoSchool() {
       .then(() => setTimeout(() => ss.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80));
   }
 }
-<<<<<<< HEAD
-=======
 
 // ============================================================
 // 💪 HAREKET MOLASI AYARI (25 Eki 2026) — Ayarlar'da "Depolama"nın üstüne enjekte edilir
@@ -392,4 +387,3 @@ function renderSaglikTani() {
   el.innerHTML = '<label>Sağlık verisi (Fitbit → Apple Sağlık → Aidan)</label>' +
     '<div class="settings-help" data-durum="' + r.durum + '">' + escapeHtml(r.metin) + '</div>';
 }
->>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648

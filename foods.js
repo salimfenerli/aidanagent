@@ -1493,16 +1493,11 @@ function parseFoodQuery(q) {
   if (qty == null && words.length > 1) {
     const n = words.length;
     const sayi = (w) => /^[0-9]+([.,][0-9]+)?$/.test(w);
-<<<<<<< HEAD
-=======
     const bitisik = (w) => w.match(/^([0-9]+([.,][0-9]+)?)(g|gr|gram|ml|adet|dilim)$/);
->>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
     if (n > 2 && sayi(words[n - 2]) && _FOOD_UNITS.includes(words[n - 1])) {
       qty = Number(words[n - 2].replace(',', '.')); words.splice(n - 2, 1);
     } else if (sayi(words[n - 1])) {
       qty = Number(words[n - 1].replace(',', '.')); words.pop();
-<<<<<<< HEAD
-=======
     } else if (bitisik(words[n - 1])) {
       // 25 Eki: "tavuk göğsü 250g" — sondaki bitişik gram hiç eşleşmiyordu
       const b = bitisik(words[n - 1]); qty = Number(b[1].replace(',', '.')); unit = b[3]; words.pop();
@@ -1513,7 +1508,6 @@ function parseFoodQuery(q) {
         const b = bitisik(words[i]);
         if (b) { qty = Number(b[1].replace(',', '.')); unit = b[3]; words.splice(i, 1); break; }
       }
->>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
     }
   }
   // ⚠️ 18 Eki 2026 — "dürüm" SON kelimeyse yemeğin ADI ("tavuk döner dürüm",

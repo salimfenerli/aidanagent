@@ -3258,11 +3258,7 @@ function nutOrnekSatirlari(ogunler, zaman) {
       if (!(x.adet > 0)) continue;
       out.push({
         slot: m.slot === 'ara' ? 'atistirma' : m.slot,
-<<<<<<< HEAD
-        name: nutPortion(x.adet, x.u) + ' ' + x.n,
-=======
         name: nutGramYaz(x.adet, x.u, x.n) + ' ' + x.n,
->>>>>>> 3e2e26f6345638f0806ef09ac9bd0f1b252c5648
         besin: x.n, adet: x.adet,   // alışveriş listesi için (18 Eki) — adı ayrıştırmaya gerek kalmasın
         kcal: Math.round(x.adet * x.k),
         protein: Math.round(x.adet * x.p),
