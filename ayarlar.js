@@ -96,6 +96,7 @@ function renderStorageInfo() {
     '<div class="sp-row"><span>Henüz veri yok</span></div>';
   renderSaglikTani();    // 25 Eki: kısayol teşhisi
   renderHareketAyar();   // 25 Eki: Ayarlar açılınca hareket molası satırı (aynı anda çizilir)
+  ayarGrupla();          // 8 Kas: satırları 5 açılır gruba taşı
 }
 
 function renderCalendarSync() {
@@ -107,7 +108,7 @@ function renderCalendarSync() {
   }
   const url = calendarUrl();
   if (!url) {
-    el.innerHTML = '<button class="small" onclick="createCalendarLink()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Takvim bağlantısı oluştur</button>';
+    el.innerHTML = '<button class="small secondary" onclick="createCalendarLink()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Takvim bağlantısı oluştur</button>';
     return;
   }
   el.innerHTML =
@@ -126,7 +127,7 @@ function renderCalendarSync() {
       '</ol>' +
       '<div class="settings-help">Google Takvim: calendar.google.com → Diğer takvimler → URL\'den → bağlantıyı yapıştır.</div>' +
     '</details>' +
-    '<button class="small" onclick="resetCalendarLink()">Bağlantıyı sıfırla</button>';
+    '<button class="small ghost" onclick="resetCalendarLink()">Bağlantıyı sıfırla</button>';
 }
 
 function createCalendarLink() {
@@ -291,6 +292,7 @@ function renderHareketAyar() {
     el.id = 'hareketAyarRow';
     el.className = 'settings-row';
     satir.parentNode.insertBefore(el, satir);
+    if (typeof ayarGrupla === 'function') ayarGrupla();
     el.addEventListener('click', ev => {
       const b = ev.target.closest('button[data-h]');
       if (!b) return;
@@ -386,4 +388,100 @@ function renderSaglikTani() {
   const r = saglikTaniMetni(data, today());
   el.innerHTML = '<label>Sağlık verisi (Fitbit → Apple Sağlık → Aidan)</label>' +
     '<div class="settings-help" data-durum="' + r.durum + '">' + escapeHtml(r.metin) + '</div>';
+}
+
+// ============================================================
+// ⚙️ AYAR GRUPLARI (8 Kas 2026, düzen 2. tur) — Ayarlar 17 ayrı kart / ~5000 px idi.
+// Satırlar 5 açılır gruba TAŞINIR (id'ler korunur, asistan.html'e satır eklenmez — ilk
+// yükleme bütçesi). Grup içinde satır kart değil, ince çizgiyle ayrılır (iç içe kart yasak).
+// Yeni ayar satırı eklersen AYAR_GRUPLAR'a yaz; yazmazsan grupların altında tek başına kalır.
+// ============================================================
+const AYAR_GRUPLAR = [
+  { id: 'agBildirim', ad: 'Bildirimler', alt: 'izin, sessize alma, sabit hatırlatıcılar, hareket molası',
+    ikon: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+    satir: ['notifSettings', 'muteState', 'fixedRemindersList', 'hareketAyarRow'] },
+  { id: 'agPlan', ad: 'Plan ve takvim', alt: 'otomatik plan, sabit program, geri sayımlar, takvim',
+    ikon: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    satir: ['autoPlanChk', 'fixedScheduleList', 'countdownManageList', 'calendarSyncBox', 'estimateStats'] },
+  { id: 'agAi', ad: 'Aidan nasıl konuşsun', alt: 'hitap, talimatlar, hafıza',
+    ikon: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    satir: ['displayName', 'aiInstructions', 'memList'] },
+  { id: 'agBag', ad: 'Bağlantılar', alt: 'sağlık verisi, Hevy, bulut hesabı, davet',
+    ikon: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+    satir: ['saglikTaniRow', 'hevyStatus', 'supaSetupBox', 'inviteSection'] },
+  { id: 'agVeri', ad: 'Veri ve yedek', alt: 'indir, yükle, otomatik yedekler, depolama',
+    ikon: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/>',
+    satir: ['importFile', 'backupDetails', 'storageInfo'] },
+];
+
+(function ayarStil() {
+  if (document.getElementById('ayarGrupStil')) return;
+  const st = document.createElement('style');
+  st.id = 'ayarGrupStil';
+  st.textContent =
+    '.ayar-grup>summary{flex-wrap:wrap;row-gap:2px}' +
+    '.ayar-grup .ag-alt{flex-basis:100%;order:3;padding-left:25px;font-weight:400;font-size:12.5px;color:var(--text-muted);line-height:1.4}' +
+    '.ayar-grup>summary::after{order:2}' +
+    '.ayar-grup .ag-govde>.settings-row{background:none;border:0;border-radius:0;margin:0;padding:14px;border-top:1px solid var(--border-soft)}' +
+    '.ayar-grup .ag-uyari{color:var(--warning)}' +
+    '#agBildirim .ag-govde>.settings-row:first-child>label:first-child{display:none}' +
+    '#settings details:not(.school-section):not(.pushlog-section)>summary{list-style:none;display:flex;align-items:center;gap:8px}' +
+    '#settings details:not(.school-section):not(.pushlog-section)>summary::-webkit-details-marker{display:none}' +
+    '#settings details:not(.school-section):not(.pushlog-section)>summary::after{content:"";width:6px;height:6px;border:solid var(--text-faint);border-width:0 2px 2px 0;transform:rotate(45deg);transition:transform 180ms ease-out}' +
+    '#settings details[open]:not(.school-section)>summary::after{transform:rotate(-135deg)}' +
+    '@media (prefers-reduced-motion:reduce){#settings details>summary::after{transition:none}}';
+  document.head.appendChild(st);
+})();
+
+function ayarSatiri(id) {
+  const el = document.getElementById(id);
+  if (!el) return null;
+  return el.classList.contains('settings-row') ? el : el.closest('.settings-row');
+}
+
+function ayarGrupla() {
+  const panel = document.getElementById('settings');
+  if (!panel) return;
+  const baslik = panel.querySelector('h2');
+  let once = baslik;
+  for (const g of AYAR_GRUPLAR) {
+    let det = document.getElementById(g.id);
+    if (!det) {
+      det = document.createElement('details');
+      det.id = g.id;
+      det.className = 'school-section ayar-grup';
+      det.innerHTML = '<summary>' + dtIcon(g.ikon) + '<span class="ag-ad">' + escapeHtml(g.ad) +
+        '</span><span class="ag-alt">' + escapeHtml(g.alt) + '</span></summary><div class="ag-govde"></div>';
+      if (once && once.parentNode === panel) once.after(det); else panel.prepend(det);
+    }
+    once = det;
+    const govde = det.querySelector('.ag-govde');
+    for (const s of g.satir) {
+      const row = ayarSatiri(s);
+      if (row && row.parentNode !== govde) govde.appendChild(row);
+    }
+    // Sıra sabit: grup içindeki satırları listedeki sıraya diz (geç gelen satır da yerine oturur)
+    g.satir.map(ayarSatiri).filter(r => r && r.parentNode === govde).forEach(r => govde.appendChild(r));
+  }
+  // Tehlikeli düğme grubun EN SONUNA (yanlışlıkla dokunma)
+  const veri = document.querySelector('#agVeri .ag-govde');
+  const sifirla = panel.querySelector('button.danger[onclick^="resetAll"]');
+  if (veri && sifirla) {
+    let r = document.getElementById('ayarSifirRow');
+    if (!r) { r = document.createElement('div'); r.id = 'ayarSifirRow'; r.className = 'settings-row'; }
+    if (sifirla.parentNode !== r) r.appendChild(sifirla);
+    veri.appendChild(r);
+  }
+  ayarGrupDurum();
+}
+
+// Grup başlığında sorun varsa tek satır uyarı (ör. sağlık verisi gelmiyor) — açmadan görülsün.
+function ayarGrupDurum() {
+  const det = document.getElementById('agBag');
+  const alt = det && det.querySelector('.ag-alt');
+  if (!alt) return;
+  const d = typeof saglikTaniMetni === 'function' && typeof data !== 'undefined' ? saglikTaniMetni(data, today()).durum : 'ok';
+  const sorun = d && d !== 'ok';
+  alt.classList.toggle('ag-uyari', !!sorun);
+  alt.textContent = sorun ? 'Sağlık verisi gelmiyor — aç ve bak' : AYAR_GRUPLAR[3].alt;
 }

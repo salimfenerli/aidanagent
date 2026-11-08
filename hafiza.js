@@ -38,7 +38,7 @@ async function renderMemory() {
   // Ekleme kutusu da modülle iner (asistan.html ilk yükleme bütçesine sayılır).
   if (slot && !slot.firstChild) {
     slot.innerHTML = '<input type="text" id="memNew" maxlength="200" placeholder="Elle ekle: örn. Salı günleri antrenman yapamıyorum"'
-      + ' onkeydown="if(event.key===\'Enter\')memAdd()"><button class="small" onclick="memAdd()">Ekle</button>';
+      + ' onkeydown="if(event.key===\'Enter\')memAdd()"><button class="small secondary" onclick="memAdd()">Ekle</button>';
   }
   const el = document.getElementById('memList');
   if (!el) return;

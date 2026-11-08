@@ -211,7 +211,7 @@ describe('istemci (ogun.js + ayarlar.js)', () => {
     A.evalIn("data.hareket.yap = { 0: 10 }");
     assert.deepStrictEqual(E('bugunOzet(data, today(), 600).hareket'), { n: 3, set: 1 });
   });
-  test('Ayarlar satırı: Depolama\'nın üstünde, +/− ve Kapat', () => {
+  test('Ayarlar satırı: Bildirimler grubunda, +/− ve Kapat', () => {
     kur();
     const doc = A.window.document;
     if (!doc.getElementById('storageInfo')) {
@@ -221,7 +221,8 @@ describe('istemci (ogun.js + ayarlar.js)', () => {
     A.evalIn('renderHareketAyar()');
     const el = doc.getElementById('hareketAyarRow');
     assert.ok(el);
-    assert.strictEqual(el.nextElementSibling, doc.getElementById('storageInfo').closest('.settings-row'));
+    // 8 Kas: Ayarlar grupları — satır Bildirimler grubuna taşınır (ayarGrupla)
+    assert.ok(el.closest('#agBildirim'), 'hareket satırı Bildirimler grubunda değil');
     el.querySelector('button[data-h="arti"][data-tur="sinav"]').click();
     assert.strictEqual(E('data.hareketAyar.adet.sinav'), 11);
     doc.getElementById('hareketAyarRow').querySelector('button[data-h="arti"][data-tur="plank"]').click();

@@ -153,6 +153,7 @@ Bu dosya **her oturumda Claude'un bağlamına otomatik yüklenir**. Büyüdükç
 - **Düzen (25 Eki):** etiketsiz `button` DOLU (accent) çıkar → nadir/ikincil düğmeye `secondary` ya da `ghost` ver, ekranda tek dolu düğme hedefle. Telefonda görev kartı eylemleri dokununca açılır (`.task.acik`, `bugun.js`). Kısayol + filtre satırı tek satır, yatay kayar. Diyet: halka+makro tek kart, "Yemek ekle" tek dolu düğme, nadir bölümler `#dietMore` altında (id'ler korunur). Borsa CSS'i kökte YOK (borsa/styles.css) — geri ekleme.
 - Dokunma hedefi ≥44px (`::after` ile görünmez alan). iOS'ta odak dokunmadan sonra kalır — `:focus-visible` halkası beyaza yakın accent'le parlamasın.
 - Bir renk tek anlam taşır: accent ≠ uyarı.
+- **Ayarlar grupları (8 Kas, `73`):** satırlar `ayarlar.js` `AYAR_GRUPLAR` ile 5 açılır gruba taşınır. Yeni ayar satırı → listeye ekle, yoksa grupların altında başıboş kalır (test kırar).
 
 ## ❌ Kaldırılanlar — yeniden ÖNERME
 

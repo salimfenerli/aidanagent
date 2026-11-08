@@ -1,3 +1,9 @@
+# ⚙️ 8 Kas 2026 — v7-225 Düzen 2. tur: Ayarlar 5 gruba indi + GitHub onarımı
+- **Onarım:** 28 Eki "a" commit'i çakışmalı birleştirmeyi `<<<<<<<` işaretleriyle push etmişti (18 dosya; CI kırmızı, deploy 10 gün çıkmadı — canlı v7-224'te kaldı). v7-224 ağacı onarım commit'iyle geri yüklendi.
+- Ayarlar: 17 ayrı kart / ~5000 px → 5 açılır grup (Bildirimler · Plan ve takvim · Aidan nasıl konuşsun · Bağlantılar · Veri ve yedek); kapalıyken tek ekran. Satırlar `ayarGrupla()` ile JS'te taşınır (asistan.html'e satır yok, id'ler aynı). Grup içinde satırlar kart değil, ince çizgiyle ayrılır.
+- Bağlantılar başlığı sağlık verisi gelmiyorsa açmadan uyarır. "Her şeyi sıfırla" Veri grubunun en sonunda. Ekle/Bağlan/İndir/Test bildirimi/Hafıza Ekle düğmeleri ikincil; Ayarlar'da dolu düğme yalnız Kaydet. Ayarlar'daki açılırların ▸ işareti ok'a çevrildi.
+- Test 73 (ayar grupları, kapı dahil); 70'te hareket satırının yeri Bildirimler grubu.
+
 # ⚖️ 25 Eki 2026 — v7-224 Kalori doğruluğu + gram esas
 - Salim: "asla kalori makro hatası istemiyorum" + "porsiyon nitel, gramda derinleşelim".
 - Denetim: 498 besin tek tek 100 g değerine çevrilip referansla karşılaştırıldı; Atwater sapması yalnız alkollerde (doğru, 7 kcal/g). Salim'in kayıtlı öğünlerinde tutarsız kayıt yok.

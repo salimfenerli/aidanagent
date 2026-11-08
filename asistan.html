@@ -606,7 +606,7 @@
       <div id="hevyStatus" class="hevy-status"></div>
       <div class="hevy-connect">
         <input type="password" id="hevyKeyInput" placeholder="Hevy API anahtarını yapıştır" autocomplete="off" spellcheck="false">
-        <button class="small" id="hevyConnectBtn" onclick="connectHevy()">Bağlan</button>
+        <button class="small secondary" id="hevyConnectBtn" onclick="connectHevy()">Bağlan</button>
         <button class="small secondary" id="hevySyncBtn" onclick="syncHevy(true)">Şimdi çek</button>
         <button class="small secondary" id="hevyDisconnectBtn" onclick="disconnectHevy()">Bağlantıyı kes</button>
       </div>
@@ -624,7 +624,7 @@
           <input type="time" id="fschEnd">
         </div>
         <div class="fsch-days" id="fschDays"></div>
-        <button class="small" onclick="addFixedSchedule()">＋ Ekle</button>
+        <button class="small secondary" onclick="addFixedSchedule()">＋ Ekle</button>
       </div>
       <div class="settings-help">Okul, özel ders, antrenman gibi her hafta aynı saatte olan işler. Otomatik plan bunların <b>etrafına</b> kurulur, üzerlerine görev yazmaz. Bir kez gir, her hafta geçerli.</div>
     </div>
@@ -639,7 +639,7 @@
           <option value="daily">Her gün</option>
           <option value="weekdays">Hafta içi</option>
         </select>
-        <button class="small" onclick="addFixedReminder()">＋ Ekle</button>
+        <button class="small secondary" onclick="addFixedReminder()">＋ Ekle</button>
       </div>
       <div class="settings-help">Her gün aynı saatte push bildirimi — telefon kilitliyken bile. İlaç, su, ders gibi sabitler için. (~15 dk hassasiyet)</div>
     </div>
@@ -650,7 +650,7 @@
       <div class="countdown-add">
         <input type="text" id="countdownLabel" placeholder="örn. Tarih sınavı" maxlength="60">
         <input type="date" id="countdownDate">
-        <button class="small" onclick="addCountdown()">＋ Ekle</button>
+        <button class="small secondary" onclick="addCountdown()">＋ Ekle</button>
       </div>
       <div class="settings-help">Görevler sekmesinin tepesinde "X gün kaldı" iri kartı görünür. Zaman körlüğüne karşı.</div>
     </div>
@@ -671,7 +671,7 @@
       <div id="supaSetupBox">
         <input type="text" id="supaUrl" placeholder="Supabase Project URL (https://xxxxx.supabase.co)" style="width:100%;max-width:500px;margin-bottom:6px;">
         <input type="text" id="supaKey" placeholder="Supabase anon public key (uzun bir JWT)" style="width:100%;max-width:500px;margin-bottom:6px;">
-        <button class="small" onclick="connectSupabase()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg> Bağlan</button>
+        <button class="small secondary" onclick="connectSupabase()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg> Bağlan</button>
         <button class="small secondary" onclick="disconnectSupabase()">Kes</button>
       </div>
       <div id="supaAuthBox" style="margin-top:10px;"></div>
@@ -689,7 +689,7 @@
 
     <div class="settings-row">
       <label>Yedekleme</label>
-      <button class="small" onclick="exportData()">Verileri indir (JSON)</button>
+      <button class="small secondary" onclick="exportData()">Verileri indir (JSON)</button>
       <button class="small secondary" onclick="document.getElementById('importFile').click()">Yedek yükle</button>
       <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importData(event)">
       <button class="small danger" onclick="resetAll()">Her şeyi sıfırla</button>
@@ -712,7 +712,7 @@
       <div id="inviteSection" style="display:none;">
         <div style="display:flex; gap:6px; align-items:center; margin-bottom:8px;">
           <input type="text" id="inviteNote" placeholder="kim için? (not, opsiyonel)" maxlength="60" style="flex:1; min-width: 120px;">
-          <button class="small" onclick="createInvite()">＋ Yeni kod üret</button>
+          <button class="small secondary" onclick="createInvite()">＋ Yeni kod üret</button>
         </div>
         <div id="inviteList"></div>
         <div class="settings-help">Üretilen kod arkadaşına ver — <code>aidanapp.pages.dev</code>'e gidip "Yeni Hesap" der, kodu girer, kayıt olur. Her kod tek sefer kullanılır.</div>

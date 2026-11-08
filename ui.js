@@ -2403,7 +2403,7 @@ function renderNotifSettings() {
       <div style="color:var(--success);">Bildirimler açık</div>
       ${pushLine}
       <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-        <button class="small" onclick="testNotif()">Test bildirimi gönder</button>
+        <button class="small secondary" onclick="testNotif()">Test bildirimi gönder</button>
         <button class="small secondary" onclick="resubscribePush()">Push'u sıfırla</button>
       </div>
       <div style="color:var(--text-muted);font-size:0.78em;margin-top:6px;">Sıfırla = telefonu kapalıyken bildirim gelmiyorsa subscription'ı yenile.</div>
